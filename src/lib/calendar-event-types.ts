@@ -1,13 +1,55 @@
 export const CAL_EVENT_TYPE_KEYS = ["meeting", "event", "campaign", "other"] as const;
 export type CalendarEventType = (typeof CAL_EVENT_TYPE_KEYS)[number];
 
+/** Week grid: solid + white text (legible in light and dark mode). */
+export const SCHEDULE_EVENT_COLORS: Record<CalendarEventType, string> = {
+  meeting: "#003476",
+  event: "#C9A84C",
+  campaign: "#DC2626",
+  other: "#6B7280",
+};
+
+/**
+ * If API type is `other`, infer from title; otherwise keep the stored type.
+ */
+export function resolveEventType(
+  type: CalendarEventType,
+  title: string | null | undefined,
+): CalendarEventType {
+  if (type && type !== "other") return type;
+  return inferTypeFromTitle(title);
+}
+
+export function inferTypeFromTitle(title: string | null | undefined): CalendarEventType {
+  if (!title || !String(title).trim()) return "other";
+  const t = title.toLowerCase();
+  if (/\bσυνάντηση|συνάντη|meeting|zoom|teams|call|κλήση|τηλεδιάσκέ|video\s*call\b/i.test(t)) {
+    return "meeting";
+  }
+  if (/\bεκδ[ίι]λωσ|event|gala|δεξ[ίι]ωση|party|reception|φεστιβά|concert|έναρξη|λήξη\b/i.test(t)) {
+    return "event";
+  }
+  if (/\b(προεκλογ|εκλογ|campaign|καν[ίι]β|door|stand|πρόοδ|χαιρετισμ|door\s*to\s*door)\b/i.test(t)) {
+    return "campaign";
+  }
+  return "other";
+}
+
+export function getScheduleEventSurface(
+  type: CalendarEventType,
+  title: string | null | undefined,
+): { resolved: CalendarEventType; color: string } {
+  const r = resolveEventType(type, title);
+  return { resolved: r, color: SCHEDULE_EVENT_COLORS[r] };
+}
+
 export const CALENDAR_EVENT_TYPES: Record<
   CalendarEventType,
   {
     label: string;
-    /** Legacy light (unused in dark week grid) */
+    /** Legacy list/table */
     color: string;
-    /** Dark luxury week grid card */
+    /** Other surfaces (alerts) — not the week grid */
     block: string;
   }
 > = {

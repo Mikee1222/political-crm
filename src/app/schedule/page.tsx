@@ -17,7 +17,12 @@ import {
 import { el } from "date-fns/locale";
 import { Calendar, ChevronLeft, ChevronRight, MapPin, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, calendarTypeBlockClass, type CalendarEventType } from "@/lib/calendar-event-types";
+import {
+  CAL_EVENT_TYPE_KEYS,
+  CALENDAR_EVENT_TYPES,
+  getScheduleEventSurface,
+  type CalendarEventType,
+} from "@/lib/calendar-event-types";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
@@ -117,7 +122,26 @@ function layoutDayTimed(
   return { timed: out, allDay };
 }
 
-const emptyForm = () => ({
+function toIsoFromDateAndTime(dateStr: string, timeStr: string) {
+  if (!dateStr || !timeStr) return "";
+  const combined = timeStr.length >= 5 ? `${dateStr}T${timeStr.length === 5 ? `${timeStr}:00` : timeStr}` : "";
+  if (!combined) return "";
+  const d = new Date(combined);
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
+const newEventDefaults = () => ({
+  title: "",
+  date: format(new Date(), "yyyy-MM-dd"),
+  startTime: "09:00",
+  endTime: "10:00",
+  location: "",
+  description: "",
+  eventType: "meeting" as CalendarEventType,
+});
+
+const emptyEditForm = () => ({
   title: "",
   start: "",
   end: "",
@@ -133,10 +157,11 @@ export default function SchedulePage() {
   const [weekLoadError, setWeekLoadError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showNew, setShowNew] = useState(false);
-  const [newEv, setNewEv] = useState(emptyForm);
+  const [newEv, setNewEv] = useState(newEventDefaults);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [detail, setDetail] = useState<CalEvent | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState(emptyForm);
+  const [editForm, setEditForm] = useState(emptyEditForm);
   const [saving, setSaving] = useState(false);
 
   const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1 }), [weekStart]);
@@ -154,6 +179,22 @@ export default function SchedulePage() {
         if (isWithinInterval(t, { start: startOfDay(weekStart), end: endOfDay(weekEnd) })) {
           return true;
         }
+      }
+    }
+    return false;
+  }, [events, weekStart, weekEnd]);
+
+  const hasEventsInDisplayedWeek = useMemo(() => {
+    const ws = startOfDay(weekStart);
+    const we = endOfDay(weekEnd);
+    for (const ev of events) {
+      if (!ev.start) continue;
+      const s = new Date(isAllDayStr(ev.start) ? `${ev.start}T12:00:00` : ev.start);
+      if (isNaN(s.getTime())) continue;
+      if (s >= ws && s <= we) return true;
+      if (ev.end) {
+        const e = new Date(isAllDayStr(ev.end) ? `${ev.end}T23:59:59` : ev.end);
+        if (!isNaN(e.getTime()) && s <= we && e >= ws) return true;
       }
     }
     return false;
@@ -186,24 +227,45 @@ export default function SchedulePage() {
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEv.title.trim() || !newEv.start || !newEv.end) return;
+    if (!newEv.title.trim() || !newEv.date) return;
+    setCreateError(null);
+    const startIso = toIsoFromDateAndTime(newEv.date, newEv.startTime);
+    const endIso = toIsoFromDateAndTime(newEv.date, newEv.endTime);
+    if (!startIso || !endIso) {
+      setCreateError("Μη έγκυρη ημ/νία ή ώρα.");
+      return;
+    }
+    if (new Date(endIso) <= new Date(startIso)) {
+      setCreateError("Η λήξη πρέπει να είναι μετά την έναρξη.");
+      return;
+    }
     setSaving(true);
-    await fetchWithTimeout("/api/schedule/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: newEv.title,
-        start: toIsoFromLocalInput(newEv.start),
-        end: toIsoFromLocalInput(newEv.end),
-        location: newEv.location,
-        description: newEv.description,
-        eventType: newEv.eventType,
-      }),
-    });
-    setSaving(false);
-    setShowNew(false);
-    setNewEv(emptyForm());
-    await load();
+    try {
+      const res = await fetchWithTimeout("/api/schedule/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newEv.title.trim(),
+          start: startIso,
+          end: endIso,
+          location: newEv.location.trim() || undefined,
+          description: newEv.description.trim() || undefined,
+          eventType: newEv.eventType,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setCreateError(body.error ?? `Σφάλμα ${res.status}`);
+        return;
+      }
+      setShowNew(false);
+      setNewEv(newEventDefaults());
+      await load();
+    } catch {
+      setCreateError("Αποτυχία δικτύου. Δοκιμάστε ξανά.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onSaveEdit = async (e: React.FormEvent) => {
@@ -242,11 +304,8 @@ export default function SchedulePage() {
 
   const openNewForEmpty = (day: Date) => {
     if (!connected) return;
-    const a = new Date(day);
-    a.setHours(9, 0, 0, 0);
-    const b = new Date(day);
-    b.setHours(10, 0, 0, 0);
-    setNewEv({ ...emptyForm(), start: toDatetimeLocalValue(a.toISOString()), end: toDatetimeLocalValue(b.toISOString()) });
+    setCreateError(null);
+    setNewEv({ ...newEventDefaults(), date: format(day, "yyyy-MM-dd") });
     setShowNew(true);
   };
 
@@ -286,6 +345,8 @@ export default function SchedulePage() {
     () => Array.from({ length: H_END - H_START }, (_, i) => H_START + i),
     [],
   );
+
+  const detailSurface = detail ? getScheduleEventSurface(detail.type, detail.title) : null;
 
   return (
     <div className="min-h-full -m-6 flex flex-col bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] md:-m-8 md:p-6">
@@ -353,17 +414,8 @@ export default function SchedulePage() {
               type="button"
               disabled={!connected}
               onClick={() => {
-                const a = new Date();
-                a.setSeconds(0, 0);
-                a.setHours(9, 0, 0, 0);
-                const b = new Date();
-                b.setSeconds(0, 0);
-                b.setHours(10, 0, 0, 0);
-                setNewEv({
-                  ...emptyForm(),
-                  start: toDatetimeLocalValue(a.toISOString()),
-                  end: toDatetimeLocalValue(b.toISOString()),
-                });
+                setCreateError(null);
+                setNewEv(newEventDefaults());
                 setShowNew(true);
               }}
               className={lux.btnGold + " !h-9 !px-4 !text-xs sm:!text-sm" + (connected ? "" : " !opacity-40")}
@@ -392,7 +444,7 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {connected === true && !loading && !weekLoadError && events.length === 0 && (
+        {connected === true && !loading && !weekLoadError && !hasEventsInDisplayedWeek && (
           <p
             className="mb-3 text-center text-sm text-[var(--text-secondary)]"
             role="status"
@@ -401,33 +453,36 @@ export default function SchedulePage() {
           </p>
         )}
 
-        {/* Full-width calendar */}
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+        {/* Full-width calendar — luxury week grid */}
+        <div className="overflow-x-auto rounded-2xl border border-[var(--border)]/80 bg-[var(--bg-card)]/60 shadow-[0_8px_40px_rgba(0,0,0,0.12)]">
           <div className="min-w-[880px]">
             {/* Day headers */}
             <div
               className="grid"
               style={{ gridTemplateColumns: `56px repeat(7, minmax(0,1fr))` }}
             >
-              <div className="min-h-[3rem] border-b border-r border-[var(--border)] bg-[var(--bg-elevated)]/50" />
+              <div className="min-h-[3.25rem] border-b border-r border-[var(--border)]/60 bg-[var(--bg-elevated)]/40" />
               {displayDays.map((d) => {
                 const today = isToday(d);
                 return (
                   <div
                     key={d.toISOString()}
                     className={[
-                      "border-b p-2 text-center",
-                      today
-                        ? "bg-[var(--accent-gold)]/8 ring-1 ring-inset ring-[var(--accent-gold)]/25"
-                        : "bg-[var(--bg-elevated)]/30",
+                      "border-b border-l border-[var(--border)]/50 p-2.5 text-center",
+                      today ? "bg-[#C9A84C]/10 ring-1 ring-inset ring-[#C9A84C]/25" : "bg-[var(--bg-elevated)]/25",
                     ].join(" ")}
                   >
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                    <p
+                      className={
+                        "text-[10px] font-semibold uppercase tracking-wider " +
+                        (today ? "text-[#B8860B]" : "text-[var(--text-muted)]")
+                      }
+                    >
                       {format(d, "EEE", { locale: el })}
                     </p>
                     <p
                       className={
-                        "text-sm font-semibold " + (today ? "text-[var(--accent-gold)]" : "text-[var(--text-primary)]")
+                        "text-sm font-bold " + (today ? "text-[#C9A84C]" : "text-[var(--text-primary)]")
                       }
                     >
                       {format(d, "d MMM", { locale: el })}
@@ -441,15 +496,15 @@ export default function SchedulePage() {
               className="grid"
               style={{ gridTemplateColumns: `56px repeat(7, minmax(0,1fr))` }}
             >
-              <div className="border-r border-[var(--border)] bg-[var(--bg-primary)]/60">
+              <div className="border-r border-[var(--border)]/60 bg-[var(--bg-primary)]/30">
                 {weekHasAllDay && <div className="box-border border-b border-[var(--border)]/50" style={{ height: ALLDAY_STRIP_H }} aria-hidden />}
                 {hours.map((h) => (
                   <div
                     key={h}
-                    className="box-border border-b border-[var(--border)]/50 pr-1 text-right"
+                    className="box-border border-b border-[var(--border)]/40 pr-2 text-right"
                     style={{ height: PX_H, paddingTop: 0 }}
                   >
-                    <span className="block -translate-y-2 pl-0 text-[10px] tabular-nums text-[var(--text-muted)]">
+                    <span className="block -translate-y-2 pl-0 text-[10px] tabular-nums text-[var(--text-muted)]/90">
                       {String(h).padStart(2, "0")}:00
                     </span>
                   </div>
@@ -466,30 +521,31 @@ export default function SchedulePage() {
                   <div
                     key={d.toISOString()}
                     className={[
-                      "group/cell flex flex-col border-l border-[var(--border)]",
-                      today ? "bg-[var(--accent-gold)]/[0.07]" : "bg-[var(--bg-primary)]/20",
+                      "group/cell flex min-h-0 flex-col border-l border-[var(--border)]/50",
+                      today ? "bg-[#C9A84C]/6" : "bg-[var(--bg-primary)]/10",
                     ].join(" ")}
                   >
                     {stripH > 0 && (
                       <div
-                        className="shrink-0 border-b border-[var(--border)]/80 bg-[var(--bg-elevated)]/50 px-1.5"
+                        className="shrink-0 border-b border-[var(--border)]/50 bg-[var(--bg-elevated)]/35 px-1.5"
                         style={{ minHeight: stripH }}
                       >
                         {allDay.length > 0
-                          ? allDay.map((ev) => (
-                              <button
-                                key={ev.id}
-                                type="button"
-                                onClick={() => openDetail(ev)}
-                                className={
-                                  "mb-0.5 w-full rounded-md px-1.5 py-0.5 text-left text-[10px] " +
-                                  calendarTypeBlockClass(ev.type)
-                                }
-                              >
-                                <span className="line-clamp-1 font-medium">{ev.title ?? "—"}</span>
-                                <span className="block text-[9px] opacity-80">Όλη η μέρα</span>
-                              </button>
-                            ))
+                          ? allDay.map((ev) => {
+                              const { color } = getScheduleEventSurface(ev.type, ev.title);
+                              return (
+                                <button
+                                  key={ev.id + (ev.calendarId ?? "")}
+                                  type="button"
+                                  onClick={() => openDetail(ev)}
+                                  className="mb-0.5 w-full rounded-lg border border-white/15 px-1.5 py-1 text-left text-[10px] font-medium text-white shadow-md transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg"
+                                  style={{ backgroundColor: color }}
+                                >
+                                  <span className="line-clamp-1 drop-shadow-sm">{ev.title ?? "—"}</span>
+                                  <span className="block text-[9px] text-white/90">Όλη η μέρα</span>
+                                </button>
+                              );
+                            })
                           : null}
                       </div>
                     )}
@@ -504,42 +560,41 @@ export default function SchedulePage() {
                       {hours.map((h) => (
                         <div
                           key={h}
-                          className="pointer-events-none box-border border-b border-dashed border-[var(--border)]/35"
+                          className="pointer-events-none box-border border-b border-dashed border-[var(--border)]/30"
                           style={{ height: PX_H }}
                         />
                       ))}
 
                       {timed.map(({ ev, top, height, col, nCols }) => {
                         const w = 100 / nCols;
+                        const { color } = getScheduleEventSurface(ev.type, ev.title);
                         return (
                           <button
-                            key={ev.id}
+                            key={ev.id + (ev.calendarId ?? "") + col}
                             type="button"
                             onClick={() => openDetail(ev)}
-                            className={
-                              "absolute flex flex-col overflow-hidden rounded-md px-1.5 py-0.5 text-left shadow-sm transition duration-150 hover:brightness-110 " +
-                              calendarTypeBlockClass(ev.type)
-                            }
+                            className="absolute flex min-h-0 flex-col overflow-hidden rounded-lg border border-white/20 px-1.5 py-0.5 text-left text-white shadow-md transition duration-200 hover:scale-[1.02] hover:shadow-lg"
                             style={{
                               top,
                               height,
                               left: `calc(${(col * 100) / nCols}% + 2px)`,
                               width: `calc(${w}% - 4px)`,
                               zIndex: 2 + col,
+                              backgroundColor: color,
                             }}
                           >
-                            <span className="line-clamp-1 text-[11px] font-semibold leading-tight">
-                              {ev.title ?? "—"}
-                            </span>
                             {ev.start && !isAllDayStr(ev.start) && (
-                              <span className="text-[9px] opacity-90">
+                              <span className="shrink-0 text-[9px] font-medium leading-tight text-white/95 [text-shadow:0_1px_0_rgba(0,0,0,0.2)]">
                                 {format(new Date(ev.start), "HH:mm", { locale: el })} —{" "}
                                 {ev.end ? format(new Date(ev.end), "HH:mm", { locale: el }) : "—"}
                               </span>
                             )}
+                            <span className="line-clamp-2 min-h-0 text-[11px] font-semibold leading-tight [text-shadow:0_1px_0_rgba(0,0,0,0.15)]">
+                              {ev.title ?? "—"}
+                            </span>
                             {ev.location ? (
-                              <span className="line-clamp-1 flex min-h-0 items-center gap-0.5 text-[9px] opacity-75">
-                                <MapPin className="h-2.5 w-2.5 shrink-0 opacity-60" />
+                              <span className="line-clamp-1 flex min-h-0 items-center gap-0.5 text-[8.5px] text-white/90">
+                                <MapPin className="h-2.5 w-2.5 shrink-0" />
                                 {ev.location}
                               </span>
                             ) : null}
@@ -566,7 +621,7 @@ export default function SchedulePage() {
 
         {loading && <p className="mt-3 text-center text-xs text-[var(--text-muted)]">Φόρτωση…</p>}
 
-        {detail && (
+        {detail && detailSurface && (
           <div
             className={lux.modalOverlay}
             onClick={() => {
@@ -579,13 +634,15 @@ export default function SchedulePage() {
               className="mx-4 w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
+              aria-modal="true"
             >
               {!editing && detail && (
                 <div>
                   <div
-                    className="mb-3 inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)] ring-1 ring-inset ring-[var(--border)]"
+                    className="mb-3 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/30"
+                    style={{ backgroundColor: detailSurface.color }}
                   >
-                    {CALENDAR_EVENT_TYPES[detail.type].label}
+                    {CALENDAR_EVENT_TYPES[detailSurface.resolved].label}
                   </div>
                   <h2 className="text-lg font-semibold text-[var(--text-primary)]">{detail.title}</h2>
                   {detail.start && !isAllDayStr(detail.start) && (
@@ -716,42 +773,72 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {/* Νέο event modal */}
         {showNew && (
-          <div className={lux.modalOverlay} onClick={() => setShowNew(false)} role="presentation">
+          <div
+            className={lux.modalOverlay}
+            onClick={() => {
+              setShowNew(false);
+              setCreateError(null);
+            }}
+            role="presentation"
+          >
             <form
               onClick={(e) => e.stopPropagation()}
               onSubmit={onCreate}
               className="mx-4 w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="schedule-new-title"
             >
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Νέο event</h2>
-              <p className="mb-4 text-xs text-[var(--text-muted)]">Ημερολόγιο: Google Calendar</p>
+              <h2 id="schedule-new-title" className="text-lg font-semibold text-[var(--text-primary)]">
+                Νέο Event
+              </h2>
+              <p className="mb-4 text-xs text-[var(--text-muted)]">Προστίθεται στο Google Calendar (πρωτεύον)</p>
+              {createError && (
+                <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200" role="alert">
+                  {createError}
+                </p>
+              )}
               <div className="space-y-3">
                 <div>
-                  <label className={lux.label}>Τίτλος</label>
+                  <label className={lux.label}>Τίτλος *</label>
                   <input
                     className={lux.input}
                     value={newEv.title}
                     onChange={(e) => setNewEv({ ...newEv, title: e.target.value })}
                     required
+                    autoFocus
                     placeholder="Τίτλος"
                   />
                 </div>
                 <div>
-                  <label className={lux.label}>Ημ/νία & ώρες</label>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <label className={lux.label}>Ημερ. *</label>
+                  <input
+                    className={lux.input}
+                    type="date"
+                    value={newEv.date}
+                    onChange={(e) => setNewEv({ ...newEv, date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className={lux.label}>Έναρξη *</label>
                     <input
                       className={lux.input}
-                      type="datetime-local"
-                      value={newEv.start}
-                      onChange={(e) => setNewEv({ ...newEv, start: e.target.value })}
+                      type="time"
+                      value={newEv.startTime}
+                      onChange={(e) => setNewEv({ ...newEv, startTime: e.target.value })}
                       required
                     />
+                  </div>
+                  <div>
+                    <label className={lux.label}>Λήξη *</label>
                     <input
                       className={lux.input}
-                      type="datetime-local"
-                      value={newEv.end}
-                      onChange={(e) => setNewEv({ ...newEv, end: e.target.value })}
+                      type="time"
+                      value={newEv.endTime}
+                      onChange={(e) => setNewEv({ ...newEv, endTime: e.target.value })}
                       required
                     />
                   </div>
@@ -776,25 +863,32 @@ export default function SchedulePage() {
                     className={lux.input}
                     value={newEv.location}
                     onChange={(e) => setNewEv({ ...newEv, location: e.target.value })}
-                    placeholder="Τοποθεσία"
+                    placeholder="Προαιρετικό"
                   />
                 </div>
                 <div>
                   <label className={lux.label}>Περιγραφή</label>
                   <textarea
-                    className={lux.textarea + " !min-h-[80px]"}
+                    className={lux.textarea + " !min-h-[88px]"}
                     value={newEv.description}
                     onChange={(e) => setNewEv({ ...newEv, description: e.target.value })}
-                    placeholder="Λεπτομέρειες…"
+                    placeholder="Προαιρετικό"
                   />
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-2 border-t border-[var(--border)] pt-4">
-                <button type="button" className={lux.btnSecondary} onClick={() => setShowNew(false)}>
+              <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
+                <button
+                  type="button"
+                  className={lux.btnSecondary}
+                  onClick={() => {
+                    setShowNew(false);
+                    setCreateError(null);
+                  }}
+                >
                   Άκυρο
                 </button>
-                <button type="submit" disabled={saving} className={lux.btnGold + " w-full sm:w-auto"}>
-                  {saving ? "—" : "Αποθήκευση"}
+                <button type="submit" disabled={saving} className={lux.btnGold}>
+                  {saving ? "…" : "Αποθήκευση"}
                 </button>
               </div>
             </form>
