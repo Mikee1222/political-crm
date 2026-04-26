@@ -21,6 +21,10 @@ const bodySchema = z.object({
       type: z.literal("spreadsheet_import"),
       rows: z.array(z.record(z.string(), z.unknown())),
       fileName: z.string().max(200).optional(),
+      /** First sheet name when it is a place (e.g. Αστακός), not generic Sheet1 */
+      sheetName: z.string().max(200).optional(),
+      /** Explicit municipality/area hint from client */
+      contextMunicipality: z.string().max(200).optional(),
     })
     .optional(),
 });
@@ -78,6 +82,23 @@ export async function POST(request: NextRequest) {
   const { message, conversationId, attachment: rawAttachment } = bodyIn;
   const importRowsForTool =
     hasMinRole(p.role, "manager") && rawAttachment?.type === "spreadsheet_import" ? rawAttachment.rows : undefined;
+
+  function isGenericSheetName(name: string | undefined): boolean {
+    if (!name || !name.trim()) return true;
+    const t = name.trim();
+    if (/^sheet\d*$/i.test(t)) return true;
+    if (/^φ[ύυ]λλ[οό]\d*$/i.test(t)) return true;
+    return false;
+  }
+
+  const importContextMunicipality: string | undefined = (() => {
+    if (!hasMinRole(p.role, "manager") || rawAttachment?.type !== "spreadsheet_import") return undefined;
+    const explicit = rawAttachment.contextMunicipality?.trim();
+    if (explicit) return explicit;
+    const s = rawAttachment.sheetName?.trim();
+    if (s && !isGenericSheetName(s)) return s;
+    return undefined;
+  })();
   const cookie = request.headers.get("cookie") ?? "";
   const origin = request.nextUrl.origin;
 
@@ -148,6 +169,7 @@ export async function POST(request: NextRequest) {
         profile: p,
         role: p.role,
         importRows: importRowsForTool,
+        importContextMunicipality,
         onBulkProgress: (current: number, total: number) => {
           sendSse(`data: ${JSON.stringify({ event: "bulk_progress", current, total })}\n\n`);
         },

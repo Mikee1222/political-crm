@@ -163,6 +163,8 @@ type ContactFuzzy = {
   last_name: string;
   nickname: string | null;
   phone?: string | null;
+  phone2?: string | null;
+  landline?: string | null;
   area?: string | null;
   municipality?: string | null;
 };
@@ -177,9 +179,13 @@ export function buildNameSearchHaystack(c: ContactFuzzy): string {
   const fullG = fn + " " + ln;
   const fullL = greekNameToLatin(`${c.first_name} ${c.last_name}`.trim());
   const ph = c.phone != null ? onlyDigits(String(c.phone)) : "";
+  const p2 = c.phone2 != null ? onlyDigits(String(c.phone2)) : "";
+  const pl = c.landline != null ? onlyDigits(String(c.landline)) : "";
   const a = c.area != null ? normalizeGreekNameKey(c.area) : "";
   const m = c.municipality != null ? normalizeGreekNameKey(c.municipality) : "";
-  return [fullG, fn, ln, nn, fullL, fnL, lnL, nnL, ph, a, m, `${fnL} ${lnL}`.trim()].filter(Boolean).join(" ");
+  return [fullG, fn, ln, nn, fullL, fnL, lnL, nnL, ph, p2, pl, a, m, `${fnL} ${lnL}`.trim()]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function needleInHay(needle: string, hay: string): boolean {
@@ -205,7 +211,7 @@ export function contactMatchesFuzzyGreekSearch(
   if (t.length === 0) return true;
 
   const hay = ` ${buildNameSearchHaystack(c)} `;
-  const phoneD = onlyDigits(c.phone ?? "");
+  const phoneD = [c.phone, c.phone2, c.landline].map((x) => onlyDigits(x ?? "")).join("");
   const terms = t.split(/\s+/).filter(Boolean);
   for (const term of terms) {
     const d = onlyDigits(term);

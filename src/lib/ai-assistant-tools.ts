@@ -6,6 +6,7 @@ import Papa from "papaparse";
 import { hasMinRole, type Role } from "@/lib/roles";
 import type { UserProfile } from "@/lib/auth-helpers";
 import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
+import { greekTitleCaseWords, parseGreekPhoneFieldsFromText } from "@/lib/greek-contact-import";
 
 export type FindRow = {
   id: string;
@@ -218,7 +219,7 @@ export const ALEX_TOOLS: Tool[] = [
     description:
       "Μαζική δημιουργία επαφών από αρχείο (Excel/CSV) μετά το mapping. Χρήση ΜΟΝΟ μετά επιβεβαίωση. Το mapping (στήλες αρχείου → πεδία CRM) υποχρεωτικό. " +
       "Οι πλήρεις γραμμές έρχονται αυτόματα από το συνημμένο. Μπορείς παραλείψεις το `rows` στο input. " +
-      "Υποστηριζόμενα: first_name, last_name, full_name, phone, email, municipality, area, notes, political_stance, father_name, mother_name, occupation, ignore.",
+      "Υποστηριζόμενα: first_name, last_name, full_name (ελληνική σειρά + Title Case), phone (κελί με πολλούς αριθμούς: 1ο κινητό 69…→phone, 2ο κινητό→phone2, 2… σταθερό→landline), context_municipality (τίτλος αρχείου/φύλλο → municipality+area+toponym όταν λείπουν), email, municipality, area, toponym, notes, political_stance, father_name, mother_name, occupation, ignore.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -230,6 +231,10 @@ export const ALEX_TOOLS: Tool[] = [
         mapping: {
           type: "object" as const,
           description: "Πχ. { \"Ονοματεπώνυμο\": \"full_name\", \"Κινητό\": \"phone\" } — κλειδιά: κελί/στήλη όπως το αρχείο",
+        },
+        context_municipality: {
+          type: "string" as const,
+          description: "Τόπος από τίτλο/φύλλο (π.χ. Αστακός)· εφαρμόζεται σε municipality, area, toponym όταν λείπουν στις γραμμές",
         },
       },
       required: ["mapping"],
@@ -257,6 +262,8 @@ type ToolContext = {
   role: Role;
   /** Πλήρεις γραμμές import από το τρέχον αίτημα (client attachment) */
   importRows?: Array<Record<string, unknown>>;
+  /** Από sheet name / επισύναψη — ιδρύει περιοχή+δήμο όταν κενά στη γραμμή */
+  importContextMunicipality?: string;
   onBulkProgress?: (current: number, total: number) => void;
 };
 
@@ -280,6 +287,7 @@ const BULK_OPTIONAL_FIELDS = [
   "email",
   "municipality",
   "area",
+  "toponym",
   "political_stance",
   "notes",
   "father_name",
@@ -297,11 +305,14 @@ function cellStr(row: Record<string, unknown>, header: string): string {
 }
 
 /**
- * mapping: column header from sheet → CRM field (first_name, last_name, full_name, phone, …)
+ * mapping: column header from sheet → CRM field (first_name, last_name, full_name, phone, …).
+ * full_name: last word → first_name, preceding → last_name (Greek order). Title Case for names.
+ * Phone: multiple 69…/2… 10-digit numbers from one cell → phone, phone2, landline; context_municipality fills municipality, area, toponym when missing.
  */
 export function mapSpreadsheetRowToContactPayload(
   row: Record<string, unknown>,
   mapping: Record<string, string>,
+  options?: { contextMunicipality?: string },
 ): { payload: Record<string, unknown> | null; skip?: "no_phone" | "incomplete_name" } {
   const acc: Record<string, string> = {};
   for (const [header, field] of Object.entries(mapping)) {
@@ -310,18 +321,26 @@ export function mapSpreadsheetRowToContactPayload(
     const v = cellStr(row, header);
     if (f === "full_name") {
       const parts = v.split(/\s+/).filter(Boolean);
-      if (parts.length >= 1) {
+      if (parts.length === 0) {
+        /* leave empty */
+      } else if (parts.length === 1) {
         if (!acc.first_name) acc.first_name = parts[0] ?? "";
-        if (!acc.last_name) acc.last_name = parts.slice(1).join(" ") || "—";
+        if (!acc.last_name) acc.last_name = "—";
+      } else {
+        if (!acc.first_name) acc.first_name = parts[parts.length - 1] ?? "";
+        if (!acc.last_name) acc.last_name = parts.slice(0, -1).join(" ");
       }
     } else {
       acc[f] = v;
     }
   }
-  const first_name = (acc.first_name ?? "").trim();
-  const last_name = (acc.last_name ?? "").trim();
-  const phone = (acc.phone ?? "").replace(/\s/g, "");
-  if (!phone || phone.length < 6) {
+  const firstRaw = (acc.first_name ?? "").trim();
+  const lastRaw = (acc.last_name ?? "").trim();
+  const first_name = firstRaw ? greekTitleCaseWords(firstRaw) : "";
+  const last_name = lastRaw ? (lastRaw === "—" ? "—" : greekTitleCaseWords(lastRaw)) : "";
+
+  const { phone, phone2, landline } = parseGreekPhoneFieldsFromText(acc.phone);
+  if (!phone) {
     return { payload: null, skip: "no_phone" };
   }
   if (!first_name || !last_name) {
@@ -334,8 +353,44 @@ export function mapSpreadsheetRowToContactPayload(
     call_status: "Pending",
     priority: "Medium",
   };
+  if (phone2) body.phone2 = phone2;
+  if (landline) body.landline = landline;
+
+  const ctxPlace = options?.contextMunicipality?.trim();
+  let muni = (acc.municipality ?? "").trim();
+  let ar = (acc.area ?? "").trim();
+  if (muni && !ar) ar = muni;
+  if (ar && !muni) muni = ar;
+  if (ctxPlace) {
+    const p = greekTitleCaseWords(ctxPlace);
+    if (!muni) muni = p;
+    if (!ar) ar = p;
+  }
+  if (muni) muni = greekTitleCaseWords(muni);
+  if (ar) ar = greekTitleCaseWords(ar);
+  if (muni && !ar) ar = muni;
+  if (ar && !muni) muni = ar;
+  if (muni) body.municipality = muni;
+  if (ar) body.area = ar;
+
   for (const k of BULK_OPTIONAL_FIELDS) {
-    if (acc[k] && String(acc[k]).trim()) body[k] = acc[k]!.trim();
+    if (k === "municipality" || k === "area") continue;
+    const v = acc[k];
+    if (v == null || !String(v).trim()) continue;
+    const t = String(v).trim();
+    if (k === "email" || k === "notes" || k === "political_stance") {
+      body[k] = t;
+    } else if (k === "father_name" || k === "mother_name" || k === "occupation" || k === "toponym") {
+      body[k] = greekTitleCaseWords(t);
+    } else {
+      body[k] = t;
+    }
+  }
+  if (ctxPlace) {
+    const p = greekTitleCaseWords(ctxPlace);
+    if (body.toponym == null || String(body.toponym).trim() === "") {
+      body.toponym = p;
+    }
   }
   if (acc.age) {
     const n = parseInt(String(acc.age), 10);
@@ -417,6 +472,8 @@ export async function runAlexTool(
       "first_name",
       "last_name",
       "phone",
+      "phone2",
+      "landline",
       "email",
       "age",
       "gender",
@@ -694,7 +751,17 @@ export async function runAlexTool(
       return { content: JSON.stringify({ error: "Υποχρεωτικά: first_name, last_name, phone" }) };
     }
     const body: Record<string, unknown> = { first_name, last_name, phone, call_status: "Pending", priority: "Medium" };
-    for (const k of ["municipality", "area", "political_stance", "notes", "email", "father_name", "mother_name"] as const) {
+    for (const k of [
+      "municipality",
+      "area",
+      "political_stance",
+      "notes",
+      "email",
+      "father_name",
+      "mother_name",
+      "phone2",
+      "landline",
+    ] as const) {
       if (raw[k] != null && String(raw[k]).trim() !== "") body[k] = raw[k];
     }
     const r = await ctx.forward("/api/contacts", {
@@ -862,7 +929,7 @@ export async function runAlexTool(
     };
   }
 
-  if (name === "bulk_create_contacts") {
+    if (name === "bulk_create_contacts") {
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
     }
@@ -870,6 +937,8 @@ export async function runAlexTool(
     if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
       return { content: JSON.stringify({ error: "Χρειάζεται mapping (object): στήλη αρχείου → πεδίο CRM" }) };
     }
+    const fromTool = typeof raw.context_municipality === "string" ? raw.context_municipality.trim() : "";
+    const contextMunicipality = fromTool || ctx.importContextMunicipality;
     const mapObj = mapping as Record<string, string>;
     let rows: Array<Record<string, unknown>> = [];
     if (Array.isArray(raw.rows) && raw.rows.length > 0) {
@@ -896,7 +965,9 @@ export async function runAlexTool(
       const batchEnd = Math.min(batchStart + ROW_BATCH, totalRows);
       await runIndexRangeWithConcurrency(batchStart, batchEnd, CONCURRENCY, async (i) => {
         try {
-          const { payload, skip } = mapSpreadsheetRowToContactPayload(list[i]!, mapObj);
+          const { payload, skip } = mapSpreadsheetRowToContactPayload(list[i]!, mapObj, {
+            contextMunicipality: contextMunicipality || undefined,
+          });
           if (skip === "no_phone") {
             perRow[i] = "skip_phone";
             return;
@@ -1002,7 +1073,7 @@ export function buildSystemPrompt(today: string) {
 - read_pdf: κείμενο/σύνοψη από URL (PDF ή κείμενο)
 - write_letter: τυπική επιστολή (αίτηση, καταγγελία, ερώτημα, ευχαριστήρια) προς δημόσιο φορέα
 - import_csv_data: εισαγωγή CSV με mapping στηλών → /api/contacts/import-mapped
-- bulk_create_contacts: μετά upload και επιβεβαίωση mapping, δημιουργία όλων των επαφών (ασύγχρονα, έως 10 παράλληλα POST, χωρίς ανώτερο όριο γραμμών). Το mapping υποχρεωτικό· οι γραμμές από το συνημμένο.
+- bulk_create_contacts: επιβεβαίωση mapping, δημιουργία επαφών (έως 10 παράλληλα). Πολλαπλά τηλ. σε κελί: 1ο κινητό, 2ο κινητό, σταθερό· context_municipality: δήμος+περιοχή+τοπωνύμιο· ονόματα Title Case.
 - search_contacts_advanced: πολλαπλά φίλτρα (όνομα, τηλ., δήμος, περιοχή, κατάσταση, πολιτική στάση, ηλικία, tag)
 
 ΣΗΜΕΡΙΝΗ ΗΜΕΡΟΜΗΝΙΑ: ${today}`;

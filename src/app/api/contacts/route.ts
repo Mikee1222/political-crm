@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const groupId = request.nextUrl.searchParams.get("group_id");
 
   const selectList =
-    "id, first_name, last_name, phone, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, contact_groups ( id, name, color, description, year )";
+    "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, contact_groups ( id, name, color, description, year )";
 
   if (namedayToday) {
     const now = new Date();
@@ -114,6 +114,11 @@ export async function POST(request: NextRequest) {
   delete body.contact_code;
   if (typeof body.phone === "string" && !body.phone.trim()) {
     body.phone = null;
+  }
+  for (const k of ["phone2", "landline"] as const) {
+    if (typeof body[k] === "string" && !String(body[k]).trim()) {
+      body[k] = null;
+    }
   }
   const code = await nextPaddedCode(supabase, "contacts", "contact_code", "EP");
   body.contact_code = code;

@@ -17,6 +17,8 @@ type Contact = {
   first_name: string;
   last_name: string;
   phone: string;
+  phone2?: string | null;
+  landline?: string | null;
   area: string | null;
   municipality: string | null;
   call_status: string | null;
@@ -26,6 +28,31 @@ type Contact = {
   group_id?: string | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
 };
+
+function PhoneListExtras({ phone2, landline }: { phone2?: string | null; landline?: string | null }) {
+  if (!String(phone2 ?? "").trim() && !String(landline ?? "").trim()) return null;
+  return (
+    <span
+      className="ml-0.5 inline-flex shrink-0 items-center gap-0.5 text-[8px] font-bold leading-none text-[var(--text-muted)]"
+      aria-label={
+        [String(phone2 ?? "").trim() ? "Έχει 2ο κινητό" : null, String(landline ?? "").trim() ? "Έχει σταθερό" : null]
+          .filter(Boolean)
+          .join(", ") || undefined
+      }
+    >
+      {String(phone2 ?? "").trim() ? (
+        <span className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-0.5 py-px" title="2ο κινητό">
+          2
+        </span>
+      ) : null}
+      {String(landline ?? "").trim() ? (
+        <span className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-0.5 py-px" title="Σταθερό">
+          Σ
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 function GroupPillWithHint({ g }: { g: NonNullable<Contact["contact_groups"]> }) {
   const border = g.color || "#003476";
@@ -129,7 +156,10 @@ function ContactSwipeCard({
             ) : null}
             {c.contact_groups ? <GroupPillWithHint g={c.contact_groups} /> : null}
           </p>
-          <p className="mt-0.5 font-mono text-[13px] text-[var(--text-secondary)]">{c.phone || "—"}</p>
+          <p className="mt-0.5 flex flex-wrap items-baseline gap-x-0.5 font-mono text-[13px] text-[var(--text-secondary)]">
+            <span>{c.phone || "—"}</span>
+            <PhoneListExtras phone2={c.phone2} landline={c.landline} />
+          </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span
               className={
@@ -653,7 +683,12 @@ function ContactsPage() {
                       </span>
                     </button>
                   </td>
-                  <td className="p-3 font-mono text-[13px] text-[var(--text-secondary)]">{c.phone}</td>
+                  <td className="p-3 font-mono text-[13px] text-[var(--text-secondary)]">
+                    <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-0.5 break-all">
+                      <span>{c.phone}</span>
+                      <PhoneListExtras phone2={c.phone2} landline={c.landline} />
+                    </span>
+                  </td>
                   <td className="p-3 text-[var(--text-table)]">{c.area ?? "—"}</td>
                   <td className="p-3 text-[var(--text-table)]">{c.municipality ?? "—"}</td>
                   <td className="p-3">
@@ -836,6 +871,8 @@ function CreateContactModal({
     father_name: "",
     mother_name: "",
     phone: "",
+    phone2: "",
+    landline: "",
     email: "",
     area: "",
     age: "",
@@ -866,6 +903,8 @@ function CreateContactModal({
   const buildPayload = () => ({
     ...form,
     phone: form.phone.trim() || null,
+    phone2: form.phone2.trim() || null,
+    landline: form.landline.trim() || null,
     age: form.age ? Number(form.age) : null,
     tags: form.tags
       .split(",")
@@ -994,12 +1033,24 @@ function CreateContactModal({
               onChange={(v) => setForm({ ...form, mother_name: v })}
             />
             <FormField
-              label="Τηλέφωνο"
+              label="Κινητό 1"
               required
               error={fieldErrors.phone}
               value={form.phone}
               placeholder="π.χ. 6912345678"
               onChange={(v) => setForm({ ...form, phone: v })}
+            />
+            <FormField
+              label="Κινητό 2"
+              value={form.phone2}
+              placeholder="Προαιρετικό"
+              onChange={(v) => setForm({ ...form, phone2: v })}
+            />
+            <FormField
+              label="Σταθερό"
+              value={form.landline}
+              placeholder="π.χ. 2101234567"
+              onChange={(v) => setForm({ ...form, landline: v })}
             />
             <div className="md:col-span-2">
               <AitoloakarnaniaLocationFields

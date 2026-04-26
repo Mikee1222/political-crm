@@ -78,7 +78,12 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           convId = await newConversation();
           if (!convId) return;
         }
-        setSpreadsheetImport({ conversationId: convId, rows: p.rows as Array<Record<string, unknown>>, fileName: file.name });
+        setSpreadsheetImport({
+          conversationId: convId,
+          rows: p.rows as Array<Record<string, unknown>>,
+          fileName: file.name,
+          sheetName: p.sheetName,
+        });
         const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows);
         void send(text, convId);
       } catch (err) {

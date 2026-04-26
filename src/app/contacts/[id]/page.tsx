@@ -48,6 +48,8 @@ type Contact = {
   first_name: string;
   last_name: string;
   phone: string | null;
+  phone2: string | null;
+  landline: string | null;
   email: string | null;
   area: string | null;
   age: number | null;
@@ -107,11 +109,15 @@ function buildContactCopyText(c: Contact) {
   const line1 = greekHeaderPrimaryLine(c.last_name, c.first_name, c.father_name);
   const line2 = greekHeaderMotherLine(c.mother_name);
   const phone = c.phone?.trim() || "";
+  const p2 = c.phone2?.trim() || "";
+  const ll = c.landline?.trim() || "";
   return [
     line1,
     ...(line2 ? [line2] : []),
     c.contact_code ? `Κωδικός: ${c.contact_code}` : null,
-    phone ? `Τηλέφωνο: ${phone}` : null,
+    phone ? `Κινητό 1: ${phone}` : null,
+    p2 ? `Κινητό 2: ${p2}` : null,
+    ll ? `Σταθερό: ${ll}` : null,
     c.email?.trim() ? `Email: ${c.email}` : null,
     c.municipality?.trim() || c.area?.trim() ? `Τοποθεσία: ${[c.municipality, c.area].filter(Boolean).join(" · ")}` : null,
   ]
@@ -250,7 +256,13 @@ export default function ContactDetailPage() {
     if (raw) {
       const g = raw.contact_groups;
       const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
-      setContact({ ...raw, contact_groups, group_id: raw.group_id ?? null });
+      setContact({
+        ...raw,
+        contact_groups,
+        group_id: raw.group_id ?? null,
+        phone2: raw.phone2 ?? null,
+        landline: raw.landline ?? null,
+      });
     } else {
       setContact(null);
     }
@@ -331,7 +343,7 @@ export default function ContactDetailPage() {
         group_id: buf.group_id,
       });
     } else if (s === "comm") {
-      await patch({ phone: buf.phone, email: buf.email, area: buf.area });
+      await patch({ phone: buf.phone, phone2: buf.phone2, landline: buf.landline, email: buf.email, area: buf.area });
     }
   };
 
@@ -493,7 +505,11 @@ export default function ContactDetailPage() {
                   </span>
                 ) : null}
               </div>
-              <p className="mt-2 font-mono text-sm text-[var(--text-secondary)]">{disp(c.phone)}</p>
+              <p className="mt-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 font-mono text-sm text-[var(--text-secondary)]">
+                <span>{disp(c.phone)}</span>
+                {c.phone2?.trim() ? <span className="text-xs text-[var(--text-muted)]">· {c.phone2}</span> : null}
+                {c.landline?.trim() ? <span className="text-xs text-[var(--text-muted)]">· στ. {c.landline}</span> : null}
+              </p>
               {c.area?.trim() ? (
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">Περιοχή: {c.area}</p>
               ) : null}
@@ -925,7 +941,9 @@ export default function ContactDetailPage() {
               <div className={grid2} style={{ gap: "0.5rem" }}>
                 {(
                   [
-                    { k: "phone" as const, l: "Τηλέφωνο" },
+                    { k: "phone" as const, l: "Κινητό 1" },
+                    { k: "phone2" as const, l: "Κινητό 2" },
+                    { k: "landline" as const, l: "Σταθερό" },
                     { k: "email" as const, l: "Email" },
                     { k: "area" as const, l: "Περιοχή" },
                   ] as const
@@ -941,7 +959,7 @@ export default function ContactDetailPage() {
                         }
                       />
                     ) : (
-                      <p className={row.k === "phone" ? val + " font-mono" : val}>
+                      <p className={row.k === "email" || row.k === "area" ? val : val + " font-mono"}>
                         {disp(c?.[row.k] as string | null)}
                       </p>
                     )}
@@ -954,10 +972,22 @@ export default function ContactDetailPage() {
                 </h3>
                 <div className="space-y-2.5">
                   <QuickCopyRow
-                    label="Τηλέφωνο"
+                    label="Κινητό 1"
                     value={live.phone?.trim() ?? ""}
                     mono
-                    copyLabel="Αντιγραφή τηλεφώνου"
+                    copyLabel="Αντιγραφή κινητού 1"
+                  />
+                  <QuickCopyRow
+                    label="Κινητό 2"
+                    value={live.phone2?.trim() ?? ""}
+                    mono
+                    copyLabel="Αντιγραφή κινητού 2"
+                  />
+                  <QuickCopyRow
+                    label="Σταθερό"
+                    value={live.landline?.trim() ?? ""}
+                    mono
+                    copyLabel="Αντιγραφή σταθερού"
                   />
                   <QuickCopyRow
                     label="Μικρό Όνομα"

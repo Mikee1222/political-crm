@@ -20,7 +20,7 @@ function priorityGr(p: string | null | undefined): string {
 }
 
 const SELECT_EXPORT =
-  "id, first_name, last_name, phone, email, area, municipality, electoral_district, call_status, priority, political_stance, notes, nickname";
+  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, electoral_district, call_status, priority, political_stance, notes, nickname";
 
 export async function GET(request: NextRequest) {
   try {
@@ -92,6 +92,8 @@ export async function GET(request: NextRequest) {
     first_name: string;
     last_name: string;
     phone: string | null;
+    phone2: string | null;
+    landline: string | null;
     email: string | null;
     area: string | null;
     municipality: string | null;
@@ -113,7 +115,9 @@ export async function GET(request: NextRequest) {
   const header = [
     "Μικρό Όνομα",
     "Επίθετο",
-    "Τηλέφωνο",
+    "Κινητό 1",
+    "Κινητό 2",
+    "Σταθερό",
     "Email",
     "Περιοχή",
     "Δήμος",
@@ -130,6 +134,8 @@ export async function GET(request: NextRequest) {
         r.first_name,
         r.last_name,
         r.phone,
+        r.phone2,
+        r.landline,
         r.email,
         r.area,
         r.municipality,
