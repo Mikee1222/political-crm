@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+import { nextPaddedCode } from "@/lib/codes";
+import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
 
 const rowSchema = z.object({
   first_name: z.string().min(1).max(400),
@@ -61,7 +63,9 @@ export async function POST(request: Request) {
   let errorCount = 0;
   const lastErrors: { phone: string; message: string }[] = [];
   for (const r of rows) {
-    const rec: InsertRow = {
+    const code = await nextPaddedCode(supabase, "contacts", "contact_code", "EP");
+    const autoNd = nameDayDateStringFromFirstName(r.first_name);
+    const rec: InsertRow & { contact_code: string; name_day: string | null } = {
       first_name: r.first_name.trim() || "—",
       last_name: r.last_name.trim() || "—",
       phone: r.phone.trim(),
@@ -74,6 +78,8 @@ export async function POST(request: Request) {
       notes: r.notes,
       call_status: r.call_status ?? "Pending",
       priority: r.priority ?? "Medium",
+      contact_code: code,
+      name_day: autoNd,
     };
     const { error } = await supabase.from("contacts").insert(rec);
     if (error) {

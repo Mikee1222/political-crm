@@ -4,6 +4,7 @@ import { hasMinRole } from "@/lib/roles";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
+import { nextPaddedCode } from "@/lib/codes";
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +21,9 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from("requests")
-    .select("id, title, description, category, status, assigned_to, created_at, updated_at, contact_id, contacts(first_name,last_name)")
+    .select(
+      "id, request_code, title, description, category, status, assigned_to, created_at, updated_at, contact_id, contacts(first_name,last_name)",
+    )
     .order("created_at", { ascending: false });
 
   if (status) query = query.eq("status", status);
@@ -50,8 +53,10 @@ export async function POST(request: NextRequest) {
     return forbidden();
   }
 
-  const body = await request.json();
-  const payload = { ...body, updated_at: new Date().toISOString() };
+  const body = (await request.json()) as Record<string, unknown>;
+  delete body.request_code;
+  const code = await nextPaddedCode(supabase, "requests", "request_code", "AIT");
+  const payload = { ...body, request_code: code, updated_at: new Date().toISOString() };
   const { data, error } = await supabase.from("requests").insert(payload).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   const title = String((data as { title?: string }).title ?? "Αίτημα");

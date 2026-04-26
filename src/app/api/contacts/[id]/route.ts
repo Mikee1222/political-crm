@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
+import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -102,6 +103,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (!hasMinRole(profile?.role, "manager")) {
     return forbidden();
+  }
+  delete body.contact_code;
+  if (!("name_day" in body) && body.first_name !== undefined) {
+    const iso = nameDayDateStringFromFirstName(String(body.first_name));
+    if (iso) body.name_day = iso;
   }
   const { data, error } = await supabase.from("contacts").update(body).eq("id", params.id).select("*").single();
   if (error) {

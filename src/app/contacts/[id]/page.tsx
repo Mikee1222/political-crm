@@ -62,6 +62,7 @@ type Contact = {
   nickname: string | null;
   spouse_name: string | null;
   name_day: string | null;
+  contact_code: string | null;
   birthday: string | null;
   municipality: string | null;
   electoral_district: string | null;
@@ -386,7 +387,14 @@ export default function ContactDetailPage() {
             {initials}
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold leading-tight text-[var(--text-primary)]">{fullName}</h1>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold leading-tight text-[var(--text-primary)]">{fullName}</h1>
+              {c.contact_code ? (
+                <span className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">
+                  {c.contact_code}
+                </span>
+              ) : null}
+            </div>
             <p className="mt-0.5 font-mono text-sm text-[var(--text-muted)]">{disp(c.phone)}</p>
             <p className="text-sm text-[var(--text-muted)]">Περιοχή: {disp(c.area)}</p>
           </div>

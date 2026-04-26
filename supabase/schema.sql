@@ -376,3 +376,35 @@ create index if not exists idx_campaign_contacts_contact on public.campaign_cont
 alter table public.campaign_contacts enable row level security;
 drop policy if exists "campaign contacts all" on public.campaign_contacts;
 create policy "campaign contacts all" on public.campaign_contacts for all to authenticated using (true) with check (true);
+
+-- Human-readable IDs (EP- / AIT-)
+alter table public.contacts
+  add column if not exists contact_code text;
+alter table public.requests
+  add column if not exists request_code text;
+
+create unique index if not exists idx_contacts_contact_code_unique
+  on public.contacts (contact_code)
+  where contact_code is not null;
+create unique index if not exists idx_requests_request_code_unique
+  on public.requests (request_code)
+  where request_code is not null;
+
+-- One-time backfill (safe to re-run: only rows without code)
+update public.contacts c
+set contact_code = 'EP-' || lpad(n::text, 6, '0')
+from (
+  select id, row_number() over (order by created_at nulls last, id) as n
+  from public.contacts
+  where contact_code is null
+) s
+where c.id = s.id;
+
+update public.requests r
+set request_code = 'AIT-' || lpad(n::text, 6, '0')
+from (
+  select id, row_number() over (order by created_at nulls last, id) as n
+  from public.requests
+  where request_code is null
+) s
+where r.id = s.id;

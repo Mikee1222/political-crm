@@ -21,6 +21,7 @@ type Contact = {
   call_status: string | null;
   priority: string | null;
   tags: string[] | null;
+  contact_code?: string | null;
 };
 
 type Camp = { id: string; name: string };
@@ -81,7 +82,7 @@ function ContactSwipeCard({
           className="flex w-14 shrink-0 items-center justify-center"
           style={{ background: "linear-gradient(270deg, rgba(0,52,118,0.35), transparent)" }}
         >
-          <Pencil className="h-4 w-4 text-sky-200" aria-hidden />
+          <Pencil className="h-4 w-4 text-[var(--accent-blue-bright)]" aria-hidden />
         </div>
       </div>
       <div className="relative z-[1] flex min-h-[4.5rem] min-w-0 items-center gap-3 p-3 pl-2 pr-2">
@@ -89,8 +90,13 @@ function ContactSwipeCard({
           {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
         </div>
         <div className="min-w-0 flex-1 pr-1">
-          <p className="font-semibold text-[var(--text-primary)]">
+          <p className="flex flex-wrap items-center gap-2 font-semibold text-[var(--text-primary)]">
             {c.first_name} {c.last_name}
+            {c.contact_code ? (
+              <span className="shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] font-normal text-[var(--text-muted)]">
+                {c.contact_code}
+              </span>
+            ) : null}
           </p>
           <p className="mt-0.5 font-mono text-[13px] text-[var(--text-secondary)]">{c.phone || "—"}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -417,7 +423,7 @@ function ContactsPage() {
       )}
 
       <div className="data-hq-card hidden overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[0_4px_24px_rgba(0,0,0,0.4)] md:block">
-        <table className="min-w-full text-sm text-[#E2E8F0]">
+        <table className="min-w-full text-sm text-[var(--text-table)]">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
               <th className="sticky left-0 z-20 w-11 min-w-11 max-w-11 border-r border-[var(--border)] bg-[var(--bg-elevated)] p-2 pl-3 text-center sm:w-12">
@@ -486,14 +492,19 @@ function ContactsPage() {
                       <div className={avatarContact + " !h-8 !w-8 text-[10px] sm:!h-9 sm:!w-9 sm:text-xs"}>
                         {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
                       </div>
-                      <span className="min-w-0 truncate font-medium text-[#E2E8F0]">
+                      <span className="flex min-w-0 items-center gap-2 truncate font-medium text-[var(--text-table)]">
                         {c.first_name} {c.last_name}
+                        {c.contact_code ? (
+                          <span className="shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
+                            {c.contact_code}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   </td>
-                  <td className="p-3 font-mono text-[13px] text-[#94A3B8]">{c.phone}</td>
-                  <td className="p-3 text-[#E2E8F0]">{c.area ?? "—"}</td>
-                  <td className="p-3 text-[#E2E8F0]">{c.municipality ?? "—"}</td>
+                  <td className="p-3 font-mono text-[13px] text-[var(--text-secondary)]">{c.phone}</td>
+                  <td className="p-3 text-[var(--text-table)]">{c.area ?? "—"}</td>
+                  <td className="p-3 text-[var(--text-table)]">{c.municipality ?? "—"}</td>
                   <td className="p-3">
                     <span
                       className={

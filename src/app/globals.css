@@ -24,6 +24,14 @@
   --text-sidebar-active: #ffffff;
   --text-muted: #94a3b8;
   --text-metric-value: #ffffff;
+  /* Semantic labels (dark) */
+  --text-label: #94a3b8;
+  --text-card-title: #f0f4ff;
+  --text-page-title: #f0f4ff;
+  --text-table-header: #94a3b8;
+  --text-input: #f0f4ff;
+  --text-body: #f0f4ff;
+  --text-badge-on-gold: #0a0f1a;
   --text-placeholder: #4a6080;
   --input-bg: #162540;
   --input-border: rgba(201, 168, 76, 0.2);
@@ -41,6 +49,19 @@
   --status-waiting-text: #94a3b8;
   --status-noanswer-bg: rgba(245, 158, 11, 0.15);
   --status-noanswer-text: #f59e0b;
+  /* Request list status chips */
+  --status-req-new-bg: rgba(14, 165, 233, 0.2);
+  --status-req-new-fg: #e0f2fe;
+  --status-req-new-ring: rgba(14, 165, 233, 0.45);
+  --status-req-prog-bg: rgba(245, 158, 11, 0.2);
+  --status-req-prog-fg: #ffedd5;
+  --status-req-prog-ring: rgba(245, 158, 11, 0.45);
+  --status-req-done-bg: rgba(16, 185, 129, 0.2);
+  --status-req-done-fg: #d1fae5;
+  --status-req-done-ring: rgba(16, 185, 129, 0.45);
+  --status-req-rej-bg: rgba(239, 68, 68, 0.2);
+  --status-req-rej-fg: #fecaca;
+  --status-req-rej-ring: rgba(239, 68, 68, 0.45);
   /* Shell */
   --sidebar-bg: #0a1628;
   --sidebar-brand-title: #f0f4ff;
@@ -83,18 +104,25 @@
   --accent-blue: #003476;
   --accent-blue-bright: #1e5fa8;
   --text-primary: #0a0f1a;
-  --text-mute-floor: #5c6570;
-  --text-secondary: #3d4a5c;
-  --text-subtitle: #64748b;
-  --text-briefing: #475569;
+  --text-mute-floor: #6b7280;
+  --text-secondary: #374151;
+  --text-subtitle: #6b7280;
+  --text-briefing: #374151;
   --text-table: #0a0f1a;
-  --text-table-secondary: #64748b;
-  --text-header: #6b7a8d;
+  --text-table-secondary: #6b7280;
+  --text-header: #374151;
   --text-sidebar: #ffffff;
   --text-sidebar-active: #ffffff;
-  --text-muted: #6b7a8d;
+  --text-muted: #6b7280;
   --text-metric-value: #0a0f1a;
-  --text-placeholder: #9aa3ad;
+  --text-label: #374151;
+  --text-card-title: #111827;
+  --text-page-title: #0a0f1a;
+  --text-table-header: #374151;
+  --text-body: #0a0f1a;
+  --text-input: #0a0f1a;
+  --text-badge-on-gold: #0a0f1a;
+  --text-placeholder: #9ca3af;
   --input-bg: #ffffff;
   --input-border: rgba(139, 105, 20, 0.25);
   --input-focus-border: #003476;
@@ -108,6 +136,19 @@
   --status-waiting-text: #475569;
   --status-noanswer-bg: #fef3c7;
   --status-noanswer-text: #b45309;
+  /* Request list status chips (contrast in light) */
+  --status-req-new-bg: #e0f2fe;
+  --status-req-new-fg: #0a4a6b;
+  --status-req-new-ring: #7dd3fc;
+  --status-req-prog-bg: #fff7ed;
+  --status-req-prog-fg: #9a3412;
+  --status-req-prog-ring: #fdba74;
+  --status-req-done-bg: #dcfce7;
+  --status-req-done-fg: #14532d;
+  --status-req-done-ring: #86efac;
+  --status-req-rej-bg: #fee2e2;
+  --status-req-rej-fg: #991b1b;
+  --status-req-rej-ring: #fca5a5;
   /* ND blue chrome */
   --sidebar-bg: #003476;
   --sidebar-brand-title: #ffffff;

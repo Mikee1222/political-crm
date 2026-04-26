@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import type { Tool } from "@anthropic-ai/sdk/resources/messages/messages";
+import Anthropic from "@anthropic-ai/sdk";
+import Papa from "papaparse";
 import { hasMinRole, type Role } from "@/lib/roles";
 import type { UserProfile } from "@/lib/auth-helpers";
 
@@ -10,6 +12,7 @@ export type FindRow = {
   last_name: string;
   phone: string | null;
   call_status: string | null;
+  contact_code?: string | null;
 };
 
 export const ALEX_TOOLS: Tool[] = [
@@ -129,6 +132,97 @@ export const ALEX_TOOLS: Tool[] = [
       required: ["contact_id"],
     },
   },
+  {
+    name: "create_contact",
+    description:
+      "Δημιουργία νέας επαφής. Χρησιμοποίησε όταν κάποιος δίνει ονοματεπώνυμο και τηλέφωνο. Εκτέλεση: POST /api/contacts",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        first_name: { type: "string" as const },
+        last_name: { type: "string" as const },
+        phone: { type: "string" as const },
+        municipality: { type: "string" as const },
+        area: { type: "string" as const },
+        political_stance: { type: "string" as const },
+        notes: { type: "string" as const },
+        email: { type: "string" as const },
+      },
+      required: ["first_name", "last_name", "phone"],
+    },
+  },
+  {
+    name: "edit_contact",
+    description:
+      "Πλήρης επεξεργασία πεδίων επαφής (ίδιο με update_contact). Χρησιμοποίησε για οποιαδήποτε αλλαγή πεδίου. Εκτέλεση: PUT /api/contacts/[id]",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        contact_id: { type: "string" as const },
+        fields: {
+          type: "object" as const,
+          description:
+            "Κλειδιά: first_name, last_name, phone, age, municipality, notes, call_status, political_stance, priority, nickname, spouse_name, occupation, email, area, name_day, …",
+        },
+      },
+      required: ["contact_id", "fields"],
+    },
+  },
+  {
+    name: "read_pdf",
+    description: "Ανάγνωση PDF ή κειμένου από URL· εξαγωγή κειμένου / σύνοψη. Input: url, question (προαιρετικό).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string" as const },
+        question: { type: "string" as const },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "write_letter",
+    description: "Σύνταξη τυπικής επιστολής (ελληνικά) προς δημόσιο φορέα. Input: recipient, subject, contact_name, issue, letter_type.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        recipient: { type: "string" as const },
+        subject: { type: "string" as const },
+        contact_name: { type: "string" as const },
+        issue: { type: "string" as const },
+        letter_type: {
+          type: "string" as const,
+          enum: ["αίτηση", "καταγγελία", "ερώτημα", "ευχαριστήρια"] as const,
+        },
+      },
+      required: ["recipient", "subject", "letter_type"],
+    },
+  },
+  {
+    name: "import_csv_data",
+    description: "Εισαγωγή επαφών από raw CSV/δεδομένα με mapping στηλών σε πεδία CRM. Input: data (string), mapping object.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        data: { type: "string" as const },
+        mapping: { type: "object" as const, description: "Χάρτης: όνομα στήλης CSV → first_name, last_name, phone, ..." },
+      },
+      required: ["data", "mapping"],
+    },
+  },
+  {
+    name: "search_contacts_advanced",
+    description:
+      "Προχωρημένη αναζήτηση επαφών με πολλαπλά φίλτρα. Input: filters (name, phone, municipality, area, call_status, priority, political_stance, age_min, age_max, tag), limit (προαιρετικό).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        filters: { type: "object" as const },
+        limit: { type: "number" as const },
+      },
+      required: ["filters"],
+    },
+  },
 ];
 
 type ToolContext = {
@@ -151,6 +245,21 @@ function buildContactsQueryParams(input: {
   if (input.area) p.set("area", input.area);
   if (input.municipality) p.set("municipality", input.municipality);
   if (input.priority) p.set("priority", input.priority);
+  return p.toString();
+}
+
+function buildAdvancedContactFilters(f: Record<string, unknown>): string {
+  const p = new URLSearchParams();
+  if (f.name) p.set("name", String(f.name));
+  if (f.phone) p.set("phone", String(f.phone));
+  if (f.municipality) p.set("municipality", String(f.municipality));
+  if (f.area) p.set("area", String(f.area));
+  if (f.call_status) p.set("call_status", String(f.call_status));
+  if (f.priority) p.set("priority", String(f.priority));
+  if (f.political_stance) p.set("political_stance", String(f.political_stance));
+  if (f.tag) p.set("tag", String(f.tag));
+  if (f.age_min != null) p.set("age_min", String(f.age_min));
+  if (f.age_max != null) p.set("age_max", String(f.age_max));
   return p.toString();
 }
 
@@ -199,7 +308,7 @@ export async function runAlexTool(
     };
   }
 
-  if (name === "update_contact") {
+  if (name === "update_contact" || name === "edit_contact") {
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο υπεύθυνοι (manager) μπορούν να ενημερώνουν επαφές" }) };
     }
@@ -228,6 +337,7 @@ export async function runAlexTool(
       "area",
       "tags",
       "influence",
+      "name_day",
     ]);
     const body: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(fields as Record<string, unknown>)) {
@@ -253,7 +363,7 @@ export async function runAlexTool(
         message: "Η επαφή ενημερώθηκε.",
         contact: j.contact,
       }),
-      executedToolName: "update_contact",
+      executedToolName: name === "edit_contact" ? "edit_contact" : "update_contact",
     };
   }
 
@@ -475,6 +585,202 @@ export async function runAlexTool(
     };
   }
 
+  if (name === "create_contact") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const first_name = String(raw.first_name ?? "").trim();
+    const last_name = String(raw.last_name ?? "").trim();
+    const phone = String(raw.phone ?? "").trim();
+    if (!first_name || !last_name || !phone) {
+      return { content: JSON.stringify({ error: "Υποχρεωτικά: first_name, last_name, phone" }) };
+    }
+    const body: Record<string, unknown> = { first_name, last_name, phone, call_status: "Pending", priority: "Medium" };
+    for (const k of ["municipality", "area", "political_stance", "notes", "email"] as const) {
+      if (raw[k] != null && String(raw[k]).trim() !== "") body[k] = raw[k];
+    }
+    const r = await ctx.forward("/api/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = (await r.json()) as { error?: string; contact?: unknown };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Αποτυχία" }) };
+    }
+    return {
+      content: JSON.stringify({ ok: true, message: "Η επαφή δημιουργήθηκε.", contact: j.contact }),
+      executedToolName: "create_contact",
+    };
+  }
+
+  if (name === "read_pdf") {
+    const url = String(raw.url ?? "");
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      return { content: JSON.stringify({ error: "Χρειάζεται http(s) URL" }) };
+    }
+    const question = String(raw.question ?? "Σύνοψη");
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) {
+      return { content: JSON.stringify({ error: `Λήψη απέτυχε: ${res.status}` }) };
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const maxBytes = 8_000_000;
+    if (buf.length > maxBytes) {
+      return { content: JSON.stringify({ error: "Πολύ μεγάλο αρχείο" }) };
+    }
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    let text = "";
+    if (ct.includes("pdf") || url.toLowerCase().endsWith(".pdf")) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+      const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text?: string }>;
+      const d = await pdfParse(buf);
+      text = d.text ?? "";
+    } else {
+      text = buf.toString("utf8");
+    }
+    const trimmed = text.slice(0, 32_000);
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (key) {
+      const cl = new Anthropic({ apiKey: key });
+      const msg = await cl.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: `Κείμενο από αρχείο/URL (μπορεί ατελές):\n---\n${trimmed}\n---\n\nΕρώτημα: ${question}\n\nΣύντομη απάντηση στα ελληνικά. Αν δεν αρκεί το κείμενο, πες τι λείπει.`,
+          },
+        ],
+      });
+      const t = (msg.content[0] as { type: string; text?: string } | undefined)?.type === "text" ? (msg.content[0] as { text: string }).text : JSON.stringify(msg.content[0]);
+      return { content: JSON.stringify({ ok: true, answer: t, excerpt_length: trimmed.length }), executedToolName: "read_pdf" };
+    }
+    return { content: JSON.stringify({ ok: true, text: trimmed, excerpt_length: trimmed.length }), executedToolName: "read_pdf" };
+  }
+
+  if (name === "write_letter") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) {
+      return { content: JSON.stringify({ error: "Λείπει ANTHROPIC_API_KEY" }) };
+    }
+    const recipient = String(raw.recipient ?? "");
+    const subject = String(raw.subject ?? "");
+    const letterType = String(raw.letter_type ?? "αίτηση");
+    const contactName = raw.contact_name != null ? String(raw.contact_name) : "";
+    const issue = raw.issue != null ? String(raw.issue) : "";
+    if (!recipient || !subject) {
+      return { content: JSON.stringify({ error: "Υποχρεωτικά recipient, subject" }) };
+    }
+    const cl = new Anthropic({ apiKey: key });
+    const out = await cl.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2_000,
+      messages: [
+        {
+          role: "user",
+          content: `Έγγραψε επιστολή στα ελληνικά, επίσημο ύφος. Τύπος: ${letterType}. Προς: ${recipient}. Θέμα: ${subject}.\nΕπαφή αναφοράς: ${contactName || "—"}\nΖήτημα: ${issue || "—"}\nΧρήση τυπικού format (ημερομηνία, Χαιρετισμός, Σώμα, Υπογραφή «Κ. Καραγκούνη» placeholder).`,
+        },
+      ],
+    });
+    const letter =
+      (out.content[0] as { type: string; text?: string } | undefined)?.type === "text"
+        ? (out.content[0] as { text: string }).text
+        : String(out.content[0] ?? "");
+    return {
+      content: JSON.stringify({ ok: true, letter, letter_type: letterType, recipient, subject }),
+      executedToolName: "write_letter",
+    };
+  }
+
+  if (name === "import_csv_data") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const dataStr = String(raw.data ?? "");
+    const mapping = raw.mapping;
+    if (!dataStr || !mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
+      return { content: JSON.stringify({ error: "Χρειάζονται data και mapping (object)" }) };
+    }
+    const parsed = Papa.parse<Record<string, string>>(dataStr, { header: true, skipEmptyLines: true, transformHeader: (h) => h.trim() });
+    if (parsed.errors.length) {
+      return { content: JSON.stringify({ error: "CSV: " + parsed.errors[0]?.message }) };
+    }
+    const map = mapping as Record<string, string>;
+    const contacts: Array<{
+      first_name: string;
+      last_name: string;
+      phone: string;
+      email?: string | null;
+      area?: string | null;
+      municipality?: string | null;
+      electoral_district?: string | null;
+      toponym?: string | null;
+      political_stance?: string | null;
+      notes?: string | null;
+    }> = [];
+    for (const row of parsed.data) {
+      const o: Record<string, string> = {};
+      for (const [csvCol, crmField] of Object.entries(map)) {
+        if (!crmField) continue;
+        const v = row[csvCol] ?? row[csvCol.trim()];
+        if (v != null) o[crmField] = String(v).trim();
+      }
+      const first_name = o.first_name;
+      const last_name = o.last_name;
+      const phone = o.phone;
+      if (!first_name || !last_name || !phone) continue;
+      contacts.push({
+        first_name,
+        last_name,
+        phone,
+        email: o.email || null,
+        area: o.area || null,
+        municipality: o.municipality || null,
+        electoral_district: o.electoral_district || null,
+        toponym: o.toponym || null,
+        political_stance: o.political_stance || null,
+        notes: o.notes || null,
+      });
+    }
+    if (contacts.length === 0) {
+      return { content: JSON.stringify({ error: "Δεν εξήχθησαν έγκυρες γραμμές" }) };
+    }
+    const r = await ctx.forward("/api/contacts/import-mapped", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contacts }),
+    });
+    const j = (await r.json()) as { inserted?: number; errors?: number; error?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "import-mapped" }) };
+    }
+    return {
+      content: JSON.stringify({ ok: true, inserted: j.inserted, error_rows: j.errors, message: "Εισήχθησαν (ή επιχειρήθηκαν) οι εγγραφές." }),
+      executedToolName: "import_csv_data",
+    };
+  }
+
+  if (name === "search_contacts_advanced") {
+    const fl = (raw.filters as Record<string, unknown>) || {};
+    const q = buildAdvancedContactFilters(fl);
+    const lim = Math.min(100, Math.max(1, Number(raw.limit) || 25));
+    const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
+    const j = (await r.json()) as { contacts?: FindRow[]; error?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
+    }
+    const list = (j.contacts ?? []).slice(0, lim) as FindRow[];
+    return {
+      content: JSON.stringify({ ok: true, count: list.length, contacts: list }),
+      findResults: list,
+      executedToolName: "search_contacts_advanced",
+    };
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
@@ -497,6 +803,14 @@ export function buildSystemPrompt(today: string) {
 - Όταν ρωτούν στατιστικά → get_stats
 - Μετά από κάθε action επιβεβαίωσε συγκεκριμένα τι έκανες
 - Αν αποτύχει → εξήγησε και πρότεινε εναλλακτική
+
+ΝΕΕΣ ΔΥΝΑΤΟΤΗΤΕΣ (tools):
+- create_contact: δημιουργία επαφής (ονοματεπώνυμο + τηλέφωνο, προαιρετικά πεδία)
+- edit_contact: ίδιο με πλήρη update επαφής (PUT) — πεδίο name_day όπου χρειάζεται
+- read_pdf: κείμενο/σύνοψη από URL (PDF ή κείμενο)
+- write_letter: τυπική επιστολή (αίτηση, καταγγελία, ερώτημα, ευχαριστήρια) προς δημόσιο φορέα
+- import_csv_data: εισαγωγή CSV με mapping στηλών → /api/contacts/import-mapped
+- search_contacts_advanced: πολλαπλά φίλτρα (όνομα, τηλ., δήμος, περιοχή, κατάσταση, πολιτική στάση, ηλικία, tag)
 
 ΣΗΜΕΡΙΝΗ ΗΜΕΡΟΜΗΝΙΑ: ${today}`;
 }

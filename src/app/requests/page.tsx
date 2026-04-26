@@ -6,6 +6,7 @@ import { lux } from "@/lib/luxury-styles";
 
 type RequestRow = {
   id: string;
+  request_code: string | null;
   contact_id: string;
   title: string;
   description: string | null;
@@ -191,7 +192,8 @@ export default function RequestsPage() {
         <table className="min-w-full text-sm">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th className="p-3 pl-4 text-left">Επαφή</th>
+              <th className="p-3 pl-4 text-left">Κωδικός</th>
+              <th className="p-3 text-left">Επαφή</th>
               <th className="p-3 text-left">Τίτλος</th>
               <th className="p-3 text-left">Κατηγορία</th>
               <th className="p-3 text-left">Κατάσταση</th>
@@ -206,7 +208,10 @@ export default function RequestsPage() {
                 className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]"
                 onClick={() => setSelected(r)}
               >
-                <td className="p-3 pl-4 text-[var(--text-primary)]">
+                <td className="p-3 pl-4 font-mono text-[13px] text-[var(--text-secondary)]">
+                  {r.request_code ?? "—"}
+                </td>
+                <td className="p-3 text-[var(--text-primary)]">
                   {r.contacts ? `${r.contacts.first_name} ${r.contacts.last_name}` : "—"}
                 </td>
                 <td className="p-3 font-medium text-[var(--text-primary)]">{r.title}</td>
@@ -231,10 +236,10 @@ export default function RequestsPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    "Νέο": "bg-sky-500/25 text-sky-200 ring-1 ring-inset ring-sky-500/40",
-    "Σε εξέλιξη": "bg-amber-500/25 text-amber-200 ring-1 ring-inset ring-amber-500/40",
-    "Ολοκληρώθηκε": "bg-emerald-500/25 text-emerald-200 ring-1 ring-inset ring-emerald-500/40",
-    "Απορρίφθηκε": "bg-red-500/25 text-red-200 ring-1 ring-inset ring-red-500/40",
+    "Νέο": "bg-[var(--status-req-new-bg)] text-[var(--status-req-new-fg)] ring-1 ring-inset ring-[var(--status-req-new-ring)]",
+    "Σε εξέλιξη": "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
+    "Ολοκληρώθηκε": "bg-[var(--status-req-done-bg)] text-[var(--status-req-done-fg)] ring-1 ring-inset ring-[var(--status-req-done-ring)]",
+    "Απορρίφθηκε": "bg-[var(--status-req-rej-bg)] text-[var(--status-req-rej-fg)] ring-1 ring-inset ring-[var(--status-req-rej-ring)]",
   };
   return (
     <span
@@ -283,7 +288,13 @@ function EditRequestModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-xl rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
+            {request.request_code ?? "—"}
+          </span>
+        </div>
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Επεξεργασία αιτήματος</h3>
+        <p className="mt-1 line-clamp-2 text-sm text-[var(--text-secondary)]">{request.title}</p>
         <div className="mt-4 grid gap-3">
           <div>
             <label className={lux.label}>Τίτλος</label>
