@@ -415,7 +415,7 @@ function ContactsPage() {
       )}
 
       <div className="data-hq-card hidden overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[0_4px_24px_rgba(0,0,0,0.4)] md:block">
-        <table className="min-w-full text-sm text-[var(--text-primary)]">
+        <table className="min-w-full text-sm text-[#E2E8F0]">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
               <th className="sticky left-0 z-20 w-11 min-w-11 max-w-11 border-r border-[var(--border)] bg-[var(--bg-elevated)] p-2 pl-3 text-center sm:w-12">
@@ -484,14 +484,14 @@ function ContactsPage() {
                       <div className={avatarContact + " !h-8 !w-8 text-[10px] sm:!h-9 sm:!w-9 sm:text-xs"}>
                         {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
                       </div>
-                      <span className="min-w-0 truncate font-medium text-[var(--text-primary)]">
+                      <span className="min-w-0 truncate font-medium text-[#E2E8F0]">
                         {c.first_name} {c.last_name}
                       </span>
                     </button>
                   </td>
-                  <td className="p-3 font-mono text-[13px] text-[var(--text-secondary)]">{c.phone}</td>
-                  <td className="p-3 text-[var(--text-primary)]">{c.area ?? "—"}</td>
-                  <td className="p-3 text-[var(--text-primary)]">{c.municipality ?? "—"}</td>
+                  <td className="p-3 font-mono text-[13px] text-[#94A3B8]">{c.phone}</td>
+                  <td className="p-3 text-[#E2E8F0]">{c.area ?? "—"}</td>
+                  <td className="p-3 text-[#E2E8F0]">{c.municipality ?? "—"}</td>
                   <td className="p-3">
                     <span
                       className={

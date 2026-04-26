@@ -90,7 +90,7 @@ export function AlexandraVoiceModeOverlay({
       </p>
 
       {isConnecting && (
-        <p className="max-w-md text-center text-[10px] leading-tight text-slate-500" aria-hidden>
+        <p className="max-w-md text-center text-[10px] leading-tight text-[#94A3B8]" aria-hidden>
           Σε κινητό, η παράδοση του ήχη στο αυτί εξαρτάται από τη συσκευή (κοντινός αισθήτρας / Safari).
         </p>
       )}

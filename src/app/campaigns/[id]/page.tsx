@@ -162,7 +162,7 @@ export default function CampaignDetailPage() {
         >
           <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 bg-[#C9A84C]/5 blur-3xl" />
           <div className="relative grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <KpiBox label="Σημειώθηκαν" value={String(s.total)} sub="κλήση/εις" color="text-slate-200" border="border-slate-500/20" />
+            <KpiBox label="Σημειώθηκαν" value={String(s.total)} sub="κλήση/εις" color="text-[#E2E8F0]" border="border-slate-500/20" />
             <KpiBox label="Θετικοί" value={String(s.positive)} sub="αποτέλεσμα" color="text-emerald-300" border="border-emerald-500/20" />
             <KpiBox label="Αρνητικοί" value={String(s.negative)} sub="αποτέλεσμα" color="text-rose-300" border="border-rose-500/20" />
             <KpiBox label="Δεν Απάντησαν" value={String(s.noAnswer)} sub="αποτέλεσμα" color="text-amber-200" border="border-amber-500/20" />
@@ -329,7 +329,7 @@ function OutcomePill({ o }: { o: string | null }) {
     Negative: { bg: "bg-rose-500/15", text: "text-rose-200", ring: "ring-rose-500/25" },
     "No Answer": { bg: "bg-amber-500/15", text: "text-amber-200", ring: "ring-amber-500/25" },
   };
-  const c = map[t] ?? { bg: "bg-slate-500/10", text: "text-slate-300", ring: "ring-slate-500/20" };
+  const c = map[t] ?? { bg: "bg-slate-500/10", text: "text-[#E2E8F0]", ring: "ring-slate-500/20" };
   return (
     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${c.bg} ${c.text} ${c.ring} max-w-full`}>
       {outcomeGreek(t === "—" ? null : t)}

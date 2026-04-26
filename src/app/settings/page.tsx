@@ -92,8 +92,8 @@ export default function SettingsPage() {
 
   if (!isAdmin) {
     return (
-      <div className={lux.card + " border-amber-200/80 bg-amber-50 !shadow-sm"}>
-        <p className="text-sm text-amber-900">Δεν έχετε πρόσβαση.</p>
+      <div className={lux.card + " border-amber-500/35 bg-amber-500/10 !shadow-sm"}>
+        <p className="text-sm text-amber-100/95">Δεν έχετε πρόσβαση.</p>
       </div>
     );
   }

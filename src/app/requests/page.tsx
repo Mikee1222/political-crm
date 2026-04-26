@@ -230,10 +230,10 @@ export default function RequestsPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    "Νέο": "bg-sky-50 text-sky-800 ring-1 ring-inset ring-sky-200",
-    "Σε εξέλιξη": "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200",
-    "Ολοκληρώθηκε": "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200",
-    "Απορρίφθηκε": "bg-red-50 text-red-800 ring-1 ring-inset ring-red-200",
+    "Νέο": "bg-sky-500/25 text-sky-200 ring-1 ring-inset ring-sky-500/40",
+    "Σε εξέλιξη": "bg-amber-500/25 text-amber-200 ring-1 ring-inset ring-amber-500/40",
+    "Ολοκληρώθηκε": "bg-emerald-500/25 text-emerald-200 ring-1 ring-inset ring-emerald-500/40",
+    "Απορρίφθηκε": "bg-red-500/25 text-red-200 ring-1 ring-inset ring-red-500/40",
   };
   return (
     <span

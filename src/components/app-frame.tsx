@@ -71,10 +71,10 @@ function initials(fullName: string | null, fallback: string) {
 
 const navItemBase =
   "group flex h-12 max-h-12 items-center gap-3 rounded-lg border-l-[3px] border-transparent pl-2 pr-2 text-sm transition duration-200 ease-out";
-const navItemInactive = "text-[var(--text-secondary)] hover:border-transparent hover:bg-[rgba(201,168,76,0.08)] hover:text-[var(--text-primary)]";
-const navItemIconInactive = "text-[var(--text-muted)] group-hover:text-[var(--accent-gold)]";
-const navItemActive = "border-[var(--accent-gold)] bg-[rgba(201,168,76,0.12)] text-[var(--text-primary)]";
-const navItemIconActive = "text-[var(--accent-gold)]";
+const navItemInactive = "text-[#8FA3BF] hover:border-transparent hover:bg-[rgba(201,168,76,0.1)] hover:text-[#F0F4FF]";
+const navItemIconInactive = "text-[#8FA3BF] group-hover:text-[#C9A84C]";
+const navItemActive = "border-[var(--accent-gold)] bg-[rgba(201,168,76,0.12)] text-white";
+const navItemIconActive = "text-white";
 
 function NavLinks({
   pathname,
@@ -128,11 +128,19 @@ function NavLinks({
           ].join(" ")}
         >
           <Sparkles
-            className={["hq-shimmer h-5 w-5 shrink-0 text-[var(--accent-gold)]", pathname.startsWith("/alexandra") ? "" : "opacity-90"].join(" ")}
+            className={[
+              "hq-shimmer h-5 w-5 shrink-0",
+              pathname.startsWith("/alexandra") ? "text-white" : "text-[#C9A84C] opacity-95",
+            ].join(" ")}
           />
-          <span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 text-[14px] font-semibold text-[var(--text-primary)]">
+          <span
+            className={[
+              "flex min-w-0 flex-1 items-center justify-between gap-1.5 text-[14px] font-semibold",
+              pathname.startsWith("/alexandra") ? "text-white" : "text-[#8FA3BF]",
+            ].join(" ")}
+          >
             <span>Αλεξάνδρα</span>
-            <span className="shrink-0 rounded border border-[var(--accent-gold)]/50 bg-[rgba(201,168,76,0.12)] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-[var(--accent-gold-light)]">
+            <span className="shrink-0 rounded border border-[#C9A84C]/60 bg-[rgba(201,168,76,0.2)] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-[#F0F4FF]">
               AI
             </span>
           </span>

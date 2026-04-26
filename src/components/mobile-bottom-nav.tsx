@@ -11,10 +11,10 @@ type MobileBottomNavProps = {
   openRequestsCount: number;
 };
 
-const goldIcon = "text-[var(--accent-gold)]";
-const inactiveIcon = "text-[var(--text-muted)]";
+const activeIcon = "text-white";
+const inactiveIcon = "text-[#8FA3BF]";
 const itemBase = "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 min-h-[44px] text-[10px] font-medium transition duration-200 ease-out";
-const itemLabel = (active: boolean) => (active ? "text-[var(--accent-gold)]" : "text-[var(--text-muted)]");
+const itemLabel = (active: boolean) => (active ? "text-white" : "text-[#8FA3BF]");
 
 export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileBottomNavProps) {
   const pathname = usePathname();
@@ -34,19 +34,19 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <Link href="/dashboard" className={`${itemBase} ${itemLabel(isActive("/dashboard", true))}`} prefetch>
-          <Home className={`h-5 w-5 shrink-0 ${isActive("/dashboard", true) ? goldIcon : inactiveIcon}`} />
+          <Home className={`h-5 w-5 shrink-0 ${isActive("/dashboard", true) ? activeIcon : inactiveIcon}`} />
           <span>Dashboard</span>
         </Link>
         <Link href="/contacts" className={`${itemBase} ${itemLabel(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}`} prefetch>
-          <Users className={`h-5 w-5 shrink-0 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? goldIcon : inactiveIcon}`} />
+          <Users className={`h-5 w-5 shrink-0 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? activeIcon : inactiveIcon}`} />
           <span>Επαφές</span>
         </Link>
         <Link href="/alexandra" className={`${itemBase} ${itemLabel(pathname.startsWith("/alexandra"))}`} prefetch>
-          <Sparkles className="h-5 w-5 shrink-0 text-[var(--accent-gold)]" />
-          <span className={pathname.startsWith("/alexandra") ? "text-[var(--accent-gold)]" : "text-[var(--text-muted)]"}>Αλεξάνδρα</span>
+          <Sparkles className={`h-5 w-5 shrink-0 ${pathname.startsWith("/alexandra") ? activeIcon : "text-[#8FA3BF]"}`} />
+          <span className={itemLabel(pathname.startsWith("/alexandra"))}>Αλεξάνδρα</span>
         </Link>
         <Link href="/requests" className={`${itemBase} ${itemLabel(isActive("/requests", true))} relative`} prefetch>
-          <Inbox className={`h-5 w-5 shrink-0 ${isActive("/requests", true) ? goldIcon : inactiveIcon}`} />
+          <Inbox className={`h-5 w-5 shrink-0 ${isActive("/requests", true) ? activeIcon : inactiveIcon}`} />
           <span>Αιτήματα</span>
           {openRequestsCount > 0 && (
             <span className="absolute right-2 top-0.5 min-w-[1rem] rounded-full bg-[var(--accent-gold)] px-1 text-center text-[9px] font-bold text-[#0a0f1a]">
@@ -56,7 +56,7 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
         </Link>
         <button
           type="button"
-          className={itemBase + " w-full border-0 bg-transparent p-0 text-[var(--text-muted)]"}
+          className={itemBase + " w-full border-0 bg-transparent p-0 text-[#8FA3BF]"}
           onClick={onOpenMore}
           aria-label="Περισσότερα"
         >
@@ -75,20 +75,20 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <Link href="/contacts" className={`${itemBase} ${itemLabel(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}`} prefetch>
-        <Users className={`h-5 w-5 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? goldIcon : inactiveIcon}`} />
+        <Users className={`h-5 w-5 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? activeIcon : inactiveIcon}`} />
         <span>Επαφές</span>
       </Link>
       <Link href="/namedays" className={`${itemBase} ${itemLabel(isActive("/namedays", true))}`} prefetch>
-        <CalendarDays className={`h-5 w-5 ${isActive("/namedays", true) ? goldIcon : inactiveIcon}`} />
+        <CalendarDays className={`h-5 w-5 ${isActive("/namedays", true) ? activeIcon : inactiveIcon}`} />
         <span>Εορτ.</span>
       </Link>
       <Link href="/alexandra" className={`${itemBase} ${itemLabel(pathname.startsWith("/alexandra"))}`} prefetch>
-        <Sparkles className="h-5 w-5 text-[var(--accent-gold)]" />
-        <span className={pathname.startsWith("/alexandra") ? "text-[var(--accent-gold)]" : "text-[var(--text-muted)]"}>Αλεξάνδρα</span>
+        <Sparkles className={`h-5 w-5 ${pathname.startsWith("/alexandra") ? activeIcon : "text-[#8FA3BF]"}`} />
+        <span className={itemLabel(pathname.startsWith("/alexandra"))}>Αλεξάνδρα</span>
       </Link>
       <button
         type="button"
-        className={itemBase + " flex-1 border-0 bg-transparent p-0 text-[var(--text-muted)]"}
+        className={itemBase + " flex-1 border-0 bg-transparent p-0 text-[#8FA3BF]"}
         onClick={onOpenMore}
         aria-label="Περισσότερα"
       >

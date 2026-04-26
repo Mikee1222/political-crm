@@ -179,7 +179,7 @@ export default function DashboardPage() {
           hint="Χρειάζονται follow-up"
           icon={Clock3}
           iconBg="bg-slate-500/20"
-          iconColor="text-slate-300"
+          iconColor="text-[#E2E8F0]"
           sub={<span className="text-[var(--text-muted)]">Αναμονή / φίλτρα</span>}
           stagger="hq-stagger-3"
         />

@@ -609,7 +609,7 @@ export function AlexandraApp() {
                     ].join(" ")}
                   >
                     <p className="line-clamp-2 font-medium">{c.title || "Νέα συνομιλία"}</p>
-                    <p className="mt-0.5 text-[10px] text-slate-500">{fmtTime(c.updated_at)}</p>
+                    <p className="mt-0.5 text-[10px] text-[#94A3B8]">{fmtTime(c.updated_at)}</p>
                   </button>
                   {(hoveredId === c.id || active) && (
                     <button
@@ -619,7 +619,7 @@ export function AlexandraApp() {
                         e.stopPropagation();
                         setToDelete(c);
                       }}
-                      className="absolute right-1.5 top-1.5 rounded-md p-1.5 text-slate-400 hover:bg-white/10 hover:text-red-400"
+                      className="absolute right-1.5 top-1.5 rounded-md p-1.5 text-[#94A3B8] hover:bg-white/10 hover:text-red-400"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -759,7 +759,7 @@ export function AlexandraApp() {
                               ].filter(Boolean),
                             ),
                           ).length > 0 && (
-                            <p className="mt-2 text-[10px] font-medium text-slate-400">
+                            <p className="mt-2 text-[10px] font-medium text-[#94A3B8]">
                               <span className="text-[var(--accent-gold)]">✓</span> Εκτελέστηκε
                               {Array.from(
                                 new Set([
@@ -767,7 +767,7 @@ export function AlexandraApp() {
                                   ...(m.streamMeta?.executed ?? []),
                                 ]),
                               ).length > 0 && (
-                                <span className="ml-1.5 text-[9px] font-normal text-slate-500">
+                                <span className="ml-1.5 text-[9px] font-normal text-[#94A3B8]">
                                   (
                                   {Array.from(
                                     new Set([
@@ -870,14 +870,14 @@ export function AlexandraApp() {
                               </div>
                             )}
                           {m.pendingAction && !m.executed && !canExecuteAction(role, m.pendingAction) && m.pendingAction.action !== "start_call" && m.pendingAction.action !== "create_contact" && (
-                            <p className="mt-2 text-xs text-amber-800">Δεν έχετε δικαίωμα· ρωτήστε υπεύθυνο.</p>
+                            <p className="mt-2 text-xs text-amber-200/95">Δεν έχετε δικαίωμα· ρωτήστε υπεύθυνο.</p>
                           )}
                         </>
                       )}
                     </div>
                     <p
                       className={
-                        m.role === "user" ? "mt-1 text-right text-[10px] text-slate-400" : "mt-1 text-[10px] text-slate-400"
+                        m.role === "user" ? "mt-1 text-right text-[10px] text-[#94A3B8]" : "mt-1 text-[10px] text-[#94A3B8]"
                       }
                     >
                       {m._createdAt ? fmtTime(m._createdAt) : ""}

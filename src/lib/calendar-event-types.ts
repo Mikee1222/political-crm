@@ -32,7 +32,7 @@ export const CALENDAR_EVENT_TYPES: Record<
   other: {
     label: "Άλλο",
     color: "bg-zinc-100 border-zinc-200 text-zinc-700",
-    block: "bg-zinc-600/25 text-zinc-200 ring-1 ring-inset ring-zinc-500/35",
+    block: "bg-zinc-600/25 text-[#E2E8F0] ring-1 ring-inset ring-zinc-500/35",
   },
 };
 

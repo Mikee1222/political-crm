@@ -113,7 +113,7 @@ function ReqStatus({ s }: { s: string | null | undefined }) {
     "Απορρίφθηκε": "bg-red-500/15 text-red-200 ring-1 ring-red-500/30",
   };
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[t] ?? "bg-slate-500/20 text-slate-200"}`}>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[t] ?? "bg-slate-500/20 text-[#E2E8F0]"}`}>
       {t}
     </span>
   );
@@ -371,7 +371,7 @@ export default function ContactDetailPage() {
   return (
     <div className="min-h-full -m-6 bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8">
       {isCaller && (
-        <p className="mb-4 rounded-[12px] border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <p className="mb-4 rounded-[12px] border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">
           Προβολή — μπορείτε να αλλάξετε μόνο την <strong>κατάσταση κλήσης</strong>· αποθήκευση παρακάτω.
         </p>
       )}

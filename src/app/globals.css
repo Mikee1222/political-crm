@@ -13,7 +13,19 @@
   --accent-blue-bright: #1e5fa8;
   --text-primary: #f0f4ff;
   --text-secondary: #8fa3bf;
-  --text-muted: #4a6080;
+  /* Tables: high contrast on dark */
+  --text-table: #e2e8f0;
+  --text-table-secondary: #94a3b8;
+  /* Uppercase / thead labels */
+  --text-header: #94a3b8;
+  /* Sidebar: inactive / active (desktop) */
+  --text-sidebar: #8fa3bf;
+  --text-sidebar-active: #ffffff;
+  /* Muted (timestamps, hints) — not as dark as 4A6080 on navy */
+  --text-muted: #94a3b8;
+  /* Form placeholders only */
+  --text-placeholder: #4a6080;
+  --input-bg: #162540;
   --border: rgba(201, 168, 76, 0.15);
   --border-hover: rgba(201, 168, 76, 0.4);
   --success: #10b981;
@@ -99,7 +111,7 @@
 .hq-breadcrumb {
   font-size: 18px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #f0f4ff;
   letter-spacing: -0.01em;
 }
 .hq-card-title {
@@ -107,7 +119,7 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-muted);
+  color: #94a3b8;
 }
 .hq-particles {
   background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201, 168, 76, 0.12) 0%, transparent 50%),
@@ -122,10 +134,26 @@ html {
 
 body {
   background: var(--bg-primary);
-  color: var(--text-primary);
+  color: #f0f4ff;
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 400;
+}
+
+/* Cards: high-contrast default text on dark card surfaces */
+[data-hq-card] {
+  color: var(--text-primary);
+}
+
+main {
+  color: #f0f4ff;
+}
+
+::placeholder,
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-placeholder);
+  opacity: 1;
 }
 
 @supports (padding: env(safe-area-inset-bottom)) {

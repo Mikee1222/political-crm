@@ -126,7 +126,7 @@ export default function DataToolsPage() {
 
   if (!can) {
     return (
-      <p className="rounded-[12px] border border-amber-200/80 bg-amber-50 p-4 text-sm text-amber-900">Δεν έχετε πρόσβαση.</p>
+      <p className="rounded-[12px] border border-amber-500/35 bg-amber-500/10 p-4 text-sm text-amber-100/95">Δεν έχετε πρόσβαση.</p>
     );
   }
 
@@ -269,7 +269,7 @@ export default function DataToolsPage() {
                     {phoneAudit.invalid.map((c) => (
                       <li
                         key={c.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50/50 p-3 text-sm"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-[#E2E8F0]"
                       >
                         <span>
                           {c.first_name} {c.last_name} — <em>{c.problem}</em>

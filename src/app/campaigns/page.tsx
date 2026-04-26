@@ -258,7 +258,7 @@ export default function CampaignsPage() {
               </div>
 
               <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <StatBadge label="Σύνολο" value={s.total} className="text-slate-100" bg="bg-slate-500/15" ring="ring-slate-500/20" />
+                <StatBadge label="Σύνολο" value={s.total} className="text-[#F0F4FF]" bg="bg-slate-500/15" ring="ring-slate-500/20" />
                 <StatBadge label="Θετικοί" value={s.positive} className="text-[#4ADE80]" bg="bg-emerald-500/10" ring="ring-emerald-500/20" />
                 <StatBadge label="Αρνητικοί" value={s.negative} className="text-[#FB7185]" bg="bg-red-500/10" ring="ring-red-500/20" />
                 <StatBadge label="Δεν Απάντησαν" value={s.noAnswer} className="text-amber-300" bg="bg-amber-500/10" ring="ring-amber-500/25" />

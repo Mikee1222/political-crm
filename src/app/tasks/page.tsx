@@ -235,7 +235,7 @@ export default function TasksPage() {
           ))}
         </div>
         <div className="min-w-0 max-md:order-2 max-md:space-y-3 order-2">
-          <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">Ολοκληρωμένες</h2>
+          <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#94A3B8] sm:text-xs">Ολοκληρωμένες</h2>
           {completed.length === 0 && !loading && (
             <p className="text-sm text-[var(--text-muted)]">Καμία ολοκληρωμένη για το φίλτρο.</p>
           )}
