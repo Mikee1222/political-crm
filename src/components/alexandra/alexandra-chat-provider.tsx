@@ -33,6 +33,12 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   const [streamMode, setStreamMode] = useState<"none" | "typing" | "streaming">("none");
   const bottomRef = useRef<HTMLDivElement>(null);
   const sendInFlight = useRef(false);
+  /** Client-side: full spreadsheet rows to attach to requests until import completes */
+  const importStashRef = useRef<{
+    conversationId: string;
+    rows: Array<Record<string, unknown>>;
+    fileName?: string;
+  } | null>(null);
   const role = profile?.role;
   const router = useRouter();
   const pathname = usePathname();
@@ -148,6 +154,13 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     scrollToBottom();
   }, [messages, loading, streamMode, scrollToBottom]);
 
+  const setSpreadsheetImport = useCallback(
+    (p: { conversationId: string; rows: Array<Record<string, unknown>>; fileName?: string } | null) => {
+      importStashRef.current = p;
+    },
+    [],
+  );
+
   const newConversation = useCallback(async (): Promise<string | null> => {
     setError(null);
     setLoading(true);
@@ -163,6 +176,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
         ...c,
       ]);
       setSelectedId(data.id);
+      importStashRef.current = null;
       return data.id;
     } catch {
       setError("Σφάλμα δικτύου");
@@ -187,6 +201,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
         if (selectedId === c.id) {
           setSelectedId(null);
           setMessages([]);
+          importStashRef.current = null;
         }
       } catch {
         setError("Σφάλμα δικτύου");
@@ -282,6 +297,8 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
           name?: string;
           contact_id?: string;
           phone?: string;
+          current?: number;
+          total?: number;
         };
         /* eslint-disable no-constant-condition */
         while (true) {
@@ -331,6 +348,9 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
               });
             } else if (j.event === "executed" && j.tool) {
               ensureAssistant();
+              if (j.tool === "bulk_create_contacts") {
+                importStashRef.current = null;
+              }
               setMessages((m) =>
                 m.map((row) => {
                   if (row.id !== streamAssistId) return row;
@@ -338,9 +358,29 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
                   if (prev.includes(String(j.tool))) return row;
                   return {
                     ...row,
-                    streamMeta: { ...row.streamMeta, executed: [...prev, String(j.tool)] } as StreamMeta,
+                    streamMeta: {
+                      ...row.streamMeta,
+                      executed: [...prev, String(j.tool)],
+                      bulkProgress: j.tool === "bulk_create_contacts" ? undefined : row.streamMeta?.bulkProgress,
+                    } as StreamMeta,
                   };
                 }),
+              );
+            } else if (j.event === "bulk_progress" && j.current != null && j.total != null) {
+              ensureAssistant();
+              setMessages((m) =>
+                m.map((row) =>
+                  row.id === streamAssistId
+                    ? {
+                        ...row,
+                        streamMeta: {
+                          ...row.streamMeta,
+                          executed: row.streamMeta?.executed ?? [],
+                          bulkProgress: { current: j.current!, total: j.total! },
+                        } as StreamMeta,
+                      }
+                    : row,
+                ),
               );
             } else if (j.event === "confirm_call" && j.contact_id) {
               ensureAssistant();
@@ -369,10 +409,23 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
         /* eslint-enable no-constant-condition */
       };
       try {
+        const stash = importStashRef.current;
+        const payload: {
+          message: string;
+          conversationId: string;
+          attachment?: { type: "spreadsheet_import"; rows: Array<Record<string, unknown>>; fileName?: string };
+        } = { message: text, conversationId: convId };
+        if (stash && stash.conversationId === convId) {
+          payload.attachment = {
+            type: "spreadsheet_import",
+            rows: stash.rows,
+            fileName: stash.fileName,
+          };
+        }
         const res = await fetch("/api/ai-assistant", {
           method: "POST",
-          headers: { "Content-Type": "application/json", },
-          body: JSON.stringify({ message: text, conversationId: convId }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
         if (!res.ok) {
           const t = await res.text();
@@ -478,7 +531,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     profile, role, conversations, selectedId, setSelectedId, messages, setMessages, loading, setLoading,
     listLoading, setListLoading, messagesLoading, setMessagesLoading, input, setInput, error, setError, toDelete, setToDelete,
     hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, setStreamMode, bottomRef, loadList, loadMessages, newConversation,
-    deleteConv, execute, send, startWithChip, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, isEmpty, showChips, scrollToBottom,
+    deleteConv, execute, send, startWithChip, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, isEmpty, showChips, scrollToBottom, setSpreadsheetImport,
     miniWindowOpen, setMiniWindowOpen, miniWindowMinimized, setMiniWindowMinimized, enterMiniFromPage, openMiniFromBubble, goToFullAlexandra, closeMiniWindow,
   };
   return <AlexandraChatContext.Provider value={value}>{children}</AlexandraChatContext.Provider>;

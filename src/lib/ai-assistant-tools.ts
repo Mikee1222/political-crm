@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import Papa from "papaparse";
 import { hasMinRole, type Role } from "@/lib/roles";
 import type { UserProfile } from "@/lib/auth-helpers";
+import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
 
 export type FindRow = {
   id: string;
@@ -213,6 +214,28 @@ export const ALEX_TOOLS: Tool[] = [
     },
   },
   {
+    name: "bulk_create_contacts",
+    description:
+      "Μαζική δημιουργία επαφών από αρχείο (Excel/CSV) μετά το mapping. Χρήση ΜΟΝΟ μετά επιβεβαίωση. Το mapping (στήλες αρχείου → πεδία CRM) υποχρεωτικό. " +
+      "Οι πλήρεις γραμμές έρχονται αυτόματα από το συνημμένο. Μπορείς παραλείψεις το `rows` στο input. " +
+      "Υποστηριζόμενα: first_name, last_name, full_name, phone, email, municipality, area, notes, political_stance, father_name, mother_name, occupation, ignore.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        rows: {
+          type: "array" as const,
+          description: "Ήδη γνωστές γραμμές (object ανά σειρά) — αλλιώς κενό για συνημμένο",
+          items: { type: "object" as const },
+        },
+        mapping: {
+          type: "object" as const,
+          description: "Πχ. { \"Ονοματεπώνυμο\": \"full_name\", \"Κινητό\": \"phone\" } — κλειδιά: κελί/στήλη όπως το αρχείο",
+        },
+      },
+      required: ["mapping"],
+    },
+  },
+  {
     name: "search_contacts_advanced",
     description:
       "Προχωρημένη αναζήτηση επαφών με πολλαπλά φίλτρα. Input: filters (name, phone, municipality, area, call_status, priority, political_stance, age_min, age_max, tag), limit (προαιρετικό).",
@@ -232,6 +255,9 @@ type ToolContext = {
   forward: (path: string, init: RequestInit) => Promise<Response>;
   profile: UserProfile;
   role: Role;
+  /** Πλήρεις γραμμές import από το τρέχον αίτημα (client attachment) */
+  importRows?: Array<Record<string, unknown>>;
+  onBulkProgress?: (current: number, total: number) => void;
 };
 
 function buildContactsQueryParams(input: {
@@ -248,6 +274,74 @@ function buildContactsQueryParams(input: {
   if (input.municipality) p.set("municipality", input.municipality);
   if (input.priority) p.set("priority", input.priority);
   return p.toString();
+}
+
+const BULK_OPTIONAL_FIELDS = [
+  "email",
+  "municipality",
+  "area",
+  "political_stance",
+  "notes",
+  "father_name",
+  "mother_name",
+  "occupation",
+  "nickname",
+] as const;
+
+function cellStr(row: Record<string, unknown>, header: string): string {
+  const k = header.trim();
+  if (row[k] !== undefined && row[k] !== null) return String(row[k]).trim();
+  const hit = Object.keys(row).find((x) => x.trim() === k);
+  if (hit != null && row[hit] != null) return String(row[hit]).trim();
+  return "";
+}
+
+/**
+ * mapping: column header from sheet → CRM field (first_name, last_name, full_name, phone, …)
+ */
+export function mapSpreadsheetRowToContactPayload(
+  row: Record<string, unknown>,
+  mapping: Record<string, string>,
+): { payload: Record<string, unknown> | null; skip?: "no_phone" | "incomplete_name" } {
+  const acc: Record<string, string> = {};
+  for (const [header, field] of Object.entries(mapping)) {
+    if (!field || field === "ignore" || field === "skip") continue;
+    const f = String(field).trim();
+    const v = cellStr(row, header);
+    if (f === "full_name") {
+      const parts = v.split(/\s+/).filter(Boolean);
+      if (parts.length >= 1) {
+        if (!acc.first_name) acc.first_name = parts[0] ?? "";
+        if (!acc.last_name) acc.last_name = parts.slice(1).join(" ") || "—";
+      }
+    } else {
+      acc[f] = v;
+    }
+  }
+  const first_name = (acc.first_name ?? "").trim();
+  const last_name = (acc.last_name ?? "").trim();
+  const phone = (acc.phone ?? "").replace(/\s/g, "");
+  if (!phone || phone.length < 6) {
+    return { payload: null, skip: "no_phone" };
+  }
+  if (!first_name || !last_name) {
+    return { payload: null, skip: "incomplete_name" };
+  }
+  const body: Record<string, unknown> = {
+    first_name,
+    last_name,
+    phone,
+    call_status: "Pending",
+    priority: "Medium",
+  };
+  for (const k of BULK_OPTIONAL_FIELDS) {
+    if (acc[k] && String(acc[k]).trim()) body[k] = acc[k]!.trim();
+  }
+  if (acc.age) {
+    const n = parseInt(String(acc.age), 10);
+    if (Number.isFinite(n)) body.age = n;
+  }
+  return { payload: body };
 }
 
 function buildAdvancedContactFilters(f: Record<string, unknown>): string {
@@ -768,6 +862,100 @@ export async function runAlexTool(
     };
   }
 
+  if (name === "bulk_create_contacts") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const mapping = raw.mapping;
+    if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
+      return { content: JSON.stringify({ error: "Χρειάζεται mapping (object): στήλη αρχείου → πεδίο CRM" }) };
+    }
+    const mapObj = mapping as Record<string, string>;
+    let rows: Array<Record<string, unknown>> = [];
+    if (Array.isArray(raw.rows) && raw.rows.length > 0) {
+      rows = raw.rows as Array<Record<string, unknown>>;
+    } else if (ctx.importRows?.length) {
+      rows = ctx.importRows;
+    }
+    if (rows.length === 0) {
+      return {
+        content: JSON.stringify({
+          error:
+            "Δεν βρέθηκαν γραμμές. Ζήτα από τον χρήστη να ξανα-ανεβάσει το αρχείο ή βεβαιώσου ότι το import είναι ακόμα ενεργό στο ίδιο αίτημα.",
+        }),
+      };
+    }
+    const list = rows;
+    const totalRows = list.length;
+    const ROW_BATCH = 100;
+    const CONCURRENCY = 10;
+    type Outcome = "created" | "skip_phone" | "skip_name" | "failed" | "other_skip";
+    const perRow: Outcome[] = new Array<Outcome>(totalRows);
+    const failed: { index: number; err: string }[] = [];
+    for (let batchStart = 0; batchStart < totalRows; batchStart += ROW_BATCH) {
+      const batchEnd = Math.min(batchStart + ROW_BATCH, totalRows);
+      await runIndexRangeWithConcurrency(batchStart, batchEnd, CONCURRENCY, async (i) => {
+        try {
+          const { payload, skip } = mapSpreadsheetRowToContactPayload(list[i]!, mapObj);
+          if (skip === "no_phone") {
+            perRow[i] = "skip_phone";
+            return;
+          }
+          if (skip === "incomplete_name") {
+            perRow[i] = "skip_name";
+            return;
+          }
+          if (!payload) {
+            perRow[i] = "other_skip";
+            return;
+          }
+          const r = await ctx.forward("/api/contacts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const j = (await r.json().catch(() => ({}))) as { error?: string };
+          if (!r.ok) {
+            perRow[i] = "failed";
+            failed.push({ index: i + 1, err: j.error || "POST" });
+          } else {
+            perRow[i] = "created";
+          }
+        } catch (e) {
+          perRow[i] = "failed";
+          failed.push({ index: i + 1, err: e instanceof Error ? e.message : "Σφάλμα" });
+        } finally {
+          ctx.onBulkProgress?.(i + 1, totalRows);
+        }
+      });
+    }
+    let created = 0;
+    let skippedNoPhone = 0;
+    let skippedName = 0;
+    for (const o of perRow) {
+      if (o === "created") created += 1;
+      if (o === "skip_phone") skippedNoPhone += 1;
+      if (o === "skip_name") skippedName += 1;
+    }
+    const parts = [
+      `Δημιουργήθηκαν ${created} επαφές`,
+      skippedNoPhone > 0 ? `${skippedNoPhone} παραλείφθηκαν (κενό/μη έγκυρο τηλέφωνο)` : null,
+      skippedName > 0 ? `${skippedName} παραλείφθηκαν (ατελές ονοματεπώνυμο)` : null,
+      failed.length > 0 ? `${failed.length} απέτυχαν: ${JSON.stringify(failed.slice(0, 5))}` : null,
+    ].filter(Boolean);
+    return {
+      content: JSON.stringify({
+        ok: true,
+        created,
+        skipped_no_phone: skippedNoPhone,
+        skipped_incomplete_name: skippedName,
+        failed,
+        message: parts.join(" · "),
+      }),
+      executedToolName: "bulk_create_contacts",
+    };
+  }
+
   if (name === "search_contacts_advanced") {
     const fl = (raw.filters as Record<string, unknown>) || {};
     const q = buildAdvancedContactFilters(fl);
@@ -814,6 +1002,7 @@ export function buildSystemPrompt(today: string) {
 - read_pdf: κείμενο/σύνοψη από URL (PDF ή κείμενο)
 - write_letter: τυπική επιστολή (αίτηση, καταγγελία, ερώτημα, ευχαριστήρια) προς δημόσιο φορέα
 - import_csv_data: εισαγωγή CSV με mapping στηλών → /api/contacts/import-mapped
+- bulk_create_contacts: μετά upload και επιβεβαίωση mapping, δημιουργία όλων των επαφών (ασύγχρονα, έως 10 παράλληλα POST, χωρίς ανώτερο όριο γραμμών). Το mapping υποχρεωτικό· οι γραμμές από το συνημμένο.
 - search_contacts_advanced: πολλαπλά φίλτρα (όνομα, τηλ., δήμος, περιοχή, κατάσταση, πολιτική στάση, ηλικία, tag)
 
 ΣΗΜΕΡΙΝΗ ΗΜΕΡΟΜΗΝΙΑ: ${today}`;

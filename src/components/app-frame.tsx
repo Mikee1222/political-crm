@@ -235,7 +235,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-[-webkit-fill-available] min-h-screen w-full bg-[var(--bg-primary)]">
+    <div className="min-h-[-webkit-fill-available] min-h-screen w-full max-w-full overflow-x-hidden bg-[var(--bg-primary)]">
       <aside
         className="app-sidebar fixed left-0 top-0 z-30 hidden h-screen w-[260px] min-h-0 flex-col overflow-hidden border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
         style={{ background: "var(--sidebar-bg)" }}
@@ -271,7 +271,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 flex-col md:ml-[260px]">
+      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden md:ml-[260px]">
         <header
           className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]"
         >
@@ -328,7 +328,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="hq-fade-in-up main-scroll mobile-page-transition flex-1 touch-pan-y bg-[var(--bg-primary)] p-3 max-md:pb-24 max-md:pt-2 sm:p-6 md:p-8">
+        <main className="hq-fade-in-up main-scroll mobile-page-transition min-w-0 max-w-full flex-1 touch-pan-y overflow-x-hidden bg-[var(--bg-primary)] p-3 max-md:pb-24 max-md:pt-2 sm:p-6 md:p-8">
           {children}
         </main>
         <AlexaMiniWindow />

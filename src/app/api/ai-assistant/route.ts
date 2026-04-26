@@ -14,8 +14,15 @@ import { z } from "zod";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 
 const bodySchema = z.object({
-  message: z.string().min(1).max(8000),
+  message: z.string().min(1).max(32_000),
   conversationId: z.string().uuid(),
+  attachment: z
+    .object({
+      type: z.literal("spreadsheet_import"),
+      rows: z.array(z.record(z.string(), z.unknown())),
+      fileName: z.string().max(200).optional(),
+    })
+    .optional(),
 });
 
 const MODEL = "claude-sonnet-4-6";
@@ -68,7 +75,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Άκυρο αίτημα" }, { status: 400 });
   }
 
-  const { message, conversationId } = bodyIn;
+  const { message, conversationId, attachment: rawAttachment } = bodyIn;
+  const importRowsForTool =
+    hasMinRole(p.role, "manager") && rawAttachment?.type === "spreadsheet_import" ? rawAttachment.rows : undefined;
   const cookie = request.headers.get("cookie") ?? "";
   const origin = request.nextUrl.origin;
 
@@ -121,13 +130,6 @@ export async function POST(request: NextRequest) {
   });
   const systemPrompt = buildSystemPrompt(today) + `\nΡόλος χρήστη: ${p.role}.`;
 
-  const toolCtx = {
-    supabase,
-    forward,
-    profile: p,
-    role: p.role,
-  };
-
   const client = new Anthropic({ apiKey: key });
   const encoder = new TextEncoder();
   const toolsExecuted: string[] = [];
@@ -139,6 +141,17 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       const write = (line: string) => controller.enqueue(encoder.encode(line));
       const sendSse = (data: string) => write(data.endsWith("\n\n") ? data : `${data}\n\n`);
+
+      const toolCtx = {
+        supabase,
+        forward,
+        profile: p,
+        role: p.role,
+        importRows: importRowsForTool,
+        onBulkProgress: (current: number, total: number) => {
+          sendSse(`data: ${JSON.stringify({ event: "bulk_progress", current, total })}\n\n`);
+        },
+      };
 
       try {
         let messages: MessageParam[] = historyForClaude;
@@ -290,3 +303,5 @@ export async function POST(request: NextRequest) {
 }
 
 export const dynamic = "force-dynamic";
+/** Long bulk imports (many thousands of rows). */
+export const maxDuration = 300;

@@ -26,7 +26,11 @@ export type StoredAssistantAction = {
   startCallMeta?: { name: string; phone: string } | null;
 } | null;
 
-export type StreamMeta = { executed: string[]; confirmCall?: { contact_id: string; name: string; phone: string } };
+export type StreamMeta = {
+  executed: string[];
+  confirmCall?: { contact_id: string; name: string; phone: string };
+  bulkProgress?: { current: number; total: number };
+};
 
 export type Msg = {
   id: string;
@@ -48,13 +52,21 @@ export type MsgWithT = Msg & { _createdAt?: string };
 export function greekToolLabel(t: string) {
   const m: Record<string, string> = {
     find_contacts: "Αναζήτηση επαφών",
-    update_contact_status: "Κατάσταση κλήσης",
-    add_task: "Εργασία",
+    update_contact: "Ενημέρωση επαφής",
+    edit_contact: "Επεξεργασία επαφής",
+    create_contact: "Νέα επαφή",
     create_request: "Αίτημα",
     add_note: "Σημείωση",
     get_contact_details: "Λεπτομέρειες",
     get_stats: "Στατιστικά",
     start_call: "Κλήση",
+    add_task: "Εργασία",
+    update_contact_status: "Κατάσταση κλήσης",
+    import_csv_data: "Εισαγωγή CSV",
+    bulk_create_contacts: "Μαζική δημιουργία επαφών",
+    search_contacts_advanced: "Προχωρημένη αναζήτηση",
+    read_pdf: "PDF",
+    write_letter: "Επιστολή",
   };
   return m[t] ?? t;
 }

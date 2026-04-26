@@ -13,10 +13,10 @@ export const lux = {
   cardFlat:
     "data-hq-card rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-body)] shadow-[0_4px_24px_rgba(0,0,0,0.35)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--border-hover)]",
   input:
-    "h-[42px] w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-input)] placeholder:text-[var(--text-placeholder)] transition-all duration-150 ease-in-out focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20 disabled:cursor-not-allowed disabled:opacity-50",
+    "h-[42px] w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-input)] placeholder:text-[var(--text-placeholder)] transition-all duration-150 ease-in-out focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20 disabled:cursor-not-allowed disabled:opacity-50",
   inputError: "border-[var(--danger)] focus:border-[var(--danger)] focus:ring-[var(--danger)]/20",
   select:
-    "h-[42px] w-full cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-input)] transition-all duration-150 focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20",
+    "h-[42px] w-full min-w-0 max-w-full cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-input)] transition-all duration-150 focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20",
   textarea:
     "min-h-[100px] w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-[var(--text-input)] placeholder:text-[var(--text-placeholder)] transition-all duration-150 focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20 disabled:opacity-50",
   /** Gold fill — spec: #C9A84C background, #0A0F1A text (≥4.5:1) */

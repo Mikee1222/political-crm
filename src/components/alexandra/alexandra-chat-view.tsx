@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Mic, Send, Trash2, X } from "lucide-react";
-import { useCallback } from "react";
+import { Menu, Mic, Paperclip, Send, Trash2, X } from "lucide-react";
+import { useCallback, useRef } from "react";
+import { hasMinRole, type Role } from "@/lib/roles";
+import { buildImportPreviewMessage, parseSpreadsheetToRows } from "@/lib/alexandra-sheet-parse";
 import { useAlexandraVoiceConversation } from "@/hooks/use-alexandra-voice-conversation";
 import { AlexandraVoiceModeOverlay } from "./alexandra-voice-mode-overlay";
 import ReactMarkdown from "react-markdown";
@@ -26,10 +28,13 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
   const {
     role, conversations, selectedId, setSelectedId, messages, loading,
     listLoading, messagesLoading, input, setInput, error, toDelete, setToDelete,
-    hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, bottomRef, newConversation,
+    setError, hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, bottomRef, newConversation,
     deleteConv, execute, send, startWithChip, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, showChips, enterMiniFromPage,
-    loadList, loadMessages,
+    loadList, loadMessages, setSpreadsheetImport,
   } = useAlexandraChat();
+
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const canImportSpreadsheet = hasMinRole(role as Role | null | undefined, "manager");
 
   const voiceModeConfigured = Boolean(
     process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID && process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID.length > 0,
@@ -54,6 +59,33 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
     input,
     setInput,
     loading || streamMode !== "none",
+  );
+
+  const onImportSpreadsheetChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file || !canImportSpreadsheet) return;
+      try {
+        const buf = await file.arrayBuffer();
+        const p = parseSpreadsheetToRows(buf);
+        if (p.columns.length === 0 || p.rows.length === 0) {
+          setError("Κενό αρχείο· δεν βρέθηκαν γραμμές");
+          return;
+        }
+        let convId: string | null = selectedId;
+        if (!convId) {
+          convId = await newConversation();
+          if (!convId) return;
+        }
+        setSpreadsheetImport({ conversationId: convId, rows: p.rows as Array<Record<string, unknown>>, fileName: file.name });
+        const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows);
+        void send(text, convId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Σφάλμα αναγνώρισης αρχείου");
+      }
+    },
+    [canImportSpreadsheet, newConversation, selectedId, send, setError, setSpreadsheetImport],
   );
 
   return (
@@ -321,6 +353,12 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                               />
                             ) : null}
                           </div>
+                          {m.streamMeta?.bulkProgress && (
+                            <p className="mt-1.5 text-xs font-medium text-[var(--accent-gold)]">
+                              Δημιουργώ επαφές… {m.streamMeta.bulkProgress.current}/
+                              {m.streamMeta.bulkProgress.total}
+                            </p>
+                          )}
                           {Array.from(
                             new Set(
                               [
@@ -498,6 +536,14 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                 title={!sttSupported ? "Χωρίς αναγνώριση φωνής: χρησιμοποιήστε το μικρόφωνο πληκτρολογίου όπου διατίθεται" : undefined}
               >
                 <div className="flex items-end gap-2">
+                  <input
+                    ref={importFileInputRef}
+                    type="file"
+                    className="sr-only"
+                    accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                    aria-hidden
+                    onChange={onImportSpreadsheetChange}
+                  />
                   <textarea
                     className="min-h-[48px] min-w-0 flex-1 resize-y rounded-2xl border-0 bg-transparent px-1 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-0"
                     placeholder="Γράψτε εδώ…"
@@ -515,6 +561,18 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                     autoComplete="off"
                     enterKeyHint="send"
                   />
+                  {canImportSpreadsheet && (
+                    <button
+                      type="button"
+                      title="Εισαγωγή Excel / CSV"
+                      aria-label="Εισαγωγή αρχείου"
+                      disabled={loading || streamMode !== "none"}
+                      onClick={() => importFileInputRef.current?.click()}
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] transition hover:border-[var(--accent-gold)]/50 hover:text-[var(--accent-gold)] disabled:opacity-40"
+                    >
+                      <Paperclip className="h-5 w-5" />
+                    </button>
+                  )}
                   {sttSupported && (
                     <button
                       type="button"

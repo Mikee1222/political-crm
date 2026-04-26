@@ -197,7 +197,7 @@ function GroupFilterSelect({
   }, [open]);
   const current = value ? groups.find((g) => g.id === value) : null;
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative w-full min-w-0 max-w-full" ref={ref}>
       <button
         type="button"
         id="f-group"
@@ -388,10 +388,10 @@ function ContactsPage() {
   };
 
   return (
-    <div className="space-y-6 pb-24 md:pb-6">
+    <div className="w-full min-w-0 max-w-full space-y-6 pb-24 md:pb-6">
       {namedayToday && (
         <div
-          className="flex flex-col gap-2 rounded-2xl border-2 border-[var(--accent-gold)]/45 bg-gradient-to-r from-[rgba(201,168,76,0.12)] to-[var(--bg-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          className="flex w-full min-w-0 max-w-full flex-col gap-2 rounded-2xl border-2 border-[var(--accent-gold)]/45 bg-gradient-to-r from-[rgba(201,168,76,0.12)] to-[var(--bg-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           role="status"
         >
           <p className="text-sm text-[var(--text-primary)]">
@@ -409,8 +409,8 @@ function ContactsPage() {
           </button>
         </div>
       )}
-      <div className={lux.card}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className={lux.card + " w-full min-w-0 max-w-full"}>
+        <div className="flex min-w-0 max-w-full flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className={lux.pageTitle}>Επαφές</h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">Διαχείριση εκλογικής βάσης</p>
@@ -473,8 +473,9 @@ function ContactsPage() {
         </div>
       </div>
 
-      <div className={lux.card + " !py-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7"}>
-        <div>
+      <div className={lux.card + " !py-4 w-full min-w-0 max-w-full"}>
+        <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,11.5rem),1fr))]">
+        <div className="min-w-0 max-w-full">
           <label className={lux.label} htmlFor="f-search">Αναζήτηση</label>
           <input
             id="f-search"
@@ -484,7 +485,7 @@ function ContactsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div>
+        <div className="min-w-0 max-w-full">
           <label className={lux.label} htmlFor="f-call">Κατάσταση</label>
           <select
             id="f-call"
@@ -499,7 +500,7 @@ function ContactsPage() {
             <option value="No Answer">Δεν απάντησε</option>
           </select>
         </div>
-        <div>
+        <div className="min-w-0 max-w-full">
           <label className={lux.label} htmlFor="f-area">Περιοχή</label>
           <select id="f-area" className={lux.select} value={area} onChange={(e) => setArea(e.target.value)}>
             <option value="">Όλες</option>
@@ -510,7 +511,7 @@ function ContactsPage() {
             ))}
           </select>
         </div>
-        <div>
+        <div className="min-w-0 max-w-full">
           <label className={lux.label} htmlFor="f-muni">Δήμος</label>
           <select
             id="f-muni"
@@ -526,7 +527,7 @@ function ContactsPage() {
             ))}
           </select>
         </div>
-        <div>
+        <div className="min-w-0 max-w-full">
           <label className={lux.label} htmlFor="f-pri">Προτεραιότητα</label>
           <select
             id="f-pri"
@@ -540,15 +541,16 @@ function ContactsPage() {
             <option value="Low">Χαμηλή</option>
           </select>
         </div>
-        <div>
+        <div className="min-w-0 max-w-full">
           <label className={lux.label} htmlFor="f-tag">Ετικέτα</label>
           <input id="f-tag" className={lux.input} placeholder="Φίλτρο tag" value={tag} onChange={(e) => setTag(e.target.value)} />
         </div>
-        <div>
+        <div className="min-w-0 max-w-full">
           <label className={lux.label} htmlFor="f-group">
             Ομάδα
           </label>
           <GroupFilterSelect value={groupId} groups={groups} onChange={setGroupId} />
+        </div>
         </div>
       </div>
 
