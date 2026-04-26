@@ -8,6 +8,7 @@ import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
 import { nextJsonError } from "@/lib/api-resilience";
 import { nextPaddedCode } from "@/lib/codes";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,6 +30,9 @@ export async function GET(request: NextRequest) {
   const ageMax = request.nextUrl.searchParams.get("age_max");
   const namedayToday = request.nextUrl.searchParams.get("nameday_today") === "1";
   const groupId = request.nextUrl.searchParams.get("group_id");
+  const limitParam = request.nextUrl.searchParams.get("limit");
+  const parsedLimit = limitParam != null ? parseInt(limitParam, 10) : NaN;
+  const listLimit = Number.isFinite(parsedLimit) ? Math.min(10_000, Math.max(1, parsedLimit)) : null;
 
   const selectList =
     "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, contact_groups ( id, name, color, description, year )";
@@ -56,6 +60,7 @@ export async function GET(request: NextRequest) {
       const n = parseInt(ageMax, 10);
       if (Number.isFinite(n)) query = query.lte("age", n);
     }
+    if (listLimit != null) query = query.limit(listLimit);
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     const rows = data ?? [];
@@ -86,6 +91,8 @@ export async function GET(request: NextRequest) {
   }
   if (search) {
     query = query.limit(12_000);
+  } else if (listLimit != null) {
+    query = query.limit(listLimit);
   }
 
   const { data, error } = await query;

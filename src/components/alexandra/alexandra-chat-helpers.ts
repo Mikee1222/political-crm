@@ -65,6 +65,10 @@ export function greekToolLabel(t: string) {
     import_csv_data: "Εισαγωγή CSV",
     bulk_create_contacts: "Μαζική δημιουργία επαφών",
     search_contacts_advanced: "Προχωρημένη αναζήτηση",
+    get_all_contacts: "Λίστα επαφών (ανάλυση)",
+    bulk_update_contacts: "Μαζική ενημέρωση",
+    bulk_delete_contacts: "Μαζική διαγραφή",
+    smart_excel_import: "Έξυπνο import Excel",
     read_pdf: "PDF",
     write_letter: "Επιστολή",
   };

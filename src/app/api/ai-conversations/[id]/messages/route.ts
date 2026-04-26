@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
+export const dynamic = 'force-dynamic';
 
 const voicePostSchema = z.object({
   entries: z
@@ -116,4 +117,3 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   return NextResponse.json({ ok: true });
 }
 
-export const dynamic = "force-dynamic";

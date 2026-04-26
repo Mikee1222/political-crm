@@ -3,6 +3,7 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { addDaysInMonthCounts, listDaysInMonth, monthRangeYmd } from "@/lib/task-filters";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {

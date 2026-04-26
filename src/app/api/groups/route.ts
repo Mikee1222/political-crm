@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { ContactGroupRow } from "@/lib/contact-groups";
+export const dynamic = 'force-dynamic';
 
 export type { ContactGroupRow } from "@/lib/contact-groups";
 

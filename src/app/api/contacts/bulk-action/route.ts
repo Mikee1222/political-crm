@@ -4,6 +4,7 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 const schema = z.object({
   contact_ids: z.array(z.string()).min(1),
   action: z.enum(["update_status", "add_to_campaign", "delete"]),

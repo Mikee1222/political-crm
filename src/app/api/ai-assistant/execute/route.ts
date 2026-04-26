@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { actionPayloadSchema, type ActionPayload } from "@/lib/ai-assistant-actions";
+export const dynamic = 'force-dynamic';
 
 function buildContactsSearchParams(
   filters?: { call_status?: string; area?: string; municipality?: string; priority?: string },
@@ -266,4 +267,3 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ error: "Άγνωστη ενέργεια" }, { status: 400 });
 }
 
-export const dynamic = "force-dynamic";

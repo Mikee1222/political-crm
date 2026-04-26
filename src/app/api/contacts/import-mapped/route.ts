@@ -5,6 +5,7 @@ import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { nextPaddedCode } from "@/lib/codes";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
+export const dynamic = 'force-dynamic';
 
 const rowSchema = z.object({
   first_name: z.string().min(1).max(400),

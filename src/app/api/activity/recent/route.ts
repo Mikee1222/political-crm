@@ -5,8 +5,8 @@ import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { activityGreekLine, firstNameFromFull, formatTimeAgo } from "@/lib/activity-descriptions";
 import type { ActivityAction } from "@/lib/activity-log";
+export const dynamic = 'force-dynamic';
 
-export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {

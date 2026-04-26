@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { API_RACE_MS, withTimeoutQuery } from "@/lib/api-resilience";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
+export const dynamic = 'force-dynamic';
 
-export const dynamic = "force-dynamic";
 
 type ConvRow = { id: string; title: string | null; updated_at: string | null };
 

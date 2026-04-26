@@ -3,6 +3,7 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { Role } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 export async function PUT(
   request: NextRequest,

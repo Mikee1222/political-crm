@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {

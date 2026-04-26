@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { buildCreatePhoneCallBody } from "@/lib/retell-outbound";
+export const dynamic = 'force-dynamic';
 
 /**
  * Dials the next contact in the campaign (first assigned contact with no call yet in this campaign).

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { API_RACE_MS, runWithTimeCap } from "@/lib/api-resilience";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+export const dynamic = 'force-dynamic';
 
-export const dynamic = "force-dynamic";
 
 function monthDay(date: Date) {
   return { month: date.getMonth() + 1, day: date.getDate() };

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import type { Role } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -15,6 +16,19 @@ type UserRow = {
   joined_at: string;
   last_sign_in_at: string | null;
 };
+
+function GoogleCalendarReturnHandler({ onConnected }: { onConnected: () => void | Promise<void> }) {
+  const sp = useSearchParams();
+  const router = useRouter();
+  useEffect(() => {
+    if (sp.get("g") !== "calendar_ok") return;
+    void (async () => {
+      await onConnected();
+      router.replace("/settings", { scroll: false });
+    })();
+  }, [sp, router, onConnected]);
+  return null;
+}
 
 export default function SettingsPage() {
   const { profile } = useProfile();
@@ -48,6 +62,8 @@ export default function SettingsPage() {
       void loadInt();
     }
   }, [isAdmin, loadUsers, loadInt]);
+
+  const googleConnected = Boolean(integrations?.hasStoredGoogleTokens);
 
   const setRole = async (userId: string, role: Role) => {
     setErr(null);
@@ -102,6 +118,11 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      {isAdmin && (
+        <Suspense fallback={null}>
+          <GoogleCalendarReturnHandler onConnected={loadInt} />
+        </Suspense>
+      )}
       <section className={lux.card}>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -204,24 +225,35 @@ export default function SettingsPage() {
       )}
 
       <section className={lux.card}>
-        <h2 className={lux.sectionTitle + " mb-1"}>Σύνδεση Google Calendar</h2>
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <h2 className={lux.sectionTitle + " mb-0"}>Σύνδεση Google Calendar</h2>
+          {integrations && googleConnected && (
+            <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-500/40">
+              Συνδεδεμένο
+            </span>
+          )}
+        </div>
         <p className="mb-4 text-sm text-[var(--text-secondary)]">OAuth 2.0 — το ημερολόγιο εμφανίζεται μετά τη σύνδεση</p>
-        <div className="flex flex-wrap gap-2">
-          <a href="/api/auth/google" className={lux.btnPrimary}>
-            Σύνδεση / ανανέωση
-          </a>
-          <button
-            type="button"
-            onClick={() => void disconnectGoogle()}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-[var(--bg-card)] px-4 py-2.5 text-sm font-medium text-red-300 transition-all duration-150 hover:bg-red-500/10"
-          >
-            Αποσύνδεση
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {integrations === null && <span className="text-sm text-[var(--text-muted)]">Φόρτωση…</span>}
+          {integrations && !googleConnected && (
+            <a href="/api/auth/google" className={lux.btnPrimary}>
+              Σύνδεση Google Calendar
+            </a>
+          )}
+          {integrations && googleConnected && (
+            <button
+              type="button"
+              onClick={() => void disconnectGoogle()}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-[var(--bg-card)] px-4 py-2.5 text-sm font-medium text-red-300 transition-all duration-150 hover:bg-red-500/10"
+            >
+              Αποσύνδεση
+            </button>
+          )}
         </div>
         {integrations && (
           <p className="mt-3 text-xs text-[var(--text-secondary)]">
-            Ρυθμίσεις env: {integrations.googleOAuthConfigured ? "OK" : "Όχι"} · Αποθηκευμένα tokens:{" "}
-            {integrations.hasStoredGoogleTokens ? "Ναι" : "Όχι"}
+            Ρυθμίσεις env: {integrations.googleOAuthConfigured ? "OK" : "Όχι"}
           </p>
         )}
       </section>

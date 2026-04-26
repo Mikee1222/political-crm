@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 export const runtime = "nodejs";
 export const maxDuration = 30;

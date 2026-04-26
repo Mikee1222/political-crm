@@ -7,6 +7,7 @@ import {
   stablePairId,
   type ContactForDedup,
 } from "@/lib/duplicate-detection";
+export const dynamic = 'force-dynamic';
 
 type Row = {
   id: string;

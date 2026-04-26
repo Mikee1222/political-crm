@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { UserProfile } from "@/lib/auth-helpers";
+export const dynamic = 'force-dynamic';
 
 type Row = {
   id: string;

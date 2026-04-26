@@ -6,6 +6,7 @@ import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { getCampaignRollup } from "@/lib/campaign-stats";
 import { listContactIdsMatching, type ContactFilter } from "@/lib/contacts-filter-query";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {

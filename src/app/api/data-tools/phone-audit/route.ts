@@ -4,6 +4,7 @@ import { hasMinRole } from "@/lib/roles";
 import { normalizePhoneForMatch } from "@/lib/duplicate-detection";
 import { analyzeGreekPhone, problemLabelGreek } from "@/lib/phone-validation";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 type C = { id: string; first_name: string; last_name: string; phone: string | null };
 

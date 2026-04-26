@@ -5,6 +5,7 @@ import { buildContactsQuery, contactMatchesLocalSearch } from "@/lib/contacts-qu
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { callStatusLabel } from "@/lib/luxury-styles";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 function escapeCsvCell(v: string | number | null | undefined): string {
   const s = v == null ? "" : String(v);

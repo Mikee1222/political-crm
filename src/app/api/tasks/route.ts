@@ -3,6 +3,7 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { defaultAnchorYmd, weekRangeYmd, type TaskTabFilter } from "@/lib/task-filters";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 const taskSelect = [
   "id",

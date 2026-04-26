@@ -4,6 +4,7 @@ import { hasMinRole } from "@/lib/roles";
 import { MUNI_CENTROIDS, findCanonicalMuni, KNOWN_MUNICIPALITY_NAMES } from "@/lib/aitoloakarnania-map-centroids";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 type Mode = "contacts" | "positive" | "negative";
 

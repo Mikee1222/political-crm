@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
+export const dynamic = 'force-dynamic';
 
-export const dynamic = "force-dynamic";
 
 export type NameDayRow = { month: number; day: number; names: string[] };
 

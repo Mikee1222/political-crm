@@ -4,6 +4,8 @@ import { logActivity } from "@/lib/activity-log";
 import { mergeCallMetadata, getContactId } from "@/lib/retell-llm";
 import { nextJsonError } from "@/lib/api-resilience";
 
+export const dynamic = 'force-dynamic';
+
 type TranscriptEntry = { role: string; content?: string | null };
 
 function getLastAgentFromCall(call: Record<string, unknown> | null | undefined): string {

@@ -210,9 +210,17 @@ create table if not exists public.google_tokens (
   access_token text,
   refresh_token text,
   expires_at timestamp with time zone,
+  expiry timestamp with time zone,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
+
+-- Legacy DBs: add expiry (mirror of expires_at for OAuth expiry)
+alter table public.google_tokens
+  add column if not exists expiry timestamp with time zone;
+update public.google_tokens
+  set expiry = coalesce(expiry, expires_at)
+  where expiry is null and expires_at is not null;
 
 create index if not exists idx_profiles_role on public.profiles (role);
 

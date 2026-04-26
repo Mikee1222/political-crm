@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
+export const dynamic = 'force-dynamic';
 
-export const dynamic = "force-dynamic";
 
 function dateLabelGreek(d: Date) {
   return d.toLocaleDateString("el-GR", {

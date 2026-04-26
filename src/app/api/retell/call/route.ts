@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { buildCreatePhoneCallBody } from "@/lib/retell-outbound";
+export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   contact_id: z.string().uuid("Άκυρο contact_id"),

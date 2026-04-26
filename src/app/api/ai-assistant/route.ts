@@ -12,6 +12,7 @@ import {
 import { hasMinRole } from "@/lib/roles";
 import { z } from "zod";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
+export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   message: z.string().min(1).max(32_000),
@@ -91,13 +92,28 @@ export async function POST(request: NextRequest) {
     return false;
   }
 
+  function municipalityHintFromFileBaseName(fileName: string | undefined): string | undefined {
+    if (!fileName?.trim()) return undefined;
+    const base = fileName
+      .replace(/^.*[/\\]/, "")
+      .replace(/\.[^.]+$/i, "")
+      .replace(/[_-]+/g, " ")
+      .trim();
+    if (base.length < 2 || base.length > 120) return undefined;
+    const lower = base.toLowerCase();
+    if (/^(export|data|contacts|επαφ|book\d*|new\s*spreadsheet|untitled|timesheet)/i.test(lower)) {
+      return undefined;
+    }
+    return base;
+  }
+
   const importContextMunicipality: string | undefined = (() => {
     if (!hasMinRole(p.role, "manager") || rawAttachment?.type !== "spreadsheet_import") return undefined;
     const explicit = rawAttachment.contextMunicipality?.trim();
     if (explicit) return explicit;
     const s = rawAttachment.sheetName?.trim();
     if (s && !isGenericSheetName(s)) return s;
-    return undefined;
+    return municipalityHintFromFileBaseName(rawAttachment.fileName) ?? undefined;
   })();
   const cookie = request.headers.get("cookie") ?? "";
   const origin = request.nextUrl.origin;
@@ -324,6 +340,5 @@ export async function POST(request: NextRequest) {
   });
 }
 
-export const dynamic = "force-dynamic";
 /** Long bulk imports (many thousands of rows). */
 export const maxDuration = 300;

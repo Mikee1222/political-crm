@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+export const dynamic = 'force-dynamic';
 
 /**
  * Unique area / municipality values for filter dropdowns (manager convenience).

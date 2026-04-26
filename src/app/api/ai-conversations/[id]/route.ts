@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -36,4 +37,3 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
   }
 }
 
-export const dynamic = "force-dynamic";

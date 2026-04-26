@@ -3,6 +3,7 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { getCalendarClientForUser, type CalendarEventType } from "@/lib/google-calendar";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 export async function PATCH(
   request: NextRequest,

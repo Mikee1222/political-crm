@@ -5,6 +5,8 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePublicApiKey } from "@/lib/public-api-auth";
 import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
 
+export const dynamic = 'force-dynamic';
+
 const toUndef = (v: unknown) => {
   if (v == null) return undefined;
   if (typeof v === "string" && v.trim() === "") return undefined;
@@ -125,5 +127,3 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ success: true, contact_id: data.id });
 }
-
-export const dynamic = "force-dynamic";

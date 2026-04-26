@@ -4,6 +4,8 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePublicApiKey } from "@/lib/public-api-auth";
 import { nextJsonError } from "@/lib/api-resilience";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
   const authErr = requirePublicApiKey(request);
@@ -59,5 +61,3 @@ export async function GET(request: NextRequest) {
     return nextJsonError();
   }
 }
-
-export const dynamic = "force-dynamic";

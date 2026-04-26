@@ -3,6 +3,7 @@ import Papa from "papaparse";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 type CsvRow = { first_name?: string; last_name?: string; phone?: string; area?: string };
 

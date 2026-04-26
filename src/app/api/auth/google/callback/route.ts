@@ -3,6 +3,7 @@ import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { exchangeCodeForTokens, parseOAuthState } from "@/lib/google-calendar";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasMinRole } from "@/lib/roles";
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const { user, profile } = await getSessionWithProfile();
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest) {
       access_token: tokens.access_token ?? null,
       refresh_token: tokens.refresh_token ?? null,
       expires_at: expires,
+      expiry: expires,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" },

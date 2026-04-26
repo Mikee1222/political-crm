@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
+export const dynamic = 'force-dynamic';
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {

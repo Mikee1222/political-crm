@@ -349,7 +349,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
               });
             } else if (j.event === "executed" && j.tool) {
               ensureAssistant();
-              if (j.tool === "bulk_create_contacts") {
+              if (j.tool === "bulk_create_contacts" || j.tool === "smart_excel_import") {
                 importStashRef.current = null;
               }
               setMessages((m) =>

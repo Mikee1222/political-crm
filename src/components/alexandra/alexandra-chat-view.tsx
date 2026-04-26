@@ -84,7 +84,10 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           fileName: file.name,
           sheetName: p.sheetName,
         });
-        const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows);
+        const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows, {
+          headerRowIndex: p.headerRowIndex,
+          sheetName: p.sheetName,
+        });
         void send(text, convId);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Σφάλμα αναγνώρισης αρχείου");

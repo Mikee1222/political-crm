@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
+export const dynamic = 'force-dynamic';
 
 const ELEVEN_GET_SIGNED = "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url";
 
@@ -55,4 +56,3 @@ export async function POST() {
   }
 }
 
-export const dynamic = "force-dynamic";

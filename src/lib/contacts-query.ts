@@ -45,3 +45,56 @@ export function buildContactsQuery(
   if (group_id) query = query.eq("group_id", group_id);
   return query;
 }
+
+const CONTACT_LIST_SELECT =
+  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, contact_groups ( id, name, color, description, year )";
+
+/** Same filtering semantics as GET /api/contacts (fuzzy when search is set), capped. */
+export async function queryContactsList(
+  supabase: SupabaseClient,
+  opts: {
+    search?: string;
+    call_status?: string;
+    area?: string;
+    municipality?: string;
+    priority?: string;
+    tag?: string;
+    group_id?: string;
+    phone?: string;
+    political_stance?: string;
+    age_min?: number;
+    age_max?: number;
+  },
+  cap: number = 10_000,
+) {
+  const maxRows = Math.min(10_000, Math.max(1, cap));
+  let query = supabase
+    .from("contacts")
+    .select(CONTACT_LIST_SELECT)
+    .order("created_at", { ascending: false });
+  if (opts.call_status) query = query.eq("call_status", opts.call_status);
+  if (opts.area) query = query.eq("area", opts.area);
+  if (opts.municipality) query = query.ilike("municipality", `%${opts.municipality}%`);
+  if (opts.priority) query = query.eq("priority", opts.priority);
+  if (opts.tag) query = query.contains("tags", [opts.tag]);
+  if (opts.group_id) query = query.eq("group_id", opts.group_id);
+  if (opts.phone) query = query.ilike("phone", `%${opts.phone}%`);
+  if (opts.political_stance) query = query.eq("political_stance", opts.political_stance);
+  if (opts.age_min != null && Number.isFinite(opts.age_min)) query = query.gte("age", opts.age_min);
+  if (opts.age_max != null && Number.isFinite(opts.age_max)) query = query.lte("age", opts.age_max);
+  if (opts.search?.trim()) {
+    query = query.limit(12_000);
+  } else {
+    query = query.limit(maxRows);
+  }
+  const { data, error } = await query;
+  if (error) {
+    return { error: error.message, contacts: [] as Record<string, unknown>[] };
+  }
+  let list = (data ?? []) as Record<string, unknown>[];
+  if (opts.search?.trim()) {
+    list = list.filter((c) => contactMatchesFuzzyGreekSearch(c as ContactForSearch, opts.search!));
+    list = list.slice(0, maxRows);
+  }
+  return { error: null, contacts: list };
+}
