@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
-import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 

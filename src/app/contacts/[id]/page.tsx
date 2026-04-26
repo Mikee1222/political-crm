@@ -24,8 +24,6 @@ const mobileEditOverlay =
   "max-md:fixed max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:top-0 z-[100] m-0 max-h-[100dvh] w-full max-w-full max-md:overflow-y-auto max-md:overflow-x-hidden max-md:rounded-none max-md:border-0 max-md:shadow-2xl max-md:p-4 max-md:pt-[max(0.5rem,env(safe-area-inset-top,0px))] max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))]";
 const btnEdit =
   "text-xs font-semibold text-[#003476] hover:underline";
-const btnOutline =
-  "inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]";
 
 type Call = {
   id: string;
