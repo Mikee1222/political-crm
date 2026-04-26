@@ -236,9 +236,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-[-webkit-fill-available] min-h-screen w-full max-w-full overflow-x-hidden bg-[var(--bg-primary)]">
-      <div className="grid w-full min-w-0 max-w-full min-h-[-webkit-fill-available] min-h-screen grid-cols-1 md:grid-cols-[220px_1fr]">
       <aside
-        className="app-sidebar relative z-30 hidden min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-[var(--border)] px-3 pt-6 pb-8 md:sticky md:top-0 md:flex md:h-screen md:shrink-0"
+        className="app-sidebar fixed left-0 top-0 z-30 box-border hidden h-screen max-h-screen w-[260px] max-w-full flex-col overflow-y-auto overflow-x-hidden border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
         style={{ background: "var(--sidebar-bg)" }}
       >
         <div className="flex items-center justify-between pr-0.5 md:justify-start md:pr-0">
@@ -267,12 +266,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.04] via-transparent to-black/20" />
         <div className="relative z-10 mb-4 h-px bg-gradient-to-r from-transparent via-[var(--accent-gold)]/40 to-transparent" />
 
-        <nav className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden pb-1">
+        <nav className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 pb-1">
           <NavLinks pathname={pathname} role={role} openRequestsCount={openRequestsCount} />
         </nav>
       </aside>
 
-      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden">
+      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden md:ml-[260px]">
         <header
           className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]"
         >
@@ -346,7 +345,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           openRequestsCount={openRequestsCount}
           role={role}
         />
-      </div>
       </div>
     </div>
   );

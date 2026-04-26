@@ -7,6 +7,9 @@ import type { Role } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
+import type { EventCategoryRow } from "@/lib/event-categories";
+import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
+import type { ContactTagDefinitionRow } from "@/lib/contact-tag-definitions";
 
 type UserRow = {
   id: string;
@@ -224,6 +227,12 @@ export default function SettingsPage() {
         />
       )}
 
+      <EventCategoriesSection />
+
+      <GroupsSection />
+
+      <TagsSection />
+
       <section className={lux.card}>
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <h2 className={lux.sectionTitle + " mb-0"}>Σύνδεση Google Calendar</h2>
@@ -268,8 +277,6 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <GroupsSection />
-
       <section className={lux.card}>
         <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>
         <p className="text-sm text-[var(--text-secondary)]">
@@ -279,6 +286,350 @@ export default function SettingsPage() {
           Πολιτική φιγούρα: <strong className="text-[var(--text-primary)]">Κώστας Καραγκούνης</strong>
         </p>
       </section>
+    </div>
+  );
+}
+
+function buildDefaultEventCategories() {
+  return CAL_EVENT_TYPE_KEYS.map((k) => ({
+    type_key: k,
+    name: CALENDAR_EVENT_TYPES[k].label,
+    color: SCHEDULE_EVENT_COLORS[k],
+  }));
+}
+
+function EventCategoriesSection() {
+  const [rows, setRows] = useState(() => buildDefaultEventCategories());
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setErr(null);
+    setLoading(true);
+    try {
+      const res = await fetchWithTimeout("/api/admin/event-categories");
+      if (res.status === 401) return;
+      if (!res.ok) {
+        setErr("Φόρτωση κατηγοριών απέτυχε. Χρήση προεπιλογών.");
+        setRows(buildDefaultEventCategories());
+        return;
+      }
+      const d = (await res.json()) as { categories?: EventCategoryRow[] };
+      const by = new Map((d.categories ?? []).map((c) => [c.type_key, c] as const));
+      setRows(
+        buildDefaultEventCategories().map((def) => {
+          const found = by.get(def.type_key);
+          return found
+            ? { type_key: def.type_key, name: found.name, color: found.color }
+            : def;
+        }),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const save = async () => {
+    setErr(null);
+    for (const r of rows) {
+      if (!r.name?.trim()) {
+        setErr("Όλες οι γραμμές χρειάζονται μη κενό όνομα");
+        return;
+      }
+    }
+    setBusy(true);
+    try {
+      const res = await fetchWithTimeout("/api/admin/event-categories", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categories: rows.map((r) => ({ type_key: r.type_key, name: r.name.trim(), color: r.color.trim() })) }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setErr(j.error ?? "Σφάλμα αποθήκευσης");
+        return;
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className={lux.card}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className={lux.pageTitle + " mb-1"}>Κατηγορίες Events</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Χρώματα και εμφανιζόμενα ονόματα τύπων στο πρόγραμμα (4 τύποι συστήματος)</p>
+        </div>
+        <button type="button" onClick={() => void save()} disabled={busy || loading} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
+          {busy ? "…" : "Αποθήκευση"}
+        </button>
+      </div>
+      {err && (
+        <p className="mb-3 text-sm text-amber-200" role="status">
+          {err}
+        </p>
+      )}
+      {loading && <p className="mb-3 text-sm text-[var(--text-muted)]">Φόρτωση…</p>}
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full min-w-[420px] text-sm">
+          <thead>
+            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+              <th className="p-3 pl-4 text-left">Τύπος (σύστημα)</th>
+              <th className="p-3 text-left">Όνομα</th>
+              <th className="p-3 pr-4 text-left">Χρώμα</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.type_key} className="border-b border-[var(--border)] last:border-0">
+                <td className="p-3 pl-4 text-[var(--text-secondary)]">
+                  {CALENDAR_EVENT_TYPES[r.type_key as CalendarEventType].label}
+                  <span className="mt-0.5 block text-[10px] font-mono text-[var(--text-muted)]">{r.type_key}</span>
+                </td>
+                <td className="p-3">
+                  <input
+                    className={lux.input + " !h-9"}
+                    value={r.name}
+                    onChange={(e) =>
+                      setRows((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, name: e.target.value } : x)))
+                    }
+                  />
+                </td>
+                <td className="p-3 pr-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      className="h-9 w-12 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]"
+                      value={r.color}
+                      onChange={(e) =>
+                        setRows((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, color: e.target.value } : x)))
+                      }
+                    />
+                    <input
+                      className={lux.input + " h-9 max-w-[120px] font-mono text-xs"}
+                      value={r.color}
+                      onChange={(e) =>
+                        setRows((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, color: e.target.value } : x)))
+                      }
+                    />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function TagsSection() {
+  const [rows, setRows] = useState<ContactTagDefinitionRow[]>([]);
+  const [editing, setEditing] = useState<ContactTagDefinitionRow | null | "new">(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [delId, setDelId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetchWithTimeout("/api/admin/contact-tags");
+    if (!res.ok) return;
+    const d = (await res.json()) as { tags: ContactTagDefinitionRow[] };
+    setRows(d.tags ?? []);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section className={lux.card}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className={lux.pageTitle + " mb-1"}>Ετικέτες</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Λεξιλόγιο ετικετών και χρώμα εμφάνισης· το πεδίο tags στις επαφές παραμένει ως έχει.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setErr(null);
+            setEditing("new");
+          }}
+          className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}
+        >
+          Προσθήκη
+        </button>
+      </div>
+      {err && (
+        <p className="mb-3 text-sm text-amber-200" role="status">
+          {err}
+        </p>
+      )}
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full min-w-[360px] text-sm">
+          <thead>
+            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+              <th className="p-3 pl-4 text-left">Όνομα</th>
+              <th className="p-3 text-left">Χρώμα</th>
+              <th className="p-3 pr-4 text-right">Ενέργειες</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((g) => (
+              <tr key={g.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
+                <td className="p-3 pl-4 font-medium text-[var(--text-primary)]">
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
+                      style={{ background: g.color || "#6B7280" }}
+                    />
+                    {g.name}
+                  </span>
+                </td>
+                <td className="p-3 font-mono text-xs text-[var(--text-secondary)]">{g.color}</td>
+                <td className="p-3 pr-4 text-right">
+                  <button
+                    type="button"
+                    className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                    onClick={() => {
+                      setErr(null);
+                      setEditing(g);
+                    }}
+                  >
+                    Επεξεργασία
+                  </button>{" "}
+                  <button type="button" className={lux.btnDanger + " !px-2 !py-1.5 text-xs"} onClick={() => setDelId(g.id)}>
+                    Διαγραφή
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && <p className="p-6 text-center text-sm text-[var(--text-muted)]">Καμία ετικέτα ακόμη — Προσθέστε.</p>}
+      </div>
+
+      {editing != null && (
+        <TagEditModal
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+          onError={setErr}
+        />
+      )}
+
+      {delId && (
+        <ConfirmModal
+          title="Διαγραφή ετικέτας"
+          body="Η ετικέτα διαγράφεται από το λεξιλόγιο. Τα υπάρχοντα tags στις επαφές δεν αλλάζουν αυτόματα."
+          confirmLabel="Διαγραφή"
+          onCancel={() => setDelId(null)}
+          onConfirm={async () => {
+            setErr(null);
+            const res = await fetchWithTimeout(`/api/admin/contact-tags/${delId}`, { method: "DELETE" });
+            if (!res.ok) {
+              const j = (await res.json().catch(() => ({}))) as { error?: string };
+              setErr(j.error ?? "Σφάλμα");
+              return;
+            }
+            setDelId(null);
+            await load();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function TagEditModal({
+  initial,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  initial: ContactTagDefinitionRow | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  onError: (e: string | null) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [color, setColor] = useState(initial?.color ?? "#6B7280");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setName(initial?.name ?? "");
+    setColor(initial?.color ?? "#6B7280");
+  }, [initial]);
+
+  const save = async () => {
+    onError(null);
+    if (!name.trim()) {
+      onError("Υποχρεωτικό όνομα");
+      return;
+    }
+    setBusy(true);
+    try {
+      const isNew = !initial;
+      const res = await fetchWithTimeout(
+        isNew ? "/api/admin/contact-tags" : `/api/admin/contact-tags/${initial!.id}`,
+        {
+          method: isNew ? "POST" : "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim(), color: color.trim() || "#6B7280" }),
+        },
+      );
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        onError(j.error ?? "Σφάλμα");
+        return;
+      }
+      await onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={lux.modalOverlay}>
+      <div className="mx-4 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:mx-0 sm:max-h-[90vh] sm:self-center sm:max-w-lg">
+        <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}</h3>
+        </div>
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+          <div>
+            <label className={lux.label}>Όνομα *</label>
+            <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} />
+          </div>
+          <div>
+            <label className={lux.label}>Χρώμα</label>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="color"
+                className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+              />
+              <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -304,11 +655,11 @@ function GroupsSection() {
     <section className={lux.card}>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className={lux.pageTitle + " mb-1"}>Ομάδες</h2>
+          <h2 className={lux.pageTitle + " mb-1"}>Ομάδες Επαφών</h2>
           <p className="text-sm text-[var(--text-secondary)]">Ομάδες επαφών (χρώμα, έτος, περιγραφή) — εμφάνιση στην λίστα επαφών</p>
         </div>
         <button type="button" onClick={() => { setErr(null); setEditing("new"); }} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
-          Νέα ομάδα
+          Προσθήκη
         </button>
       </div>
       {err && (

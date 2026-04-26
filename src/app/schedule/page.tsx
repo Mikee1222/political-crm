@@ -25,6 +25,7 @@ import {
 } from "@/lib/calendar-event-types";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { stripHtml } from "@/lib/strip-html";
 
 type CalEvent = {
   id: string;
@@ -36,6 +37,9 @@ type CalEvent = {
   location?: string | null;
   description?: string | null;
   type: CalendarEventType;
+  /** From DB `event_categories` (schedule API) */
+  color?: string | null;
+  typeLabel?: string | null;
 };
 
 const H_START = 8;
@@ -346,7 +350,7 @@ export default function SchedulePage() {
     [],
   );
 
-  const detailSurface = detail ? getScheduleEventSurface(detail.type, detail.title) : null;
+  const detailSurface = detail ? getScheduleEventSurface(detail.type, detail.title, detail.color) : null;
 
   return (
     <div className="min-h-full -m-6 flex flex-col bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] md:-m-8 md:p-6">
@@ -515,7 +519,7 @@ export default function SchedulePage() {
                 const today = isToday(d);
                 const des = dayEvents(d);
                 const { timed, allDay } = layoutDayTimed(d, des);
-                const stripH = (weekHasAllDay || allDay.length > 0) ? ALLDAY_STRIP_H : 0;
+                const stripH = weekHasAllDay || allDay.length > 0 ? ALLDAY_STRIP_H : 0;
 
                 return (
                   <div
@@ -532,17 +536,22 @@ export default function SchedulePage() {
                       >
                         {allDay.length > 0
                           ? allDay.map((ev) => {
-                              const { color } = getScheduleEventSurface(ev.type, ev.title);
+                              const { color } = getScheduleEventSurface(ev.type, ev.title, ev.color);
+                              const title = stripHtml(ev.title ?? null) || "—";
                               return (
                                 <button
                                   key={ev.id + (ev.calendarId ?? "")}
                                   type="button"
                                   onClick={() => openDetail(ev)}
-                                  className="mb-0.5 w-full rounded-lg border border-white/15 px-1.5 py-1 text-left text-[10px] font-medium text-white shadow-md transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg"
+                                  className="min-h-10 w-full overflow-hidden rounded-lg border border-white/15 px-1.5 py-0.5 text-left text-white shadow-md transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg"
                                   style={{ backgroundColor: color }}
                                 >
-                                  <span className="line-clamp-1 drop-shadow-sm">{ev.title ?? "—"}</span>
-                                  <span className="block text-[9px] text-white/90">Όλη η μέρα</span>
+                                  <span className="line-clamp-1 text-[10px] font-medium leading-tight [text-shadow:0_1px_0_rgba(0,0,0,0.2)] drop-shadow-sm">
+                                    {title}
+                                  </span>
+                                  <span className="mt-0.5 block text-[9px] font-bold text-white/95 [text-shadow:0_1px_0_rgba(0,0,0,0.15)]">
+                                    Όλη η μέρα
+                                  </span>
                                 </button>
                               );
                             })
@@ -567,16 +576,18 @@ export default function SchedulePage() {
 
                       {timed.map(({ ev, top, height, col, nCols }) => {
                         const w = 100 / nCols;
-                        const { color } = getScheduleEventSurface(ev.type, ev.title);
+                        const { color } = getScheduleEventSurface(ev.type, ev.title, ev.color);
+                        const title = stripHtml(ev.title ?? null) || "—";
+                        const loc = ev.location ? stripHtml(ev.location) : "";
                         return (
                           <button
                             key={ev.id + (ev.calendarId ?? "") + col}
                             type="button"
                             onClick={() => openDetail(ev)}
-                            className="absolute flex min-h-0 flex-col overflow-hidden rounded-lg border border-white/20 px-1.5 py-0.5 text-left text-white shadow-md transition duration-200 hover:scale-[1.02] hover:shadow-lg"
+                            className="absolute flex min-h-10 min-w-0 flex-col gap-0.5 overflow-hidden rounded-lg border border-white/20 px-1.5 py-0.5 text-left text-white shadow-md transition duration-200 hover:scale-[1.02] hover:shadow-lg"
                             style={{
                               top,
-                              height,
+                              height: Math.max(height, 40),
                               left: `calc(${(col * 100) / nCols}% + 2px)`,
                               width: `calc(${w}% - 4px)`,
                               zIndex: 2 + col,
@@ -584,18 +595,21 @@ export default function SchedulePage() {
                             }}
                           >
                             {ev.start && !isAllDayStr(ev.start) && (
-                              <span className="shrink-0 text-[9px] font-medium leading-tight text-white/95 [text-shadow:0_1px_0_rgba(0,0,0,0.2)]">
+                              <span className="shrink-0 text-[9px] font-bold leading-tight text-white/95 [text-shadow:0_1px_0_rgba(0,0,0,0.2)]">
                                 {format(new Date(ev.start), "HH:mm", { locale: el })} —{" "}
                                 {ev.end ? format(new Date(ev.end), "HH:mm", { locale: el }) : "—"}
                               </span>
                             )}
-                            <span className="line-clamp-2 min-h-0 text-[11px] font-semibold leading-tight [text-shadow:0_1px_0_rgba(0,0,0,0.15)]">
-                              {ev.title ?? "—"}
+                            <span className="line-clamp-2 min-h-0 text-[12px] font-medium leading-tight [text-shadow:0_1px_0_rgba(0,0,0,0.15)]">
+                              {title}
                             </span>
-                            {ev.location ? (
-                              <span className="line-clamp-1 flex min-h-0 items-center gap-0.5 text-[8.5px] text-white/90">
-                                <MapPin className="h-2.5 w-2.5 shrink-0" />
-                                {ev.location}
+                            {loc ? (
+                              <span
+                                className="line-clamp-1 flex min-h-0 min-w-0 items-center gap-0.5 text-[9px] text-white/90"
+                                title={loc}
+                              >
+                                <MapPin className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                                <span className="min-w-0 truncate">{loc}</span>
                               </span>
                             ) : null}
                           </button>
@@ -642,9 +656,11 @@ export default function SchedulePage() {
                     className="mb-3 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/30"
                     style={{ backgroundColor: detailSurface.color }}
                   >
-                    {CALENDAR_EVENT_TYPES[detailSurface.resolved].label}
+                    {detail.typeLabel?.trim() || CALENDAR_EVENT_TYPES[detailSurface.resolved].label}
                   </div>
-                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">{detail.title}</h2>
+                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                    {stripHtml(detail.title ?? null) || "—"}
+                  </h2>
                   {detail.start && !isAllDayStr(detail.start) && (
                     <p className="mt-1 text-sm text-[var(--text-secondary)]">
                       {format(new Date(detail.start), "PPPp", { locale: el })} —{" "}
@@ -654,15 +670,17 @@ export default function SchedulePage() {
                   {detail.start && isAllDayStr(detail.start) && (
                     <p className="mt-1 text-sm text-amber-200/90">Όλη η μέρα (ημερολόγιο Google)</p>
                   )}
-                  {detail.location && (
-                    <p className="mt-2 flex items-start gap-1.5 text-sm text-[var(--text-primary)]">
+                  {stripHtml(detail.location ?? null) ? (
+                    <p className="mt-2 flex min-w-0 items-start gap-1.5 text-sm text-[var(--text-primary)]">
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
-                      {detail.location}
+                      <span className="min-w-0 break-words">{stripHtml(detail.location)}</span>
                     </p>
-                  )}
-                  {detail.description && (
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">{detail.description}</p>
-                  )}
+                  ) : null}
+                  {stripHtml(detail.description ?? null) ? (
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
+                      {stripHtml(detail.description ?? null)}
+                    </p>
+                  ) : null}
                 </div>
               )}
               {editing && detail && !isAllDayStr(detail.start) && (

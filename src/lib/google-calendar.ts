@@ -2,6 +2,7 @@ import { addMonths, subMonths } from "date-fns";
 import { google } from "googleapis";
 import type { calendar_v3 } from "googleapis";
 import { createServiceClient } from "./supabase/admin";
+import { stripHtml } from "./strip-html";
 import { CALENDAR_EVENT_TYPES, type CalendarEventType } from "./calendar-event-types";
 export { CALENDAR_EVENT_TYPES, type CalendarEventType } from "./calendar-event-types";
 
@@ -102,14 +103,17 @@ export function mapEventType(e: calendar_v3.Schema$Event): CalendarEventType {
 }
 
 function toScheduleEventView(e: calendar_v3.Schema$Event, calendarId: string) {
+  const title = stripHtml(e.summary ?? null) || null;
+  const location = e.location ? stripHtml(e.location) || null : null;
+  const description = e.description ? stripHtml(e.description) || null : null;
   return {
     id: (e.id ?? "") as string,
     calendarId,
-    title: e.summary,
+    title,
     start: e.start?.dateTime ?? e.start?.date,
     end: e.end?.dateTime ?? e.end?.date,
-    location: e.location,
-    description: e.description,
+    location,
+    description,
     type: mapEventType(e),
   };
 }

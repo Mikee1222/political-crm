@@ -35,11 +35,18 @@ export function inferTypeFromTitle(title: string | null | undefined): CalendarEv
   return "other";
 }
 
+const HEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+
 export function getScheduleEventSurface(
   type: CalendarEventType,
   title: string | null | undefined,
+  customColor?: string | null,
 ): { resolved: CalendarEventType; color: string } {
   const r = resolveEventType(type, title);
+  const c = customColor && String(customColor).trim();
+  if (c && HEX.test(c)) {
+    return { resolved: r, color: c };
+  }
   return { resolved: r, color: SCHEDULE_EVENT_COLORS[r] };
 }
 

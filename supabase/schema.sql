@@ -443,3 +443,34 @@ alter table public.contact_groups enable row level security;
 drop policy if exists "authenticated contact_groups" on public.contact_groups;
 create policy "authenticated contact_groups" on public.contact_groups
   for all to authenticated using (true) with check (true);
+
+-- Κατηγορίες events (χρώμα + εμφανιζόμενο όνομα στο πρόγραμμα)
+create table if not exists public.event_categories (
+  type_key text not null check (type_key in ('meeting', 'event', 'campaign', 'other')) primary key,
+  name text not null,
+  color text not null,
+  updated_at timestamptz not null default now()
+);
+insert into public.event_categories (type_key, name, color) values
+  ('meeting', 'Συνάντηση', '#003476'),
+  ('event', 'Εκδήλωση', '#C9A84C'),
+  ('campaign', 'Προεκλογικό', '#DC2626'),
+  ('other', 'Άλλο', '#6B7280')
+on conflict (type_key) do nothing;
+alter table public.event_categories enable row level security;
+drop policy if exists "authenticated event_categories" on public.event_categories;
+create policy "authenticated event_categories" on public.event_categories
+  for all to authenticated using (true) with check (true);
+
+-- Ετικέτες επαφών (λεξιλόγιο + χρώμα· το contacts.tags παραμένει text[])
+create table if not exists public.contact_tag_definitions (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  color text not null default '#6B7280',
+  created_at timestamptz not null default now(),
+  unique (name)
+);
+alter table public.contact_tag_definitions enable row level security;
+drop policy if exists "authenticated contact_tag_definitions" on public.contact_tag_definitions;
+create policy "authenticated contact_tag_definitions" on public.contact_tag_definitions
+  for all to authenticated using (true) with check (true);

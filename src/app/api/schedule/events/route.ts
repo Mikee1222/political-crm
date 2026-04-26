@@ -2,7 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getCalendarClientForUser, listAllCalendarsEventsHttp } from "@/lib/google-calendar";
+import { getCalendarClientForUser, listAllCalendarsEventsHttp, type ScheduleEventRow } from "@/lib/google-calendar";
+import { CAL_EVENT_TYPE_KEYS } from "@/lib/calendar-event-types";
 import { hasMinRole, type Role } from "@/lib/roles";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -74,8 +75,28 @@ export async function GET() {
         { status: 502 },
       );
     }
+    const supabase = await createClient();
+    let catByType: Record<string, { name: string; color: string }> = {};
+    const { data: cats, error: catErr } = await supabase
+      .from("event_categories")
+      .select("type_key, name, color")
+      .in("type_key", [...CAL_EVENT_TYPE_KEYS]);
+    if (catErr) {
+      console.warn(`${LOG} event_categories`, catErr.message);
+    } else {
+      catByType = Object.fromEntries(
+        (cats ?? []).map((c: { type_key: string; name: string; color: string }) => [c.type_key, { name: c.name, color: c.color }]),
+      ) as Record<string, { name: string; color: string }>;
+    }
+    const events: Array<
+      ScheduleEventRow & { color?: string | null; typeLabel?: string | null }
+    > = result.events.map((ev) => {
+      const row = catByType[ev.type];
+      if (!row) return { ...ev };
+      return { ...ev, color: row.color, typeLabel: row.name };
+    });
     return NextResponse.json({
-      events: result.events,
+      events,
       connected: true,
       calendars_found: result.calendars_found,
       time_range: result.time_range,
