@@ -1,3 +1,4 @@
+import { addMonths, subMonths } from "date-fns";
 import { google } from "googleapis";
 import type { calendar_v3 } from "googleapis";
 import { createServiceClient } from "./supabase/admin";
@@ -100,9 +101,10 @@ export function mapEventType(e: calendar_v3.Schema$Event): CalendarEventType {
   return "other";
 }
 
-function toScheduleEventView(e: calendar_v3.Schema$Event) {
+function toScheduleEventView(e: calendar_v3.Schema$Event, calendarId: string) {
   return {
     id: (e.id ?? "") as string,
+    calendarId,
     title: e.summary,
     start: e.start?.dateTime ?? e.start?.date,
     end: e.end?.dateTime ?? e.end?.date,
@@ -114,18 +116,40 @@ function toScheduleEventView(e: calendar_v3.Schema$Event) {
 
 export type ScheduleEventRow = ReturnType<typeof toScheduleEventView>;
 
+export type GoogleCalendarListEntry = {
+  id: string;
+  summary?: string | null;
+  accessRole?: string | null;
+  primary?: boolean | null;
+};
+
+type CalendarDebug = {
+  calendars_found: GoogleCalendarListEntry[];
+  time_range: { timeMin: string; timeMax: string };
+};
+
+function defaultFetchRange() {
+  const now = new Date();
+  return {
+    timeMin: subMonths(now, 3).toISOString(),
+    timeMax: addMonths(now, 3).toISOString(),
+  };
+}
+
 /**
- * List primary calendar events via Calendar REST API (Bearer). Handles 401 by refresh + one retry.
+ * 1) calendarList — all calendars. 2) events from each. Bearer + 401 refresh. Wide time window (±3 months).
  */
-export async function listPrimaryCalendarEventsHttp(
+export async function listAllCalendarsEventsHttp(
   userId: string,
-  timeMin: string,
-  timeMax: string,
 ): Promise<
-  | { ok: true; events: ScheduleEventRow[] }
-  | { ok: false; code: "not_connected" }
-  | { ok: false; code: "calendar_error"; message: string }
+  | ({ ok: true; events: ScheduleEventRow[] } & CalendarDebug)
+  | ({ ok: false; code: "not_connected" } & CalendarDebug)
+  | ({ ok: false; code: "calendar_error"; message: string } & CalendarDebug)
 > {
+  const time_range = defaultFetchRange();
+  const { timeMin, timeMax } = time_range;
+  const emptyDebug: CalendarDebug = { calendars_found: [], time_range };
+
   const s = createServiceClient();
   const { data, error } = await s
     .from("google_tokens")
@@ -134,25 +158,13 @@ export async function listPrimaryCalendarEventsHttp(
     .maybeSingle();
   if (error) {
     console.error("[google-calendar] load tokens", error.message);
-    return { ok: false, code: "not_connected" };
+    return { ok: false, code: "not_connected", ...emptyDebug };
   }
-  if (!data) return { ok: false, code: "not_connected" };
+  if (!data) return { ok: false, code: "not_connected", ...emptyDebug };
   const row = data as GoogleTokenRow;
   if (!row.refresh_token && !row.access_token) {
-    return { ok: false, code: "not_connected" };
+    return { ok: false, code: "not_connected", ...emptyDebug };
   }
-
-  const buildListUrl = () => {
-    const u = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
-    u.searchParams.set("timeMin", timeMin);
-    u.searchParams.set("timeMax", timeMax);
-    u.searchParams.set("singleEvents", "true");
-    u.searchParams.set("orderBy", "startTime");
-    return u.toString();
-  };
-
-  const fetchList = (bearer: string) =>
-    fetch(buildListUrl(), { headers: { Authorization: `Bearer ${bearer}` } });
 
   let access: string | null = isAccessTokenFresh(row) ? (row.access_token as string) : null;
   if (!access) {
@@ -162,32 +174,105 @@ export async function listPrimaryCalendarEventsHttp(
     if (row.access_token) {
       access = row.access_token;
     } else {
-      return { ok: false, code: "not_connected" };
+      return { ok: false, code: "not_connected", ...emptyDebug };
     }
   }
 
-  let res = await fetchList(access);
-  if (res.status === 401 && row.refresh_token) {
-    const reaccess = await refreshAndPersistAccessToken(userId, {
-      ...row,
-      access_token: access,
-    });
-    if (reaccess) {
-      res = await fetchList(reaccess);
+  const getJson = async (url: string): Promise<{ res: Response; access: string }> => {
+    let a = access as string;
+    let r = await fetch(url, { headers: { Authorization: `Bearer ${a}` } });
+    if (r.status === 401 && row.refresh_token) {
+      const re = await refreshAndPersistAccessToken(userId, { ...row, access_token: a });
+      if (re) {
+        a = re;
+        access = re;
+        r = await fetch(url, { headers: { Authorization: `Bearer ${re}` } });
+      }
     }
+    return { res: r, access: a };
+  };
+
+  let listPage: string | undefined;
+  const calendars: GoogleCalendarListEntry[] = [];
+  do {
+    const listListUrl = new URL("https://www.googleapis.com/calendar/v3/users/me/calendarList");
+    listListUrl.searchParams.set("maxResults", "250");
+    if (listPage) listListUrl.searchParams.set("pageToken", listPage);
+    const { res: cRes } = await getJson(listListUrl.toString());
+    if (cRes.status === 401) {
+      return { ok: false, code: "not_connected", ...emptyDebug };
+    }
+    if (!cRes.ok) {
+      const t = await cRes.text();
+      return {
+        ok: false,
+        code: "calendar_error",
+        message: `calendarList: ${t || cRes.statusText}`,
+        ...emptyDebug,
+      };
+    }
+    const cJson = (await cRes.json()) as {
+      items?: Array<{ id?: string; summary?: string; accessRole?: string; primary?: boolean }>;
+      nextPageToken?: string;
+    };
+    for (const it of cJson.items ?? []) {
+      if (it.id) {
+        calendars.push({
+          id: it.id,
+          summary: it.summary ?? null,
+          accessRole: it.accessRole ?? null,
+          primary: it.primary ?? null,
+        });
+      }
+    }
+    listPage = cJson.nextPageToken;
+  } while (listPage);
+
+  if (calendars.length === 0) {
+    return { ok: true, events: [], calendars_found: calendars, time_range };
   }
 
-  if (res.status === 401) {
-    return { ok: false, code: "not_connected" };
-  }
-  if (!res.ok) {
-    const t = await res.text();
-    return { ok: false, code: "calendar_error", message: t || res.statusText };
+  const allEvents: ScheduleEventRow[] = [];
+  for (const cal of calendars) {
+    let eventPage: string | undefined;
+    do {
+      const u = new URL(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+      );
+      u.searchParams.set("timeMin", timeMin);
+      u.searchParams.set("timeMax", timeMax);
+      u.searchParams.set("singleEvents", "true");
+      u.searchParams.set("orderBy", "startTime");
+      u.searchParams.set("maxResults", "250");
+      if (eventPage) u.searchParams.set("pageToken", eventPage);
+      const { res: eRes, access: curAccess } = await getJson(u.toString());
+      if (eRes.status === 401) {
+        return { ok: false, code: "not_connected", calendars_found: calendars, time_range };
+      }
+      if (!eRes.ok) {
+        const errText = await eRes.text();
+        console.error("[google-calendar] events list for", cal.id, eRes.status, errText);
+        break;
+      }
+      const eJson = (await eRes.json()) as {
+        items?: calendar_v3.Schema$Event[];
+        nextPageToken?: string;
+      };
+      for (const e of eJson.items ?? []) {
+        allEvents.push(toScheduleEventView(e, cal.id));
+      }
+      eventPage = eJson.nextPageToken;
+      access = curAccess;
+    } while (eventPage);
   }
 
-  const list = (await res.json()) as { items?: calendar_v3.Schema$Event[] };
-  const items = list.items ?? [];
-  return { ok: true, events: items.map(toScheduleEventView) };
+  allEvents.sort((a, b) => {
+    const s = a.start ?? "";
+    const t = b.start ?? "";
+    return s.localeCompare(t);
+  });
+
+  return { ok: true, events: allEvents, calendars_found: calendars, time_range };
 }
 
 function tokenExpiryMs(row: GoogleTokenRow): number | undefined {

@@ -1,9 +1,8 @@
 export const dynamic = "force-dynamic";
 
-import { endOfWeek, startOfWeek } from "date-fns";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getCalendarClientForUser, listPrimaryCalendarEventsHttp } from "@/lib/google-calendar";
+import { getCalendarClientForUser, listAllCalendarsEventsHttp } from "@/lib/google-calendar";
 import { hasMinRole, type Role } from "@/lib/roles";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -33,7 +32,7 @@ async function getUserAndManagerProfile() {
   return { user, profile: { role } };
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const { user, profile } = await getUserAndManagerProfile();
     if (!user) {
@@ -44,24 +43,23 @@ export async function GET(request: NextRequest) {
       return forbidden();
     }
 
-    let timeMin = request.nextUrl.searchParams.get("timeMin");
-    let timeMax = request.nextUrl.searchParams.get("timeMax");
-    if (!timeMin || !timeMax) {
-      const now = new Date();
-      timeMin = startOfWeek(now, { weekStartsOn: 1 }).toISOString();
-      timeMax = endOfWeek(now, { weekStartsOn: 1 }).toISOString();
-    }
-    console.log(`${LOG} 5) time range`, { timeMin, timeMax });
-
-    console.log(`${LOG} 6) listPrimaryCalendarEventsHttp (google_tokens via service client)`);
-    const result = await listPrimaryCalendarEventsHttp(user.id, timeMin, timeMax);
-    console.log(`${LOG} 7) calendar list result`, {
+    console.log(`${LOG} 5) listAllCalendarsEventsHttp (calendarList + all calendars, ±3 months via lib)`);
+    const result = await listAllCalendarsEventsHttp(user.id);
+    console.log(`${LOG} 6) result`, {
       ok: result.ok,
       code: result.ok ? "ok" : result.code,
+      calendars: result.ok ? result.calendars_found.length : 0,
+      time_range: result.time_range,
     });
 
     if (!result.ok && result.code === "not_connected") {
-      return NextResponse.json({ error: "not_connected", events: [], connected: false });
+      return NextResponse.json({
+        error: "not_connected",
+        events: [],
+        connected: false,
+        calendars_found: result.calendars_found,
+        time_range: result.time_range,
+      });
     }
     if (!result.ok) {
       return NextResponse.json(
@@ -70,11 +68,18 @@ export async function GET(request: NextRequest) {
           message: result.message,
           events: [],
           connected: true,
+          calendars_found: result.calendars_found,
+          time_range: result.time_range,
         },
         { status: 502 },
       );
     }
-    return NextResponse.json({ events: result.events, connected: true });
+    return NextResponse.json({
+      events: result.events,
+      connected: true,
+      calendars_found: result.calendars_found,
+      time_range: result.time_range,
+    });
   } catch (e) {
     console.error("[api/schedule/events GET]", e);
     return nextJsonError();

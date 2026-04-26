@@ -23,6 +23,8 @@ import { lux } from "@/lib/luxury-styles";
 
 type CalEvent = {
   id: string;
+  /** Google calendar id (multi-calendar fetch) */
+  calendarId?: string;
   title?: string | null;
   start?: string | null;
   end?: string | null;
