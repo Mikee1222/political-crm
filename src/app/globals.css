@@ -62,7 +62,8 @@
   --status-req-rej-bg: rgba(239, 68, 68, 0.2);
   --status-req-rej-fg: #fecaca;
   --status-req-rej-ring: rgba(239, 68, 68, 0.45);
-  /* Shell */
+  /* Shell — set by app-frame (64 | 240 px); see .app-main-shell */
+  --sidebar-width: 240px;
   --sidebar-bg: #0a1628;
   --sidebar-brand-title: #f0f4ff;
   --sidebar-tagline: #c9a84c;
@@ -364,6 +365,66 @@ body {
 }
 [data-theme="light"] [data-hq-card]:hover {
   box-shadow: var(--card-shadow-hover);
+}
+
+/* App shell: main uses remaining width next to fixed sidebar */
+.app-main-shell {
+  width: calc(100vw - var(--sidebar-width));
+  min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
+}
+@supports (width: 100dvw) {
+  .app-main-shell {
+    width: calc(100dvw - var(--sidebar-width));
+  }
+}
+.app-main-inner {
+  overflow-x: hidden;
+  max-width: 100%;
+  min-width: 0;
+}
+/* Full-width child trees — avoid fixed px widths; card grids: use .app-card-grid in pages or utility */
+.app-main-inner [class*="data-hq-card"],
+.app-main-inner table,
+.app-main-inner [class*="hq-table"] {
+  max-width: 100%;
+}
+.app-card-grid {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.app-sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
+  box-sizing: border-box;
+  transition: width 250ms ease, min-width 250ms ease, max-width 250ms ease;
+}
+.app-sidebar--rail {
+  align-items: stretch;
+}
+.app-nav-tooltip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 12rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 0.25rem 0.5rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  box-shadow: var(--card-shadow);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.app-nav-tooltip[data-visible="true"] {
+  opacity: 1;
 }
 
 main {
