@@ -27,12 +27,168 @@ export async function exchangeCodeForTokens(code: string) {
   return tokens;
 }
 
-type GoogleTokenRow = {
+export type GoogleTokenRow = {
   access_token: string | null;
   refresh_token: string | null;
   expires_at: string | null;
   expiry: string | null;
 };
+
+function isAccessTokenFresh(row: GoogleTokenRow, skewMs = 60_000): boolean {
+  if (!row.access_token) return false;
+  const raw = row.expiry ?? row.expires_at;
+  if (!raw) return true;
+  return new Date(raw).getTime() > Date.now() + skewMs;
+}
+
+/** POST https://oauth2.googleapis.com/token — persist new access (+ expiry) in google_tokens. */
+export async function refreshAndPersistAccessToken(
+  userId: string,
+  row: GoogleTokenRow,
+): Promise<string | null> {
+  if (!row.refresh_token) return null;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    console.error("[google-calendar] missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET");
+    return null;
+  }
+  const s = createServiceClient();
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: row.refresh_token,
+    grant_type: "refresh_token",
+  });
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!res.ok) {
+    console.error("[google-calendar] token refresh", res.status, await res.text().catch(() => ""));
+    return null;
+  }
+  const j = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    refresh_token?: string;
+  };
+  if (!j.access_token) return null;
+  const expiresIso = j.expires_in
+    ? new Date(Date.now() + j.expires_in * 1000).toISOString()
+    : null;
+  const { error: upErr } = await s
+    .from("google_tokens")
+    .update({
+      access_token: j.access_token,
+      refresh_token: j.refresh_token ?? row.refresh_token,
+      expires_at: expiresIso,
+      expiry: expiresIso,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+  if (upErr) {
+    console.error("[google-calendar] persist refresh", upErr.message);
+  }
+  return j.access_token;
+}
+
+export function mapEventType(e: calendar_v3.Schema$Event): CalendarEventType {
+  const t = (e.extendedProperties?.private as Record<string, string> | undefined)?.crmType;
+  if (t && t in CALENDAR_EVENT_TYPES) return t as CalendarEventType;
+  return "other";
+}
+
+function toScheduleEventView(e: calendar_v3.Schema$Event) {
+  return {
+    id: (e.id ?? "") as string,
+    title: e.summary,
+    start: e.start?.dateTime ?? e.start?.date,
+    end: e.end?.dateTime ?? e.end?.date,
+    location: e.location,
+    description: e.description,
+    type: mapEventType(e),
+  };
+}
+
+export type ScheduleEventRow = ReturnType<typeof toScheduleEventView>;
+
+/**
+ * List primary calendar events via Calendar REST API (Bearer). Handles 401 by refresh + one retry.
+ */
+export async function listPrimaryCalendarEventsHttp(
+  userId: string,
+  timeMin: string,
+  timeMax: string,
+): Promise<
+  | { ok: true; events: ScheduleEventRow[] }
+  | { ok: false; code: "not_connected" }
+  | { ok: false; code: "calendar_error"; message: string }
+> {
+  const s = createServiceClient();
+  const { data, error } = await s
+    .from("google_tokens")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    console.error("[google-calendar] load tokens", error.message);
+    return { ok: false, code: "not_connected" };
+  }
+  if (!data) return { ok: false, code: "not_connected" };
+  const row = data as GoogleTokenRow;
+  if (!row.refresh_token && !row.access_token) {
+    return { ok: false, code: "not_connected" };
+  }
+
+  const buildListUrl = () => {
+    const u = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
+    u.searchParams.set("timeMin", timeMin);
+    u.searchParams.set("timeMax", timeMax);
+    u.searchParams.set("singleEvents", "true");
+    u.searchParams.set("orderBy", "startTime");
+    return u.toString();
+  };
+
+  const fetchList = (bearer: string) =>
+    fetch(buildListUrl(), { headers: { Authorization: `Bearer ${bearer}` } });
+
+  let access: string | null = isAccessTokenFresh(row) ? (row.access_token as string) : null;
+  if (!access) {
+    access = await refreshAndPersistAccessToken(userId, row);
+  }
+  if (!access) {
+    if (row.access_token) {
+      access = row.access_token;
+    } else {
+      return { ok: false, code: "not_connected" };
+    }
+  }
+
+  let res = await fetchList(access);
+  if (res.status === 401 && row.refresh_token) {
+    const reaccess = await refreshAndPersistAccessToken(userId, {
+      ...row,
+      access_token: access,
+    });
+    if (reaccess) {
+      res = await fetchList(reaccess);
+    }
+  }
+
+  if (res.status === 401) {
+    return { ok: false, code: "not_connected" };
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    return { ok: false, code: "calendar_error", message: t || res.statusText };
+  }
+
+  const list = (await res.json()) as { items?: calendar_v3.Schema$Event[] };
+  const items = list.items ?? [];
+  return { ok: true, events: items.map(toScheduleEventView) };
+}
 
 function tokenExpiryMs(row: GoogleTokenRow): number | undefined {
   const raw = row.expiry ?? row.expires_at;
@@ -81,12 +237,4 @@ export async function getCalendarClientForUser(
     return null;
   }
   return google.calendar({ version: "v3", auth: oauth2 });
-}
-
-export function mapEventType(
-  e: calendar_v3.Schema$Event,
-): CalendarEventType {
-  const t = (e.extendedProperties?.private as Record<string, string> | undefined)?.crmType;
-  if (t && t in CALENDAR_EVENT_TYPES) return t as CalendarEventType;
-  return "other";
 }

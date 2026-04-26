@@ -128,6 +128,7 @@ export default function SchedulePage() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [weekLoadError, setWeekLoadError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [newEv, setNewEv] = useState(emptyForm);
@@ -160,9 +161,20 @@ export default function SchedulePage() {
     setLoading(true);
     const q = new URLSearchParams({ timeMin, timeMax });
     const res = await fetchWithTimeout(`/api/schedule/events?${q}`);
-    const data = await res.json();
+    const data = (await res.json()) as {
+      events?: CalEvent[];
+      connected?: boolean;
+      error?: string;
+    };
     setEvents((data.events ?? []) as CalEvent[]);
-    setConnected(Boolean(data.connected));
+    setWeekLoadError(res.status === 502 || data.error === "calendar_error");
+    if (res.status === 401) {
+      setConnected(null);
+    } else if (data.error === "not_connected" || data.connected === false) {
+      setConnected(false);
+    } else {
+      setConnected(true);
+    }
     setLoading(false);
   }, [timeMin, timeMax]);
 
@@ -313,8 +325,11 @@ export default function SchedulePage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2 border-t border-[var(--border)]/60 pt-4 sm:justify-end">
-            <a href="/api/auth/google" className={lux.btnSecondary + " !h-9 !px-3 !text-xs sm:!text-sm"}>
-              Σύνδεση Google
+            <a
+              href="/api/auth/google"
+              className={lux.btnSecondary + " !h-9 !px-3 !text-xs sm:!text-sm"}
+            >
+              Σύνδεση Google Calendar
             </a>
             <button
               type="button"
@@ -358,8 +373,29 @@ export default function SchedulePage() {
         </div>
 
         {connected === false && (
-          <p className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-100/90">
-            Συνδεθείτε στο Google Ημερολόγιο για πλήρη λειτουργία. Μπορείτε ακόμα να περιηγηθείτε στο πρόγραμμα.
+          <div
+            className="mb-4 flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+            role="status"
+          >
+            <p className="text-sm text-amber-100/95">
+              Δεν υπάρχει σύνδεση με το Google Calendar — δεν φορτώνονται εκδηλώσεις. Συνδεθείτε για συγχρονισμό
+              εβδομάδας.
+            </p>
+            <a
+              href="/api/auth/google"
+              className={lux.btnPrimary + " shrink-0 !py-2.5 text-center text-sm sm:min-w-[200px]"}
+            >
+              Σύνδεση Google Calendar
+            </a>
+          </div>
+        )}
+
+        {connected === true && !loading && !weekLoadError && events.length === 0 && (
+          <p
+            className="mb-3 text-center text-sm text-[var(--text-secondary)]"
+            role="status"
+          >
+            Δεν υπάρχουν γεγονότα αυτή την εβδομάδα
           </p>
         )}
 
