@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+// API key: header `x-api-key` or query `?key=` (see requirePublicApiKey)
 import { requirePublicApiKey } from "@/lib/public-api-auth";
 import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
 
