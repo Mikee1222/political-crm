@@ -90,6 +90,9 @@
   --nav-mobile-active: #ffffff;
   --background: var(--bg-primary);
   --foreground: var(--text-primary);
+  /* Modal / sheet backdrops (dark theme) */
+  --overlay-scrim: rgba(0, 0, 0, 0.62);
+  --surface-bulk: rgba(15, 30, 53, 0.92);
   color-scheme: dark;
 }
 
@@ -177,6 +180,9 @@
   --nav-mobile-active: #003476;
   --background: var(--bg-primary);
   --foreground: var(--text-primary);
+  /* Modal / sheet backdrops (light — cream, not pure black) */
+  --overlay-scrim: rgba(10, 15, 26, 0.38);
+  --surface-bulk: rgba(255, 255, 255, 0.97);
   color-scheme: light;
 }
 

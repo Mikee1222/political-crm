@@ -286,7 +286,7 @@ function EditRequestModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm [background:var(--overlay-scrim)]">
       <div className="w-full max-w-xl rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">

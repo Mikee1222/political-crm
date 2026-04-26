@@ -27,17 +27,19 @@ export function buildContactsQuery(
     municipality?: string;
     priority?: string;
     tag?: string;
+    group_id?: string;
   },
 ) {
-  const { search: _search, call_status, area, municipality, priority, tag } = opts;
+  const { search: _search, call_status, area, municipality, priority, tag, group_id } = opts;
   void _search; /* in-memory fuzzy filter (export) after query */
   let query = supabase.from("contacts").select(
-    "id, first_name, last_name, phone, email, area, municipality, electoral_district, call_status, priority, political_stance, notes, nickname, tags",
+    "id, first_name, last_name, phone, email, area, municipality, electoral_district, call_status, priority, political_stance, notes, nickname, tags, group_id",
   );
   if (call_status) query = query.eq("call_status", call_status);
   if (area) query = query.eq("area", area);
   if (municipality) query = query.ilike("municipality", `%${municipality}%`);
   if (priority) query = query.eq("priority", priority);
   if (tag) query = query.contains("tags", [tag]);
+  if (group_id) query = query.eq("group_id", group_id);
   return query;
 }

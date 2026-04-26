@@ -42,7 +42,7 @@ export const ALEX_TOOLS: Tool[] = [
         fields: {
           type: "object" as const,
           description:
-            "Κλειδιά: first_name, last_name, phone, email, age, gender, occupation, nickname, spouse_name, municipality, electoral_district, toponym, political_stance, priority, call_status, notes, area, tags (array), influence (bool)",
+            "Κλειδιά: first_name, last_name, father_name, mother_name, phone, email, age, gender, occupation, nickname, spouse_name, municipality, electoral_district, toponym, political_stance, priority, call_status, notes, area, tags (array), influence (bool)",
         },
       },
       required: ["contact_id", "fields"],
@@ -147,6 +147,8 @@ export const ALEX_TOOLS: Tool[] = [
         political_stance: { type: "string" as const },
         notes: { type: "string" as const },
         email: { type: "string" as const },
+        father_name: { type: "string" as const, description: "Πατρώνυμο" },
+        mother_name: { type: "string" as const, description: "Μητρώνυμο" },
       },
       required: ["first_name", "last_name", "phone"],
     },
@@ -162,7 +164,7 @@ export const ALEX_TOOLS: Tool[] = [
         fields: {
           type: "object" as const,
           description:
-            "Κλειδιά: first_name, last_name, phone, age, municipality, notes, call_status, political_stance, priority, nickname, spouse_name, occupation, email, area, name_day, …",
+            "Κλειδιά: first_name, last_name, father_name, mother_name, phone, age, municipality, notes, call_status, political_stance, priority, nickname, spouse_name, occupation, email, area, name_day, …",
         },
       },
       required: ["contact_id", "fields"],
@@ -338,6 +340,8 @@ export async function runAlexTool(
       "tags",
       "influence",
       "name_day",
+      "father_name",
+      "mother_name",
     ]);
     const body: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(fields as Record<string, unknown>)) {
@@ -596,7 +600,7 @@ export async function runAlexTool(
       return { content: JSON.stringify({ error: "Υποχρεωτικά: first_name, last_name, phone" }) };
     }
     const body: Record<string, unknown> = { first_name, last_name, phone, call_status: "Pending", priority: "Medium" };
-    for (const k of ["municipality", "area", "political_stance", "notes", "email"] as const) {
+    for (const k of ["municipality", "area", "political_stance", "notes", "email", "father_name", "mother_name"] as const) {
       if (raw[k] != null && String(raw[k]).trim() !== "") body[k] = raw[k];
     }
     const r = await ctx.forward("/api/contacts", {
@@ -805,8 +809,8 @@ export function buildSystemPrompt(today: string) {
 - Αν αποτύχει → εξήγησε και πρότεινε εναλλακτική
 
 ΝΕΕΣ ΔΥΝΑΤΟΤΗΤΕΣ (tools):
-- create_contact: δημιουργία επαφής (ονοματεπώνυμο + τηλέφωνο, προαιρετικά πεδία)
-- edit_contact: ίδιο με πλήρη update επαφής (PUT) — πεδίο name_day όπου χρειάζεται
+- create_contact: δημιουργία επαφής (ονοματεπώνυμο + τηλέφωνο, προαιρετικά father_name, mother_name, πεδία δήμου κ.λπ.)
+- edit_contact: ίδιο με πλήρη update επαφής (PUT) — father_name, mother_name, name_day κ.λπ.
 - read_pdf: κείμενο/σύνοψη από URL (PDF ή κείμενο)
 - write_letter: τυπική επιστολή (αίτηση, καταγγελία, ερώτημα, ευχαριστήρια) προς δημόσιο φορέα
 - import_csv_data: εισαγωγή CSV με mapping στηλών → /api/contacts/import-mapped

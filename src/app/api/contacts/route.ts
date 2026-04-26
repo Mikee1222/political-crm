@@ -28,9 +28,10 @@ export async function GET(request: NextRequest) {
   const ageMin = request.nextUrl.searchParams.get("age_min");
   const ageMax = request.nextUrl.searchParams.get("age_max");
   const namedayToday = request.nextUrl.searchParams.get("nameday_today") === "1";
+  const groupId = request.nextUrl.searchParams.get("group_id");
 
   const selectList =
-    "id, first_name, last_name, phone, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance";
+    "id, first_name, last_name, phone, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, contact_groups ( id, name, color, description, year )";
 
   if (namedayToday) {
     const now = new Date();
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
     if (tag) query = query.contains("tags", [tag]);
     if (phone) query = query.ilike("phone", `%${phone}%`);
     if (politicalStance) query = query.eq("political_stance", politicalStance);
+    if (groupId) query = query.eq("group_id", groupId);
     if (ageMin) {
       const n = parseInt(ageMin, 10);
       if (Number.isFinite(n)) query = query.gte("age", n);
@@ -73,6 +75,7 @@ export async function GET(request: NextRequest) {
   if (tag) query = query.contains("tags", [tag]);
   if (phone) query = query.ilike("phone", `%${phone}%`);
   if (politicalStance) query = query.eq("political_stance", politicalStance);
+  if (groupId) query = query.eq("group_id", groupId);
   if (ageMin) {
     const n = parseInt(ageMin, 10);
     if (Number.isFinite(n)) query = query.gte("age", n);

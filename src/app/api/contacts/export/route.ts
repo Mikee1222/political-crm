@@ -58,11 +58,13 @@ export async function GET(request: NextRequest) {
       const municipality = sp.get("municipality");
       const priority = sp.get("priority");
       const tag = sp.get("tag");
+      const groupId = sp.get("group_id");
       if (callStatus) qn = qn.eq("call_status", callStatus);
       if (area) qn = qn.eq("area", area);
       if (municipality) qn = qn.ilike("municipality", `%${municipality}%`);
       if (priority) qn = qn.eq("priority", priority);
       if (tag) qn = qn.contains("tags", [tag]);
+      if (groupId) qn = qn.eq("group_id", groupId);
       query = qn;
     }
   } else if (filtered) {
@@ -73,6 +75,7 @@ export async function GET(request: NextRequest) {
       municipality: sp.get("municipality") ?? undefined,
       priority: sp.get("priority") ?? undefined,
       tag: sp.get("tag") ?? undefined,
+      group_id: sp.get("group_id") ?? undefined,
     });
   } else {
     if (!isManager) {

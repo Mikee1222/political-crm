@@ -25,7 +25,7 @@ export function MobileMoreSheet({ open, onClose, items, openRequestsCount, role 
     <>
       <button
         type="button"
-        className="fixed inset-0 z-[100] bg-black/70 transition-opacity duration-200 ease-out"
+        className="fixed inset-0 z-[100] transition-opacity duration-200 ease-out [background:var(--overlay-scrim)]"
         aria-label="Κλείσιμο"
         onClick={onClose}
       />

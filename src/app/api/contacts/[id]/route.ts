@@ -15,7 +15,11 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   }
   const role = profile?.role ?? "caller";
 
-  const { data: contact, error } = await supabase.from("contacts").select("*").eq("id", params.id).single();
+  const { data: contact, error } = await supabase
+    .from("contacts")
+    .select("*, contact_groups ( id, name, color, description, year )")
+    .eq("id", params.id)
+    .single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

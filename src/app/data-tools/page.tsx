@@ -350,7 +350,7 @@ export default function DataToolsPage() {
       )}
 
       {mergeTarget && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 [background:var(--overlay-scrim)]">
           <div className="w-full max-w-md space-y-4 rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-xl">
             <h3 className="text-lg font-bold text-[var(--text-primary)]">Συγχώνευση</h3>
             <p className="text-sm text-[var(--text-secondary)]">Ποια εγγραφή να κρατήσουμε; (οι κλήσεις, tasks και αιτήματα μεταφέρονται)</p>

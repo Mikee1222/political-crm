@@ -247,7 +247,7 @@ export function ContactsImportWizard({ onImported }: Props) {
       {open &&
         createPortal(
           <div
-            className="fixed inset-0 z-[200] flex items-stretch justify-end bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4"
+            className="fixed inset-0 z-[200] flex items-stretch justify-end p-0 backdrop-blur-sm [background:var(--overlay-scrim)] sm:items-center sm:justify-center sm:p-4"
             role="dialog"
             aria-modal
             aria-labelledby="import-wizard-title"

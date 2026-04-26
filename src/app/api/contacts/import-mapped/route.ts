@@ -17,6 +17,8 @@ const rowSchema = z.object({
   toponym: z.string().max(400).nullish().transform((v) => (v == null || v === "" ? null : v)),
   political_stance: z.string().max(500).nullish().transform((v) => (v == null || v === "" ? null : v)),
   notes: z.string().max(10000).nullish().transform((v) => (v == null || v === "" ? null : v)),
+  father_name: z.string().max(400).nullish().transform((v) => (v == null || v === "" ? null : v)),
+  mother_name: z.string().max(400).nullish().transform((v) => (v == null || v === "" ? null : v)),
   call_status: z.literal("Pending").optional(),
   priority: z.enum(["High", "Medium", "Low"]).optional(),
 });
@@ -36,6 +38,8 @@ type InsertRow = {
   toponym: string | null;
   political_stance: string | null;
   notes: string | null;
+  father_name: string | null;
+  mother_name: string | null;
   call_status: string;
   priority: string;
 };
@@ -76,6 +80,8 @@ export async function POST(request: Request) {
       toponym: r.toponym,
       political_stance: r.political_stance,
       notes: r.notes,
+      father_name: r.father_name,
+      mother_name: r.mother_name,
       call_status: r.call_status ?? "Pending",
       priority: r.priority ?? "Medium",
       contact_code: code,

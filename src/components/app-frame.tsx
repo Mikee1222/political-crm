@@ -235,11 +235,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div
-      className="grid min-h-[-webkit-fill-available] w-full min-h-screen grid-cols-1 bg-[var(--bg-primary)] md:grid-cols-[260px_minmax(0,1fr)]"
-    >
+    <div className="min-h-[-webkit-fill-available] min-h-screen w-full bg-[var(--bg-primary)]">
       <aside
-        className="app-sidebar relative z-30 hidden h-screen min-h-0 w-full min-w-0 flex-col border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
+        className="app-sidebar fixed left-0 top-0 z-30 hidden h-screen w-[260px] min-h-0 flex-col overflow-hidden border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
         style={{ background: "var(--sidebar-bg)" }}
       >
         <div className="flex items-center justify-between pr-0.5 md:justify-start md:pr-0">
@@ -273,7 +271,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 flex-col">
+      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 flex-col md:ml-[260px]">
         <header
           className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]"
         >

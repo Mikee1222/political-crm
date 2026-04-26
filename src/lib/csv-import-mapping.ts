@@ -3,6 +3,8 @@ import Papa from "papaparse";
 export const CRM_FIELD_IDS = [
   "first_name",
   "last_name",
+  "father_name",
+  "mother_name",
   "phone",
   "email",
   "area",
@@ -18,6 +20,8 @@ export type CrmFieldId = (typeof CRM_FIELD_IDS)[number];
 const LABELS: Record<CrmFieldId, string> = {
   first_name: "Μικρό Όνομα",
   last_name: "Επίθετο",
+  father_name: "Πατρώνυμο",
+  mother_name: "Μητρώνυμο",
   phone: "Τηλέφωνο",
   email: "Email",
   area: "Περιοχή",
@@ -54,6 +58,26 @@ export function normalizePhone(s: string): string | null {
 const RULES: { field: CrmFieldId; patterns: RegExp[] }[] = [
   { field: "first_name", patterns: [/first[\s_]?name/i, /μικρ/i, /forename/i, /^name$/i, /όνομ|ονομ/i, /fname/i, /^onoma$/i, /^mikr/i, /^given/i] },
   { field: "last_name", patterns: [/last[\s_]?name/i, /eponymo|eπίθ|επίθετο|surname|family|επίθ|last/i] },
+  {
+    field: "father_name",
+    patterns: [
+      /patr/i,
+      /πατρ/i,
+      /father/i,
+      /του πατέρα/i,
+      /patronym/i,
+    ],
+  },
+  {
+    field: "mother_name",
+    patterns: [
+      /m[ée]t[r]?/i,
+      /μητρ/i,
+      /mother/i,
+      /μητέρ/i,
+      /μητρώνυμο/i,
+    ],
+  },
   { field: "phone", patterns: [/thl|tilef|til|kinito|kιν|miso|misis|phone|mobile|κιν|αριθμ|τηλ/i, /^tel/i] },
   { field: "email", patterns: [/e-?mail|ηλεκτ|mail|ημαιλ/i] },
   { field: "area", patterns: [/perioch|περιοχ|region|locality|^area$/i] },
@@ -85,6 +109,8 @@ function emptyRow(o: Record<string, string | undefined>) {
 export type MappedRowForInsert = {
   first_name: string;
   last_name: string;
+  father_name: string | null;
+  mother_name: string | null;
   phone: string;
   email: string | null;
   area: string | null;
@@ -163,9 +189,13 @@ export function mapRowsToContacts(
       skippedNoPhone += 1;
       continue;
     }
+    const fa = pickStr(acc, "father_name");
+    const mo = pickStr(acc, "mother_name");
     out.push({
       first_name: first,
       last_name: last,
+      father_name: fa || null,
+      mother_name: mo || null,
       phone: n,
       email: pickStr(acc, "email") || null,
       area: pickStr(acc, "area") || null,

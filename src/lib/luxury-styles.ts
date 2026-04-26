@@ -39,7 +39,7 @@ export const lux = {
   tableRow:
     "cursor-pointer border-b border-[var(--border)] text-[var(--text-table)] transition-colors duration-150 last:border-0 hover:bg-[var(--bg-elevated)]/80",
   modalOverlay:
-    "fixed inset-0 z-50 flex items-stretch justify-center bg-black/70 p-0 backdrop-blur-[8px] sm:items-center sm:p-4",
+    "fixed inset-0 z-50 flex items-stretch justify-center p-0 backdrop-blur-[8px] sm:items-center sm:p-4 [background:var(--overlay-scrim)]",
   modalPanel:
     "hq-modal-panel flex min-h-[100dvh] w-full max-w-full flex-col overflow-hidden rounded-none border-0 border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:min-h-0 sm:max-h-[90vh] sm:max-w-[680px] sm:rounded-2xl sm:border",
 } as const;

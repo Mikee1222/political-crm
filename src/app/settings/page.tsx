@@ -5,6 +5,7 @@ import { useProfile } from "@/contexts/profile-context";
 import type { Role } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import type { ContactGroupRow } from "@/lib/contact-groups";
 
 type UserRow = {
   id: string;
@@ -93,8 +94,8 @@ export default function SettingsPage() {
 
   if (!isAdmin) {
     return (
-      <div className={lux.card + " border-amber-500/35 bg-amber-500/10 !shadow-sm"}>
-        <p className="text-sm text-amber-100/95">Δεν έχετε πρόσβαση.</p>
+      <div className={lux.card + " !border-amber-500/40 !bg-[var(--status-noanswer-bg)] !shadow-sm"}>
+        <p className="text-sm text-[var(--status-noanswer-text)]">Δεν έχετε πρόσβαση.</p>
       </div>
     );
   }
@@ -235,6 +236,8 @@ export default function SettingsPage() {
         )}
       </section>
 
+      <GroupsSection />
+
       <section className={lux.card}>
         <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>
         <p className="text-sm text-[var(--text-secondary)]">
@@ -244,6 +247,227 @@ export default function SettingsPage() {
           Πολιτική φιγούρα: <strong className="text-[var(--text-primary)]">Κώστας Καραγκούνης</strong>
         </p>
       </section>
+    </div>
+  );
+}
+
+function GroupsSection() {
+  const [rows, setRows] = useState<ContactGroupRow[]>([]);
+  const [editing, setEditing] = useState<ContactGroupRow | null | "new">(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [delId, setDelId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetchWithTimeout("/api/groups");
+    if (!res.ok) return;
+    const d = (await res.json()) as { groups: ContactGroupRow[] };
+    setRows(d.groups ?? []);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section className={lux.card}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className={lux.pageTitle + " mb-1"}>Ομάδες</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Ομάδες επαφών (χρώμα, έτος, περιγραφή) — εμφάνιση στην λίστα επαφών</p>
+        </div>
+        <button type="button" onClick={() => { setErr(null); setEditing("new"); }} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
+          Νέα ομάδα
+        </button>
+      </div>
+      {err && (
+        <p className="mb-3 text-sm text-[var(--status-negative-text)]" role="status">
+          {err}
+        </p>
+      )}
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead>
+            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+              <th className="p-3 pl-4 text-left">Όνομα</th>
+              <th className="p-3 text-left">Χρώμα</th>
+              <th className="p-3 text-left">Έτος</th>
+              <th className="p-3 text-left">Περιγραφή</th>
+              <th className="p-3 pr-4 text-right">Ενέργειες</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((g) => (
+              <tr key={g.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
+                <td className="p-3 pl-4 font-medium text-[var(--text-primary)]">
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
+                      style={{ background: g.color || "#003476" }}
+                      title={g.color}
+                    />
+                    {g.name}
+                  </span>
+                </td>
+                <td className="p-3 font-mono text-xs text-[var(--text-secondary)]">{g.color}</td>
+                <td className="p-3 text-[var(--text-secondary)]">{g.year != null ? g.year : "—"}</td>
+                <td className="max-w-xs truncate p-3 text-[var(--text-secondary)]" title={g.description ?? ""}>
+                  {g.description || "—"}
+                </td>
+                <td className="p-3 pr-4 text-right">
+                  <button
+                    type="button"
+                    className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                    onClick={() => {
+                      setErr(null);
+                      setEditing(g);
+                    }}
+                  >
+                    Επεξεργασία
+                  </button>{" "}
+                  <button type="button" className={lux.btnDanger + " !px-2 !py-1.5 text-xs"} onClick={() => setDelId(g.id)}>
+                    Διαγραφή
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && <p className="p-6 text-center text-sm text-[var(--text-muted)]">Καμία ομάδα ακόμη.</p>}
+      </div>
+
+      {editing != null && (
+        <GroupEditModal
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+          onError={setErr}
+        />
+      )}
+
+      {delId && (
+        <ConfirmModal
+          title="Διαγραφή ομάδας"
+          body="Οι επαφές δεν θα διαγραφούν· απλώς θα αφαιρεθεί η σύνδεση (group_id = κενό)."
+          confirmLabel="Διαγραφή"
+          onCancel={() => setDelId(null)}
+          onConfirm={async () => {
+            setErr(null);
+            const res = await fetchWithTimeout(`/api/groups/${delId}`, { method: "DELETE" });
+            if (!res.ok) {
+              const j = (await res.json().catch(() => ({}))) as { error?: string };
+              setErr(j.error ?? "Σφάλμα");
+              return;
+            }
+            setDelId(null);
+            await load();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function GroupEditModal({
+  initial,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  initial: ContactGroupRow | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  onError: (e: string | null) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [color, setColor] = useState(initial?.color ?? "#003476");
+  const [year, setYear] = useState(initial?.year != null ? String(initial.year) : "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setName(initial?.name ?? "");
+    setColor(initial?.color ?? "#003476");
+    setYear(initial?.year != null ? String(initial.year) : "");
+    setDescription(initial?.description ?? "");
+  }, [initial]);
+
+  const save = async () => {
+    onError(null);
+    if (!name.trim()) {
+      onError("Υποχρεωτικό το όνομα");
+      return;
+    }
+    setBusy(true);
+    try {
+      const y = year.trim() === "" ? null : parseInt(year, 10);
+      const payload = {
+        name: name.trim(),
+        color: color.trim() || "#003476",
+        year: y != null && Number.isFinite(y) ? y : null,
+        description: description.trim() ? description.trim() : null,
+      };
+      const isNew = !initial;
+      const res = await fetchWithTimeout(isNew ? "/api/groups" : `/api/groups/${initial!.id}`, {
+        method: isNew ? "POST" : "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        onError(j.error ?? "Σφάλμα");
+        return;
+      }
+      await onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={lux.modalOverlay}>
+      <div className="mx-4 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:mx-0 sm:max-h-[90vh] sm:self-center sm:max-w-lg">
+        <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}</h3>
+        </div>
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+          <div>
+            <label className={lux.label}>Όνομα *</label>
+            <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className={lux.label}>Χρώμα</label>
+            <div className="mt-1 flex items-center gap-3">
+              <input type="color" className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]" value={color} onChange={(e) => setColor(e.target.value)} />
+              <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className={lux.label}>Έτος (π.χ. 2025)</label>
+            <input
+              className={lux.input}
+              inputMode="numeric"
+              placeholder="Κενό = οποιοδήποτε"
+              value={year}
+              onChange={(e) => setYear(e.target.value.replace(/\D/g, ""))}
+            />
+          </div>
+          <div>
+            <label className={lux.label}>Περιγραφή (εμφανίζεται στο ? στην λίστα)</label>
+            <textarea className={lux.textarea} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

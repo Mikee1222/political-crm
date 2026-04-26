@@ -10,6 +10,7 @@ import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-loca
 import { hasMinRole } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { avatarContact, callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
+import type { ContactGroupRow } from "@/lib/contact-groups";
 
 type Contact = {
   id: string;
@@ -22,7 +23,36 @@ type Contact = {
   priority: string | null;
   tags: string[] | null;
   contact_code?: string | null;
+  group_id?: string | null;
+  contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
 };
+
+function GroupPillWithHint({ g }: { g: NonNullable<Contact["contact_groups"]> }) {
+  const border = g.color || "#003476";
+  return (
+    <span className="inline-flex max-w-full shrink-0 items-center gap-0.5">
+      <span
+        className="inline-flex max-w-[7.5rem] truncate rounded-full border px-1.5 py-px text-[9px] font-semibold"
+        style={{
+          borderColor: border,
+          color: border,
+          background: "var(--bg-elevated)",
+        }}
+        title={g.name}
+      >
+        {g.name}
+      </span>
+      {g.description ? (
+        <span
+          className="inline-flex h-3.5 w-3.5 shrink-0 cursor-help items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[8px] font-bold leading-none text-[var(--text-secondary)]"
+          title={g.description}
+        >
+          ?
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 type Camp = { id: string; name: string };
 
@@ -97,6 +127,7 @@ function ContactSwipeCard({
                 {c.contact_code}
               </span>
             ) : null}
+            {c.contact_groups ? <GroupPillWithHint g={c.contact_groups} /> : null}
           </p>
           <p className="mt-0.5 font-mono text-[13px] text-[var(--text-secondary)]">{c.phone || "—"}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -130,6 +161,7 @@ function filterParams(
   tag: string,
   namedayToday: boolean,
   municipality: string,
+  groupId: string,
 ) {
   const p = new URLSearchParams();
   if (search) p.set("search", search);
@@ -138,9 +170,104 @@ function filterParams(
   if (municipality) p.set("municipality", municipality);
   if (priority) p.set("priority", priority);
   if (tag) p.set("tag", tag);
+  if (groupId) p.set("group_id", groupId);
   if (namedayToday) p.set("nameday_today", "1");
   p.set("filters", "1");
   return p;
+}
+
+function GroupFilterSelect({
+  value,
+  groups,
+  onChange,
+}: {
+  value: string;
+  groups: ContactGroupRow[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const current = value ? groups.find((g) => g.id === value) : null;
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        id="f-group"
+        className={lux.select + " flex w-full min-w-0 items-center justify-between gap-2 text-left"}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          {current ? (
+            <>
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
+                style={{ background: current.color || "#003476" }}
+                aria-hidden
+              />
+              <span className="min-w-0 truncate">
+                {current.name}
+                {current.year != null ? ` (${current.year})` : ""}
+              </span>
+            </>
+          ) : (
+            <span className="text-[var(--text-primary)]">Όλες οι ομάδες</span>
+          )}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+      {open && (
+        <ul
+          className="absolute left-0 right-0 z-40 mt-1 max-h-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-[var(--card-shadow)]"
+          role="listbox"
+        >
+          <li>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              Όλες οι ομάδες
+            </button>
+          </li>
+          {groups.map((g) => (
+            <li key={g.id}>
+              <button
+                type="button"
+                className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+                onClick={() => {
+                  onChange(g.id);
+                  setOpen(false);
+                }}
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
+                  style={{ background: g.color || "#003476" }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {g.name}
+                  {g.year != null ? <span className="text-[var(--text-muted)]"> ({g.year})</span> : null}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function ContactsPage() {
@@ -157,6 +284,8 @@ function ContactsPage() {
   const [municipality, setMunicipality] = useState("");
   const [priority, setPriority] = useState("");
   const [tag, setTag] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [groups, setGroups] = useState<ContactGroupRow[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
@@ -170,13 +299,26 @@ function ContactsPage() {
   const load = useCallback(async () => {
     const params = new URLSearchParams({ search, call_status: callStatus, area, priority, tag });
     if (municipality) params.set("municipality", municipality);
+    if (groupId) params.set("group_id", groupId);
     if (namedayToday) {
       params.set("nameday_today", "1");
     }
     const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
-    const data = await res.json();
-    setContacts(data.contacts ?? []);
-  }, [search, callStatus, area, municipality, priority, tag, namedayToday]);
+    const data = (await res.json()) as { contacts?: Contact[] };
+    const list = (data.contacts ?? []).map((c) => {
+      const g = c.contact_groups;
+      const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+      return { ...c, contact_groups } as Contact;
+    });
+    setContacts(list);
+  }, [search, callStatus, area, municipality, priority, tag, groupId, namedayToday]);
+
+  useEffect(() => {
+    fetchWithTimeout("/api/groups")
+      .then((r) => r.json())
+      .then((d: { groups?: ContactGroupRow[] }) => setGroups(d.groups ?? []))
+      .catch(() => setGroups([]));
+  }, []);
 
   useLayoutEffect(() => {
     setMunicipality(searchParams.get("municipality") ?? "");
@@ -300,7 +442,7 @@ function ContactsPage() {
                   )}
                   <a
                     className="block px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-                    href={`/api/contacts/export?${filterParams(search, callStatus, area, priority, tag, namedayToday, municipality).toString()}`}
+                    href={`/api/contacts/export?${filterParams(search, callStatus, area, priority, tag, namedayToday, municipality, groupId).toString()}`}
                   >
                     Εξαγωγή φίλτρων
                   </a>
@@ -331,7 +473,7 @@ function ContactsPage() {
         </div>
       </div>
 
-      <div className={lux.card + " !py-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"}>
+      <div className={lux.card + " !py-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7"}>
         <div>
           <label className={lux.label} htmlFor="f-search">Αναζήτηση</label>
           <input
@@ -402,6 +544,12 @@ function ContactsPage() {
           <label className={lux.label} htmlFor="f-tag">Ετικέτα</label>
           <input id="f-tag" className={lux.input} placeholder="Φίλτρο tag" value={tag} onChange={(e) => setTag(e.target.value)} />
         </div>
+        <div>
+          <label className={lux.label} htmlFor="f-group">
+            Ομάδα
+          </label>
+          <GroupFilterSelect value={groupId} groups={groups} onChange={setGroupId} />
+        </div>
       </div>
 
       {canManage && <ContactsImportWizard onImported={load} />}
@@ -422,7 +570,7 @@ function ContactsPage() {
         </div>
       )}
 
-      <div className="data-hq-card hidden overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[0_4px_24px_rgba(0,0,0,0.4)] md:block">
+      <div className="data-hq-card hidden overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)] md:block">
         <table className="min-w-full text-sm text-[var(--text-table)]">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
@@ -492,13 +640,14 @@ function ContactsPage() {
                       <div className={avatarContact + " !h-8 !w-8 text-[10px] sm:!h-9 sm:!w-9 sm:text-xs"}>
                         {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
                       </div>
-                      <span className="flex min-w-0 items-center gap-2 truncate font-medium text-[var(--text-table)]">
+                      <span className="flex min-w-0 flex-wrap items-center gap-1.5 truncate font-medium text-[var(--text-table)]">
                         {c.first_name} {c.last_name}
                         {c.contact_code ? (
                           <span className="shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
                             {c.contact_code}
                           </span>
                         ) : null}
+                        {c.contact_groups ? <GroupPillWithHint g={c.contact_groups} /> : null}
                       </span>
                     </button>
                   </td>
@@ -558,8 +707,8 @@ function ContactsPage() {
       )}
 
       {selectedIds.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-50 max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border)] bg-[rgba(8,16,32,0.95)] p-3 shadow-[0_-8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md md:bottom-4 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:-translate-x-1/2 md:rounded-2xl md:border md:px-4">
-          {bulkErr && <p className="mb-2 text-center text-xs text-red-300">{bulkErr}</p>}
+        <div className="fixed inset-x-0 bottom-0 z-50 max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border)] bg-[var(--surface-bulk)] p-3 shadow-[var(--card-shadow)] backdrop-blur-md md:bottom-4 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:-translate-x-1/2 md:rounded-2xl md:border md:px-4">
+          {bulkErr && <p className="mb-2 text-center text-xs text-[var(--status-negative-text)]">{bulkErr}</p>}
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <p className="text-center text-sm font-medium text-[var(--text-primary)] sm:text-left">
               {selectedIds.length} επαφές επιλεγμένες
@@ -664,16 +813,26 @@ function ContactsPage() {
         </div>
       )}
 
-      {openCreate && <CreateContactModal onClose={() => setOpenCreate(false)} onSaved={load} />}
+      {openCreate && <CreateContactModal groups={groups} onClose={() => setOpenCreate(false)} onSaved={load} />}
     </div>
   );
 }
 
-function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> }) {
+function CreateContactModal({
+  groups,
+  onClose,
+  onSaved,
+}: {
+  groups: ContactGroupRow[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
   const router = useRouter();
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
+    father_name: "",
+    mother_name: "",
     phone: "",
     email: "",
     area: "",
@@ -693,6 +852,7 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
     influence: false,
     notes: "",
     tags: "",
+    group_id: "",
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -712,11 +872,14 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
     municipality: form.municipality || null,
     electoral_district: form.electoral_district || null,
     toponym: form.toponym || null,
+    father_name: form.father_name.trim() || null,
+    mother_name: form.mother_name.trim() || null,
     spouse_name: form.spouse_name || null,
     nickname: form.nickname || null,
     name_day: form.name_day || null,
     birthday: form.birthday || null,
     call_status: "Pending",
+    group_id: form.group_id || null,
   });
 
   const postCreate = async () => {
@@ -785,7 +948,7 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
     <>
     <div className={lux.modalOverlay}>
       <div className={lux.modalPanel + " flex max-h-[100dvh] max-w-full flex-col sm:max-h-[90vh] sm:max-w-[680px]"}>
-        <div className="mx-auto mt-2 h-1 w-11 shrink-0 rounded-full bg-white/20 md:hidden" role="presentation" />
+        <div className="mx-auto mt-2 h-1 w-11 shrink-0 rounded-full bg-[var(--border)] md:hidden" role="presentation" />
         <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
           <h3 className="text-xl font-bold text-[var(--text-primary)]">Νέα Επαφή</h3>
           <button
@@ -817,6 +980,18 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
               onChange={(v) => setForm({ ...form, last_name: v })}
             />
             <FormField
+              label="Πατρώνυμο"
+              value={form.father_name}
+              placeholder="Όνομα πατέρα"
+              onChange={(v) => setForm({ ...form, father_name: v })}
+            />
+            <FormField
+              label="Μητρώνυμο"
+              value={form.mother_name}
+              placeholder="Όνομα μητέρας"
+              onChange={(v) => setForm({ ...form, mother_name: v })}
+            />
+            <FormField
               label="Τηλέφωνο"
               required
               error={fieldErrors.phone}
@@ -841,6 +1016,25 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
                   }))
                 }
               />
+            </div>
+            <div className="md:col-span-2">
+              <label className={lux.label} htmlFor="new-contact-group">
+                Ομάδα
+              </label>
+              <select
+                id="new-contact-group"
+                className={lux.select}
+                value={form.group_id}
+                onChange={(e) => setForm({ ...form, group_id: e.target.value })}
+              >
+                <option value="">— Χωρίς ομάδα —</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                    {g.year != null ? ` (${g.year})` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
             <FormField label="Email" value={form.email} placeholder="email@example.com" onChange={(v) => setForm({ ...form, email: v })} />
             <FormField label="Περιοχή" value={form.area} placeholder="Περιοχή / περιφέρεια" onChange={(v) => setForm({ ...form, area: v })} />
@@ -933,7 +1127,7 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
     </div>
 
     {conflict && (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-[8px]">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-[8px] [background:var(--overlay-scrim)]">
         <div className="hq-modal-panel w-full max-w-md space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl">
           <h4 className="text-lg font-bold text-[var(--text-primary)]">Πιθανή σύγκρουση</h4>
           {conflict.phoneMatch && (

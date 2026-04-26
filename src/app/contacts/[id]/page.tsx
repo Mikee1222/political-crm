@@ -1,6 +1,6 @@
 "use client";
 
-import { Clipboard, Phone, Plus } from "lucide-react";
+import { Clipboard, Pencil, Phone, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
@@ -8,6 +8,7 @@ import { hasMinRole } from "@/lib/roles";
 import { callStatusLabel, callStatusPill, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
+import type { ContactGroupRow } from "@/lib/contact-groups";
 
 const card =
   "rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
@@ -63,12 +64,16 @@ type Contact = {
   spouse_name: string | null;
   name_day: string | null;
   contact_code: string | null;
+  father_name: string | null;
+  mother_name: string | null;
   birthday: string | null;
   municipality: string | null;
   electoral_district: string | null;
   toponym: string | null;
   call_status: string | null;
   notes: string | null;
+  group_id: string | null;
+  contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
 };
 
 const CALL_OPTS = [
@@ -81,6 +86,39 @@ const CALL_OPTS = [
 function disp(v: string | null | undefined) {
   if (v == null || String(v).trim() === "") return "—";
   return v;
+}
+
+/** [Επίθετο] [Μικρό] του [Πατρώνυμο] */
+function greekHeaderPrimaryLine(lastName: string, firstName: string, fatherName: string | null | undefined) {
+  const l = (lastName ?? "").trim();
+  const f = (firstName ?? "").trim();
+  const p = (fatherName ?? "").trim();
+  const core = [l, f].filter(Boolean).join(" ");
+  if (!core) return "Επαφή";
+  if (p) return `${core} του ${p}`;
+  return core;
+}
+
+function greekHeaderMotherLine(motherName: string | null | undefined) {
+  const m = (motherName ?? "").trim();
+  if (!m) return null;
+  return `και της ${m}`;
+}
+
+function buildContactCopyText(c: Contact) {
+  const line1 = greekHeaderPrimaryLine(c.last_name, c.first_name, c.father_name);
+  const line2 = greekHeaderMotherLine(c.mother_name);
+  const phone = c.phone?.trim() || "";
+  return [
+    line1,
+    ...(line2 ? [line2] : []),
+    c.contact_code ? `Κωδικός: ${c.contact_code}` : null,
+    phone ? `Τηλέφωνο: ${phone}` : null,
+    c.email?.trim() ? `Email: ${c.email}` : null,
+    c.municipality?.trim() || c.area?.trim() ? `Τοποθεσία: ${[c.municipality, c.area].filter(Boolean).join(" · ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function fmtDate(s: string | null | undefined) {
@@ -199,6 +237,8 @@ export default function ContactDetailPage() {
   const [openReq, setOpenReq] = useState(false);
   const [newTask, setNewTask] = useState({ title: "", due_date: "" });
   const [openTask, setOpenTask] = useState(false);
+  const [headerCopied, setHeaderCopied] = useState(false);
+  const [groupOptions, setGroupOptions] = useState<ContactGroupRow[]>([]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -208,7 +248,14 @@ export default function ContactDetailPage() {
       setContact(null);
       return;
     }
-    setContact(data.contact ?? null);
+    const raw = data.contact as Contact | null;
+    if (raw) {
+      const g = raw.contact_groups;
+      const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+      setContact({ ...raw, contact_groups, group_id: raw.group_id ?? null });
+    } else {
+      setContact(null);
+    }
     setBuf(null);
     setEditing(null);
     setCalls((data.calls ?? []) as Call[]);
@@ -219,6 +266,13 @@ export default function ContactDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    fetchWithTimeout("/api/groups")
+      .then((r) => r.json())
+      .then((d: { groups?: ContactGroupRow[] }) => setGroupOptions(d.groups ?? []))
+      .catch(() => setGroupOptions([]));
+  }, []);
 
   const c = contact;
   const w = buf ?? c;
@@ -263,6 +317,8 @@ export default function ContactDetailPage() {
         gender: buf.gender,
         occupation: buf.occupation,
         tags: buf.tags,
+        father_name: buf.father_name,
+        mother_name: buf.mother_name,
       });
     } else if (s === "electoral") {
       await patch({
@@ -274,6 +330,7 @@ export default function ContactDetailPage() {
         priority: buf.priority,
         call_status: buf.call_status,
         influence: buf.influence,
+        group_id: buf.group_id,
       });
     } else if (s === "comm") {
       await patch({ phone: buf.phone, email: buf.email, area: buf.area });
@@ -365,10 +422,21 @@ export default function ContactDetailPage() {
 
   const st = c.call_status ?? "Pending";
   const pr = c.priority ?? "Medium";
-  const fullName = [c.first_name, c.last_name].filter(Boolean).join(" ") || "Επαφή";
+  const primaryGreek = greekHeaderPrimaryLine(c.last_name, c.first_name, c.father_name);
+  const motherGreek = greekHeaderMotherLine(c.mother_name);
   const initials = `${(c.first_name?.[0] ?? "?").toUpperCase()}${(c.last_name?.[0] ?? "?").toUpperCase()}`;
   const live = w ?? c;
   const onomaTeponymo = [live.first_name, live.last_name].filter(Boolean).join(" ").trim();
+
+  const copyHeaderInfo = async () => {
+    try {
+      await navigator.clipboard.writeText(buildContactCopyText(c));
+      setHeaderCopied(true);
+      setTimeout(() => setHeaderCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
     <div className="min-h-full -m-6 bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8">
@@ -378,82 +446,136 @@ export default function ContactDetailPage() {
         </p>
       )}
 
-      {/* Header */}
+      {/* Header — premium profile card */}
       <div
-        className={`mb-4 flex max-md:sticky max-md:top-0 z-20 max-md:backdrop-blur flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:bg-[var(--bg-card)] max-md:px-3`}
+        className={
+          "mb-5 max-md:sticky max-md:top-0 z-20 max-md:backdrop-blur rounded-2xl border border-[var(--border)] " +
+          "bg-[var(--bg-card)]/98 p-5 shadow-[var(--card-shadow)] max-md:px-4 " +
+          "sm:p-6 ring-1 ring-[var(--border)]/50"
+        }
       >
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#003476] text-base font-bold text-white">
-            {initials}
-          </div>
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold leading-tight text-[var(--text-primary)]">{fullName}</h1>
-              {c.contact_code ? (
-                <span className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">
-                  {c.contact_code}
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
+            <div
+              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-lg font-bold text-white shadow-md ring-2 ring-[var(--accent-gold)]/35"
+            >
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-balance text-2xl font-semibold leading-tight tracking-tight text-[var(--text-card-title)] sm:text-3xl sm:font-bold">
+                {primaryGreek}
+              </h1>
+              <div
+                className="mt-2.5 h-0.5 w-16 rounded-full bg-gradient-to-r from-[var(--accent-gold)] to-[var(--accent-gold)]/30"
+                aria-hidden
+              />
+              {motherGreek ? (
+                <p className="mt-2.5 text-sm text-[var(--text-muted)]">{motherGreek}</p>
+              ) : null}
+              <div className="mt-4 flex min-w-0 flex-wrap items-center gap-1.5">
+                <span
+                  className={
+                    "inline-flex min-h-7 max-w-full items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold " +
+                    (callStatusPill[st] ?? callStatusPill.Pending)
+                  }
+                >
+                  {callStatusLabel(c.call_status)}
                 </span>
+                <span
+                  className={
+                    "inline-flex min-h-7 items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold " +
+                    (priorityPill[pr] ?? priorityPill.Medium)
+                  }
+                >
+                  {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+                </span>
+                {c.contact_code ? (
+                  <span className="inline-flex min-h-7 max-w-full items-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-0.5 font-mono text-[10px] font-medium text-[var(--text-secondary)]">
+                    {c.contact_code}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 font-mono text-sm text-[var(--text-secondary)]">{disp(c.phone)}</p>
+              {c.area?.trim() ? (
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">Περιοχή: {c.area}</p>
               ) : null}
             </div>
-            <p className="mt-0.5 font-mono text-sm text-[var(--text-muted)]">{disp(c.phone)}</p>
-            <p className="text-sm text-[var(--text-muted)]">Περιοχή: {disp(c.area)}</p>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {isCaller ? (
-            <>
-              <span
-                className={
-                  "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold " +
-                  (priorityPill[pr] ?? priorityPill.Medium)
-                }
-              >
-                {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
-              </span>
-              <select
-                aria-label="Κατάσταση κλήσης"
-                className={inputSm + " w-auto min-w-[140px]"}
-                value={c.call_status ?? "Pending"}
-                onChange={(e) => setContact({ ...c, call_status: e.target.value })}
-              >
-                {CALL_OPTS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void saveCallerStatus()}
-                className="h-8 rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white hover:bg-[#002255] disabled:opacity-50"
-              >
-                Αποθήκευση
-              </button>
-            </>
-          ) : (
-            <>
-              <span
-                className={
-                  "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold " +
-                  (callStatusPill[st] ?? callStatusPill.Pending)
-                }
-              >
-                {callStatusLabel(c.call_status)}
-              </span>
-              <span
-                className={
-                  "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold " + (priorityPill[pr] ?? priorityPill.Medium)
-                }
-              >
-                {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
-              </span>
-              <button type="button" onClick={triggerCall} className={btnOutline}>
-                <Phone className="h-3.5 w-3.5" />
-                Outbound (Retell)
-              </button>
-            </>
-          )}
+
+          <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:max-w-[min(100%,320px)] sm:items-end">
+            {isCaller ? (
+              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                <span
+                  className={
+                    "inline-flex rounded-md px-2.5 py-0.5 text-xs font-semibold " +
+                    (priorityPill[pr] ?? priorityPill.Medium)
+                  }
+                >
+                  {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+                </span>
+                <select
+                  aria-label="Κατάσταση κλήσης"
+                  className={inputSm + " w-auto min-w-[140px] max-w-full"}
+                  value={c.call_status ?? "Pending"}
+                  onChange={(e) => setContact({ ...c, call_status: e.target.value })}
+                >
+                  {CALL_OPTS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void saveCallerStatus()}
+                  className="h-9 rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white hover:bg-[#002255] disabled:opacity-50"
+                >
+                  Αποθήκευση
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyHeaderInfo()}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)]"
+                >
+                  <Clipboard className="h-3.5 w-3.5" />
+                  {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={triggerCall}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50 hover:bg-[var(--bg-card)]"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    Κλήση
+                  </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => startEdit("personal")}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Επεξεργασία
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void copyHeaderInfo()}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                  >
+                    <Clipboard className="h-3.5 w-3.5" />
+                    {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
+                  </button>
+                </div>
+                <p className="hidden text-[10px] text-[var(--text-muted)] sm:text-right sm:block">Outbound (Retell) μέσω «Κλήση»</p>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -490,6 +612,8 @@ export default function ContactDetailPage() {
                     { k: "nickname" as const, l: "Υποκοριστικό" },
                     { k: "first_name" as const, l: "Μικρό Όνομα" },
                     { k: "last_name" as const, l: "Επίθετο" },
+                    { k: "father_name" as const, l: "Πατρώνυμο" },
+                    { k: "mother_name" as const, l: "Μητρώνυμο" },
                     { k: "spouse_name" as const, l: "Όνομα Συζύγου" },
                     { k: "name_day" as const, l: "Γιορτή", date: true },
                     { k: "birthday" as const, l: "Γενέθλια", date: true },
@@ -610,21 +734,75 @@ export default function ContactDetailPage() {
                       onChange={(v) => setBuf({ ...w, ...v } as Contact)}
                     />
                   </div>
-                ) : (
-                  (["municipality", "electoral_district", "toponym"] as const).map((k) => {
-                    const labels: Record<typeof k, string> = {
-                      municipality: "Δήμος",
-                      electoral_district: "Εκλογικό διαμέρισμα",
-                      toponym: "Τοπωνύμιο/χωριό",
-                    };
-                    return (
-                      <div key={k} className={fieldGap}>
-                        <span className={lbl}>{labels[k]}</span>
-                        <p className={val}>{disp(c?.[k] as string | null)}</p>
-                      </div>
-                    );
-                  })
-                )}
+                ) : null}
+                {canManage && editing === "electoral" && w ? (
+                  <div className="fieldGap sm:col-span-2">
+                    <span className={lbl}>Ομάδα</span>
+                    <select
+                      className={inputSm}
+                      value={w.group_id ?? ""}
+                      onChange={(e) =>
+                        setBuf({
+                          ...w,
+                          group_id: e.target.value || null,
+                        } as Contact)
+                      }
+                    >
+                      <option value="">— Χωρίς ομάδα —</option>
+                      {groupOptions.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                          {g.year != null ? ` (${g.year})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {!(canManage && editing === "electoral" && w) ? (
+                  <>
+                    {(["municipality", "electoral_district", "toponym"] as const).map((k) => {
+                      const labels: Record<typeof k, string> = {
+                        municipality: "Δήμος",
+                        electoral_district: "Εκλογικό διαμέρισμα",
+                        toponym: "Τοπωνύμιο/χωριό",
+                      };
+                      return (
+                        <div key={k} className={fieldGap}>
+                          <span className={lbl}>{labels[k]}</span>
+                          <p className={val}>{disp(c?.[k] as string | null)}</p>
+                        </div>
+                      );
+                    })}
+                    <div className="fieldGap sm:col-span-2">
+                      <span className={lbl}>Ομάδα</span>
+                      {c.contact_groups ? (
+                        <p className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
+                            style={{
+                              borderColor: c.contact_groups.color || "#003476",
+                              color: c.contact_groups.color || "#003476",
+                              background: "var(--bg-elevated)",
+                            }}
+                          >
+                            {c.contact_groups.name}
+                            {c.contact_groups.year != null ? ` · ${c.contact_groups.year}` : ""}
+                          </span>
+                          {c.contact_groups.description ? (
+                            <span
+                              className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[9px] font-bold text-[var(--text-secondary)]"
+                              title={c.contact_groups.description}
+                            >
+                              ?
+                            </span>
+                          ) : null}
+                        </p>
+                      ) : (
+                        <p className={val}>—</p>
+                      )}
+                    </div>
+                  </>
+                ) : null}
                 {(
                   [
                     { k: "political_stance" as const, l: "Πολιτική τοποθέτηση" },

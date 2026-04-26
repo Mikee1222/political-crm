@@ -547,7 +547,7 @@ export function AlexandraApp() {
       {sideOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          className="fixed inset-0 z-40 md:hidden [background:var(--overlay-scrim)]"
           aria-label="Κλείσιμο"
           onClick={() => setSideOpen(false)}
         />
@@ -957,7 +957,7 @@ export function AlexandraApp() {
 
       {toDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-[8px]"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[8px] [background:var(--overlay-scrim)]"
           role="dialog"
           aria-modal
         >
