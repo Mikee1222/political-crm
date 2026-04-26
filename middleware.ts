@@ -28,6 +28,11 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = await updateSession(request);
+
+  if (pathname.startsWith("/api/public/")) {
+    return response;
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
