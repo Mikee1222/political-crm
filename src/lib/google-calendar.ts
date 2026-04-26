@@ -12,21 +12,6 @@ function createOAuth2() {
   );
 }
 
-const SCOPES = ["https://www.googleapis.com/auth/calendar"];
-
-export function getGoogleAuthUrl(userId: string) {
-  const oauth2 = createOAuth2();
-  const state = Buffer.from(
-    JSON.stringify({ u: userId, t: Date.now() }),
-  ).toString("base64url");
-  return oauth2.generateAuthUrl({
-    access_type: "offline",
-    scope: SCOPES,
-    prompt: "consent",
-    state,
-  });
-}
-
 export function parseOAuthState(state: string) {
   const raw = Buffer.from(state, "base64url").toString("utf8");
   const p = JSON.parse(raw) as { u: string; t: number };
@@ -42,29 +27,59 @@ export async function exchangeCodeForTokens(code: string) {
   return tokens;
 }
 
+type GoogleTokenRow = {
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: string | null;
+  expiry: string | null;
+};
+
+function tokenExpiryMs(row: GoogleTokenRow): number | undefined {
+  const raw = row.expiry ?? row.expires_at;
+  if (!raw) return undefined;
+  const ms = new Date(raw).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
 export async function getCalendarClientForUser(
   userId: string,
 ): Promise<ReturnType<typeof google.calendar> | null> {
   const s = createServiceClient();
   const { data, error } = await s.from("google_tokens").select("*").eq("user_id", userId).maybeSingle();
   if (error || !data?.refresh_token) return null;
+  const row = data as GoogleTokenRow;
   const oauth2 = createOAuth2();
+  const expMs = tokenExpiryMs(row);
   oauth2.setCredentials({
-    access_token: data.access_token ?? undefined,
-    refresh_token: data.refresh_token,
-    expiry_date: data.expires_at ? new Date(data.expires_at).getTime() : undefined,
+    access_token: row.access_token ?? undefined,
+    refresh_token: row.refresh_token,
+    expiry_date: expMs,
   });
   oauth2.on("tokens", (t) => {
-    void s
-      .from("google_tokens")
-      .update({
-        access_token: t.access_token,
-        refresh_token: t.refresh_token ?? data.refresh_token,
-        expires_at: t.expiry_date ? new Date(t.expiry_date).toISOString() : data.expires_at,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
+    const expiresIso = t.expiry_date ? new Date(t.expiry_date).toISOString() : null;
+    void (async () => {
+      const { error: upErr } = await s
+        .from("google_tokens")
+        .update({
+          access_token: t.access_token ?? row.access_token,
+          refresh_token: t.refresh_token ?? row.refresh_token,
+          expires_at: expiresIso,
+          expiry: expiresIso,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId);
+      if (upErr) {
+        console.error("[google-calendar] token persist", upErr.message);
+      }
+    })();
   });
+  /* Refresh access token if missing or expiring (getAccessToken uses refresh_token). */
+  try {
+    await oauth2.getAccessToken();
+  } catch (e) {
+    console.error("[google-calendar] getAccessToken", e);
+    return null;
+  }
   return google.calendar({ version: "v3", auth: oauth2 });
 }
 
