@@ -1,0 +1,29 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { hasMinRole } from "@/lib/roles";
+import { stablePairId } from "@/lib/duplicate-detection";
+
+export async function POST(request: NextRequest) {
+  const { user, profile, supabase } = await getSessionWithProfile();
+  if (!user) {
+    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  }
+  if (!hasMinRole(profile?.role, "manager")) {
+    return forbidden();
+  }
+
+  const body = (await request.json()) as { contactId1: string; contactId2: string };
+  const { small, big } = stablePairId(body.contactId1, body.contactId2);
+  const { error } = await supabase.from("contact_relations").insert({
+    contact_id_1: small,
+    contact_id_2: big,
+    relation_type: "family",
+  });
+  if (error) {
+    if (error.code === "23505") {
+      return NextResponse.json({ ok: true });
+    }
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true });
+}

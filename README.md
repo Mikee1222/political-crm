@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Political CRM (Next.js + Supabase)
 
-## Getting Started
+Πλήρης full-stack εφαρμογή πολιτικού CRM με:
 
-First, run the development server:
+- Next.js 14 (App Router)
+- Supabase (Auth + Postgres)
+- Tailwind CSS
+- TypeScript
+- Retell AI integration (outbound calls + webhook updates)
+
+## Setup
+
+1. Εγκατάσταση:
+
+```bash
+npm install
+```
+
+2. Δημιούργησε `.env.local` από το `.env.example` και συμπλήρωσε:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (ρόλος διακομιστή — για admin APIs)
+- `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_FROM_NUMBER`
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (ίδιο URL με το Google Cloud Console)
+
+3. Τρέξε το SQL schema στο Supabase SQL Editor:
+
+- `supabase/schema.sql`
+
+4. Run app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Routes
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `/login` — σύνδεση
+- `/dashboard` — στατιστικά (Manager+)
+- `/contacts` — επαφές (Καλείς: ανάγνωση + κατάσταση κλήσης)
+- `/requests`, `/tasks`, `/campaigns` — αιτήματα, εργασίες, καμπάνιες (Manager+)
+- `/schedule` — Google Calendar, πρόγραμμα (Manager+)
+- `/settings` — ρυθμίσεις, χρήστες, OAuth (μόνο Admin)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Retell Endpoints
 
-## Learn More
+- Trigger outbound call: `POST /api/retell/call`
+- Retell webhook: `POST /api/retell/webhook`
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Configure το Retell webhook URL στο dashboard σου προς το endpoint της εφαρμογής.

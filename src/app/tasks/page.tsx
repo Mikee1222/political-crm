@@ -1,0 +1,899 @@
+"use client";
+
+import clsx from "clsx";
+import { el } from "date-fns/locale";
+import {
+  Calendar,
+  CheckCircle2,
+  Circle,
+  FileText,
+  ListTodo,
+  Loader2,
+  MapPin,
+  Phone,
+  Plus,
+  Search,
+  Trash2,
+  UserRound,
+  X,
+} from "lucide-react";
+import { format, parseISO } from "date-fns";
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lux, priorityPill } from "@/lib/luxury-styles";
+import { ymdToNextMonth, ymdToPrevMonth } from "@/lib/task-filters";
+import type { TaskTabFilter } from "@/lib/task-filters";
+
+type TaskT = {
+  id: string;
+  contact_id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+  priority: string | null;
+  category: string | null;
+  contacts: { id: string; first_name: string; last_name: string; phone?: string } | null;
+};
+
+const TABS: { id: TaskTabFilter; label: string }[] = [
+  { id: "all", label: "Όλες" },
+  { id: "today", label: "Σήμερα" },
+  { id: "week", label: "Αυτή την εβδομάδα" },
+  { id: "overdue", label: "Ληγμένες" },
+];
+
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: "call", label: "Κλήση" },
+  { value: "field", label: "Πεδίο" },
+  { value: "meeting", label: "Συνάντηση" },
+  { value: "doc", label: "Έγγραφα" },
+  { value: "other", label: "Άλλο" },
+];
+
+function catIcon(v: string | null | undefined) {
+  const k = v || "other";
+  const c = { call: Phone, field: MapPin, meeting: UserRound, doc: FileText, other: ListTodo }[k] ?? ListTodo;
+  return c;
+}
+
+function prLabel(p: string | null | undefined) {
+  if (p === "High") return "Υψηλή";
+  if (p === "Low") return "Χαμηλή";
+  return "Μεσαία";
+}
+
+function athensTodayYmd() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Athens" });
+}
+
+export default function TasksPage() {
+  const [tab, setTab] = useState<TaskTabFilter>("all");
+  const [pending, setPending] = useState<TaskT[]>([]);
+  const [completed, setCompleted] = useState<TaskT[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [modal, setModal] = useState(false);
+  const [heat, setHeat] = useState<{ year: number; m: number }>(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), m: d.getMonth() + 1 };
+  });
+  const [heatCounts, setHeatCounts] = useState<Record<string, number>>({});
+  const [heatMax, setHeatMax] = useState(0);
+
+  const load = useCallback(async () => {
+    setErr(null);
+    setLoading(true);
+    try {
+      const q = new URLSearchParams({ filter: tab, date: athensTodayYmd() });
+      const res = await fetch(`/api/tasks?${q.toString()}`);
+      const d = (await res.json().catch(() => ({}))) as { error?: string; pending?: TaskT[]; completed?: TaskT[]; anchor?: string };
+      if (!res.ok) {
+        setErr(d.error ?? "Σφάλμα");
+        return;
+      }
+      setPending(d.pending ?? []);
+      setCompleted(d.completed ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const loadHeat = useCallback(async () => {
+    const { year, m } = heat;
+    const res = await fetch(`/api/tasks/heatmap?year=${year}&month=${m}`);
+    const d = (await res.json().catch(() => ({}))) as { counts?: Record<string, number>; max?: number };
+    if (res.ok && d.counts) {
+      setHeatCounts(d.counts);
+      setHeatMax(typeof d.max === "number" ? d.max : 0);
+    } else {
+      setHeatCounts({});
+      setHeatMax(0);
+    }
+  }, [heat]);
+
+  useEffect(() => {
+    void loadHeat();
+  }, [loadHeat]);
+
+  const anchorYmd = athensTodayYmd();
+
+  return (
+    <div className="space-y-6 max-md:space-y-4">
+      <CalendarStrip
+        year={heat.year}
+        month1={heat.m}
+        max={Math.max(heatMax, 1)}
+        counts={heatCounts}
+        onPrev={() => {
+          const p = ymdToPrevMonth(heat.year, heat.m);
+          setHeat({ year: p.y, m: p.m });
+        }}
+        onNext={() => {
+          const p = ymdToNextMonth(heat.year, heat.m);
+          setHeat({ year: p.y, m: p.m });
+        }}
+      />
+      <section
+        className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--border)] p-4 sm:p-5"
+        style={{
+          background: "linear-gradient(165deg, #0A1628 0%, #050D1A 55%, #0F1E35 100%)",
+        }}
+      >
+        <div
+          className="pointer-events-none absolute right-0 top-0 h-32 w-40 bg-[#C9A84C]/[0.08] blur-3xl"
+          aria-hidden
+        />
+        <div className="relative z-[1] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Εργασίες</h1>
+            <p className="text-sm text-[var(--text-secondary)]">Κέντρο ενεργειών, λήξεις &amp; follow-up.</p>
+          </div>
+          <div className="mx-auto w-full min-w-0 sm:mx-0 sm:max-w-none sm:self-end sm:justify-end md:flex-1">
+            <button
+              type="button"
+              className="no-mobile-scale h-12 w-full max-w-md rounded-full border-2 border-[#8B6914] bg-gradient-to-b from-[#E8C96B] to-[#8B6914] px-6 text-sm font-bold text-[#0A1628] shadow-[0_0_0_1px_rgba(0,0,0,0.25)] transition duration-200 hover:brightness-110 md:ml-auto md:mr-0"
+              onClick={() => {
+                setErr(null);
+                setModal(true);
+              }}
+            >
+              <span className="inline-flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" />
+                <span>Νέα Εργασία</span>
+              </span>
+            </button>
+          </div>
+        </div>
+        <div
+          className="relative z-[1] -mx-1 flex gap-0.5 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="tablist"
+        >
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              id={`tt-${t.id}`}
+              onClick={() => setTab(t.id)}
+              className={clsx(
+                "min-h-11 min-w-0 flex-1 rounded-xl px-3 py-2 text-center text-xs font-bold transition duration-200 sm:min-w-[7rem] sm:px-4 sm:text-sm",
+                tab === t.id
+                  ? "border border-[#C9A84C]/45 bg-[#C9A84C]/15 text-[#E8C96B] shadow-[inset_0_0_0_1px_rgba(201,168,76,0.2)]"
+                  : "border border-transparent text-[var(--text-muted)] active:bg-white/5",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </section>
+      {err && (
+        <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200" role="alert">
+          {err}
+        </p>
+      )}
+
+      <div className="md:hidden">
+        {loading ? <Loader2 className="h-5 w-5 animate-spin text-[#C9A84C]" /> : null}
+      </div>
+
+      <div className="max-md:space-y-6 grid gap-4 md:grid-cols-2 md:items-start md:gap-6 max-md:grid-cols-1 max-md:grid-cols-1">
+        <div className="min-w-0 max-md:order-1 max-md:space-y-3 order-1">
+          <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] sm:text-xs">Σε αναμονή</h2>
+          {pending.length === 0 && !loading && (
+            <p className="text-sm text-[var(--text-muted)]">Καμία ενεργή εργασία για το φίλτρο.</p>
+          )}
+          {pending.map((t) => (
+            <TaskCard
+              key={t.id}
+              t={t}
+              anchor={anchorYmd}
+              isCompleted={false}
+              expanded={expanded === t.id}
+              onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
+              onDone={() => void markDone(t.id, setErr, () => {
+                void load();
+                void loadHeat();
+              })}
+              onDelete={() => void removeTask(t.id, setErr, () => {
+                void load();
+                void loadHeat();
+              })}
+              onSaved={async () => {
+                setExpanded(null);
+                await load();
+                await loadHeat();
+              }}
+            />
+          ))}
+        </div>
+        <div className="min-w-0 max-md:order-2 max-md:space-y-3 order-2">
+          <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">Ολοκληρωμένες</h2>
+          {completed.length === 0 && !loading && (
+            <p className="text-sm text-[var(--text-muted)]">Καμία ολοκληρωμένη για το φίλτρο.</p>
+          )}
+          {completed.map((t) => (
+            <TaskCard
+              key={t.id}
+              t={t}
+              anchor={anchorYmd}
+              isCompleted
+              expanded={expanded === t.id}
+              onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
+              onDone={() => void markUndone(t.id, setErr, () => {
+                void load();
+                void loadHeat();
+              })}
+              onDelete={() => void removeTask(t.id, setErr, () => {
+                void load();
+                void loadHeat();
+              })}
+              onSaved={async () => {
+                setExpanded(null);
+                await load();
+                await loadHeat();
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {modal && (
+        <NewTaskModal
+          onClose={() => setModal(false)}
+          onCreated={async () => {
+            await load();
+            await loadHeat();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+async function markDone(id: string, setE: (s: string | null) => void, onOk: () => void) {
+  setE(null);
+  const r = await fetch(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: true }) });
+  const d = (await r.json().catch(() => ({}))) as { error?: string };
+  if (!r.ok) setE(d.error ?? "Σφάλμα");
+  else onOk();
+}
+async function markUndone(id: string, setE: (s: string | null) => void, onOk: () => void) {
+  setE(null);
+  const r = await fetch(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: false }) });
+  const d = (await r.json().catch(() => ({}))) as { error?: string };
+  if (!r.ok) setE(d.error ?? "Σφάλμα");
+  else onOk();
+}
+async function removeTask(id: string, setE: (s: string | null) => void, onOk: () => void) {
+  setE(null);
+  if (!confirm("Διαγραφή εργασίας;")) return;
+  const r = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+  if (!r.ok) {
+    const d = (await r.json().catch(() => ({}))) as { error?: string };
+    setE(d.error ?? "Σφάλμα");
+  } else onOk();
+}
+
+function TaskCard({
+  t: task,
+  anchor,
+  isCompleted,
+  expanded,
+  onToggleExpand,
+  onDone,
+  onDelete,
+  onSaved,
+}: {
+  t: TaskT;
+  anchor: string;
+  isCompleted: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onDone: () => void;
+  onDelete: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const C = catIcon(task.category);
+  const due = task.due_date?.slice(0, 10) ?? null;
+  const overdue = !isCompleted && due && due < anchor;
+  const dueToday = !isCompleted && due === anchor;
+  const skip = useRef(false);
+  const touch0 = useRef<{ x: number; moved: boolean } | null>(null);
+
+  const [edit, setEdit] = useState({
+    title: task.title,
+    description: task.description ?? "",
+    due_date: task.due_date ?? "",
+    priority: (task.priority ?? "Medium") as "High" | "Medium" | "Low",
+    contact_id: task.contact_id,
+    category: task.category || "other",
+  });
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<Partial<TaskT["contacts"] & { id: string; phone: string }>[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [dErr, setDErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    setEdit({
+      title: task.title,
+      description: task.description ?? "",
+      due_date: task.due_date ?? "",
+      priority: (task.priority as "High" | "Medium" | "Low") ?? "Medium",
+      contact_id: task.contact_id,
+      category: task.category || "other",
+    });
+  }, [expanded, task]);
+
+  useEffect(() => {
+    if (!q.trim() || q.length < 1) {
+      setHits([]);
+      return;
+    }
+    const tm = setTimeout(() => {
+      void fetch(`/api/contacts?search=${encodeURIComponent(q)}`)
+        .then((r) => r.json())
+        .then((d: { contacts?: { id: string; first_name: string; last_name: string; phone: string }[] }) =>
+          setHits((d.contacts ?? []).slice(0, 12)),
+        );
+    }, 200);
+    return () => clearTimeout(tm);
+  }, [q]);
+
+  return (
+    <div
+      className={clsx(
+        "relative flex flex-col overflow-hidden rounded-xl border border-[var(--border)]",
+        isCompleted ? "bg-[#0A1628]/90" : "bg-gradient-to-b from-[#0F1E35]/90 to-[#0A1628]/95",
+        !isCompleted && overdue && "border-l-4 !border-l-red-500/85",
+        !isCompleted && dueToday && !overdue && "border-l-4 !border-l-[#C9A84C]",
+      )}
+    >
+      <div
+        className="flex w-full min-w-0 items-start gap-2 p-3"
+        onTouchStart={(e) => {
+          touch0.current = { x: e.touches[0].clientX, moved: false };
+        }}
+        onTouchMove={(e) => {
+          const t = touch0.current;
+          if (t && Math.abs(e.touches[0].clientX - t.x) > 10) t.moved = true;
+        }}
+        onTouchEnd={(e) => {
+          if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return;
+          const t0 = touch0.current;
+          touch0.current = null;
+          if (!t0) return;
+          const d = e.changedTouches[0].clientX - t0.x;
+          if (t0.moved && d < -50) {
+            onDone();
+            skip.current = true;
+            return;
+          }
+          if (t0.moved && d > 50) {
+            onDelete();
+            skip.current = true;
+          }
+        }}
+      >
+        <div className="pt-0.5">
+          {isCompleted ? (
+            <button
+              type="button"
+              className="text-emerald-400/90"
+              onClick={() => onDone()}
+              title="Ξανα-αναίρεση (επιστροφή σε αναμονή)"
+            >
+              <CheckCircle2 className="h-6 w-6" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="text-[var(--text-muted)] hover:text-[#C9A84C]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDone();
+              }}
+              title="Ολοκλήρωση"
+            >
+              <Circle className="h-6 w-6" />
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          className="min-w-0 flex-1 text-left"
+          onClick={() => {
+            if (skip.current) {
+              skip.current = false;
+              return;
+            }
+            onToggleExpand();
+          }}
+        >
+          <div className="flex min-w-0 items-start justify-between gap-1">
+            <p className="line-clamp-2 font-bold text-[var(--text-primary)] break-words">{task.title}</p>
+            <div className="shrink-0 self-start rounded-md border border-[#C9A84C]/25 bg-[#050D1A]/50 p-1.5 text-[#C9A84C]">
+              <C className="h-3.5 w-3.5" />
+            </div>
+          </div>
+          <p className="mt-0.5 text-xs text-[var(--text-secondary)] max-md:max-w-full">
+            {task.due_date
+              ? format(parseISO(task.due_date.slice(0, 10) + "T12:00:00"), "d MMM yyyy", { locale: el })
+              : "Χωρίς ορισμό"}{" "}
+            {overdue && <span className="ml-0.5 font-bold text-red-300">· ΛΗΞΗ</span>}
+          </p>
+          {task.contacts && (
+            <p className="mt-0.5">
+              <Link
+                className="text-sm font-medium text-sky-300/90 hover:underline"
+                href={`/contacts/${task.contact_id}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {task.contacts.first_name} {task.contacts.last_name}
+              </Link>
+            </p>
+          )}
+        </button>
+        <div className="shrink-0">
+          {(() => {
+            const pk =
+              task.priority === "High" || task.priority === "Low" || task.priority === "Medium"
+                ? task.priority
+                : "Medium";
+            return (
+              <span
+                className={clsx(
+                  "inline-flex min-h-6 min-w-0 max-w-full items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                  priorityPill[pk],
+                )}
+              >
+                {prLabel(task.priority)}
+              </span>
+            );
+          })()}
+        </div>
+      </div>
+
+      {expanded && (
+        <div
+          className="border-t border-[var(--border)]/80 p-3 sm:px-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {dErr && <p className="mb-2 text-sm text-red-200">{dErr}</p>}
+          <label className="block text-[10px] font-medium uppercase text-[var(--text-muted)]">Περιγραφή</label>
+          <textarea
+            className={clsx(lux.textarea, "mt-1 w-full !text-base")}
+            rows={3}
+            value={edit.description}
+            onChange={(e) => setEdit((x) => ({ ...x, description: e.target.value }))}
+            placeholder="Σημειώσεις…"
+          />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className={clsx(lux.label)}>Λήξη</label>
+              <input
+                className={clsx(lux.input, "!min-h-11 w-full !text-base")}
+                type="date"
+                value={edit.due_date ? edit.due_date.slice(0, 10) : ""}
+                onChange={(e) => setEdit((x) => ({ ...x, due_date: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className={clsx(lux.label)}>Προτεραιότητα</label>
+              <select
+                className={clsx(lux.select, "!min-h-11 w-full !text-base")}
+                value={edit.priority}
+                onChange={(e) => setEdit((x) => ({ ...x, priority: e.target.value as typeof edit.priority }))}
+              >
+                <option value="High">Υψηλή</option>
+                <option value="Medium">Μεσαία</option>
+                <option value="Low">Χαμηλή</option>
+              </select>
+            </div>
+            <div>
+              <label className={clsx(lux.label)}>Κατηγορία</label>
+              <select
+                className={clsx(lux.select, "!min-h-11 w-full !text-base")}
+                value={edit.category}
+                onChange={(e) => setEdit((x) => ({ ...x, category: e.target.value }))}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={clsx(lux.label)}>Ώρα επαφής (αναζήτηση)</label>
+              <div className="relative">
+                <input
+                  className={clsx(lux.input, "w-full !pl-8 !text-base !min-h-11")}
+                  placeholder="Όνομα, τηλ…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                {hits.length > 0 && (
+                  <ul
+                    className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm shadow-2xl"
+                    role="listbox"
+                  >
+                    {hits.map((h) => h && h.id && (
+                      <li key={h.id}>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-elevated)]"
+                          onClick={() => {
+                            setEdit((e) => ({ ...e, contact_id: h.id! }));
+                            setQ("");
+                            setHits([]);
+                          }}
+                        >
+                          {h.first_name} {h.last_name} · {h.phone ?? "—"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <p className="mt-1 text-[10px] text-[var(--text-muted)]">Ενεργό ID: {edit.contact_id.slice(0, 8)}…</p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className={clsx(lux.label)}>Τίτλος</label>
+              <input
+                className={clsx(lux.input, "w-full !min-h-11 !text-base")}
+                value={edit.title}
+                onChange={(e) => setEdit((x) => ({ ...x, title: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              className={clsx(lux.btnDanger, "inline-flex w-full !min-h-11 !justify-center !gap-2 sm:w-auto")}
+              onClick={() => {
+                onDelete();
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              Διαγραφή
+            </button>
+            <button
+              type="button"
+              className={clsx(lux.btnPrimary, "w-full !min-h-11 sm:w-auto sm:!min-w-40")}
+              disabled={saving}
+              onClick={async () => {
+                setDErr(null);
+                setSaving(true);
+                try {
+                  const r = await fetch(`/api/tasks/${task.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      title: edit.title,
+                      description: edit.description || null,
+                      due_date: edit.due_date ? edit.due_date.slice(0, 10) : null,
+                      priority: edit.priority,
+                      category: edit.category,
+                      contact_id: edit.contact_id,
+                    }),
+                  });
+                  const d = (await r.json().catch(() => ({}))) as { error?: string };
+                  if (!r.ok) {
+                    setDErr(d.error ?? "Σφάλμα");
+                    return;
+                  }
+                  await onSaved();
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "…" : "Αποθήκευση"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <p className="px-2 pb-1.5 text-center text-[8px] text-[var(--text-muted)] sm:hidden" aria-hidden>
+        Σάρωση: αριστερά ολοκλ. · δεξιά διαγραφή
+      </p>
+    </div>
+  );
+}
+
+function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void | Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [e, setE] = useState<string | null>(null);
+  const [f, setF] = useState({
+    title: "",
+    description: "",
+    due_date: "",
+    priority: "Medium" as "High" | "Medium" | "Low",
+    category: "other",
+    contact_id: "" as string,
+  });
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<{ id: string; first_name: string; last_name: string; phone: string }[]>([]);
+  const [cLabel, setCLabel] = useState("");
+
+  useEffect(() => {
+    if (q.length < 1) {
+      setHits([]);
+      return;
+    }
+    const tm = setTimeout(() => {
+      void fetch(`/api/contacts?search=${encodeURIComponent(q)}`)
+        .then((r) => r.json())
+        .then((d: { contacts?: typeof hits }) => setHits((d.contacts ?? []).slice(0, 12)));
+    }, 200);
+    return () => clearTimeout(tm);
+  }, [q]);
+
+  const save = async (ev: FormEvent) => {
+    ev.preventDefault();
+    setE(null);
+    if (!f.contact_id || !f.title.trim()) {
+      setE("Υποχρεωτική επαφή και τίτλος");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: f.contact_id,
+          title: f.title.trim(),
+          description: f.description || null,
+          due_date: f.due_date || null,
+          priority: f.priority,
+          category: f.category || null,
+        }),
+      });
+      const d = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) {
+        setE(d.error ?? "Σφάλμα");
+        return;
+      }
+      await Promise.resolve(onCreated());
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className={clsx(lux.modalOverlay, "!z-50 !p-0 sm:!items-center sm:!p-4")} onClick={onClose} role="presentation">
+      <form
+        onClick={(ev) => ev.stopPropagation()}
+        onSubmit={save}
+        className={clsx(lux.modalPanel, "flex w-full !max-w-[600px] flex-1 !flex-col overflow-hidden !rounded-none sm:max-h-[min(100dvh,90vh)] sm:!rounded-2xl")}
+      >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
+        <div className="flex items-center justify-between border-b border-[var(--border)] bg-[#0A1628] px-4 py-3">
+          <h2 className="text-lg font-bold">Νέα Εργασία</h2>
+          <button type="button" className="p-1 text-[var(--text-muted)] hover:text-white" onClick={onClose} aria-label="Κλείσιμο">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {e && <p className="text-sm text-red-200">{e}</p>}
+          <div>
+            <label className={lux.label}>Τίτλος *</label>
+            <input className={clsx(lux.input, "w-full !min-h-11 !text-base")} required value={f.title} onChange={(ev) => setF((x) => ({ ...x, title: ev.target.value }))} />
+          </div>
+          <div>
+            <label className={lux.label}>Περιγραφή</label>
+            <textarea className={clsx(lux.textarea, "!min-h-24 w-full !text-base")} value={f.description} onChange={(ev) => setF((x) => ({ ...x, description: ev.target.value }))} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className={lux.label}>Ημερομηνία λήξης</label>
+              <input
+                className={clsx(lux.input, "w-full !min-h-11 !text-base")}
+                type="date"
+                value={f.due_date}
+                onChange={(ev) => setF((x) => ({ ...x, due_date: ev.target.value }))}
+              />
+            </div>
+            <div>
+              <label className={lux.label}>Προτεραιότητα</label>
+              <select
+                className={clsx(lux.select, "w-full !min-h-11 !text-base")}
+                value={f.priority}
+                onChange={(ev) => setF((x) => ({ ...x, priority: ev.target.value as "High" | "Medium" | "Low" }))}
+              >
+                <option value="High">Υψηλή</option>
+                <option value="Medium">Μεσαία</option>
+                <option value="Low">Χαμηλή</option>
+              </select>
+            </div>
+            <div>
+              <label className={lux.label}>Κατηγορία</label>
+              <select
+                className={clsx(lux.select, "w-full !min-h-11 !text-base")}
+                value={f.category}
+                onChange={(ev) => setF((x) => ({ ...x, category: ev.target.value }))}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className={lux.label}>Σύνδεση με επαφή * (αναζητήστε)</label>
+              <div className="relative">
+                <input
+                  className={clsx(lux.input, "w-full !min-h-11 !pl-9 !text-base")}
+                  value={cLabel}
+                  onChange={(ev) => {
+                    setCLabel(ev.target.value);
+                    setQ(ev.target.value);
+                    if (f.contact_id) {
+                      setF((x) => ({ ...x, contact_id: "" }));
+                    }
+                  }}
+                  placeholder="Όνομα, τηλέφωνο…"
+                />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                {hits.length > 0 && (
+                  <ul className="absolute z-30 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0 shadow-2xl">
+                    {hits.map((h) => (
+                      <li key={h.id}>
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[var(--bg-card)]"
+                          onClick={() => {
+                            setF((x) => ({ ...x, contact_id: h.id }));
+                            setCLabel([h.first_name, h.last_name, h.phone].filter(Boolean).join(" · "));
+                            setHits([]);
+                            setQ("");
+                          }}
+                        >
+                          {h.first_name} {h.last_name} · {h.phone}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 border-t border-[var(--border)] p-3 sm:grid-cols-2 sm:px-4">
+          <button type="button" className={clsx(lux.btnSecondary, "!w-full !min-h-12")} onClick={onClose} disabled={saving}>
+            Άκυρο
+          </button>
+          <button type="submit" className={clsx(lux.btnPrimary, "w-full !min-h-12 !justify-center !py-2")} disabled={saving || !f.contact_id}>
+            {saving ? "—" : "Προσθήκη"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function CalendarStrip({
+  year,
+  month1,
+  counts,
+  max: maxV,
+  onPrev,
+  onNext,
+}: {
+  year: number;
+  month1: number;
+  max: number;
+  counts: Record<string, number>;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const d0 = new Date(year, month1 - 1, 1);
+  const name = d0.toLocaleDateString("el-GR", { month: "long", year: "numeric" });
+  const daysInMonth = new Date(year, month1, 0).getDate();
+  const firstDow = d0.getDay();
+  const startPad = firstDow === 0 ? 6 : firstDow - 1;
+  const nCells = 42;
+  const cells = useMemo(() => {
+    const out: { d: string | null; inMonth: boolean; n: number }[] = [];
+    let day = 1;
+    for (let i = 0; i < nCells; i += 1) {
+      if (i < startPad) {
+        out.push({ d: null, inMonth: false, n: 0 });
+        continue;
+      }
+      if (day > daysInMonth) {
+        out.push({ d: null, inMonth: false, n: 0 });
+        continue;
+      }
+      const m = String(month1).padStart(2, "0");
+      const d = String(day).padStart(2, "0");
+      const ymd = `${year}-${m}-${d}`;
+      const c = counts[ymd] ?? 0;
+      out.push({ d: ymd, inMonth: true, n: c });
+      day += 1;
+    }
+    return out;
+  }, [year, month1, daysInMonth, startPad, counts]);
+
+  const wk = ["Δε", "Τρ", "Τε", "Πε", "Πα", "Σα", "Κυ"];
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[#0F1E35]/80 to-[#050D1A] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.4)] sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <button type="button" className="rounded-lg border border-[var(--border)] p-1.5 text-sm text-[#C9A84C] hover:bg-white/5" onClick={onPrev} aria-label="Προηγούμενο μήνα">
+          <span className="px-0.5">‹</span>
+        </button>
+        <div className="flex min-w-0 items-center justify-center gap-1.5 text-sm font-bold text-[var(--text-primary)] sm:text-base">
+          <Calendar className="h-3.5 w-3.5 text-[#C9A84C] sm:h-4 sm:w-4" />
+          <span className="truncate text-center">Ημερολόγιο · {name}</span>
+        </div>
+        <button type="button" className="rounded-lg border border-[var(--border)] p-1.5 text-sm text-[#C9A84C] hover:bg-white/5" onClick={onNext} aria-label="Επόμενο μήνα">
+          <span className="px-0.5">›</span>
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center text-[9px] text-[var(--text-muted)] sm:gap-1 sm:text-[10px] sm:font-bold">
+        {wk.map((w) => (
+          <div key={w} className="px-0 py-1">
+            {w}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 grid grid-cols-7 gap-0.5 sm:gap-1.5">
+        {cells.map((c, i) => {
+          if (c.d == null || !c.inMonth) {
+            return <div key={`e-${i}`} className="aspect-square min-w-0" />;
+          }
+          const p = maxV > 0 ? 0.35 + (0.6 * c.n) / maxV : 0;
+          const has = c.n > 0;
+          return (
+            <div
+              key={c.d}
+              className={clsx(
+                "flex min-w-0 aspect-square items-center justify-center rounded border text-xs font-bold tabular-nums sm:text-sm",
+                has
+                  ? "border-[#C9A84C]/60 text-[#0A1628]"
+                  : "border-white/5 text-[var(--text-muted)]",
+              )}
+              style={has ? { backgroundColor: `rgba(201,168,76,${p.toFixed(2)})` } : undefined}
+              title={c.n ? `${c.d}: ${c.n} εργασίες` : c.d}
+            >
+              {c.d ? parseInt(c.d.slice(8, 10), 10) : ""}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

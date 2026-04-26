@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#050D1A" rx="96"/>
+  <text
+    x="256"
+    y="318"
+    text-anchor="middle"
+    font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, 'Helvetica Neue', sans-serif"
+    font-size="188"
+    font-weight="800"
+    fill="#C9A84C"
+  >
+    KK
+  </text>
+</svg>
