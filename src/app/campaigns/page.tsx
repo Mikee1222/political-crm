@@ -543,9 +543,9 @@ export default function CampaignsPage() {
 function StatPill({ label, value, sub, color, border }: { label: string; value: string; sub: string; color: string; border: string }) {
   return (
     <div className={["rounded-lg border", border, "bg-[#0A1628]/80 p-2.5 sm:p-3"].join(" ")}>
-      <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
+      <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-subtitle)]">{label}</p>
       <p className={["mt-0.5 text-xl font-bold tabular-nums sm:text-2xl", color].join(" ")}>{value}</p>
-      <p className="text-[9px] text-[var(--text-muted)] sm:text-[10px]">{sub}</p>
+      <p className="text-[9px] text-[var(--text-subtitle)] sm:text-[10px]">{sub}</p>
     </div>
   );
 }
@@ -565,7 +565,7 @@ function StatBadge({
 }) {
   return (
     <div className={["flex flex-col rounded-lg p-1.5 ring-1 sm:p-2", bg, ring, "min-h-[2.5rem] justify-center"].join(" ")}>
-      <span className="text-[9px] font-semibold leading-tight text-[var(--text-muted)]">{label}</span>
+      <span className="text-[9px] font-semibold leading-tight text-[var(--text-subtitle)]">{label}</span>
       <span className={["text-sm font-bold tabular-nums sm:text-base", cls].join(" ")}>{value}</span>
     </div>
   );

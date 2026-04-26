@@ -8,7 +8,7 @@ export const lux = {
     "mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-[#94A3B8]",
   pageBg: "min-h-full bg-[var(--bg-primary)]",
   pageAnimated: "hq-fade-in-up",
-  cardTitle: "text-[13px] font-medium uppercase tracking-[0.08em] text-[#94A3B8]",
+  cardTitle: "text-[13px] font-medium uppercase tracking-[0.08em] text-[#C9A84C]",
   card:
     "data-hq-card rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 text-[#F0F4FF] shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--border-hover)]",
   cardFlat:

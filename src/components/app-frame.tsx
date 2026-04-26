@@ -71,9 +71,11 @@ function initials(fullName: string | null, fallback: string) {
 
 const navItemBase =
   "group flex h-12 max-h-12 items-center gap-3 rounded-lg border-l-[3px] border-transparent pl-2 pr-2 text-sm transition duration-200 ease-out";
-const navItemInactive = "text-[#8FA3BF] hover:border-transparent hover:bg-[rgba(201,168,76,0.1)] hover:text-[#F0F4FF]";
+const navItemInactive =
+  "text-[#8FA3BF] [&>span]:text-[#8FA3BF] hover:border-transparent hover:bg-[rgba(201,168,76,0.1)] hover:text-[#F0F4FF] hover:[&>span]:text-[#F0F4FF]";
 const navItemIconInactive = "text-[#8FA3BF] group-hover:text-[#C9A84C]";
-const navItemActive = "border-[var(--accent-gold)] bg-[rgba(201,168,76,0.12)] text-white";
+const navItemActive =
+  "border-[var(--accent-gold)] bg-[rgba(201,168,76,0.12)] !text-white [&>span]:!text-white";
 const navItemIconActive = "text-white";
 
 function NavLinks({

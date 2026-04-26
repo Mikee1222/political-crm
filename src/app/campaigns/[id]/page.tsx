@@ -162,14 +162,14 @@ export default function CampaignDetailPage() {
         >
           <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 bg-[#C9A84C]/5 blur-3xl" />
           <div className="relative grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <KpiBox label="Σημειώθηκαν" value={String(s.total)} sub="κλήση/εις" color="text-[#E2E8F0]" border="border-slate-500/20" />
+            <KpiBox label="Σημειώθηκαν" value={String(s.total)} sub="κλήση/εις" color="text-white" border="border-slate-500/20" />
             <KpiBox label="Θετικοί" value={String(s.positive)} sub="αποτέλεσμα" color="text-emerald-300" border="border-emerald-500/20" />
             <KpiBox label="Αρνητικοί" value={String(s.negative)} sub="αποτέλεσμα" color="text-rose-300" border="border-rose-500/20" />
             <KpiBox label="Δεν Απάντησαν" value={String(s.noAnswer)} sub="αποτέλεσμα" color="text-amber-200" border="border-amber-500/20" />
             <div className="col-span-1 sm:col-span-2 lg:col-span-1">
               <p className="text-[9px] font-bold uppercase tracking-widest text-[#C9A84C]">Λίστα επαφών</p>
               <p className="text-lg font-bold text-[var(--text-primary)]">
-                {data.callsMade} <span className="text-sm font-normal text-[var(--text-muted)]">/ {data.contactTotal || "—"}</span>
+                {data.callsMade} <span className="text-sm font-normal text-[var(--text-subtitle)]">/ {data.contactTotal || "—"}</span>
               </p>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[#050D1A] ring-1 ring-[#C9A84C]/15">
                 <div
@@ -315,9 +315,9 @@ export default function CampaignDetailPage() {
 function KpiBox({ label, value, sub, color, border }: { label: string; value: string; sub: string; color: string; border: string }) {
   return (
     <div className={["rounded-lg border p-2.5 sm:p-3", border, "bg-[#050D1A]/30"].join(" ")}>
-      <p className="text-[8px] font-bold uppercase leading-tight tracking-wider text-[var(--text-muted)] sm:text-[9px] sm:leading-tight sm:tracking-widest">{label}</p>
+      <p className="text-[8px] font-bold uppercase leading-tight tracking-wider text-[var(--text-subtitle)] sm:text-[9px] sm:leading-tight sm:tracking-widest">{label}</p>
       <p className={["mt-0.5 text-xl font-bold sm:text-2xl", color].join(" ")}>{value}</p>
-      <p className="text-[8px] text-[var(--text-muted)] sm:text-[9px] sm:leading-tight">{sub}</p>
+      <p className="text-[8px] text-[var(--text-subtitle)] sm:text-[9px] sm:leading-tight">{sub}</p>
     </div>
   );
 }

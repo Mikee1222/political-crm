@@ -53,7 +53,7 @@ export default function DashboardPage() {
   if (!data) {
     return (
       <div className="flex min-h-[30vh] items-center justify-center">
-        <p className="text-sm text-[var(--text-secondary)]">Φόρτωση…</p>
+        <p className="text-sm text-[var(--text-subtitle)]">Φόρτωση…</p>
       </div>
     );
   }
@@ -92,7 +92,10 @@ export default function DashboardPage() {
               }
             />
             {briefing.namedays.contactNames.length > 0 && (
-              <p className="mt-2 line-clamp-2 text-xs text-[var(--text-secondary)]" title={briefing.namedays.contactNames.join(", ")}>
+              <p
+                className="mt-2 line-clamp-2 text-xs text-[var(--text-briefing)]"
+                title={briefing.namedays.contactNames.join(", ")}
+              >
                 {briefing.namedays.contactNames.join(", ")}
               </p>
             )}
@@ -131,7 +134,7 @@ export default function DashboardPage() {
                 {briefing.campaigns.map((c) => (
                   <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 px-3 py-2">
                     <span className="font-medium">{c.name}</span>
-                    <span className="text-xs text-[var(--text-secondary)]">
+                    <span className="text-xs text-[var(--text-briefing)]">
                       {c.callsTotal} κλήσεις · {c.positive} θετικές
                     </span>
                   </li>
@@ -180,7 +183,7 @@ export default function DashboardPage() {
           icon={Clock3}
           iconBg="bg-slate-500/20"
           iconColor="text-[#E2E8F0]"
-          sub={<span className="text-[var(--text-muted)]">Αναμονή / φίλτρα</span>}
+          sub={<span className="text-xs font-medium text-[var(--text-subtitle)]">Αναμονή / φίλτρα</span>}
           stagger="hq-stagger-3"
         />
       </div>
@@ -205,7 +208,7 @@ export default function DashboardPage() {
       <section className={lux.card}>
         <h2 className="hq-card-title mb-4">Πρόσφατη δραστηριότητα</h2>
         {acts.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">Δεν υπάρχει πρόσφατη δραστηριότητα.</p>
+          <p className="text-sm text-[var(--text-subtitle)]">Δεν υπάρχει πρόσφατη δραστηριότητα.</p>
         ) : (
           <ul className="space-y-4">
             {acts.map((item) => (
@@ -216,7 +219,7 @@ export default function DashboardPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-[var(--text-primary)]">
                     {item.text}
-                    {item.timeAgo ? <span className="text-[var(--text-muted)]"> — {item.timeAgo}</span> : null}
+                    {item.timeAgo ? <span className="text-[var(--text-subtitle)]"> — {item.timeAgo}</span> : null}
                   </p>
                 </div>
               </li>
@@ -245,18 +248,18 @@ function BriefRow({
         <Icon className="h-4 w-4 shrink-0" />
         <span className="text-xs font-semibold uppercase tracking-wider">{title}</span>
       </div>
-      <p className="text-lg font-bold text-[var(--text-primary)]">{value}</p>
-      <p className="mt-1 line-clamp-2 text-xs text-[var(--text-secondary)]">{sub}</p>
+      <p className="text-lg font-bold text-[var(--text-briefing)]">{value}</p>
+      <p className="mt-1 line-clamp-2 text-xs text-[var(--text-briefing)]">{sub}</p>
     </div>
   );
 }
 
 function TrendLine({ positive }: { positive?: boolean }) {
   if (!positive) {
-    return <span className="text-[11px] text-[var(--text-muted)]">—</span>;
+    return <span className="text-[11px] font-medium text-[var(--text-subtitle)]">—</span>;
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--success)]">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#4ADE80]">
       <TrendingUp className="h-3.5 w-3.5" />
       <span>Ενεργό</span>
     </span>
@@ -298,10 +301,13 @@ function Stat({
           <Icon className={["h-4 w-4", iconColor].join(" ")} />
         </div>
       </div>
-      <p className="text-4xl font-bold tabular-nums text-[var(--text-primary)]" style={{ fontFeatureSettings: '"tnum"' }}>
+      <p
+        className="text-4xl font-bold tabular-nums text-[var(--text-metric-value)]"
+        style={{ fontFeatureSettings: '"tnum"' }}
+      >
         {value}
       </p>
-      <p className="mt-1 text-xs text-[var(--text-secondary)]">{hint}</p>
+      <p className="mt-1 text-xs text-[var(--text-subtitle)]">{hint}</p>
       <div className="mt-2">{sub}</div>
     </div>
   );
@@ -312,7 +318,7 @@ function ProgressRow({ label, value, color }: { label: string; value: number; co
   return (
     <div>
       <div className="mb-2 flex items-center justify-between text-sm">
-        <span className="text-[var(--text-secondary)]">{label}</span>
+        <span className="text-[var(--text-subtitle)]">{label}</span>
         <span className="font-semibold text-[var(--text-primary)]">{safeValue.toFixed(1)}%</span>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-[var(--bg-elevated)] ring-1 ring-inset ring-[var(--border)]">
