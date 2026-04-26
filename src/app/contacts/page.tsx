@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, Download, Eye, Pencil, Phone, Plus, Upload } from "lucide-react";
+import { ChevronDown, Download, Eye, Pencil, Phone, Plus } from "lucide-react";
+import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
@@ -396,7 +397,7 @@ function ContactsPage() {
         </div>
       </div>
 
-      {canManage && <CsvImport onImported={load} />}
+      {canManage && <ContactsImportWizard onImported={load} />}
 
       {contacts.length > 0 && (
         <div className="md:hidden">
@@ -1054,32 +1055,3 @@ function SelectFormField({
   );
 }
 
-function CsvImport({ onImported }: { onImported: () => void }) {
-  const [file, setFile] = useState<File | null>(null);
-
-  const upload = async () => {
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    await fetch("/api/contacts/import", { method: "POST", body: formData });
-    onImported();
-  };
-
-  return (
-    <div className={lux.card + " !py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"}>
-      <p className="text-sm text-[var(--text-secondary)]">Μαζική εισαγωγή από αρχείο CSV</p>
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="file"
-          accept=".csv"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm text-[var(--text-secondary)] file:mr-2 file:rounded-lg file:border-0 file:bg-[var(--bg-elevated)] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[var(--text-primary)]"
-        />
-        <button type="button" onClick={() => void upload()} className={lux.btnPrimary + " !py-2 text-sm"} disabled={!file}>
-          <Upload className="h-4 w-4" />
-          Import από CSV
-        </button>
-      </div>
-    </div>
-  );
-}
