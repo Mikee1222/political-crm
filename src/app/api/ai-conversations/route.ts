@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 
 
 type ConvRow = { id: string; title: string | null; updated_at: string | null };
+type LastMsg = { content: string; created_at: string } | null;
 
 export async function GET() {
   try {
@@ -38,7 +39,50 @@ export async function GET() {
       updated_at: r.updated_at,
     }));
 
-    return NextResponse.json({ conversations: list });
+    const ids = list.map((c) => c.id);
+    const lastById = new Map<string, LastMsg>();
+    if (ids.length > 0) {
+      const CHUNK = 20;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const part = ids.slice(i, i + CHUNK);
+        const rows = await Promise.all(
+          part.map(async (convId) => {
+            const q = supabase
+              .from("ai_messages")
+              .select("content, created_at")
+              .eq("conversation_id", convId)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            const { data: row, error: e } = await q;
+            if (e || !row) return { convId, last: null as LastMsg };
+            return {
+              convId,
+              last: { content: String(row.content ?? ""), created_at: String(row.created_at ?? "") },
+            };
+          }),
+        );
+        for (const { convId, last } of rows) {
+          lastById.set(convId, last);
+        }
+      }
+    }
+
+    return NextResponse.json({
+      conversations: list.map((c) => {
+        const last = lastById.get(c.id);
+        return {
+          ...c,
+          last_message_preview: last
+            ? (() => {
+                const raw = last.content.replace(/\s+/g, " ").trim();
+                return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+              })()
+            : null,
+          last_message_at: last?.created_at ?? null,
+        };
+      }),
+    });
   } catch {
     return NextResponse.json({ conversations: [] });
   }

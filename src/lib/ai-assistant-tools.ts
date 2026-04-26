@@ -345,19 +345,59 @@ export const ALEX_TOOLS: Tool[] = [
       required: ["mapping"],
     },
   },
+  {
+    name: "save_memory",
+    description: "Αποθήκευσε σημαντική πληροφορία για μελλοντική χρήση (προτιμήσεις, σημαντικά facts).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        key: { type: "string" as const, description: "π.χ. user_preferences" },
+        value: { type: "string" as const },
+      },
+      required: ["key", "value"],
+    },
+  },
+  {
+    name: "get_memories",
+    description: "Φόρτωσε αποθηκευμένες πληροφορίες για αυτόν το χρήστη (ήδη συμπεριλαμβάνονται στο system prompt, αλλά μπορείς να το καλέσεις εάν χρειάζεται ανανέωση).",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "schedule_reminder",
+    description:
+      "Πρόσθεσε υπενθύμιση: δημιουργεί task με title = message και due_date από ημερομηνία. Προαιρετικό contact_id· αλλιώς χρησιμοποίησε την επαφή της τρέχουσας σελίδας. datetime σε ISO 8601.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        message: { type: "string" as const },
+        datetime: { type: "string" as const, description: "ISO 8601, π.χ. 2026-04-27T09:00:00" },
+        contact_id: { type: "string" as const, description: "Προαιρετικό" },
+      },
+      required: ["message", "datetime"],
+    },
+  },
 ];
 
-type ToolContext = {
+export type ToolContext = {
   supabase: SupabaseClient;
   forward: (path: string, init: RequestInit) => Promise<Response>;
   profile: UserProfile;
   role: Role;
+  userId: string;
+  /** Επαφή από /contacts/[id] — default για tools με contact_id */
+  defaultContactId?: string | null;
   /** Πλήρεις γραμμές import από το τρέχον αίτημα (client attachment) */
   importRows?: Array<Record<string, unknown>>;
   /** Από sheet name / επισύναψη — ιδρύει περιοχή+δήμο όταν κενά στη γραμμή */
   importContextMunicipality?: string;
   onBulkProgress?: (current: number, total: number) => void;
 };
+
+function pickContactId(raw: unknown, ctx: ToolContext): string {
+  const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
+  if (a) return a;
+  return ctx.defaultContactId?.trim() ?? "";
+}
 
 function buildContactsQueryParams(input: {
   search?: string;
@@ -558,7 +598,7 @@ export async function runAlexTool(
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο υπεύθυνοι (manager) μπορούν να ενημερώνουν επαφές" }) };
     }
-    const contact_id = String(raw.contact_id ?? "");
+    const contact_id = pickContactId(raw.contact_id, ctx);
     const fields = raw.fields;
     if (!contact_id || !fields || typeof fields !== "object" || Array.isArray(fields) || fields === null) {
       return { content: JSON.stringify({ error: "Χρειάζονται contact_id και fields (object)" }) };
@@ -618,7 +658,7 @@ export async function runAlexTool(
   }
 
   if (name === "update_contact_status") {
-    const contact_id = String(raw.contact_id ?? "");
+    const contact_id = pickContactId(raw.contact_id, ctx);
     const status = String(raw.status ?? "");
     if (!contact_id || !status) {
       return { content: JSON.stringify({ error: "Άκυρα δεδομένα" }) };
@@ -657,18 +697,10 @@ export async function runAlexTool(
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
     }
     const title = String(raw.title ?? "").trim();
-    const contact_id = raw.contact_id != null ? String(raw.contact_id) : "";
+    const contact_id = pickContactId(raw.contact_id, ctx) || null;
     const due = raw.due_date != null && String(raw.due_date) !== "null" ? String(raw.due_date) : null;
     if (!title) {
       return { content: JSON.stringify({ error: "Κενό τίτλο" }) };
-    }
-    if (!contact_id) {
-      return {
-        content: JSON.stringify({
-          error:
-            "Για task απαιτείται contact_id. Χρησιμοποιήστε find_contacts για να βρείτε την επαφή και ξαναλάβετε contact_id.",
-        }),
-      };
     }
     const { data, error } = await ctx.supabase
       .from("tasks")
@@ -680,7 +712,18 @@ export async function runAlexTool(
       })
       .select("id")
       .single();
-    if (error) return { content: JSON.stringify({ error: error.message }) };
+    if (error) {
+      if (error.message.includes("null") || error.message.includes("violates")) {
+        return {
+          content: JSON.stringify({
+            error:
+              "Χρειάζεται επαφή (contact_id) ή άνοιγμα σελίδας επαφής, ή find_contacts. Γενικές εργασίες: ενημερώστε τη βάση (contact_id optional).",
+            detail: error.message,
+          }),
+        };
+      }
+      return { content: JSON.stringify({ error: error.message }) };
+    }
     return {
       content: JSON.stringify({ ok: true, message: "Η εργασία προστέθηκε.", id: data?.id }),
       executedToolName: "add_task",
@@ -691,7 +734,7 @@ export async function runAlexTool(
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
     }
-    const contact_id = raw.contact_id != null ? String(raw.contact_id) : "";
+    const contact_id = pickContactId(raw.contact_id, ctx);
     const title = String(raw.title ?? "").trim();
     const category = String(raw.category ?? "Άλλο");
     const description = raw.description != null ? String(raw.description) : null;
@@ -730,7 +773,7 @@ export async function runAlexTool(
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
     }
-    const contact_id = String(raw.contact_id ?? "");
+    const contact_id = pickContactId(raw.contact_id, ctx);
     const note = String(raw.note ?? "").trim();
     if (!contact_id || !note) {
       return { content: JSON.stringify({ error: "Χρειάζονται contact_id και note" }) };
@@ -751,7 +794,7 @@ export async function runAlexTool(
   }
 
   if (name === "get_contact_details") {
-    const contact_id = String(raw.contact_id ?? "");
+    const contact_id = pickContactId(raw.contact_id, ctx);
     if (!contact_id) {
       return { content: JSON.stringify({ error: "Χρειάζεται contact_id" }) };
     }
@@ -807,9 +850,9 @@ export async function runAlexTool(
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager μπορεί να ξεκινά κλήσεις" }) };
     }
-    const contact_id = String(raw.contact_id ?? "");
+    const contact_id = pickContactId(raw.contact_id, ctx);
     if (!contact_id) {
-      return { content: JSON.stringify({ error: "Χρειάζεται contact_id" }) };
+      return { content: JSON.stringify({ error: "Χρειάζεται contact_id (ή άνοιγμα σελίδας επαφής)" }) };
     }
     const cr = await ctx.forward(`/api/contacts/${contact_id}`, { method: "GET" });
     const j = (await cr.json()) as {
@@ -1428,32 +1471,130 @@ export async function runAlexTool(
     };
   }
 
+  if (name === "save_memory") {
+    const key = String(raw.key ?? "").trim().slice(0, 200);
+    const value = String(raw.value ?? "").trim().slice(0, 32_000);
+    if (!key || !value) {
+      return { content: JSON.stringify({ error: "Χρειάζονται key και value" }), showExecutedTag: false };
+    }
+    const { error } = await ctx.supabase.from("alexandra_memory").upsert(
+      {
+        user_id: ctx.userId,
+        key,
+        value,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,key" },
+    );
+    if (error) return { content: JSON.stringify({ error: error.message }), showExecutedTag: false };
+    return {
+      content: JSON.stringify({ ok: true, message: "Η μνήμη αποθηκεύτηκε." }),
+      executedToolName: "save_memory",
+    };
+  }
+
+  if (name === "get_memories") {
+    const { data, error } = await ctx.supabase
+      .from("alexandra_memory")
+      .select("key, value, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(50);
+    if (error) return { content: JSON.stringify({ error: error.message }), showExecutedTag: false };
+    return {
+      content: JSON.stringify({ ok: true, memories: data ?? [] }),
+      executedToolName: "get_memories",
+      showExecutedTag: false,
+    };
+  }
+
+  if (name === "schedule_reminder") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const message = String(raw.message ?? "").trim();
+    const dtStr = String(raw.datetime ?? "").trim();
+    const contact_id = pickContactId(raw.contact_id, ctx) || null;
+    if (!message || !dtStr) {
+      return { content: JSON.stringify({ error: "Χρειάζονται message και datetime" }) };
+    }
+    const d = new Date(dtStr);
+    if (!Number.isFinite(d.getTime())) {
+      return { content: JSON.stringify({ error: "Άκυρη ημερομηνία/ώρα (χρησιμοποιήστε ISO 8601)" }) };
+    }
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const due_date = `${y}-${m}-${day}`;
+    const { data, error } = await ctx.supabase
+      .from("tasks")
+      .insert({
+        contact_id,
+        title: message,
+        due_date,
+        completed: false,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      return { content: JSON.stringify({ error: error.message }) };
+    }
+    return {
+      content: JSON.stringify({
+        ok: true,
+        message: `Ρυθμίστηκε υπενθύμιση (εργασία) με ημ/νία ${due_date}.`,
+        id: data?.id,
+      }),
+      executedToolName: "schedule_reminder",
+    };
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
-export function buildSystemPrompt(today: string) {
-  return `Είσαι η Αλεξάνδρα, η AI γραμματέας του βουλευτή Κώστα Καραγκούνη (Νέα Δημοκρατία, Αιτωλοακαρνανία). Έχεις πλήρη εικόνα του CRM: χρησιμοποιείς εργαλεία (tools) για κάθε πραγματική ενέργεια. Δεν ισχυρίζεσαι «δεν μπορώ αυτό» γενικά· είτε εκτελείς αίτημα με tool είτε εμφανίζεις το **ακριβές** μήνυμα/κωδικό σφάλματος από API όταν αποτύχει.
+export type SystemPromptBuildOpts = {
+  todayDate: string;
+  pageContextBlock: string;
+  memoriesBlock: string;
+};
 
-ΧΑΡΑΚΤΗΡΑΣ: επαγγελματική, σύντομη, μόνιμα ελληνικά, αποφασιστική. Για απλές ενέργειες: tools χωρίς άσκοπη καθυστέρηση. Για **διαγραφή μαζική** ή **κλήση**: απαίτησε ξεκάθαρη επιβεβαίωση (βλ. παρακάτω).
+export function buildSystemPrompt({
+  todayDate,
+  pageContextBlock,
+  memoriesBlock,
+}: SystemPromptBuildOpts) {
+  return `Είσαι η Αλεξάνδρα, η AI γραμματέας του βουλευτή Κώστα Καραγκούνη (Νέα Δημοκρατία, Αιτωλοακαρνανία).
 
-— ΣΧΗΜΑ / ΠΕΔΙΑ ΕΠΑΦΩΝ (public.contacts, κλειδί όχησης: phone μοναδικό):
-id (uuid), first_name, last_name, phone, phone2, landline, email, area, address, age, gender, occupation, source, tags[], priority, political_stance, influence, call_status, notes, last_contacted_at, created_at, nickname, spouse_name, name_day, birthday, municipality, electoral_district, toponym, father_name, mother_name, contact_code, group_id, και σχέση με contact_groups. Το **κύριο τηλέφωνο** (phone) είναι 10ψήφιο εθνικό· 69… κινητά, 2… σταθερά. Πολλαπλοί αριθμοί σε κελί: χαρτογραφούνται σε phone / phone2 / landline (όπως περιγράφει το import).
+ΤΑΥΤΟΤΗΤΑ:
+Έμπειρη πολιτική γραμματέας — έξυπνη, αποφασιστική, αξιόπιστη.
+Μιλάς ΠΑΝΤΑ Ελληνικά. Ποτέ Αγγλικά.
+Είσαι σύντομη και συγκεκριμένη. Max 3 προτάσεις ανά απάντηση εκτός αν ζητηθεί περισσότερο.
 
-— ΔΙΠΛΟΤΥΠΑ: **διπλότυπη εγγραφή = ίδιο κύριο πεδίο phone**. Δεν αρκούν παρόμοια ονόματα. Σε import/Excel: αν το phone υπάρχει, ρώτα: παράλειψη, **ενημέρωση** υπάρχουσας (smart_excel_import με update_existing) ή **λίστα** διπλοτύπων (duplicate_mode: ask_user).
+ΓΝΩΣΗ CRM:
+- contacts: first_name, last_name, phone, phone2, landline, municipality, area, toponym, call_status (Pending/Positive/Negative/No Answer), priority, political_stance, father_name, mother_name, notes, tags, group_id, nickname
+- requests: title, description, category, status (Νέο/Σε εξέλιξη/Ολοκληρώθηκε/Απορρίφθηκε), assigned_to
+- tasks: title, due_date, completed, contact_id
+- campaigns: name, status, calls
+- calls: outcome, duration_seconds, transferred_to_politician
+- Duplicate = ίδιο phone
+- contact_code: EP-000001
 
-— ΜΑΖΙΚΕΣ ΕΝΕΡΓΕΙΕΣ (manager, εκτός αναφοράς):
-• bulk_create_contacts: rows + mapping (από συνημμένο αν λείπουν rows) — **μετά επιβεβαίωση mapping** από χρήστη.
-• smart_excel_import: ίδιο + skip_duplicates / update_existing / duplicate_mode.
-• get_all_contacts: φίλτρα + limit έως 10000 για αναλύσεις/εκθέσεις.
-• bulk_update_contacts: contact_ids + fields.
-• bulk_delete_contacts: **πάντα πρώτα user_confirmed: false** (προεπισκόπηση) — αφού ο χρήστης πει Ναι/επιβεβαιώσει, **user_confirmed: true**. Με filters μπορεί «διάγραψε όσους ταιριάζουν…». Συνδυασμός contact_ids Ή filters.
-• start_call, update_contact, edit_contact, get_contact_details, get_stats, tasks, requests, κ.λπ. — όπως εργαλεία.
+ΚΑΝΟΝΕΣ TOOLS:
+- Χρησιμοποίησε tools ΑΜΕΣΩΣ χωρίς να ρωτάς άδεια για απλές ενέργειες
+- Για διαγραφές/μαζικές ενέργειες: πες τι θα κάνεις και περίμενε "ναι"
+- Μετά από κάθε tool: επιβεβαίωσε τι έγινε με συγκεκριμένα στοιχεία
+- Αν tool αποτύχει: εξήγησε γιατί με συγκεκριμένο error message
+- ΠΟΤΕ μην πεις "δεν μπορώ" — βρες πάντα τρόπο ή εξήγησε το τεχνικό εμπόδιο
+- Αν είσαι στη σελίδα μιας επαφής, σε εργαλεία που δέχονται contact_id μπορείς να το παραλείψεις: θα χρησιμοποιηθεί αυτόματα η τρέχουσα επαφή.
 
-— EXCEL/CSV: το σύστημα προσπαθεί **αυτόματη** γραμμή κεφαλίδων· αλλιώς κατάλαβε από περιεχόμενο. Όνομα/τίτλος αρχείου ή φύλλου → hint για **δήμο/περιοχή/τοπωνύμιο** (municipality, area, toponym) όταν λείπει στη γραμμή. full_name: **τελευταία λέξη = first_name**, προηγούμενο κείμενο = last_name (ελληνική σειρά + Title Case). Σπάσιμο πολλαπλών αριθμών: 69… → phone, δεύτερο 69… → phone2, 2… → landline (όπως import).
+EXCEL/CSV, διπλότυπα, μαζικές ενέργειες: ίδιο με την τεκμηρίωση (smart_excel_import, bulk_*, get_all_contacts).
 
-ΚΛΗΣΗ/ΑΚΡΙΒΙΑ: μετά actions, σύντομη επιβεβαίωση αποτελέσματος. Αν error από API, μεταφέρεις το **συγκεκριμένο** κείμενο σφάλματος.
+ΣΗΜΕΡΑ: ${todayDate}
+ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ/ΠΛΗΡΟΦΟΡΙΕΣ:
+${pageContextBlock}
 
-ΣΗΜΕΡΙΝΗ ΗΜΕΡΟΜΗΝΙΑ: ${today}`;
+ΑΠΟΘΗΚΕΥΜΕΝΗ ΜΝΗΜΗ (για προσωποποίηση — μην την επαναλέγεις αδικαιολόγητα):
+${memoriesBlock}
+`;
 }
 
 export function historyToClaude(

@@ -143,13 +143,10 @@ export default function TasksPage() {
         }}
       />
       <section
-        className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--border)] p-4 sm:p-5"
-        style={{
-          background: "linear-gradient(165deg, #0A1628 0%, #050D1A 55%, #0F1E35 100%)",
-        }}
+        className="data-hq-card relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.12)] sm:p-5 [data-theme='light']:shadow-[0_2px_16px_rgba(0,0,0,0.08)]"
       >
         <div
-          className="pointer-events-none absolute right-0 top-0 h-32 w-40 bg-[#C9A84C]/[0.08] blur-3xl"
+          className="pointer-events-none absolute right-0 top-0 h-32 w-40 bg-[var(--accent-gold)]/[0.07] blur-3xl [data-theme='light']:bg-[#C9A84C]/10"
           aria-hidden
         />
         <div className="relative z-[1] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -160,7 +157,7 @@ export default function TasksPage() {
           <div className="mx-auto w-full min-w-0 sm:mx-0 sm:max-w-none sm:self-end sm:justify-end md:flex-1">
             <button
               type="button"
-              className="no-mobile-scale h-12 w-full max-w-md rounded-full border-2 border-[#8B6914] bg-gradient-to-b from-[#E8C96B] to-[#8B6914] px-6 text-sm font-bold text-[#0A1628] shadow-[0_0_0_1px_rgba(0,0,0,0.25)] transition duration-200 hover:brightness-110 md:ml-auto md:mr-0"
+              className="no-mobile-scale h-12 w-full max-w-md rounded-full border-2 border-[#8B6914] bg-gradient-to-b from-[#E8C96B] to-[#8B6914] px-6 text-sm font-bold text-[#0A1628] shadow-[0_0_0_1px_rgba(0,0,0,0.15)] transition duration-200 hover:brightness-110 md:ml-auto md:mr-0"
               onClick={() => {
                 setErr(null);
                 setModal(true);
@@ -186,8 +183,8 @@ export default function TasksPage() {
               className={clsx(
                 "min-h-11 min-w-0 flex-1 rounded-xl px-3 py-2 text-center text-xs font-bold transition duration-200 sm:min-w-[7rem] sm:px-4 sm:text-sm",
                 tab === t.id
-                  ? "border border-[#C9A84C]/45 bg-[#C9A84C]/15 text-[#E8C96B] shadow-[inset_0_0_0_1px_rgba(201,168,76,0.2)]"
-                  : "border border-transparent text-[var(--text-muted)] active:bg-white/5",
+                  ? "border border-[#C9A84C]/45 bg-[#C9A84C]/15 text-[var(--text-primary)] shadow-[inset_0_0_0_1px_rgba(201,168,76,0.2)] [data-theme='light']:text-[#1a1a0a]"
+                  : "border border-transparent text-[var(--text-muted)] active:bg-[var(--bg-elevated)]/80",
               )}
             >
               {t.label}
@@ -372,8 +369,8 @@ function TaskCard({
   return (
     <div
       className={clsx(
-        "relative flex flex-col overflow-hidden rounded-xl border border-[var(--border)]",
-        isCompleted ? "bg-[#0A1628]/90" : "bg-gradient-to-b from-[#0F1E35]/90 to-[#0A1628]/95",
+        "relative flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-sm [data-theme='light']:shadow-[0_1px_8px_rgba(0,0,0,0.06)]",
+        isCompleted && "bg-[var(--bg-elevated)]/80",
         !isCompleted && overdue && "border-l-4 !border-l-red-500/85",
         !isCompleted && dueToday && !overdue && "border-l-4 !border-l-[#C9A84C]",
       )}
@@ -441,7 +438,7 @@ function TaskCard({
         >
           <div className="flex min-w-0 items-start justify-between gap-1">
             <p className="line-clamp-2 font-bold text-[var(--text-primary)] break-words">{task.title}</p>
-            <div className="shrink-0 self-start rounded-md border border-[#C9A84C]/25 bg-[#050D1A]/50 p-1.5 text-[#C9A84C]">
+            <div className="shrink-0 self-start rounded-md border border-[#C9A84C]/30 bg-[var(--bg-elevated)]/90 p-1.5 text-[#C9A84C]">
               <C className="h-3.5 w-3.5" />
             </div>
           </div>
@@ -851,7 +848,7 @@ function CalendarStrip({
 
   const wk = ["Δε", "Τρ", "Τε", "Πε", "Πα", "Σα", "Κυ"];
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[#0F1E35]/80 to-[#050D1A] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.4)] sm:p-4">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 shadow-[0_4px_20px_rgba(0,0,0,0.1)] [data-theme='light']:shadow-[0_2px_12px_rgba(0,0,0,0.07)] sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" className="rounded-lg border border-[var(--border)] p-1.5 text-sm text-[#C9A84C] hover:bg-white/5" onClick={onPrev} aria-label="Προηγούμενο μήνα">
           <span className="px-0.5">‹</span>
@@ -884,8 +881,8 @@ function CalendarStrip({
               className={clsx(
                 "flex min-w-0 aspect-square items-center justify-center rounded border text-xs font-bold tabular-nums sm:text-sm",
                 has
-                  ? "border-[#C9A84C]/60 text-[#0A1628]"
-                  : "border-white/5 text-[var(--text-muted)]",
+                  ? "border-[#C9A84C]/50 text-[var(--text-primary)] [data-theme='light']:text-[#1a1405]"
+                  : "border-[var(--border)]/60 text-[var(--text-muted)]",
               )}
               style={has ? { backgroundColor: `rgba(201,168,76,${p.toFixed(2)})` } : undefined}
               title={c.n ? `${c.d}: ${c.n} εργασίες` : c.d}

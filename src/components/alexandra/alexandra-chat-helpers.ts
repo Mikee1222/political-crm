@@ -1,14 +1,21 @@
+import { formatDistanceToNow } from "date-fns";
+import { el } from "date-fns/locale";
 import { hasMinRole, type Role } from "@/lib/roles";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 
-export const SUGGESTED: string[] = [
-  "Τι έχω για σήμερα;",
-  "Ποιοι γιορτάζουν αυτή την εβδομάδα;",
-  "Δείξε μου τους αναποφάσιστους",
-  "Ποια αιτήματα είναι εκκρεμή;",
-  "Βρες μου επαφές από το Αγρίνιο",
-  "Τι tasks έχω;",
+import type { LucideIcon } from "lucide-react";
+import { BarChart2, Bell, MapPin, Sparkles, UserSearch, ListTodo } from "lucide-react";
+
+export const SUGGESTED_CHIPS: { text: string; icon: LucideIcon }[] = [
+  { text: "Τι έχω για σήμερα;", icon: Sparkles },
+  { text: "Ποιοι γιορτάζουν αυτή την εβδομάδα;", icon: BarChart2 },
+  { text: "Δείξε μου τους αναποφάσιστους", icon: UserSearch },
+  { text: "Ποια αιτήματα είναι εκκρεμή;", icon: ListTodo },
+  { text: "Βρες μου επαφές από το Αγρίνιο", icon: MapPin },
+  { text: "Τι tasks έχω;", icon: Bell },
 ];
+
+export const SUGGESTED: string[] = SUGGESTED_CHIPS.map((c) => c.text);
 
 export type FindRow = {
   id: string;
@@ -46,7 +53,13 @@ export type Msg = {
   streamMeta?: StreamMeta | null;
 };
 
-export type RowConv = { id: string; title: string; updated_at: string };
+export type RowConv = {
+  id: string;
+  title: string;
+  updated_at: string;
+  last_message_preview?: string | null;
+  last_message_at?: string | null;
+};
 export type MsgWithT = Msg & { _createdAt?: string };
 
 export function greekToolLabel(t: string) {
@@ -71,6 +84,9 @@ export function greekToolLabel(t: string) {
     smart_excel_import: "Έξυπνο import Excel",
     read_pdf: "PDF",
     write_letter: "Επιστολή",
+    save_memory: "Μνήμη",
+    get_memories: "Φόρτωση μνημών",
+    schedule_reminder: "Υπενθύμιση",
   };
   return m[t] ?? t;
 }
@@ -96,6 +112,14 @@ export function canConfirmCreate(role: Role | null | undefined, a: ActionPayload
 export function fmtTime(iso: string) {
   try {
     return new Date(iso).toLocaleString("el-GR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+export function fmtRelativeTime(iso: string) {
+  try {
+    return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: el });
   } catch {
     return "";
   }

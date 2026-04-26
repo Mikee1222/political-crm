@@ -353,15 +353,15 @@ export default function SchedulePage() {
   const detailSurface = detail ? getScheduleEventSurface(detail.type, detail.title, detail.color) : null;
 
   return (
-    <div className="min-h-full -m-6 flex flex-col bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] md:-m-8 md:p-6">
+    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
       <div className="mx-auto w-full max-w-[1680px] flex-1">
         {/* Top bar */}
         <div
-          className="mb-4 space-y-4 rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--bg-card)]/95 to-[#060d18]/95 p-4 shadow-[0_4px_40px_rgba(0,0,0,0.5)] ring-1 ring-inset ring-white/5 backdrop-blur-md"
+          className="mb-4 space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.12)] [data-theme='light']:shadow-[0_2px_12px_rgba(0,0,0,0.08)]"
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--accent-gold)]/30 bg-gradient-to-br from-[#0d1829] to-[#050a12]">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--accent-gold)]/35 bg-[var(--bg-elevated)]">
                 <Calendar className="h-5 w-5 text-[var(--accent-gold)]" />
               </div>
               <div>
@@ -458,7 +458,7 @@ export default function SchedulePage() {
         )}
 
         {/* Full-width calendar — luxury week grid */}
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)]/80 bg-[var(--bg-card)]/60 shadow-[0_8px_40px_rgba(0,0,0,0.12)]">
+        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[0_4px_20px_rgba(0,0,0,0.1)] [data-theme='light']:shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
           <div className="min-w-[880px]">
             {/* Day headers */}
             <div

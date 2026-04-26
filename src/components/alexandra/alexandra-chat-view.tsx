@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Mic, Paperclip, Send, Trash2, X } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { Calendar, Menu, Mic, Paperclip, Send, Phone, Sparkles, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
 import { hasMinRole, type Role } from "@/lib/roles";
 import { buildImportPreviewMessage, parseSpreadsheetToRows } from "@/lib/alexandra-sheet-parse";
 import { useAlexandraVoiceConversation } from "@/hooks/use-alexandra-voice-conversation";
@@ -10,19 +10,66 @@ import { AlexandraVoiceModeOverlay } from "./alexandra-voice-mode-overlay";
 import ReactMarkdown from "react-markdown";
 import { callStatusLabel, callStatusPill } from "@/lib/luxury-styles";
 import {
-  SUGGESTED,
+  SUGGESTED_CHIPS,
   greekToolLabel,
   canConfirmCreate,
   canConfirmStartCall,
   canExecuteAction,
   fmtTime,
+  fmtRelativeTime,
   initialsName,
   type FindRow,
   type Msg,
   type RowConv,
 } from "./alexandra-chat-helpers";
 import { useAlexandraSpeechToText } from "@/hooks/use-alexandra-speech-to-text";
-import { useAlexandraChat } from "./alexandra-chat-provider";
+import { useAlexandraChat, type BriefingToday } from "./alexandra-chat-provider";
+
+function isBriefingReady(b: BriefingToday | "loading" | null): b is BriefingToday {
+  return b != null && b !== "loading";
+}
+
+function BriefingDetails({ b }: { b: BriefingToday }) {
+  const nd = b.namedays;
+  const names = nd.names.length ? nd.names.join(", ") : "—";
+  return (
+    <>
+      <p className="text-xs text-[var(--text-muted)]">
+        {new Date().toLocaleDateString("el-GR", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}
+      </p>
+      <p className="mt-2 text-sm">
+        Σήμερα γιορτάζουν: {names}
+        {nd.matchingContactsCount > 0 && (
+          <span className="text-[var(--text-secondary)]"> ({nd.matchingContactsCount} επαφές στη βάση)</span>
+        )}
+      </p>
+      <p className="mt-1.5">Έχεις {b.pendingTasksCount ?? 0} εκκρεμείς εργασίες</p>
+      <p className="mt-1.5">Υπάρχουν {b.openRequestsCount} ανοιχτά αιτήματα</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          href={nd.matchingContactsCount ? "/contacts" : "/namedays"}
+          className="inline-flex items-center gap-1 rounded-lg bg-[#003476] px-3 py-1.5 text-xs font-medium text-white"
+        >
+          <Phone className="h-3.5 w-3.5" />
+          Κάλεσε τους εορτάζοντες
+        </Link>
+        <Link
+          href="/tasks"
+          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)]"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-[var(--accent-gold)]" />
+          Δες τις εργασίες
+        </Link>
+      </div>
+    </>
+  );
+}
+import { AlexandraActivityPanel } from "./alexandra-activity-panel";
 
 export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
   const {
@@ -30,8 +77,11 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
     listLoading, messagesLoading, input, setInput, error, toDelete, setToDelete,
     setError, hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, bottomRef, newConversation,
     deleteConv, execute, send, startWithChip, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, showChips, enterMiniFromPage,
-    loadList, loadMessages, setSpreadsheetImport,
+    loadList, loadMessages, setSpreadsheetImport, leftPanelTab, setLeftPanelTab, briefingToday, contactPageContext, openMiniFromBubble,
   } = useAlexandraChat();
+  const canSeeBriefing = hasMinRole(role as Role | null | undefined, "manager");
+  const canSeeActivity = hasMinRole(role as Role | null | undefined, "manager");
+  const pendingVoiceStart = useRef(false);
 
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const canImportSpreadsheet = hasMinRole(role as Role | null | undefined, "manager");
@@ -54,6 +104,27 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
     endVoice,
     toggleMute: voiceToggleMute,
   } = useAlexandraVoiceConversation(selectedId, { onAfterPersist: onAfterVoice });
+
+  useEffect(() => {
+    if (pendingVoiceStart.current && selectedId && voiceModeConfigured) {
+      pendingVoiceStart.current = false;
+      void startVoice();
+    }
+  }, [selectedId, startVoice, voiceModeConfigured]);
+
+  useEffect(() => {
+    const h = () => {
+      if (!voiceModeConfigured) return;
+      if (!selectedId) {
+        pendingVoiceStart.current = true;
+        void newConversation();
+        return;
+      }
+      void startVoice();
+    };
+    window.addEventListener("alexandra-voice-shortcut", h);
+    return () => window.removeEventListener("alexandra-voice-shortcut", h);
+  }, [selectedId, newConversation, startVoice, voiceModeConfigured]);
 
   const { supported: sttSupported, isRecording: sttRecording, toggle: sttToggle } = useAlexandraSpeechToText(
     input,
@@ -96,6 +167,47 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
     [canImportSpreadsheet, newConversation, selectedId, send, setError, setSpreadsheetImport],
   );
 
+  const onChatDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!canImportSpreadsheet) return;
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+      const ext = file.name.toLowerCase();
+      if (!/\.(xlsx|xls|csv)$/.test(ext) && !file.type.includes("spreadsheet") && !file.type.includes("csv")) {
+        return;
+      }
+      try {
+        const buf = await file.arrayBuffer();
+        const p = parseSpreadsheetToRows(buf);
+        if (p.columns.length === 0 || p.rows.length === 0) {
+          setError("Κενό αρχείο");
+          return;
+        }
+        let convId: string | null = selectedId;
+        if (!convId) {
+          convId = await newConversation();
+          if (!convId) return;
+        }
+        setSpreadsheetImport({
+          conversationId: convId,
+          rows: p.rows as Array<Record<string, unknown>>,
+          fileName: file.name,
+          sheetName: p.sheetName,
+        });
+        const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows, {
+          headerRowIndex: p.headerRowIndex,
+          sheetName: p.sheetName,
+        });
+        void send(text, convId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Σφάλμα");
+      }
+    },
+    [canImportSpreadsheet, newConversation, selectedId, send, setError, setSpreadsheetImport],
+  );
+
   return (
     <div
       className={
@@ -132,14 +244,20 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
         {mode === "page" && (
         <aside
           className={[
-            "fixed inset-y-0 left-0 z-50 flex w-[min(100%,280px)] flex-col border-r border-[var(--border)] bg-[var(--bg-secondary)] transition-transform duration-200 md:relative md:inset-auto md:z-0 md:w-[280px] md:translate-x-0",
+            "fixed inset-y-0 left-0 z-50 flex w-[min(100%,300px)] flex-col border-r border-[var(--border)] bg-[var(--bg-secondary)] transition-transform duration-200 md:relative md:inset-auto md:z-0 md:w-[300px] md:translate-x-0",
             sideOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           ].join(" ")}
         >
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent" aria-hidden />
-          <div className="relative z-10 flex shrink-0 items-center justify-between p-4 pb-2 pr-2">
-            <div>
-              <h2 className="text-[18px] font-semibold text-[var(--text-primary)]">Αλεξάνδρα</h2>
+          <div className="relative z-10 flex shrink-0 items-start gap-3 p-4 pb-2 pr-2">
+            <div
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-[#0a0f1a] shadow-lg"
+              style={{ background: "linear-gradient(145deg, #e8d5a0, #c9a84c, #8b6914)" }}
+            >
+              A
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[20px] font-bold tracking-tight text-[var(--text-primary)]">Αλεξάνδρα</h2>
               <p className="text-xs font-medium text-[var(--accent-gold)]">AI Γραμματέας</p>
             </div>
             <button
@@ -151,60 +269,106 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
               <X className="h-5 w-5" />
             </button>
           </div>
-          <div className="relative z-10 shrink-0 px-3 pb-3">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => void newConversation()}
-              className="w-full rounded-xl border-2 border-[var(--accent-gold)] bg-transparent px-3 py-2.5 text-sm font-semibold text-[var(--accent-gold)] transition duration-200 hover:bg-[var(--accent-gold)] hover:text-[#0a0f1a] disabled:opacity-50"
-            >
-              + Νέα συνομιλία
-            </button>
-          </div>
-          <div className="relative z-10 min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-4">
-            {listLoading && <p className="px-2 text-xs text-[var(--text-muted)]">Φόρτωση…</p>}
-            {!listLoading && conversations.length === 0 && (
-              <p className="px-2 text-center text-xs text-[var(--text-secondary)]">Δεν υπάρχουν συνομιλίες ακόμα</p>
-            )}
-            {conversations.map((c: RowConv) => {
-              const active = selectedId === c.id;
-              return (
-                <div
-                  key={c.id}
-                  className="group relative"
-                  onMouseEnter={() => setHoveredId(c.id)}
-                  onMouseLeave={() => setHoveredId((h: string | null) => (h === c.id ? null : h))}
+          {canSeeActivity && (
+            <div className="relative z-10 flex shrink-0 border-b border-[var(--border)]/60 px-2">
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("chats")}
+                className={[
+                  "min-h-[44px] flex-1 rounded-t-lg py-2 text-center text-xs font-semibold",
+                  leftPanelTab === "chats"
+                    ? "text-[var(--accent-gold)] [box-shadow:inset_0_-2px_0_#c9a84c]"
+                    : "text-[var(--text-secondary)]",
+                ].join(" ")}
+              >
+                Συνομιλίες
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("activity")}
+                className={[
+                  "min-h-[44px] flex-1 rounded-t-lg py-2 text-center text-xs font-semibold",
+                  leftPanelTab === "activity"
+                    ? "text-[var(--accent-gold)] [box-shadow:inset_0_-2px_0_#c9a84c]"
+                    : "text-[var(--text-secondary)]",
+                ].join(" ")}
+              >
+                Ιστορικό ενεργειών
+              </button>
+            </div>
+          )}
+          {leftPanelTab === "chats" || !canSeeActivity ? (
+            <>
+              <div className="relative z-10 shrink-0 px-3 pb-3 pt-1">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void newConversation()}
+                  className="w-full rounded-xl border-2 border-[var(--accent-gold)] bg-transparent px-3 py-2.5 text-sm font-semibold text-[var(--accent-gold)] transition duration-200 hover:bg-[var(--accent-gold)] hover:text-[#0a0f1a] disabled:opacity-50"
                 >
-                  <button
-                    type="button"
-                    onClick={() => selectConversation(c.id)}
-                    className={[
-                      "w-full rounded-lg border-l-2 border-transparent px-3 py-2.5 text-left text-sm text-[var(--text-primary)] transition duration-200",
-                      active
-                        ? "border-[var(--accent-gold)] bg-[var(--bg-elevated)]"
-                        : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/80",
-                    ].join(" ")}
-                  >
-                    <p className="line-clamp-2 font-medium">{c.title || "Νέα συνομιλία"}</p>
-                    <p className="mt-0.5 text-[10px] text-[#94A3B8]">{fmtTime(c.updated_at)}</p>
-                  </button>
-                  {(hoveredId === c.id || active) && (
-                    <button
-                      type="button"
-                      title="Διαγραφή"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setToDelete(c);
-                      }}
-                      className="absolute right-1.5 top-1.5 rounded-md p-1.5 text-[#94A3B8] hover:bg-white/10 hover:text-red-400"
+                  + Νέα συνομιλία
+                </button>
+              </div>
+              <div className="relative z-10 min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-4">
+                {listLoading && <p className="px-2 text-xs text-[var(--text-muted)]">Φόρτωση…</p>}
+                {!listLoading && conversations.length === 0 && (
+                  <p className="px-2 py-12 text-center text-sm text-[var(--text-secondary)]">
+                    Καμία συνομιλία ακόμη.
+                    <br />
+                    <span className="text-xs text-[var(--text-muted)]">Ξεκινήστε μια νέα από το κουμπί παραπάνω.</span>
+                  </p>
+                )}
+                {conversations.map((c: RowConv) => {
+                  const active = selectedId === c.id;
+                  const relT = c.last_message_at
+                    ? fmtRelativeTime(c.last_message_at)
+                    : fmtRelativeTime(c.updated_at);
+                  return (
+                    <div
+                      key={c.id}
+                      className="group relative"
+                      onMouseEnter={() => setHoveredId(c.id)}
+                      onMouseLeave={() => setHoveredId((h: string | null) => (h === c.id ? null : h))}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                      <button
+                        type="button"
+                        onClick={() => selectConversation(c.id)}
+                        className={[
+                          "w-full rounded-lg border-l-[3px] border-transparent px-3 py-2.5 text-left text-sm text-[var(--text-primary)] transition duration-200",
+                          active
+                            ? "border-[var(--accent-gold)] bg-[var(--bg-elevated)]/90"
+                            : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/80",
+                        ].join(" ")}
+                      >
+                        <p className="line-clamp-1 font-medium">{c.title || "Νέα συνομιλία"}</p>
+                        <p className="mt-0.5 text-[10px] text-[#94A3B8]">{relT}</p>
+                        {c.last_message_preview && (
+                          <p className="mt-1 line-clamp-1 text-[11px] text-[var(--text-muted)]">{c.last_message_preview}</p>
+                        )}
+                      </button>
+                      {hoveredId === c.id && (
+                        <button
+                          type="button"
+                          title="Διαγραφή"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setToDelete(c);
+                          }}
+                          className="absolute right-1.5 top-2 rounded-md p-1.5 text-[#94A3B8] opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-red-400"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="relative z-10 min-h-0 flex-1 overflow-hidden">
+              <AlexandraActivityPanel />
+            </div>
+          )}
         </aside>
         )}
 
@@ -278,24 +442,35 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {!selectedId && (
+          <div
+            className="min-h-0 flex-1 overflow-y-auto"
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onDrop={onChatDrop}
+          >
+            {!selectedId && mode === "page" && (
               <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-4 px-6 text-center">
-                <div className="hq-pulse-gold flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent-gold)] to-[#8b6914] text-3xl font-bold text-[#0a0f1a] shadow-[0_0_40px_rgba(201,168,76,0.25)]">
+                <div
+                  className="alex-hero-a-circle hq-pulse-gold relative flex h-28 w-28 items-center justify-center rounded-full text-3xl font-bold text-[#0a0f1a] shadow-[0_0_48px_rgba(201,168,76,0.45)]"
+                  style={{ background: "linear-gradient(145deg, #e8d5a0, #c9a84c, #6b5420)" }}
+                >
                   A
                 </div>
-                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Γεια σου! Είμαι η Αλεξάνδρα</h2>
+                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Καλησπέρα! Είμαι η Αλεξάνδρα</h2>
                 <p className="max-w-md text-sm text-[var(--text-secondary)]">Η AI γραμματέας του γραφείου Καραγκούνη</p>
-                <div className="mt-2 grid w-full max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
-                  {SUGGESTED.map((c) => (
+                <div className="mt-2 grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {SUGGESTED_CHIPS.map((c) => (
                     <button
-                      key={c}
+                      key={c.text}
                       type="button"
                       disabled={loading}
-                      onClick={() => void startWithChip(c)}
-                      className="rounded-2xl border border-[var(--accent-gold)]/50 bg-[var(--bg-elevated)] px-3 py-2.5 text-left text-xs text-[var(--accent-gold)] transition hover:border-[var(--accent-gold)] hover:bg-[var(--accent-gold)]/10 disabled:opacity-50"
+                      onClick={() => void startWithChip(c.text)}
+                      className="flex items-start gap-2 rounded-2xl border border-[var(--accent-gold)]/45 bg-[var(--bg-elevated)] px-3 py-2.5 text-left text-xs text-[var(--accent-gold)] transition hover:border-[var(--accent-gold)] hover:bg-[var(--accent-gold)]/10 disabled:opacity-50"
                     >
-                      {c}
+                      <c.icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                      <span>{c.text}</span>
                     </button>
                   ))}
                 </div>
@@ -311,16 +486,68 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                 </button>
               </div>
             )}
+            {!selectedId && mode === "mini" && (
+              <div className="flex h-full min-h-[120px] flex-col items-center justify-center px-4 text-center text-xs text-[var(--text-muted)]">
+                Επίλεξε συνομιλία ή +Νεα.
+              </div>
+            )}
 
             {selectedId && messagesLoading && (
               <div className="flex h-40 items-center justify-center p-6 text-sm text-[var(--text-secondary)]">Φόρτωση…</div>
+            )}
+            {selectedId && !messagesLoading && messages.length === 0 && streamMode === "none" && mode === "page" && (
+              <div className="space-y-4 px-4 py-5">
+                {contactPageContext && (
+                  <p className="text-center text-[15px] leading-relaxed text-[var(--text-primary)]">
+                    Βλέπω ότι κοιτάς την επαφή <strong className="text-[var(--accent-gold)]">{contactPageContext.contactName}</strong>.
+                    Τι θέλεις να κάνω;
+                  </p>
+                )}
+                <div className="mx-auto flex max-w-lg flex-col items-center text-center">
+                  <div
+                    className="alex-hero-a-circle hq-pulse-gold mb-3 flex h-32 w-32 items-center justify-center rounded-full text-4xl font-bold text-[#0a0f1a] shadow-[0_0_60px_rgba(201,168,76,0.5)]"
+                    style={{ background: "linear-gradient(145deg, #e8d5a0, #c9a84c, #5c4818)" }}
+                  >
+                    A
+                  </div>
+                  <h2 className="text-[24px] font-semibold text-[var(--text-primary)]">Καλησπέρα! Είμαι η Αλεξάνδρα</h2>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">Η AI γραμματέας του γραφείου Καραγκούνη</p>
+                </div>
+                <div className="mx-auto grid max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {SUGGESTED_CHIPS.map((c) => (
+                    <button
+                      key={c.text}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void send(c.text)}
+                      className="flex items-start gap-2.5 rounded-2xl border border-[var(--accent-gold)]/50 bg-[var(--bg-elevated)]/90 px-3.5 py-3 text-left text-sm text-[var(--accent-gold)] shadow-sm transition hover:border-[var(--accent-gold)] disabled:opacity-50"
+                    >
+                      <c.icon className="mt-0.5 h-4 w-4 shrink-0 opacity-90" />
+                      {c.text}
+                    </button>
+                  ))}
+                </div>
+                {canSeeBriefing && (
+                  <div className="mx-auto w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 text-left text-sm text-[var(--text-primary)] shadow-sm">
+                    <p className="mb-2 flex items-center gap-2 font-semibold text-[var(--accent-gold)]">
+                      <Calendar className="h-4 w-4" />
+                      Σημείωση ημέρας
+                    </p>
+                    {briefingToday === "loading" && <p className="text-xs text-[var(--text-muted)]">Φόρτωση…</p>}
+                    {isBriefingReady(briefingToday) && <BriefingDetails b={briefingToday} />}
+                  </div>
+                )}
+              </div>
+            )}
+            {selectedId && !messagesLoading && mode === "mini" && messages.length === 0 && streamMode === "none" && (
+              <p className="px-3 py-3 text-center text-xs text-[var(--text-muted)]">Γράψε εντολή παρακάτω — ή άνοιξε «Νέα».</p>
             )}
             {selectedId && !messagesLoading && messages.map((m: Msg & { _createdAt?: string }) => (
               <div key={m.id} className="px-4 py-2">
                 <div className={m.role === "user" ? "flex flex-col items-end" : "flex items-start gap-2"}>
                   {m.role === "assistant" && (
                     <span
-                      className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                      className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
                       style={{ color: "#0A1628", backgroundColor: "#C9A84C" }}
                     >
                       A
@@ -329,8 +556,8 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                   <div
                     className={
                       m.role === "user"
-                        ? "w-full min-w-0 max-w-full md:max-w-[min(100%,32rem)]"
-                        : "min-w-0 w-full max-w-full flex-1 md:max-w-[min(100%,36rem)]"
+                        ? "ml-auto w-full min-w-0 max-w-[75%]"
+                        : "min-w-0 w-full max-w-[80%] flex-1"
                     }
                   >
                     {m.role === "assistant" && m.contextLabel && (
@@ -339,8 +566,8 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                     <div
                       className={
                         m.role === "user"
-                          ? "rounded-tl-[18px] rounded-tr-[18px] rounded-br-[4px] rounded-bl-[18px] bg-gradient-to-br from-[var(--accent-gold)] to-[#8b6914] px-4 py-2.5 text-sm font-medium text-[#0a0f1a] shadow-sm"
-                          : "rounded-tl-[18px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[4px] border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm text-[var(--text-primary)] shadow-sm"
+                          ? "rounded-[18px] rounded-br-[4px] bg-gradient-to-br from-[var(--accent-gold)] to-[#8b6914] px-4 py-2.5 text-sm font-medium text-[#0a0f1a] shadow-sm"
+                          : "rounded-[18px] rounded-bl-[4px] border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm text-[var(--text-primary)] shadow-sm"
                       }
                     >
                       {m.role === "user" ? (
@@ -367,44 +594,40 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                               {m.streamMeta.bulkProgress.total}
                             </p>
                           )}
-                          {Array.from(
-                            new Set(
-                              [
-                                ...(m.toolsExecutedFromDb ?? []),
-                                ...(m.streamMeta?.executed ?? []),
-                              ].filter(Boolean),
-                            ),
-                          ).length > 0 && (
-                            <p className="mt-2 text-[10px] font-medium text-[#94A3B8]">
-                              <span className="text-[var(--accent-gold)]">✓</span> Εκτελέστηκε
-                              {Array.from(
-                                new Set([
+                          {(() => {
+                            const tools = Array.from(
+                              new Set(
+                                [
                                   ...(m.toolsExecutedFromDb ?? []),
                                   ...(m.streamMeta?.executed ?? []),
-                                ]),
-                              ).length > 0 && (
-                                <span className="ml-1.5 text-[9px] font-normal text-[#94A3B8]">
-                                  (
-                                  {Array.from(
-                                    new Set([
-                                      ...(m.toolsExecutedFromDb ?? []),
-                                      ...(m.streamMeta?.executed ?? []),
-                                    ]),
-                                  )
-                                    .map((t) => greekToolLabel(t))
-                                    .join(", ")}
-                                  )
-                                </span>
-                              )}
-                            </p>
-                          )}
-                          {m.findResults && m.findResults.length > 0 && (
+                                ].filter(Boolean),
+                              ),
+                            );
+                            if (tools.length === 0) return null;
+                            return (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {tools.map((t) => (
+                                  <span
+                                    key={t}
+                                    className="inline-flex items-center gap-0.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-100/95"
+                                  >
+                                    ✓ Εκτελέστηκε · {greekToolLabel(t)}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                          {m.findResults && m.findResults.length > 0 && (() => {
+                            const all = m.findResults;
+                            const list = all.slice(0, 5);
+                            const hasMore = all.length > 5;
+                            return (
                             <ul className="mt-2 space-y-1.5 border-t border-dashed border-[var(--border)] pt-2">
-                              {m.findResults.map((c: FindRow) => (
+                              {list.map((c: FindRow) => (
                                 <li key={c.id}>
                                   <Link
                                     href={`/contacts/${c.id}`}
-                                    className="flex items-center gap-2 rounded-lg border border-[var(--border)] p-1.5 text-left hover:bg-[var(--bg-elevated)]"
+                                    className="flex items-center gap-2 rounded-lg border border-[var(--border)] p-1.5 text-left transition hover:bg-[var(--bg-elevated)]"
                                   >
                                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#003476] text-[10px] font-bold text-white">
                                       {initialsName(c.first_name, c.last_name)}
@@ -427,8 +650,16 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                                   </Link>
                                 </li>
                               ))}
+                              {hasMore && (
+                                <li className="pt-0.5 text-right">
+                                  <Link href="/contacts" className="text-xs font-medium text-[var(--accent-gold)] hover:underline">
+                                    Δες όλα →
+                                  </Link>
+                                </li>
+                              )}
                             </ul>
-                          )}
+                            );
+                          })()}
                           {m.pendingAction && m.startCallMeta && canConfirmStartCall(role, m.pendingAction) && m.pendingAction.action === "start_call" && (
                             <div className="mt-2 space-y-2 border-t border-dashed border-[var(--border)] pt-2">
                               <p className="text-xs text-[var(--text-primary)]">
@@ -503,12 +734,19 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
               </div>
             ))}
             {selectedId && streamMode === "typing" && (
-              <div className="flex justify-start gap-2 px-4 py-2">
-                <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ color: "#0A1628", backgroundColor: "#C9A84C" }}>A</span>
-                <div className="flex items-center gap-0.5 self-center rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2.5">
-                  <span className="ai-typing h-1.5 w-1.5 rounded-full bg-[var(--text-muted)] [animation-delay:0ms]" />
-                  <span className="ai-typing h-1.5 w-1.5 rounded-full bg-[var(--text-muted)] [animation-delay:150ms]" />
-                  <span className="ai-typing h-1.5 w-1.5 rounded-full bg-[var(--text-muted)] [animation-delay:300ms]" />
+              <div className="flex max-w-[80%] items-start gap-2 px-4 py-2">
+                <span
+                  className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                  style={{ color: "#0A1628", backgroundColor: "#C9A84C" }}
+                >
+                  A
+                </span>
+                <div className="rounded-[18px] rounded-bl-[4px] border border-[var(--border)] bg-[var(--bg-card)] px-3.5 py-3 shadow-sm">
+                  <div className="flex h-4 items-end gap-1" aria-hidden>
+                    <span className="ai-typing h-1.5 w-1.5 rounded-full bg-[var(--text-muted)] [animation-delay:0ms]" />
+                    <span className="ai-typing h-1.5 w-1.5 rounded-full bg-[var(--text-muted)] [animation-delay:150ms]" />
+                    <span className="ai-typing h-1.5 w-1.5 rounded-full bg-[var(--text-muted)] [animation-delay:300ms]" />
+                  </div>
                 </div>
               </div>
             )}
@@ -523,64 +761,65 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
             >
               {showChips && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
-                  {SUGGESTED.map((c) => (
+                  {SUGGESTED_CHIPS.map((c) => (
                     <button
-                      key={c}
+                      key={c.text}
                       type="button"
-                      onClick={() => void send(c)}
-                      className="rounded-full border border-[var(--accent-gold)]/40 bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[11px] text-[var(--accent-gold)] transition hover:bg-[var(--accent-gold)]/15"
+                      onClick={() => void send(c.text)}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--accent-gold)]/40 bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[11px] text-[var(--accent-gold)] transition hover:bg-[var(--accent-gold)]/15"
                     >
-                      {c}
+                      <c.icon className="h-3 w-3 shrink-0 opacity-80" />
+                      {c.text}
                     </button>
                   ))}
                 </div>
               )}
               <form
-                className="flex flex-col gap-1.5 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]/50 p-2 pl-3"
+                className="group/form flex items-end gap-1 rounded-[999px] border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-2 py-1.5 shadow-sm transition focus-within:border-[var(--accent-gold)]/50 focus-within:ring-2 focus-within:ring-[var(--accent-gold)]/30"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void send(input);
                 }}
                 title={!sttSupported ? "Χωρίς αναγνώριση φωνής: χρησιμοποιήστε το μικρόφωνο πληκτρολογίου όπου διατίθεται" : undefined}
               >
-                <div className="flex items-end gap-2">
-                  <input
-                    ref={importFileInputRef}
-                    type="file"
-                    className="sr-only"
-                    accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-                    aria-hidden
-                    onChange={onImportSpreadsheetChange}
-                  />
-                  <textarea
-                    className="min-h-[48px] min-w-0 flex-1 resize-y rounded-2xl border-0 bg-transparent px-1 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-0"
-                    placeholder="Γράψτε εδώ…"
-                    rows={2}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (!loading && streamMode === "none" && input.trim()) void send(input);
-                      }
-                    }}
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  className="sr-only"
+                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  aria-hidden
+                  onChange={onImportSpreadsheetChange}
+                />
+                {canImportSpreadsheet && (
+                  <button
+                    type="button"
+                    title="Εισαγωγή Excel / CSV"
+                    aria-label="Εισαγωγή αρχείου"
                     disabled={loading || streamMode !== "none"}
-                    inputMode="text"
-                    autoComplete="off"
-                    enterKeyHint="send"
-                  />
-                  {canImportSpreadsheet && (
-                    <button
-                      type="button"
-                      title="Εισαγωγή Excel / CSV"
-                      aria-label="Εισαγωγή αρχείου"
-                      disabled={loading || streamMode !== "none"}
-                      onClick={() => importFileInputRef.current?.click()}
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] transition hover:border-[var(--accent-gold)]/50 hover:text-[var(--accent-gold)] disabled:opacity-40"
-                    >
-                      <Paperclip className="h-5 w-5" />
-                    </button>
-                  )}
+                    onClick={() => importFileInputRef.current?.click()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)] disabled:opacity-40"
+                  >
+                    <Paperclip className="h-5 w-5" />
+                  </button>
+                )}
+                <textarea
+                  className="min-h-[44px] min-w-0 flex-1 resize-none rounded-2xl border-0 bg-transparent px-2 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-0"
+                  placeholder="Γράψε εντολή ή ερώτηση..."
+                  rows={2}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!loading && streamMode === "none" && input.trim()) void send(input);
+                    }
+                  }}
+                  disabled={loading || streamMode !== "none"}
+                  inputMode="text"
+                  autoComplete="off"
+                  enterKeyHint="send"
+                />
+                <div className="flex shrink-0 items-center gap-0.5 self-end pb-0.5">
                   {sttSupported && (
                     <button
                       type="button"
@@ -590,16 +829,14 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                       disabled={loading || streamMode !== "none"}
                       onClick={sttToggle}
                       className={[
-                        "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] transition",
+                        "flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition",
                         sttRecording
-                          ? "alex-stt-recording border-red-500/50 text-red-200"
-                          : "hover:border-red-500/30 hover:text-red-300/90",
+                          ? "alex-stt-recording text-red-200"
+                          : "hover:text-red-200/80",
                       ].join(" ")}
                     >
                       <span className="relative flex h-5 w-5 items-center justify-center">
-                        {sttRecording && (
-                          <span className="absolute -inset-0.5 rounded-full bg-red-500/20" aria-hidden />
-                        )}
+                        {sttRecording && <span className="absolute -inset-0.5 rounded-full bg-red-500/20" aria-hidden />}
                         <Mic className="relative h-5 w-5" strokeWidth={2.25} />
                       </span>
                     </button>
@@ -611,7 +848,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                       aria-label="Φωνητικός διάλογος"
                       disabled={!selectedId || loading || streamMode !== "none"}
                       onClick={() => void startVoice()}
-                      className="flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center self-end rounded-full border-2 border-[var(--accent-gold)]/90 bg-[var(--bg-elevated)]/80 text-[var(--accent-gold)] transition hover:border-[var(--accent-gold)] hover:bg-[var(--accent-gold)]/10 disabled:opacity-40"
+                      className="mr-0.5 flex h-9 w-9 items-center justify-center rounded-full text-[var(--accent-gold)]/90 transition hover:bg-[var(--accent-gold)]/10 disabled:opacity-40"
                     >
                       <Mic className="h-4 w-4" strokeWidth={2.25} />
                     </button>
@@ -619,14 +856,15 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                   <button
                     type="submit"
                     disabled={loading || streamMode !== "none" || !input.trim()}
-                    className="flex h-12 w-12 shrink-0 items-center justify-center self-end rounded-2xl bg-gradient-to-br from-[var(--accent-gold)] to-[#8b6914] text-[#0a0f1a] shadow-md transition hover:shadow-[0_0_20px_rgba(201,168,76,0.35)] disabled:opacity-40"
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-[#0a0f1a] transition hover:opacity-95 disabled:opacity-40"
+                    style={{ background: "linear-gradient(145deg, #e4cf8a, #c9a84c, #7a5f1a)" }}
                     aria-label="Αποστολή"
                   >
                     <Send className="h-4 w-4" />
                   </button>
                 </div>
                 {!sttSupported && (
-                  <p className="px-0.5 text-[10px] text-[var(--text-muted)]">
+                  <p className="sr-only">
                     Αν δεν εμφανίζεται μικρόφωνο, χρησιμοποιήστε τη φωνητική εισαγωγή πληκτρολογίου (Gboard, iOS, κ.λπ.).
                   </p>
                 )}
@@ -644,6 +882,10 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
         muted={voiceMuted}
         onToggleMute={voiceToggleMute}
         onEnd={() => void endVoice()}
+        onMinimize={() => {
+          void endVoice();
+          openMiniFromBubble();
+        }}
       />
 
       {toDelete && (

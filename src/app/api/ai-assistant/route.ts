@@ -14,9 +14,16 @@ import { z } from "zod";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 export const dynamic = 'force-dynamic';
 
+const pageContextSchema = z.object({
+  type: z.literal("contact"),
+  contactId: z.string().uuid(),
+  contactName: z.string().min(1).max(200),
+});
+
 const bodySchema = z.object({
   message: z.string().min(1).max(32_000),
   conversationId: z.string().uuid(),
+  pageContext: pageContextSchema.optional().nullable(),
   attachment: z
     .object({
       type: z.literal("spreadsheet_import"),
@@ -80,7 +87,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Άκυρο αίτημα" }, { status: 400 });
   }
 
-  const { message, conversationId, attachment: rawAttachment } = bodyIn;
+  const { message, conversationId, pageContext: rawPageContext, attachment: rawAttachment } = bodyIn;
+  const pageContext = rawPageContext ?? undefined;
   const importRowsForTool =
     hasMinRole(p.role, "manager") && rawAttachment?.type === "spreadsheet_import" ? rawAttachment.rows : undefined;
 
@@ -165,7 +173,32 @@ export async function POST(request: NextRequest) {
     month: "long",
     day: "numeric",
   });
-  const systemPrompt = buildSystemPrompt(today) + `\nΡόλος χρήστη: ${p.role}.`;
+
+  const { data: memRows, error: memErr } = await supabase
+    .from("alexandra_memory")
+    .select("key, value, updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (memErr) {
+    console.warn("[ai-assistant] alexandra_memory", memErr.message);
+  }
+  const memoriesBlock =
+    (memRows ?? []).length > 0
+      ? (memRows ?? [])
+          .map((r) => `- [${(r as { key: string; value: string }).key}] ${(r as { value: string }).value}`)
+          .join("\n")
+      : "— (κενό)";
+
+  const pageContextBlock = pageContext
+    ? `Ο χρήστης βρίσκεται στη σελίδα επαφής: ${pageContext.contactName} (id: ${pageContext.contactId})`
+    : "Καμία ειδική σελίδα (όχι σε λεπτομέρειες επαφής).";
+
+  const systemPrompt =
+    buildSystemPrompt({
+      todayDate: today,
+      pageContextBlock,
+      memoriesBlock,
+    }) + `\nΡόλος χρήστη: ${p.role}.`;
 
   const client = new Anthropic({ apiKey: key });
   const encoder = new TextEncoder();
@@ -184,6 +217,8 @@ export async function POST(request: NextRequest) {
         forward,
         profile: p,
         role: p.role,
+        userId: user.id,
+        defaultContactId: pageContext?.contactId ?? null,
         importRows: importRowsForTool,
         importContextMunicipality,
         onBulkProgress: (current: number, total: number) => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, Volume2, VolumeX, X } from "lucide-react";
+import { Loader2, Minimize2, Volume2, VolumeX, X } from "lucide-react";
 import type { VoiceTranscriptLine, VoiceUiPhase } from "@/hooks/use-alexandra-voice-conversation";
 
 function phaseLabel(phase: VoiceUiPhase): string {
@@ -48,6 +48,7 @@ export function AlexandraVoiceModeOverlay({
   muted,
   onToggleMute,
   onEnd,
+  onMinimize,
 }: {
   open: boolean;
   phase: VoiceUiPhase;
@@ -56,6 +57,8 @@ export function AlexandraVoiceModeOverlay({
   muted: boolean;
   onToggleMute: () => void;
   onEnd: () => void;
+  /** Κλείνει φωνή· ανοίγει mini παράθυρο όταν δοθεί */
+  onMinimize?: () => void;
 }) {
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
@@ -71,7 +74,7 @@ export function AlexandraVoiceModeOverlay({
     phase === "SPEAKING"
       ? "alex-voice-ring alex-voice-ring--gold-pulse"
       : phase === "THINKING"
-        ? "alex-voice-ring alex-voice-ring--gold-static"
+        ? "alex-voice-ring alex-voice-ring--think-spin"
         : phase === "LISTENING"
           ? "alex-voice-ring alex-voice-ring--blue-pulse"
           : "alex-voice-ring alex-voice-ring--gold-inner";
@@ -80,7 +83,7 @@ export function AlexandraVoiceModeOverlay({
 
   const node = (
     <div
-      className="fixed inset-0 z-[500] flex flex-col items-center justify-between overflow-hidden bg-[#030910]/95 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-sm"
+      className="fixed inset-0 z-[500] flex flex-col items-center justify-between overflow-hidden bg-[#030910]/80 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-md"
       role="dialog"
       aria-modal
       aria-labelledby={titleId}
@@ -170,7 +173,19 @@ export function AlexandraVoiceModeOverlay({
               <X className="h-8 w-8 stroke-[2.5]" />
             </button>
           </div>
-          <div className="w-1/3" />
+          <div className="w-1/3 flex justify-end">
+            {onMinimize && (
+              <button
+                type="button"
+                onClick={onMinimize}
+                className="flex h-12 w-12 min-h-[48px] min-w-[48px] items-center justify-center rounded-full border border-[var(--border)] bg-[#0a1628] text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)]"
+                title="Ελαχιστοποίηση (mini)"
+                aria-label="Ελαχιστοποίηση"
+              >
+                <Minimize2 className="h-5 w-5" />
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

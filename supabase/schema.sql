@@ -109,93 +109,8 @@ create policy "authenticated tasks" on public.tasks for all to authenticated usi
 create policy "authenticated requests" on public.requests for all to authenticated using (true) with check (true);
 create policy "authenticated name_days" on public.name_days for all to authenticated using (true) with check (true);
 
-insert into public.name_days (month, day, names) values
-(1,1,ARRAY['Βασίλειος','Βασιλική']),
-(1,6,ARRAY['Ιορδάνης','Φωτεινή','Φώτης','Θεοφάνης']),
-(1,7,ARRAY['Ιωάννης']),
-(1,11,ARRAY['Θεοδόσιος']),
-(1,17,ARRAY['Αντώνιος']),
-(1,18,ARRAY['Αθανάσιος','Κύριλλος']),
-(1,20,ARRAY['Ευθύμιος']),
-(1,21,ARRAY['Μάξιμος']),
-(1,25,ARRAY['Γρηγόριος']),
-(1,27,ARRAY['Ιωάννης','Χρυσόστομος']),
-(1,30,ARRAY['Τρεις Ιεράρχες','Βασίλειος','Γρηγόριος','Ιωάννης']),
-(2,2,ARRAY['Υπαπαντή']),
-(2,3,ARRAY['Συμεών']),
-(2,10,ARRAY['Χαράλαμπος']),
-(2,11,ARRAY['Βλάσιος']),
-(2,17,ARRAY['Θεόδωρος']),
-(2,24,ARRAY['Πολύκαρπος']),
-(2,27,ARRAY['Ασκληπιός']),
-(3,1,ARRAY['Ευδοκία']),
-(3,9,ARRAY['Σαράντης']),
-(3,25,ARRAY['Ευαγγελισμός','Μαρία','Μάριος']),
-(3,26,ARRAY['Σύναξη Αρχαγγέλου Γαβριήλ']),
-(3,30,ARRAY['Ιωάννης']),
-(4,1,ARRAY['Μαρία Αιγυπτία']),
-(4,23,ARRAY['Γεώργιος']),
-(4,25,ARRAY['Μάρκος']),
-(4,29,ARRAY['Ιάσων','Σωσίπατρος']),
-(4,30,ARRAY['Ιάκωβος']),
-(5,2,ARRAY['Αναστάσιος']),
-(5,5,ARRAY['Ειρήνη']),
-(5,8,ARRAY['Ιωάννης']),
-(5,9,ARRAY['Χριστόφορος']),
-(5,20,ARRAY['Λυδία']),
-(5,21,ARRAY['Κωνσταντίνος','Ελένη']),
-(5,25,ARRAY['Ιωάννης']),
-(6,11,ARRAY['Βαρνάβας']),
-(6,24,ARRAY['Ιωάννης','Γιαννούλα']),
-(6,29,ARRAY['Πέτρος','Παύλος','Πέτρα','Παυλίνα']),
-(6,30,ARRAY['Σύναξη Αποστόλων']),
-(7,1,ARRAY['Κοσμάς','Δαμιανός']),
-(7,7,ARRAY['Κυριακή']),
-(7,11,ARRAY['Όλγα','Ευφημία']),
-(7,17,ARRAY['Μαρίνα']),
-(7,20,ARRAY['Ηλίας']),
-(7,25,ARRAY['Άννα']),
-(7,26,ARRAY['Παρασκευή']),
-(7,27,ARRAY['Παντελεήμων']),
-(8,1,ARRAY['Πρόοδος Τιμίου Σταυρού']),
-(8,6,ARRAY['Σωτήριος','Σωτηρία']),
-(8,15,ARRAY['Μαρία','Παναγιώτης','Δέσποινα']),
-(8,16,ARRAY['Διομήδης']),
-(8,23,ARRAY['Ειρήνη']),
-(8,27,ARRAY['Φανούριος']),
-(8,29,ARRAY['Ιωάννης']),
-(9,1,ARRAY['Συμεών']),
-(9,3,ARRAY['Ανθιμος']),
-(9,8,ARRAY['Μαρία']),
-(9,14,ARRAY['Σταύρος','Σταυρούλα']),
-(9,17,ARRAY['Σοφία','Πίστη','Ελπίδα','Αγάπη']),
-(9,20,ARRAY['Ευστάθιος']),
-(9,23,ARRAY['Ξανθίππη']),
-(9,26,ARRAY['Ιωάννης']),
-(10,6,ARRAY['Θωμάς']),
-(10,18,ARRAY['Λουκάς']),
-(10,23,ARRAY['Ιάκωβος']),
-(10,26,ARRAY['Δημήτριος','Δήμητρα']),
-(10,28,ARRAY['Σκέπη Θεοτόκου']),
-(11,1,ARRAY['Κοσμάς','Δαμιανός']),
-(11,8,ARRAY['Μιχαήλ','Γαβριήλ','Αγγελος','Αγγελική']),
-(11,11,ARRAY['Μηνάς','Βίκτωρ','Βικτωρία']),
-(11,13,ARRAY['Ιωάννης','Χρυσόστομος']),
-(11,14,ARRAY['Φίλιππος']),
-(11,21,ARRAY['Εισόδια Θεοτόκου','Μαρία']),
-(11,25,ARRAY['Αικατερίνη','Κατερίνα']),
-(11,30,ARRAY['Ανδρέας']),
-(12,4,ARRAY['Βαρβάρα']),
-(12,5,ARRAY['Σάββας']),
-(12,6,ARRAY['Νικόλαος','Νίκη']),
-(12,9,ARRAY['Άννα']),
-(12,12,ARRAY['Σπυρίδων']),
-(12,15,ARRAY['Ελευθέριος']),
-(12,17,ARRAY['Δανιήλ']),
-(12,25,ARRAY['Χριστούγεννα','Χρήστος','Χριστίνα']),
-(12,26,ARRAY['Σύναξη Θεοτόκου']),
-(12,27,ARRAY['Στέφανος'])
-on conflict do nothing;
+-- Πλήρες εορτολόγιο: εισαγωγή από POST /api/admin/nameday-sync (src/lib/nameday-seed.ts, δεδομένα alexstyl + συμπληρώσεις)
+create unique index if not exists name_days_month_day_uniq on public.name_days (month, day);
 
 -- Profiles (roles) + Google Calendar tokens
 create table if not exists public.profiles (
@@ -352,6 +267,29 @@ create policy "ai_messages through conversation" on public.ai_messages for all t
     )
   );
 
+-- Υπενθυμίσεις χωρίς συγκεκριμένη επαφή (Alexandra)
+alter table public.tasks
+  alter column contact_id drop not null;
+
+-- Μνήμη Αλεξάνδρας (προτιμήσεις/σημειώσεις χρήστη)
+create table if not exists public.alexandra_memory (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  key text not null,
+  value text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, key)
+);
+
+create index if not exists idx_alexandra_memory_user on public.alexandra_memory (user_id, updated_at desc);
+
+alter table public.alexandra_memory enable row level security;
+
+drop policy if exists "alexandra memory own" on public.alexandra_memory;
+create policy "alexandra memory own" on public.alexandra_memory for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
 -- Ημερολόγιο δραστηριότητας
 create table if not exists public.activity_log (
   id uuid primary key default gen_random_uuid(),
@@ -473,4 +411,43 @@ create table if not exists public.contact_tag_definitions (
 alter table public.contact_tag_definitions enable row level security;
 drop policy if exists "authenticated contact_tag_definitions" on public.contact_tag_definitions;
 create policy "authenticated contact_tag_definitions" on public.contact_tag_definitions
+  for all to authenticated using (true) with check (true);
+
+-- Προτεραιότητες (εργασίες/φίλτρα) — κλειδιά High / Medium / Low
+create table if not exists public.priority_levels (
+  id uuid primary key default gen_random_uuid(),
+  sort_order int not null default 0,
+  key text not null,
+  label text not null,
+  color text not null,
+  updated_at timestamptz not null default now(),
+  unique (key)
+);
+insert into public.priority_levels (sort_order, key, label, color) values
+  (0, 'High', 'Υψηλή', '#DC2626'),
+  (1, 'Medium', 'Μεσαία', '#D97706'),
+  (2, 'Low', 'Χαμηλή', '#64748B')
+on conflict (key) do nothing;
+alter table public.priority_levels enable row level security;
+drop policy if exists "authenticated priority_levels" on public.priority_levels;
+create policy "authenticated priority_levels" on public.priority_levels
+  for all to authenticated using (true) with check (true);
+
+-- Κατηγορίες αιτημάτων
+create table if not exists public.request_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  color text not null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (name)
+);
+insert into public.request_categories (name, color, sort_order) values
+  ('Άλλο', '#6B7280', 0),
+  ('Δημόσια υπηρεσία', '#2563EB', 1),
+  ('Υγεία', '#059669', 2)
+on conflict (name) do nothing;
+alter table public.request_categories enable row level security;
+drop policy if exists "authenticated request_categories" on public.request_categories;
+create policy "authenticated request_categories" on public.request_categories
   for all to authenticated using (true) with check (true);

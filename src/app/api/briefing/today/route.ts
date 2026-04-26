@@ -28,6 +28,7 @@ function startOfWeekMonday(d: Date) {
 const emptyBriefing = {
   namedays: { names: [] as string[], matchingContactsCount: 0, contactNames: [] as string[] },
   tasksDueToday: [] as Array<{ id: string; title: string; contact: string }>,
+  pendingTasksCount: 0,
   openRequestsCount: 0,
   contactsAddedThisWeek: 0,
   campaigns: [] as Array<{ id: string; name: string; started_at: string | null; callsTotal: number; positive: number }>,
@@ -54,6 +55,7 @@ export async function GET() {
       allContacts,
       reqOpenRes,
       tasksRes,
+      pendingTasksRes,
       weekRes,
       campaignsRes,
     ] = await Promise.all([
@@ -68,6 +70,7 @@ export async function GET() {
         .select("id, title, due_date, contact_id, completed, contacts(first_name, last_name)")
         .eq("completed", false)
         .eq("due_date", todayStr),
+      supabase.from("tasks").select("id", { count: "exact", head: true }).eq("completed", false),
       supabase
         .from("contacts")
         .select("id", { count: "exact", head: true })
@@ -80,6 +83,7 @@ export async function GET() {
       allContacts.error ||
       reqOpenRes.error ||
       tasksRes.error ||
+      pendingTasksRes.error ||
       weekRes.error ||
       campaignsRes.error
     ) {
@@ -145,6 +149,7 @@ export async function GET() {
         contactNames: contactNames.slice(0, 20),
       },
       tasksDueToday,
+      pendingTasksCount: pendingTasksRes.count ?? 0,
       openRequestsCount: reqOpenRes.count ?? 0,
       contactsAddedThisWeek: weekRes.count ?? 0,
       campaigns: withStats,

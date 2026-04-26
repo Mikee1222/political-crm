@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { Maximize2, Minimize2, X, GripHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
@@ -8,6 +8,7 @@ import { AlexandraChatView } from "@/components/alexandra/alexandra-chat-view";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 
 const POS_KEY = "alexandra-mini-position";
+const SIZE_KEY = "alexandra-mini-size";
 const W = 380;
 const H = 520;
 
@@ -41,6 +42,27 @@ function savePos(p: { x: number; y: number }) {
   }
 }
 
+function readSize(): { w: number; h: number } {
+  if (typeof window === "undefined") return { w: W, h: H };
+  try {
+    const raw = localStorage.getItem(SIZE_KEY);
+    if (!raw) return { w: W, h: H };
+    const p = JSON.parse(raw) as { w: number; h: number };
+    if (typeof p.w !== "number" || typeof p.h !== "number") return { w: W, h: H };
+    return { w: clamp(p.w, 300, 720), h: clamp(p.h, 360, 900) };
+  } catch {
+    return { w: W, h: H };
+  }
+}
+
+function saveSize(s: { w: number; h: number }) {
+  try {
+    localStorage.setItem(SIZE_KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function AlexaMiniWindow() {
   const pathname = usePathname();
   const {
@@ -53,7 +75,9 @@ export function AlexaMiniWindow() {
   } = useAlexandraChat();
 
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const drag = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const resize = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
   const opened = useRef(false);
 
   useEffect(() => {
@@ -63,17 +87,25 @@ export function AlexaMiniWindow() {
     }
     if (!opened.current) {
       setPos(readPos());
+      setSize(readSize());
       opened.current = true;
     }
   }, [miniWindowOpen]);
 
-  const layoutPos = useCallback((p: { x: number; y: number }) => {
-    if (typeof window === "undefined") return p;
-    const maxX = Math.max(0, window.innerWidth - (miniWindowMinimized ? 200 : W));
-    const h = miniWindowMinimized ? 40 : H;
-    const maxY = Math.max(0, window.innerHeight - h);
-    return { x: clamp(p.x, 0, maxX), y: clamp(p.y, 0, maxY) };
-  }, [miniWindowMinimized]);
+  const effW = size?.w ?? W;
+  const effH = size?.h ?? H;
+
+  const layoutPos = useCallback(
+    (p: { x: number; y: number }) => {
+      if (typeof window === "undefined") return p;
+      const w = miniWindowMinimized ? 200 : effW;
+      const h = miniWindowMinimized ? 40 : effH;
+      const maxX = Math.max(0, window.innerWidth - w);
+      const maxY = Math.max(0, window.innerHeight - h);
+      return { x: clamp(p.x, 0, maxX), y: clamp(p.y, 0, maxY) };
+    },
+    [miniWindowMinimized, effW, effH],
+  );
 
   useEffect(() => {
     const onResize = () => {
@@ -111,7 +143,7 @@ export function AlexaMiniWindow() {
   if (pathname === "/alexandra" || pathname.startsWith("/alexandra/")) {
     return null;
   }
-  if (!miniWindowOpen || pos === null) {
+  if (!miniWindowOpen || pos === null || size === null) {
     return null;
   }
 
@@ -150,14 +182,37 @@ export function AlexaMiniWindow() {
     return createPortal(el, document.body);
   }
 
+  const onResizePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    resize.current = { startX: e.clientX, startY: e.clientY, origW: size.w, origH: size.h };
+  };
+  const onResizePointerMove = (e: React.PointerEvent) => {
+    if (!resize.current) return;
+    const d = resize.current;
+    const nw = clamp(d.origW + (e.clientX - d.startX), 300, 900);
+    const nh = clamp(d.origH + (e.clientY - d.startY), 360, 1000);
+    setSize({ w: nw, h: nh });
+    setPos((p) => (p ? layoutPos(p) : p));
+  };
+  const onResizePointerUp = (e: React.PointerEvent) => {
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    resize.current = null;
+    setSize((s) => {
+      if (s) saveSize(s);
+      return s;
+    });
+  };
+
   const shell = (
     <div
       className="fixed z-[60] flex flex-col overflow-hidden rounded-2xl border border-[rgba(201,168,76,0.25)] bg-[#0a0f1a] shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
       style={{
         left: pos.x,
         top: pos.y,
-        width: W,
-        height: H,
+        width: effW,
+        height: effH,
         maxWidth: "calc(100vw - 8px)",
         paddingBottom: 0,
       }}
@@ -200,8 +255,19 @@ export function AlexaMiniWindow() {
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <AlexandraChatView mode="mini" />
+        <div
+          className="absolute bottom-0 right-0 z-10 flex h-7 w-7 cursor-nwse-resize items-end justify-end rounded-tl-md border-t border-l border-[var(--border)]/50 bg-[var(--bg-elevated)]/40 p-0.5 text-[var(--text-muted)]"
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          onPointerCancel={onResizePointerUp}
+          title="Μέγεθος"
+          aria-label="Μεταβολή μεγέθους"
+        >
+          <GripHorizontal className="h-4 w-4 rotate-45 opacity-60" />
+        </div>
       </div>
     </div>
   );

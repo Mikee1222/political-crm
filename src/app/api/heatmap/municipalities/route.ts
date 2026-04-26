@@ -83,11 +83,14 @@ export async function GET(request: NextRequest) {
     };
   });
 
+  const maxTot = byMuni.length ? Math.max(1, ...byMuni.map((b) => b.total)) : 1;
   const forMap = MUNICIPALITIES.map((m) => {
     const c = MUNI_CENTROIDS[m.name];
     const s = byMuni.find((x) => x.muni === m.name);
     if (!c || !s) return null;
-    return { ...s, lat: c.lat, lng: c.lng, radius: c.r };
+    const t = s.total;
+    const radius = Math.max(500, Math.round(700 + (t / maxTot) * Math.min(c.r * 2.2, 14_000)));
+    return { ...s, lat: c.lat, lng: c.lng, radius };
   }).filter((x): x is NonNullable<typeof x> => x != null);
 
   const top10 = [...byMuni].sort((a, b) => b.total - a.total).slice(0, 10);

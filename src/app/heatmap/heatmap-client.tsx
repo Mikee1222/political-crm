@@ -134,11 +134,11 @@ export function HeatmapClient() {
             <MunicipalMap forMap={data.forMap} onSelect={onSelectMuni} />
           )}
           <div
-            className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[min(100%,220px)] rounded-xl border border-[var(--border)] bg-[#0a1628]/95 px-3 py-2.5 text-[10px] text-[var(--text-secondary)] shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md"
+            className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[min(100%,220px)] rounded-xl border border-[var(--border)] bg-[var(--bg-card)]/95 px-3 py-2.5 text-[10px] text-[var(--text-secondary)] shadow-md backdrop-blur-md"
             role="img"
             aria-label="Υπόμνημα"
           >
-            <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#4a6080]">Υπόμνημα</p>
+            <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Υπόμνημα</p>
             <ul className="space-y-1.5">
               <li className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full border border-[var(--border)]" />
@@ -168,7 +168,7 @@ export function HeatmapClient() {
           className="data-hq-card w-full max-w-full shrink-0 space-y-3 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.4)] lg:max-w-[300px] xl:max-w-[320px]"
           aria-label="Κορυφαίοι δήμοι"
         >
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-[#4a6080]">Top 10 δήμων</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Top 10 δήμων</h2>
           {top.length === 0 && !err && (
             <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>
           )}
@@ -181,7 +181,7 @@ export function HeatmapClient() {
                   </span>
                   <span className="shrink-0 text-[12px] tabular-nums text-[var(--accent-gold)]">{r.total}</span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-[#162540]">
+                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-[#6b4f18] to-[#C9A84C] shadow-[0_0_12px_rgba(201,168,76,0.4)]"
                     style={{ width: `${Math.min(100, (r.total / maxTop) * 100)}%` }}

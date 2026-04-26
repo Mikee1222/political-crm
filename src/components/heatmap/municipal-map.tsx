@@ -1,10 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PathOptions } from "leaflet";
 import { MapContainer, TileLayer, Circle, Tooltip } from "react-leaflet";
 import { MAP_REGION } from "@/lib/aitoloakarnania-map-centroids";
 import "leaflet/dist/leaflet.css";
+
+function useMapColorMode(): "light" | "dark" {
+  const [m, setM] = useState<"light" | "dark">("light");
+  useEffect(() => {
+    const el = document.documentElement;
+    const read = () => setM(el.getAttribute("data-theme") === "dark" ? "dark" : "light");
+    read();
+    const o = new MutationObserver(read);
+    o.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => o.disconnect();
+  }, []);
+  return m;
+}
 
 const GOLD = "#C9A84C";
 const GOLD_LIGHT = "#E8C96B";
@@ -107,7 +120,14 @@ type MunicipalMapProps = {
   onSelect: (muni: string) => void;
 };
 
+const TILES = {
+  light:
+    "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+} as const;
+
 export function MunicipalMap({ forMap, onSelect }: MunicipalMapProps) {
+  const colorMode = useMapColorMode();
   const bounds = useMemo(
     () =>
       [MAP_REGION.maxBounds[0], MAP_REGION.maxBounds[1]] as [[number, number], [number, number]],
@@ -126,7 +146,8 @@ export function MunicipalMap({ forMap, onSelect }: MunicipalMapProps) {
       style={{ width: "100%" }}
     >
       <TileLayer
-        url="https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
+        key={colorMode}
+        url={TILES[colorMode]}
         attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OSM</a> &copy; <a href='https://carto.com/attributions'>CARTO</a>"
       />
       {forMap.map((m) => (

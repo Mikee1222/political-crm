@@ -187,6 +187,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const isPublic = pathname === "/login";
   const [openRequestsCount, setOpenRequestsCount] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [alexVoiceToast, setAlexVoiceToast] = useState(false);
   const role: Role = profile?.role ?? "caller";
   const depth = pathname.split("/").filter(Boolean).length;
   const showBackMobile = depth >= 2;
@@ -208,6 +209,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         if (hasMinRole(role, "caller")) {
           router.push("/alexandra");
         }
+      }
+      if (e.key.toLowerCase() === "a" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+        e.preventDefault();
+        if (!hasMinRole(role, "caller")) return;
+        window.dispatchEvent(new Event("alexandra-voice-shortcut"));
+        setAlexVoiceToast(true);
+        window.setTimeout(() => setAlexVoiceToast(false), 2600);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -237,7 +245,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[-webkit-fill-available] min-h-screen w-full max-w-full overflow-x-hidden bg-[var(--bg-primary)]">
       <aside
-        className="app-sidebar fixed left-0 top-0 z-30 box-border hidden h-screen max-h-screen w-[260px] max-w-full flex-col overflow-y-auto overflow-x-hidden border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
+        className="app-sidebar fixed left-0 top-0 z-30 box-border hidden h-screen w-[260px] max-w-full flex-col overflow-hidden border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
         style={{ background: "var(--sidebar-bg)" }}
       >
         <div className="flex items-center justify-between pr-0.5 md:justify-start md:pr-0">
@@ -271,7 +279,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden md:ml-[260px]">
+      <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 max-w-full min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden md:ml-[260px] md:h-screen md:min-h-0 md:overflow-hidden">
         <header
           className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]"
         >
@@ -328,10 +336,19 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="hq-fade-in-up main-scroll mobile-page-transition min-w-0 max-w-full flex-1 touch-pan-y overflow-x-hidden bg-[var(--bg-primary)] p-3 max-md:pb-24 max-md:pt-2 sm:p-6 md:p-8">
+        <main className="hq-fade-in-up main-scroll mobile-page-transition min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-md:pb-24 max-md:pt-2 sm:p-6 md:p-8">
           {children}
         </main>
         <AlexaMiniWindow />
+        {alexVoiceToast && (
+          <div
+            className="pointer-events-none fixed bottom-6 left-1/2 z-[300] max-w-[min(100%,20rem)] -translate-x-1/2 rounded-full border border-[var(--border)] bg-[#0a1628]/95 px-5 py-2.5 text-center text-sm font-medium text-[var(--accent-gold)] shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-md"
+            role="status"
+            aria-live="polite"
+          >
+            Αλεξάνδρα ακούει…
+          </div>
+        )}
         <div className="max-md:hidden">
           <AiAssistantWidget />
         </div>

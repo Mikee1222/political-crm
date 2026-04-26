@@ -10,6 +10,8 @@ import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { EventCategoryRow } from "@/lib/event-categories";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
 import type { ContactTagDefinitionRow } from "@/lib/contact-tag-definitions";
+import type { PriorityLevelRow } from "@/lib/priority-levels";
+import type { RequestCategoryRow } from "@/lib/request-categories";
 
 type UserRow = {
   id: string;
@@ -277,6 +279,12 @@ export default function SettingsPage() {
         )}
       </section>
 
+      <NamedaySyncSection />
+
+      <PriorityLevelsSection />
+
+      <RequestCategoriesSettingsSection />
+
       <section className={lux.card}>
         <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>
         <p className="text-sm text-[var(--text-secondary)]">
@@ -286,6 +294,359 @@ export default function SettingsPage() {
           Πολιτική φιγούρα: <strong className="text-[var(--text-primary)]">Κώστας Καραγκούνης</strong>
         </p>
       </section>
+    </div>
+  );
+}
+
+function NamedaySyncSection() {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <section className={lux.card}>
+      <h2 className={lux.pageTitle + " mb-1"}>Εορτολόγιο (βάση)</h2>
+      <p className="mb-3 text-sm text-[var(--text-secondary)]">
+        Αντικαθιστά όλα τα δεδομένα <code className="text-xs">name_days</code> με πλήρες ελληνικό ορθόδοξο εορτολόγιο
+        (συγχώνευση παγίων ημερομηνιών + παραλλαγές). Εκτέλεση μία φορά μετά τη δημιουργία πινάκων.
+      </p>
+      {msg && (
+        <p className="mb-2 text-sm text-amber-200" role="status">
+          {msg}
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setMsg(null);
+          setBusy(true);
+          try {
+            const res = await fetchWithTimeout("/api/admin/nameday-sync", { method: "POST" });
+            const j = (await res.json().catch(() => ({}))) as { error?: string; inserted?: number };
+            if (!res.ok) {
+              setMsg(j.error ?? "Σφάλμα");
+              return;
+            }
+            setMsg(`Εισήχθησαν ${j.inserted ?? 0} ημέρες εορτολογίου.`);
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}
+      >
+        {busy ? "…" : "Συγχρονισμός εορτολογίου"}
+      </button>
+    </section>
+  );
+}
+
+function PriorityLevelsSection() {
+  const [rows, setRows] = useState<PriorityLevelRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setErr(null);
+    setLoading(true);
+    try {
+      const res = await fetchWithTimeout("/api/admin/priority-levels");
+      if (!res.ok) return;
+      const d = (await res.json()) as { levels?: PriorityLevelRow[] };
+      setRows(d.levels ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const byKey = (k: string) => rows.find((r) => r.key === k);
+
+  const setField = (key: string, field: "label" | "color", value: string) => {
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+  };
+
+  const save = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const res = await fetchWithTimeout("/api/admin/priority-levels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ levels: rows.map((r) => ({ key: r.key, label: r.label.trim(), color: r.color.trim() })) }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setErr(j.error ?? "Σφάλμα");
+        return;
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className={lux.card}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className={lux.pageTitle + " mb-1"}>Προτεραιότητες</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Υψηλή / Μεσαία / Χαμηλή — ετικέτες και χρώμα (εργασίες, φίλτρα)</p>
+        </div>
+        <button type="button" onClick={() => void save()} disabled={busy || loading} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
+          {busy ? "…" : "Αποθήκευση"}
+        </button>
+      </div>
+      {err && (
+        <p className="mb-2 text-sm text-amber-200" role="status">
+          {err}
+        </p>
+      )}
+      {loading && <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>}
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full min-w-[400px] text-sm">
+          <thead>
+            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+              <th className="p-3 pl-4 text-left">Κλειδί</th>
+              <th className="p-3 text-left">Ετικέτα</th>
+              <th className="p-3 pr-4 text-left">Χρώμα</th>
+            </tr>
+          </thead>
+          <tbody>
+            {["High", "Medium", "Low"].map((k) => {
+              const r = byKey(k);
+              if (!r) return null;
+              return (
+                <tr key={k} className="border-b border-[var(--border)] last:border-0">
+                  <td className="p-3 pl-4 font-mono text-xs text-[var(--text-muted)]">{k}</td>
+                  <td className="p-3">
+                    <input className={lux.input + " !h-9"} value={r.label} onChange={(e) => setField(k, "label", e.target.value)} />
+                  </td>
+                  <td className="p-3 pr-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="h-9 w-12 cursor-pointer rounded border border-[var(--border)]"
+                        value={r.color}
+                        onChange={(e) => setField(k, "color", e.target.value)}
+                      />
+                      <input
+                        className={lux.input + " h-9 max-w-[120px] font-mono text-xs"}
+                        value={r.color}
+                        onChange={(e) => setField(k, "color", e.target.value)}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function RequestCategoriesSettingsSection() {
+  const [rows, setRows] = useState<RequestCategoryRow[]>([]);
+  const [editing, setEditing] = useState<RequestCategoryRow | "new" | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [delId, setDelId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetchWithTimeout("/api/admin/request-categories");
+    if (!res.ok) return;
+    const d = (await res.json()) as { categories?: RequestCategoryRow[] };
+    setRows(d.categories ?? []);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section className={lux.card}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className={lux.pageTitle + " mb-1"}>Κατηγορίες Αιτημάτων</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Ονομασία και χρώμα (η στήλη `category` στα αιτήματα κρατά κείμενο)</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setErr(null);
+            setEditing("new");
+          }}
+          className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}
+        >
+          Προσθήκη
+        </button>
+      </div>
+      {err && (
+        <p className="mb-2 text-sm text-amber-200" role="status">
+          {err}
+        </p>
+      )}
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full min-w-[360px] text-sm">
+          <thead>
+            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+              <th className="p-3 pl-4 text-left">Όνομα</th>
+              <th className="p-3 text-left">Χρώμα</th>
+              <th className="p-3 pr-4 text-right">Ενέργειες</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((g) => (
+              <tr key={g.id} className="border-b border-[var(--border)] last:border-0">
+                <td className="p-3 pl-4 font-medium text-[var(--text-primary)]">
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
+                      style={{ background: g.color }}
+                    />
+                    {g.name}
+                  </span>
+                </td>
+                <td className="p-3 font-mono text-xs text-[var(--text-secondary)]">{g.color}</td>
+                <td className="p-3 pr-4 text-right">
+                  <button
+                    type="button"
+                    className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                    onClick={() => {
+                      setErr(null);
+                      setEditing(g);
+                    }}
+                  >
+                    Επεξεργασία
+                  </button>{" "}
+                  <button type="button" className={lux.btnDanger + " !px-2 !py-1.5 text-xs"} onClick={() => setDelId(g.id)}>
+                    Διαγραφή
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <RequestCategoryModal
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+          onError={setErr}
+        />
+      )}
+
+      {delId && (
+        <ConfirmModal
+          title="Διαγραφή κατηγορίας"
+          body="Υπάρχοντα αιτήματα κρατούν το παλιό κείμενο category."
+          confirmLabel="Διαγραφή"
+          onCancel={() => setDelId(null)}
+          onConfirm={async () => {
+            setErr(null);
+            const res = await fetchWithTimeout(`/api/admin/request-categories/${delId}`, { method: "DELETE" });
+            if (!res.ok) {
+              const j = (await res.json().catch(() => ({}))) as { error?: string };
+              setErr(j.error ?? "Σφάλμα");
+              return;
+            }
+            setDelId(null);
+            await load();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function RequestCategoryModal({
+  initial,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  initial: RequestCategoryRow | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  onError: (e: string | null) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [color, setColor] = useState(initial?.color ?? "#6B7280");
+  const [sort, setSort] = useState(initial != null ? String(initial.sort_order) : "0");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setName(initial?.name ?? "");
+    setColor(initial?.color ?? "#6B7280");
+    setSort(initial != null ? String(initial.sort_order) : "0");
+  }, [initial]);
+  const save = async () => {
+    onError(null);
+    if (!name.trim()) {
+      onError("Υποχρεωτικό όνομα");
+      return;
+    }
+    const so = parseInt(sort, 10);
+    setBusy(true);
+    try {
+      const isNew = !initial;
+      const res = await fetchWithTimeout(
+        isNew ? "/api/admin/request-categories" : `/api/admin/request-categories/${initial!.id}`,
+        {
+          method: isNew ? "POST" : "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim(), color: color.trim(), sort_order: Number.isFinite(so) ? so : 0 }),
+        },
+      );
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        onError(j.error ?? "Σφάλμα");
+        return;
+      }
+      await onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={lux.modalOverlay}>
+      <div className="mx-4 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl">
+        <div className="border-b border-[var(--border)] px-5 py-4">
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}</h3>
+        </div>
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4">
+          <div>
+            <label className={lux.label}>Όνομα *</label>
+            <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} />
+          </div>
+          <div>
+            <label className={lux.label}>Χρώμα</label>
+            <div className="mt-1 flex items-center gap-2">
+              <input type="color" className="h-10 w-14 cursor-pointer rounded border" value={color} onChange={(e) => setColor(e.target.value)} />
+              <input className={lux.input + " font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className={lux.label}>Σειρά</label>
+            <input className={lux.input} inputMode="numeric" value={sort} onChange={(e) => setSort(e.target.value.replace(/[^\d-]/g, ""))} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
+          <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" className={lux.btnPrimary} onClick={() => void save()} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

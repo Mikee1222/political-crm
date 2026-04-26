@@ -141,12 +141,9 @@ export default function CampaignsPage() {
   return (
     <div className="space-y-8 max-md:space-y-6">
       <section
-        className="relative overflow-hidden rounded-2xl border border-[var(--border)] p-4 shadow-[0_4px_32px_rgba(0,0,0,0.45)] sm:p-6"
-        style={{
-          background: "linear-gradient(145deg, #0A1628 0%, #050D1A 50%, #0F1E35 100%)",
-        }}
+        className="data-hq-card relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.12)] [data-theme='light']:shadow-[0_2px_16px_rgba(0,0,0,0.08)] sm:p-6"
       >
-        <div className="pointer-events-none absolute -right-12 -top-8 h-40 w-40 rounded-full bg-[#C9A84C]/10 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -right-12 -top-8 h-40 w-40 rounded-full bg-[var(--accent-gold)]/10 blur-3xl" aria-hidden />
         <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
             <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">Καμπάνιες</h2>
@@ -202,9 +199,9 @@ export default function CampaignsPage() {
           return (
             <li
               key={c.id}
-              className="group data-hq-card relative flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[#0F1E35] to-[#0A1628] p-4 shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
+              className="group data-hq-card relative flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.12)] [data-theme='light']:shadow-[0_2px_12px_rgba(0,0,0,0.07)]"
             >
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/[0.04] to-transparent" aria-hidden />
+              <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/[0.02] to-transparent [data-theme='light']:from-black/[0.02]" aria-hidden />
               <div className="relative flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -230,7 +227,7 @@ export default function CampaignsPage() {
                       : ""}
                   </p>
                 </div>
-                <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl border border-[#C9A84C]/25 bg-[#050D1A]">
+                <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl border border-[#C9A84C]/30 bg-[var(--bg-elevated)]">
                   <Megaphone className="h-4 w-4 text-[#C9A84C]" />
                 </div>
               </div>
@@ -250,7 +247,7 @@ export default function CampaignsPage() {
                         : "0 / 0"}
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-[#050D1A] ring-1 ring-[#C9A84C]/15">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)] ring-1 ring-[#C9A84C]/15">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-[#1e5fa8] via-[#C9A84C] to-[#2dd4bf]"
                     style={{ width: `${barPct}%`, transition: "width 0.2s ease" }}
@@ -376,7 +373,7 @@ export default function CampaignsPage() {
       </ul>
 
       {formErr && !modal && (
-        <p className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-red-500/40 bg-[#0A1628] px-4 py-2 text-sm text-red-200 shadow-xl max-md:bottom-28" role="alert">
+        <p className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-red-500/40 bg-[var(--bg-card)] px-4 py-2 text-sm text-red-200 shadow-xl max-md:bottom-28" role="alert">
           {formErr}
         </p>
       )}

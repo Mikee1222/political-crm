@@ -1,10 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { useProfile } from "@/contexts/profile-context";
+import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { mapDbToMsg, type Msg, type MsgWithT, type RowConv, type StreamMeta } from "./alexandra-chat-helpers";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,8 +17,18 @@ export function useAlexandraChat() {
   return v;
 }
 
+export type BriefingToday = {
+  namedays: { names: string[]; matchingContactsCount: number; contactNames: string[] };
+  tasksDueToday: Array<{ id: string; title: string; contact: string }>;
+  pendingTasksCount: number;
+  openRequestsCount: number;
+  contactsAddedThisWeek: number;
+  campaigns: Array<{ id: string; name: string; started_at: string | null; callsTotal: number; positive: number }>;
+};
+
 export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   const { profile } = useProfile();
+  const pageContact = useOptionalAlexandraPageContact();
   const [conversations, setConversations] = useState<RowConv[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MsgWithT[]>([]);
@@ -46,6 +57,8 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   const isAlexandraPage = Boolean(pathname?.startsWith("/alexandra"));
   const [miniWindowOpen, setMiniWindowOpen] = useState(false);
   const [miniWindowMinimized, setMiniWindowMinimized] = useState(false);
+  const [leftPanelTab, setLeftPanelTab] = useState<"chats" | "activity">("chats");
+  const [briefingToday, setBriefingToday] = useState<BriefingToday | null | "loading">(null);
 
   const enterMiniFromPage = useCallback(() => {
     setMiniWindowOpen(true);
@@ -101,14 +114,40 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  /** Do not block dashboard/login: only load conversation list on /alexandra. */
+  const loadBriefing = useCallback(async () => {
+    setBriefingToday("loading");
+    try {
+      const res = await fetchWithTimeout("/api/briefing/today", { timeoutMs: CLIENT_FETCH_TIMEOUT_MS });
+      if (!res.ok) {
+        setBriefingToday(null);
+        return;
+      }
+      const j = (await res.json()) as BriefingToday;
+      setBriefingToday(j);
+    } catch {
+      setBriefingToday(null);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!isAlexandraPage) {
+    if (!isAlexandraPage && !miniWindowOpen) {
       setListLoading(false);
       return;
     }
     void loadList();
-  }, [isAlexandraPage, loadList]);
+  }, [isAlexandraPage, miniWindowOpen, loadList]);
+
+  const pageContextForApi = useMemo(
+    () =>
+      pageContact?.contact
+        ? {
+            type: "contact" as const,
+            contactId: pageContact.contact.contactId,
+            contactName: pageContact.contact.contactName,
+          }
+        : undefined,
+    [pageContact?.contact],
+  );
 
   const loadMessages = useCallback(
     async (id: string, options?: { silent?: boolean }) => {
@@ -150,6 +189,18 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
       setMessages([]);
     }
   }, [selectedId, loadMessages]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setBriefingToday(null);
+      return;
+    }
+    if (messages.length > 0 || messagesLoading) {
+      setBriefingToday(null);
+      return;
+    }
+    void loadBriefing();
+  }, [selectedId, messages.length, messagesLoading, loadBriefing]);
 
   useEffect(() => {
     scrollToBottom();
@@ -414,6 +465,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
         const payload: {
           message: string;
           conversationId: string;
+          pageContext?: { type: "contact"; contactId: string; contactName: string };
           attachment?: {
             type: "spreadsheet_import";
             rows: Array<Record<string, unknown>>;
@@ -421,6 +473,9 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
             sheetName?: string;
           };
         } = { message: text, conversationId: convId };
+        if (pageContextForApi) {
+          payload.pageContext = pageContextForApi;
+        }
         if (stash && stash.conversationId === convId) {
           payload.attachment = {
             type: "spreadsheet_import",
@@ -471,7 +526,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
         );
       }
     },
-    [selectedId, loadMessages, loadList],
+    [selectedId, loadMessages, loadList, pageContextForApi],
   );
 
   const startWithChip = useCallback(
@@ -540,6 +595,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, setStreamMode, bottomRef, loadList, loadMessages, newConversation,
     deleteConv, execute, send, startWithChip, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, isEmpty, showChips, scrollToBottom, setSpreadsheetImport,
     miniWindowOpen, setMiniWindowOpen, miniWindowMinimized, setMiniWindowMinimized, enterMiniFromPage, openMiniFromBubble, goToFullAlexandra, closeMiniWindow,
+    leftPanelTab, setLeftPanelTab, briefingToday, contactPageContext: pageContact?.contact ?? null,
   };
   return <AlexandraChatContext.Provider value={value}>{children}</AlexandraChatContext.Provider>;
 }

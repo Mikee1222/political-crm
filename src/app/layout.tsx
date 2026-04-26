@@ -7,6 +7,7 @@ import { PwaServiceWorkerRegister } from "@/components/pwa-service-worker-regist
 import { ProfileProvider } from "@/contexts/profile-context";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AlexandraChatProvider } from "@/components/alexandra/alexandra-chat-provider";
+import { AlexandraPageProvider } from "@/contexts/alexandra-page-context";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -66,9 +67,11 @@ export default function RootLayout({
         <PwaServiceWorkerRegister />
         <ThemeProvider>
           <ProfileProvider>
-            <AlexandraChatProvider>
-              <AppFrame>{children}</AppFrame>
-            </AlexandraChatProvider>
+            <AlexandraPageProvider>
+              <AlexandraChatProvider>
+                <AppFrame>{children}</AppFrame>
+              </AlexandraChatProvider>
+            </AlexandraPageProvider>
           </ProfileProvider>
         </ThemeProvider>
       </body>

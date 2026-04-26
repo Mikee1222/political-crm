@@ -4,6 +4,7 @@ import { Clipboard, Pencil, Phone, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
+import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { hasMinRole } from "@/lib/roles";
 import { callStatusLabel, callStatusPill, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -243,6 +244,7 @@ export default function ContactDetailPage() {
   const [openTask, setOpenTask] = useState(false);
   const [headerCopied, setHeaderCopied] = useState(false);
   const [groupOptions, setGroupOptions] = useState<ContactGroupRow[]>([]);
+  const alexPage = useOptionalAlexandraPageContact();
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -276,6 +278,17 @@ export default function ContactDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!alexPage) return;
+    if (!contact) {
+      alexPage.setContactPage(null);
+      return;
+    }
+    const name = `${contact.first_name} ${contact.last_name}`.trim();
+    alexPage.setContactPage({ contactId: contact.id, contactName: name || "Επαφή" });
+    return () => alexPage.setContactPage(null);
+  }, [alexPage, contact]);
 
   useEffect(() => {
     fetchWithTimeout("/api/groups")

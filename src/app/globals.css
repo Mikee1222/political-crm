@@ -256,6 +256,20 @@
 .hq-pulse-gold {
   animation: pulse-gold 2.4s ease-in-out infinite;
 }
+.alex-hero-a-circle {
+  position: relative;
+  box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.45);
+  animation: alex-hero-pulse 2.5s ease-out infinite;
+}
+@keyframes alex-hero-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 36px 8px rgba(201, 168, 76, 0.28);
+  }
+}
 .hq-modal-panel {
   animation: modal-in 0.2s ease-out both;
 }
@@ -578,6 +592,18 @@ textarea::placeholder {
   background: linear-gradient(145deg, #152238, #0a1220);
   box-shadow: 0 0 24px rgba(201, 168, 76, 0.2);
 }
+@keyframes alex-voice-think-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.alex-voice-ring--think-spin {
+  border-width: 3px;
+  border-color: rgba(201, 168, 76, 0.45);
+  border-top-color: rgba(201, 168, 76, 0.95);
+  background: linear-gradient(145deg, #152238, #0a1220);
+  animation: alex-voice-think-spin 0.85s linear infinite;
+}
 .alex-voice-ring--blue-pulse {
   border-color: rgba(30, 95, 168, 0.6);
   animation: alex-voice-pulse-blue 1.3s ease-in-out infinite;
@@ -599,7 +625,11 @@ textarea::placeholder {
 }
 @media (prefers-reduced-motion: reduce) {
   .alex-voice-ring--gold-pulse,
-  .alex-voice-ring--blue-pulse {
+  .alex-voice-ring--blue-pulse,
+  .alex-voice-ring--think-spin {
+    animation: none;
+  }
+  .alex-hero-a-circle {
     animation: none;
   }
   .alex-voice-bar {
