@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Roboto_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { AppFrame } from "@/components/app-frame";
 import { PwaServiceWorkerRegister } from "@/components/pwa-service-worker-register";
@@ -42,7 +43,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#050D1A",
-  colorScheme: "dark",
+  colorScheme: "dark light",
   viewportFit: "cover",
 };
 
@@ -54,10 +55,14 @@ export default function RootLayout({
   return (
     <html
       lang="el"
+      data-theme="dark"
       suppressHydrationWarning
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex min-h-[-webkit-fill-available] flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
+        <Script id="crm-theme-init" strategy="beforeInteractive">
+          {`(function(){try{var t=localStorage.getItem('crm-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`}
+        </Script>
         <PwaServiceWorkerRegister />
         <ThemeProvider>
           <ProfileProvider>

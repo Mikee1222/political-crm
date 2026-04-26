@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { getCalendarClientForUser, mapEventType } from "@/lib/google-calendar";
 import { hasMinRole } from "@/lib/roles";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, profile } = await getSessionWithProfile();
   if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   if (!hasMinRole(profile?.role, "manager")) return forbidden();
@@ -35,9 +37,14 @@ export async function GET(request: NextRequest) {
     type: mapEventType(e),
   }));
   return NextResponse.json({ events, connected: true });
+  } catch (e) {
+    console.error("[api/schedule/events GET]", e);
+    return nextJsonError();
+  }
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const { user, profile } = await getSessionWithProfile();
   if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   if (!hasMinRole(profile?.role, "manager")) return forbidden();
@@ -68,4 +75,8 @@ export async function POST(request: NextRequest) {
     },
   });
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[api/schedule/events POST]", e);
+    return nextJsonError();
+  }
 }

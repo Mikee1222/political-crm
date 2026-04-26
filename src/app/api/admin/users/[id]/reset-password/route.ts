@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { nextJsonError } from "@/lib/api-resilience";
 
 /**
  * Αποστολή email επαναφοράς κωδικού (Supabase Auth recover).
  */
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile } = await getSessionWithProfile();
   if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   if (profile?.role !== "admin") return forbidden();
@@ -32,4 +34,8 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     return NextResponse.json({ error: t || "Αποτυχία αποστολής" }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[api/admin/users/reset-password]", e);
+    return nextJsonError();
+  }
 }

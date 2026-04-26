@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
@@ -48,7 +49,7 @@ export default function DataToolsPage() {
     setScanning(true);
     setDups(null);
     try {
-      const res = await fetch("/api/data-tools/duplicates/scan", { method: "POST" });
+      const res = await fetchWithTimeout("/api/data-tools/duplicates/scan", { method: "POST" });
       const data = await res.json();
       setDups((data.pairs as DupPair[]) ?? []);
     } catch {
@@ -62,7 +63,7 @@ export default function DataToolsPage() {
     setPhoneLoading(true);
     setPhoneAudit(null);
     try {
-      const res = await fetch("/api/data-tools/phone-audit");
+      const res = await fetchWithTimeout("/api/data-tools/phone-audit");
       setPhoneAudit(await res.json());
     } catch {
       setPhoneAudit({ empty: [], invalid: [], phoneDuplicates: [] });
@@ -75,7 +76,7 @@ export default function DataToolsPage() {
     setStatsLoading(true);
     setStats(null);
     try {
-      const res = await fetch("/api/data-tools/stats");
+      const res = await fetchWithTimeout("/api/data-tools/stats");
       setStats(await res.json());
     } catch {
       setStats(null);
@@ -85,7 +86,7 @@ export default function DataToolsPage() {
   }, []);
 
   const dismissPair = async (a: C, b: C) => {
-    await fetch("/api/data-tools/duplicates/dismiss", {
+    await fetchWithTimeout("/api/data-tools/duplicates/dismiss", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId1: a.id, contactId2: b.id }),
@@ -94,7 +95,7 @@ export default function DataToolsPage() {
   };
 
   const familyPair = async (a: C, b: C) => {
-    await fetch("/api/data-tools/duplicates/family", {
+    await fetchWithTimeout("/api/data-tools/duplicates/family", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId1: a.id, contactId2: b.id }),
@@ -107,7 +108,7 @@ export default function DataToolsPage() {
     const { contactA, contactB } = mergeTarget;
     const keepId = keepSide === "a" ? contactA.id : contactB.id;
     const mergeId = keepSide === "a" ? contactB.id : contactA.id;
-    await fetch("/api/data-tools/duplicates/merge", {
+    await fetchWithTimeout("/api/data-tools/duplicates/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ keepId, mergeId }),

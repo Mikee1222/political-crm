@@ -1,8 +1,9 @@
 @import "tailwindcss";
 /* Inter: weights 300–700 via next/font in layout.tsx (Greek + Latin) */
 
-/* Design tokens: War Room / command center (fonts also loaded via next/font) */
-:root {
+/* Design tokens — default & Σκοτεινό (war room): */
+:root,
+:root[data-theme="dark"] {
   --bg-primary: #050d1a;
   --bg-secondary: #0a1628;
   --bg-card: #0f1e35;
@@ -12,36 +13,130 @@
   --accent-blue: #003476;
   --accent-blue-bright: #1e5fa8;
   --text-primary: #f0f4ff;
-  /* Muted/secondary: never darker than this on dark UI */
   --text-mute-floor: #6b7f96;
-  /* General secondary (sidebar targets --text-sidebar; keep this readable) */
   --text-secondary: #8fa3bf;
-  /* Subtitles, KPI underlines, table secondary */
   --text-subtitle: #94a3b8;
-  /* Dashboard briefing rows (Καμία αντιστοίχιση, sublines, etc.) */
   --text-briefing: #cbd5e1;
-  /* Tables: high contrast on dark */
   --text-table: #e2e8f0;
   --text-table-secondary: #94a3b8;
-  /* Uppercase / thead labels (tables) */
   --text-header: #94a3b8;
-  /* Sidebar: inactive / active (desktop) */
   --text-sidebar: #8fa3bf;
   --text-sidebar-active: #ffffff;
-  /* Muted (meta, helper lines) — at or above --text-mute-floor */
   --text-muted: #94a3b8;
-  /* Big metric numerals in stat tiles */
   --text-metric-value: #ffffff;
-  /* Form placeholders only */
   --text-placeholder: #4a6080;
   --input-bg: #162540;
+  --input-border: rgba(201, 168, 76, 0.2);
+  --input-focus-border: #1e5fa8;
   --border: rgba(201, 168, 76, 0.15);
   --border-hover: rgba(201, 168, 76, 0.4);
   --success: #10b981;
   --danger: #ef4444;
   --warning: #f59e0b;
+  --status-positive-bg: rgba(16, 185, 129, 0.15);
+  --status-positive-text: #10b981;
+  --status-negative-bg: rgba(239, 68, 68, 0.15);
+  --status-negative-text: #ef4444;
+  --status-waiting-bg: rgba(148, 163, 184, 0.2);
+  --status-waiting-text: #94a3b8;
+  --status-noanswer-bg: rgba(245, 158, 11, 0.15);
+  --status-noanswer-text: #f59e0b;
+  /* Shell */
+  --sidebar-bg: #0a1628;
+  --sidebar-brand-title: #f0f4ff;
+  --sidebar-tagline: #c9a84c;
+  --topbar-bg: rgba(5, 13, 26, 0.9);
+  --nav-ink: #8fa3bf;
+  --nav-ink-hover: #f0f4ff;
+  --nav-item-hover-bg: rgba(201, 168, 76, 0.1);
+  --nav-item-active-border: #c9a84c;
+  --nav-item-active-bg: rgba(201, 168, 76, 0.12);
+  --nav-item-active-fg: #ffffff;
+  --nav-icon-inactive: #8fa3bf;
+  --nav-icon-hover: #c9a84c;
+  --nav-icon-active: #ffffff;
+  --nav-alex-inactive: #c9a84c;
+  --nav-alex-row-bg: rgba(201, 168, 76, 0.06);
+  --nav-alex-row-active-boost: rgba(201, 168, 76, 0.14);
+  --nav-alex-pill-border: rgba(201, 168, 76, 0.6);
+  --nav-alex-pill-bg: rgba(201, 168, 76, 0.2);
+  --nav-alex-pill-fg: #f0f4ff;
+  --nav-badge-bg: var(--accent-gold);
+  --nav-badge-fg: #0a0f1a;
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --nav-mobile-inactive: #8fa3bf;
+  --nav-mobile-active: #ffffff;
   --background: var(--bg-primary);
   --foreground: var(--text-primary);
+  color-scheme: dark;
+}
+
+/* Ανοιχτό — luxury cream / government office */
+:root[data-theme="light"] {
+  --bg-primary: #f5f0e8;
+  --bg-secondary: #ede8dc;
+  --bg-card: #ffffff;
+  --bg-elevated: #f9f6f0;
+  --accent-gold: #8b6914;
+  --accent-gold-light: #c9a84c;
+  --accent-blue: #003476;
+  --accent-blue-bright: #1e5fa8;
+  --text-primary: #0a0f1a;
+  --text-mute-floor: #5c6570;
+  --text-secondary: #3d4a5c;
+  --text-subtitle: #64748b;
+  --text-briefing: #475569;
+  --text-table: #0a0f1a;
+  --text-table-secondary: #64748b;
+  --text-header: #6b7a8d;
+  --text-sidebar: #ffffff;
+  --text-sidebar-active: #ffffff;
+  --text-muted: #6b7a8d;
+  --text-metric-value: #0a0f1a;
+  --text-placeholder: #9aa3ad;
+  --input-bg: #ffffff;
+  --input-border: rgba(139, 105, 20, 0.25);
+  --input-focus-border: #003476;
+  --border: rgba(139, 105, 20, 0.2);
+  --border-hover: rgba(139, 105, 20, 0.45);
+  --status-positive-bg: #dcfce7;
+  --status-positive-text: #15803d;
+  --status-negative-bg: #fee2e2;
+  --status-negative-text: #dc2626;
+  --status-waiting-bg: #f1f5f9;
+  --status-waiting-text: #475569;
+  --status-noanswer-bg: #fef3c7;
+  --status-noanswer-text: #b45309;
+  /* ND blue chrome */
+  --sidebar-bg: #003476;
+  --sidebar-brand-title: #ffffff;
+  --sidebar-tagline: rgba(255, 255, 255, 0.7);
+  --topbar-bg: rgba(245, 240, 232, 0.95);
+  --nav-ink: rgba(255, 255, 255, 0.6);
+  --nav-ink-hover: #ffffff;
+  --nav-item-hover-bg: rgba(255, 255, 255, 0.1);
+  --nav-item-active-border: #c9a84c;
+  --nav-item-active-bg: rgba(255, 255, 255, 0.15);
+  --nav-item-active-fg: #ffffff;
+  --nav-icon-inactive: rgba(255, 255, 255, 0.7);
+  --nav-icon-hover: #c9a84c;
+  --nav-icon-active: #ffffff;
+  --nav-alex-inactive: #c9a84c;
+  --nav-alex-row-bg: rgba(255, 255, 255, 0.08);
+  --nav-alex-row-active-boost: rgba(255, 255, 255, 0.2);
+  --nav-alex-pill-border: rgba(201, 168, 76, 0.5);
+  --nav-alex-pill-bg: rgba(255, 255, 255, 0.2);
+  --nav-alex-pill-fg: #ffffff;
+  --nav-badge-bg: #c9a84c;
+  --nav-badge-fg: #0a0f1a;
+  --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --card-shadow-hover: 0 4px 20px rgba(0, 0, 0, 0.1);
+  --nav-mobile-inactive: #6b7a8d;
+  --nav-mobile-active: #003476;
+  --background: var(--bg-primary);
+  --foreground: var(--text-primary);
+  color-scheme: light;
 }
 
 @theme inline {
@@ -117,10 +212,13 @@
 .hq-modal-panel {
   animation: modal-in 0.2s ease-out both;
 }
+.hq-bottom-nav {
+  background: color-mix(in srgb, var(--bg-secondary) 98%, transparent);
+}
 .hq-breadcrumb {
   font-size: 18px;
   font-weight: 600;
-  color: #f0f4ff;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 .hq-card-title {
@@ -128,12 +226,17 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #c9a84c;
+  color: var(--accent-gold-light);
 }
 .hq-particles {
   background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201, 168, 76, 0.12) 0%, transparent 50%),
     radial-gradient(ellipse 60% 40% at 100% 100%, rgba(30, 95, 168, 0.12) 0%, transparent 45%),
     radial-gradient(ellipse 50% 30% at 0% 80%, rgba(201, 168, 76, 0.08) 0%, transparent 40%), var(--bg-primary);
+}
+[data-theme="light"] .hq-particles {
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201, 168, 76, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(0, 52, 118, 0.07) 0%, transparent 45%),
+    radial-gradient(ellipse 50% 30% at 0% 80%, rgba(139, 105, 20, 0.08) 0%, transparent 40%), var(--bg-primary);
 }
 
 html {
@@ -143,7 +246,7 @@ html {
 
 body {
   background: var(--bg-primary);
-  color: #f0f4ff;
+  color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 400;
@@ -153,9 +256,15 @@ body {
 [data-hq-card] {
   color: var(--text-primary);
 }
+[data-theme="light"] [data-hq-card] {
+  box-shadow: var(--card-shadow);
+}
+[data-theme="light"] [data-hq-card]:hover {
+  box-shadow: var(--card-shadow-hover);
+}
 
 main {
-  color: #f0f4ff;
+  color: var(--text-primary);
 }
 
 ::placeholder,

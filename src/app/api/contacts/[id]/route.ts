@@ -4,8 +4,10 @@ import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -45,9 +47,14 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     .order("created_at", { ascending: false });
 
   return NextResponse.json({ contact, calls, tasks, requests });
+  } catch (e) {
+    console.error("[api/contacts/id GET]", e);
+    return nextJsonError();
+  }
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -110,11 +117,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     details: { actor_name: firstNameFromFull(profile?.full_name) },
   });
   return NextResponse.json({ contact: data });
+  } catch (e) {
+    console.error("[api/contacts/id PATCH]", e);
+    return nextJsonError();
+  }
 }
 
 export const PUT = PATCH;
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -128,4 +140,8 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[api/contacts/id DELETE]", e);
+    return nextJsonError();
+  }
 }

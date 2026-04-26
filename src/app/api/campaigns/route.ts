@@ -5,8 +5,10 @@ import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { getCampaignRollup } from "@/lib/campaign-stats";
 import { listContactIdsMatching, type ContactFilter } from "@/lib/contacts-filter-query";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET() {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -45,9 +47,14 @@ export async function GET() {
   );
 
   return NextResponse.json({ campaigns: withStats });
+  } catch (e) {
+    console.error("[api/campaigns GET]", e);
+    return nextJsonError();
+  }
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -124,4 +131,8 @@ export async function POST(request: NextRequest) {
     },
   });
   return NextResponse.json({ campaign: data, assigned_contacts: contactIds.length });
+  } catch (e) {
+    console.error("[api/campaigns POST]", e);
+    return nextJsonError();
+  }
 }

@@ -24,7 +24,9 @@ import { AiAssistantWidget } from "@/components/ai-assistant-widget";
 import { LogoutButton } from "@/components/logout-button";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-sheet";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useProfile } from "@/contexts/profile-context";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { hasMinRole, ROLE_BADGE, type Role } from "@/lib/roles";
 import type { LucideIcon } from "lucide-react";
 
@@ -71,12 +73,17 @@ function initials(fullName: string | null, fallback: string) {
 
 const navItemBase =
   "group flex h-12 max-h-12 items-center gap-3 rounded-lg border-l-[3px] border-transparent pl-2 pr-2 text-sm transition duration-200 ease-out";
-const navItemInactive =
-  "text-[#8FA3BF] [&>span]:text-[#8FA3BF] hover:border-transparent hover:bg-[rgba(201,168,76,0.1)] hover:text-[#F0F4FF] hover:[&>span]:text-[#F0F4FF]";
-const navItemIconInactive = "text-[#8FA3BF] group-hover:text-[#C9A84C]";
-const navItemActive =
-  "border-[var(--accent-gold)] bg-[rgba(201,168,76,0.12)] !text-white [&>span]:!text-white";
-const navItemIconActive = "text-white";
+const navItemInactive = [
+  "text-[var(--nav-ink)]",
+  "[&>span]:text-[var(--nav-ink)]",
+  "hover:border-transparent hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)] hover:[&>span]:text-[var(--nav-ink-hover)]",
+].join(" ");
+const navItemIconInactive = "text-[var(--nav-icon-inactive)] group-hover:text-[var(--nav-icon-hover)]";
+const navItemActive = [
+  "border-[var(--nav-item-active-border)] bg-[var(--nav-item-active-bg)]",
+  "!text-[var(--nav-item-active-fg)] [&>span]:!text-[var(--nav-item-active-fg)]",
+].join(" ");
+const navItemIconActive = "text-[var(--nav-icon-active)]";
 
 function NavLinks({
   pathname,
@@ -110,7 +117,10 @@ function NavLinks({
             <span className="flex min-w-0 flex-1 items-center justify-between gap-2 text-[14px] font-medium">
               <span className="truncate">{item.label}</span>
               {item.badge === "requests" && openRequestsCount > 0 && hasMinRole(role, "manager") && (
-                <span className="shrink-0 rounded-full bg-[var(--accent-gold)] px-1.5 py-0.5 text-[10px] font-bold text-[#0a0f1a]">
+                <span
+                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                  style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}
+                >
                   {openRequestsCount}
                 </span>
               )}
@@ -125,24 +135,35 @@ function NavLinks({
           onClick={onNavigate}
           className={[
             navItemBase,
-            "mt-0.5 border-[var(--border)]/50 bg-[rgba(201,168,76,0.06)]",
-            pathname.startsWith("/alexandra") ? navItemActive + " !bg-[rgba(201,168,76,0.14)]" : navItemInactive,
+            "mt-0.5 border-[var(--border)]/50 bg-[var(--nav-alex-row-bg)]",
+            pathname.startsWith("/alexandra")
+              ? `${navItemActive} !bg-[var(--nav-alex-row-active-boost)]`
+              : navItemInactive,
           ].join(" ")}
         >
           <Sparkles
             className={[
               "hq-shimmer h-5 w-5 shrink-0",
-              pathname.startsWith("/alexandra") ? "text-white" : "text-[#C9A84C] opacity-95",
+              pathname.startsWith("/alexandra") ? "text-[var(--nav-item-active-fg)]" : "text-[var(--nav-alex-inactive)] opacity-95",
             ].join(" ")}
           />
           <span
             className={[
               "flex min-w-0 flex-1 items-center justify-between gap-1.5 text-[14px] font-semibold",
-              pathname.startsWith("/alexandra") ? "text-white" : "text-[#8FA3BF]",
+              pathname.startsWith("/alexandra")
+                ? "text-[var(--nav-item-active-fg)]"
+                : "text-[var(--nav-ink)]",
             ].join(" ")}
           >
             <span>Αλεξάνδρα</span>
-            <span className="shrink-0 rounded border border-[#C9A84C]/60 bg-[rgba(201,168,76,0.2)] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-[#F0F4FF]">
+            <span
+              className="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+              style={{
+                borderColor: "var(--nav-alex-pill-border)",
+                background: "var(--nav-alex-pill-bg)",
+                color: "var(--nav-alex-pill-fg)",
+              }}
+            >
               AI
             </span>
           </span>
@@ -197,7 +218,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     if (isPublic || !hasMinRole(role, "manager")) {
       return;
     }
-    fetch("/api/requests")
+    fetchWithTimeout("/api/requests")
       .then((res) => res.json())
       .then((data) => {
         const rows = Array.isArray(data.requests) ? data.requests : [];
@@ -218,18 +239,28 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       className="grid min-h-[-webkit-fill-available] w-full min-h-screen grid-cols-1 bg-[var(--bg-primary)] md:grid-cols-[260px_minmax(0,1fr)]"
     >
       <aside
-        className="relative z-30 hidden h-screen min-h-0 w-full min-w-0 flex-col border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
-        style={{ background: "var(--bg-secondary)" }}
+        className="app-sidebar relative z-30 hidden h-screen min-h-0 w-full min-w-0 flex-col border-r border-[var(--border)] px-3 pt-6 pb-8 md:flex"
+        style={{ background: "var(--sidebar-bg)" }}
       >
         <div className="flex items-center justify-between pr-0.5 md:justify-start md:pr-0">
           <div className="mb-6 flex w-full items-center justify-between gap-3 pl-0.5">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#C9A84C] to-[#8B6914] text-[15px] font-bold tracking-tight text-white shadow-[0_0_24px_rgba(201,168,76,0.25)]">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-bold tracking-tight text-white shadow-[0_0_24px_rgba(201,168,76,0.25)]"
+                style={{ background: "linear-gradient(145deg, #c9a84c 0%, #8b6914 100%)" }}
+              >
                 ΚΚ
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-semibold leading-tight text-[var(--text-primary)]">Καραγκούνης</p>
-                <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--accent-gold)]">ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ</p>
+                <p className="text-[15px] font-semibold leading-tight" style={{ color: "var(--sidebar-brand-title)" }}>
+                  Καραγκούνης
+                </p>
+                <p
+                  className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.12em]"
+                  style={{ color: "var(--sidebar-tagline)" }}
+                >
+                  ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ
+                </p>
               </div>
             </div>
           </div>
@@ -244,7 +275,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
       <div className="app-main-shell box-border flex min-h-0 w-full min-w-0 flex-col">
         <header
-          className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] bg-[#050D1A]/90 pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg"
+          className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]"
         >
           <div className="box-border flex h-[52px] w-full min-w-0 max-w-full items-center justify-between gap-2 px-3 sm:px-6 md:h-[60px] md:px-8">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -288,6 +319,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   {ROLE_BADGE[role]}
                 </span>
               )}
+              <ThemeToggle />
               <div
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/40 text-[10px] font-bold text-white shadow-sm sm:text-xs"
                 title={profile?.full_name ?? "Χρήστης"}

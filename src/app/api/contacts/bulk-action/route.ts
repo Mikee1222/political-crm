@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { nextJsonError } from "@/lib/api-resilience";
 const schema = z.object({
   contact_ids: z.array(z.string()).min(1),
   action: z.enum(["update_status", "add_to_campaign", "delete"]),
@@ -12,6 +13,7 @@ const schema = z.object({
 const STATUSES = new Set(["Pending", "Positive", "Negative", "No Answer"]);
 
 export async function POST(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   if (!hasMinRole(profile?.role, "manager")) {
@@ -52,4 +54,8 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: "Άγνωστη ενέργεια" }, { status: 400 });
+  } catch (e) {
+    console.error("[api/contacts/bulk-action]", e);
+    return nextJsonError();
+  }
 }

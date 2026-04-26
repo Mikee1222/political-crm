@@ -18,6 +18,7 @@ import { el } from "date-fns/locale";
 import { Calendar, ChevronLeft, ChevronRight, MapPin, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, calendarTypeBlockClass, type CalendarEventType } from "@/lib/calendar-event-types";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
 type CalEvent = {
@@ -158,7 +159,7 @@ export default function SchedulePage() {
   const load = useCallback(async () => {
     setLoading(true);
     const q = new URLSearchParams({ timeMin, timeMax });
-    const res = await fetch(`/api/schedule/events?${q}`);
+    const res = await fetchWithTimeout(`/api/schedule/events?${q}`);
     const data = await res.json();
     setEvents((data.events ?? []) as CalEvent[]);
     setConnected(Boolean(data.connected));
@@ -173,7 +174,7 @@ export default function SchedulePage() {
     e.preventDefault();
     if (!newEv.title.trim() || !newEv.start || !newEv.end) return;
     setSaving(true);
-    await fetch("/api/schedule/events", {
+    await fetchWithTimeout("/api/schedule/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -195,7 +196,7 @@ export default function SchedulePage() {
     e.preventDefault();
     if (!detail?.id || isAllDayStr(detail.start) || !editForm.title.trim() || !editForm.start || !editForm.end) return;
     setSaving(true);
-    await fetch(`/api/schedule/events/${detail.id}`, {
+    await fetchWithTimeout(`/api/schedule/events/${detail.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -215,7 +216,7 @@ export default function SchedulePage() {
 
   const onDelete = async (id: string) => {
     if (!confirm("Διαγραφή γεγονότος;")) return;
-    await fetch(`/api/schedule/events/${id}`, { method: "DELETE" });
+    await fetchWithTimeout(`/api/schedule/events/${id}`, { method: "DELETE" });
     setDetail(null);
     setEditing(false);
     await load();

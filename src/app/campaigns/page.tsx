@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FileText, LayoutGrid, Megaphone, Plus, Play, Search, Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
@@ -59,7 +60,7 @@ export default function CampaignsPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/campaigns");
+    const res = await fetchWithTimeout("/api/campaigns");
     const data = await res.json();
     if (!res.ok) return;
     setCampaigns((data.campaigns ?? []) as Campaign[]);
@@ -72,7 +73,7 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     if (!modal) return;
-    fetch("/api/contacts/field-options")
+    fetchWithTimeout("/api/contacts/field-options")
       .then((r) => r.json())
       .then((d: FieldOptions) => setOptions({ areas: d.areas ?? [], municipalities: d.municipalities ?? [] }))
       .catch(() => setOptions({ areas: [], municipalities: [] }));
@@ -92,7 +93,7 @@ export default function CampaignsPage() {
     }
     setPreviewing(true);
     const t = setTimeout(() => {
-      fetch(`/api/campaigns/preview?${q.toString()}`)
+      fetchWithTimeout(`/api/campaigns/preview?${q.toString()}`)
         .then((r) => r.json())
         .then((d) => setPreviewCount(typeof d.count === "number" ? d.count : null))
         .catch(() => setPreviewCount(null))
@@ -113,7 +114,7 @@ export default function CampaignsPage() {
         priority: filter.priority || undefined,
         tag: filter.tag || undefined,
       };
-      const res = await fetch("/api/campaigns", {
+      const res = await fetchWithTimeout("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, description: description || null, filter: f }),
@@ -281,7 +282,7 @@ export default function CampaignsPage() {
                     setDialingId(c.id);
                     setFormErr(null);
                     try {
-                      const r = await fetch(`/api/campaigns/${c.id}/dial-next`, { method: "POST" });
+                      const r = await fetchWithTimeout(`/api/campaigns/${c.id}/dial-next`, { method: "POST" });
                       const d = (await r.json().catch(() => ({}))) as { error?: string; contact_id?: string };
                       if (!r.ok) {
                         setFormErr(d.error ?? "Αποτυχία");
@@ -309,7 +310,7 @@ export default function CampaignsPage() {
                     onClick={async () => {
                       setTogglingId(c.id);
                       try {
-                        const r = await fetch(`/api/campaigns/${c.id}`, {
+                        const r = await fetchWithTimeout(`/api/campaigns/${c.id}`, {
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ status: "completed" }),
@@ -330,7 +331,7 @@ export default function CampaignsPage() {
                     onClick={async () => {
                       setTogglingId(c.id);
                       try {
-                        const r = await fetch(`/api/campaigns/${c.id}`, {
+                        const r = await fetchWithTimeout(`/api/campaigns/${c.id}`, {
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ status: "active" }),
@@ -353,7 +354,7 @@ export default function CampaignsPage() {
                     setDeletingId(c.id);
                     setFormErr(null);
                     try {
-                      const r = await fetch(`/api/campaigns/${c.id}`, { method: "DELETE" });
+                      const r = await fetchWithTimeout(`/api/campaigns/${c.id}`, { method: "DELETE" });
                       const d = (await r.json().catch(() => ({}))) as { error?: string };
                       if (!r.ok) {
                         setFormErr(d.error ?? "Σφάλμα διαγραφής");

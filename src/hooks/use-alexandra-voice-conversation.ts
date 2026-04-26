@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { Conversation, type Mode, type Status } from "@11labs/client";
 
 /**
@@ -97,7 +98,7 @@ export function useAlexandraVoiceConversation(
     rawMessagesRef.current = [];
     if (merged.length > 0 && conversationId) {
       try {
-        const res = await fetch(`/api/ai-conversations/${conversationId}/messages`, {
+        const res = await fetchWithTimeout(`/api/ai-conversations/${conversationId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ entries: merged }),
@@ -162,7 +163,7 @@ export function useAlexandraVoiceConversation(
     setError(null);
 
     try {
-      const res = await fetch("/api/voice/session", { method: "POST" });
+      const res = await fetchWithTimeout("/api/voice/session", { method: "POST" });
       const j = (await res.json().catch(() => ({}))) as { signed_url?: string; error?: string };
       if (!res.ok) {
         throw new Error(j.error || "Άρνηση σύνδεσης");

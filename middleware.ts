@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
-import { createServerClient } from "@supabase/ssr";
+import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
 
 const CALLER_BLOCKED_PREFIXES = [
   "/dashboard",
@@ -31,58 +30,44 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const response = await updateSession(request);
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: () => {},
-      },
-    },
-  );
-
-  const { data } = await supabase.auth.getUser();
-  const isLoggedIn = Boolean(data.user);
+  const { supabase, response: sessionResponse, user: authUser } = await updateSession(request);
+  const isLoggedIn = Boolean(authUser);
   const isLoginPage = pathname === "/login";
-  const isWebhook = pathname.startsWith("/api/retell/webhook");
+  const isRetellPublic = pathname.startsWith("/api/retell/webhook") || pathname === "/api/retell/llm";
 
-  if (!isLoggedIn && !isLoginPage && !isWebhook) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  if (!isLoggedIn && !isLoginPage && !isRetellPublic) {
+    return redirectWithSession(request, "/login", sessionResponse);
   }
   if (isLoggedIn && isLoginPage) {
-    const { data: prof } = await supabase
+    await supabase
       .from("profiles")
       .select("role")
-      .eq("id", data.user!.id)
+      .eq("id", authUser!.id)
       .maybeSingle();
-    const role = (prof?.role as string) ?? "caller";
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return redirectWithSession(request, "/dashboard", sessionResponse);
   }
 
-  if (isLoggedIn && !isLoginPage && !isWebhook) {
+  if (isLoggedIn && !isLoginPage && !isRetellPublic) {
     const { data: prof } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", data.user!.id)
+      .eq("id", authUser!.id)
       .maybeSingle();
     const role = (prof?.role as string) ?? "caller";
 
     if (role === "caller") {
       for (const p of CALLER_BLOCKED_PREFIXES) {
         if (pathname === p || pathname.startsWith(`${p}/`)) {
-          return NextResponse.redirect(new URL("/contacts", request.url));
+          return redirectWithSession(request, "/contacts", sessionResponse);
         }
       }
     }
     if (role === "manager" && (pathname === "/settings" || pathname.startsWith("/settings/"))) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return redirectWithSession(request, "/dashboard", sessionResponse);
     }
   }
 
-  return response;
+  return sessionResponse;
 }
 
 export const config = {

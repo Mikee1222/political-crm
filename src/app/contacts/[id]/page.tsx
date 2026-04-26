@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { callStatusLabel, callStatusPill, priorityPill } from "@/lib/luxury-styles";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 
 const card =
@@ -200,7 +201,7 @@ export default function ContactDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const res = await fetch(`/api/contacts/${id}`);
+    const res = await fetchWithTimeout(`/api/contacts/${id}`);
     const data = await res.json();
     if (data.error) {
       setContact(null);
@@ -235,7 +236,7 @@ export default function ContactDetailPage() {
     if (!id) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/contacts/${id}`, {
+      const res = await fetchWithTimeout(`/api/contacts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -287,7 +288,7 @@ export default function ContactDetailPage() {
 
   const addRequest = async () => {
     if (!c || !newRequest.title.trim()) return;
-    await fetch("/api/requests", {
+    await fetchWithTimeout("/api/requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...newRequest, contact_id: c.id }),
@@ -299,7 +300,7 @@ export default function ContactDetailPage() {
 
   const addTask = async () => {
     if (!c || !newTask.title.trim()) return;
-    const res = await fetch("/api/tasks", {
+    const res = await fetchWithTimeout("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -317,7 +318,7 @@ export default function ContactDetailPage() {
 
   const toggleTask = async (task: Task) => {
     if (!canManage) return;
-    await fetch(`/api/tasks/${task.id}`, {
+    await fetchWithTimeout(`/api/tasks/${task.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ completed: !task.completed }),
@@ -327,7 +328,7 @@ export default function ContactDetailPage() {
 
   const triggerCall = async () => {
     if (!c) return;
-    await fetch("/api/retell/call", {
+    await fetchWithTimeout("/api/retell/call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contact_id: c.id }),
@@ -338,7 +339,7 @@ export default function ContactDetailPage() {
     if (!c) return;
     setSaving(true);
     try {
-      await fetch(`/api/contacts/${id}`, {
+      await fetchWithTimeout(`/api/contacts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_status: c.call_status }),

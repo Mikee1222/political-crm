@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { addDaysInMonthCounts, listDaysInMonth, monthRangeYmd } from "@/lib/task-filters";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -32,4 +34,8 @@ export async function GET(request: NextRequest) {
   );
   const max = Math.max(0, ...Object.values(counts));
   return NextResponse.json({ counts, days: listDaysInMonth(y, m), max, from, to });
+  } catch (e) {
+    console.error("[api/tasks/heatmap]", e);
+    return nextJsonError();
+  }
 }

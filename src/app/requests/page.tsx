@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
 type RequestRow = {
@@ -34,7 +35,7 @@ export default function RequestsPage() {
 
   const load = useCallback(async () => {
     const q = new URLSearchParams({ status, category });
-    const res = await fetch(`/api/requests?${q.toString()}`);
+    const res = await fetchWithTimeout(`/api/requests?${q.toString()}`);
     const data = await res.json();
     setRows(data.requests ?? []);
   }, [status, category]);
@@ -44,7 +45,7 @@ export default function RequestsPage() {
   }, [load]);
 
   useEffect(() => {
-    fetch("/api/contacts")
+    fetchWithTimeout("/api/contacts")
       .then((res) => res.json())
       .then((data) => setContacts(data.contacts ?? []));
   }, []);
@@ -54,7 +55,7 @@ export default function RequestsPage() {
   }, [rows]);
 
   const createRequest = async () => {
-    await fetch("/api/requests", {
+    await fetchWithTimeout("/api/requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(create),
@@ -264,7 +265,7 @@ function EditRequestModal({
   });
 
   const save = async () => {
-    await fetch(`/api/requests/${request.id}`, {
+    await fetchWithTimeout(`/api/requests/${request.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -274,7 +275,7 @@ function EditRequestModal({
   };
 
   const remove = async () => {
-    await fetch(`/api/requests/${request.id}`, { method: "DELETE" });
+    await fetchWithTimeout(`/api/requests/${request.id}`, { method: "DELETE" });
     await onSaved();
     onClose();
   };

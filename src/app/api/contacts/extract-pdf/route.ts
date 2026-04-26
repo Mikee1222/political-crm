@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -13,6 +14,7 @@ const getPdf = (): ((b: Buffer) => Promise<PdfData>) => {
 };
 
 export async function POST(request: Request) {
+  try {
   const { user, profile } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -31,4 +33,8 @@ export async function POST(request: Request) {
   const pdfParse = getPdf();
   const data = await pdfParse(buf);
   return NextResponse.json({ text: data.text ?? "", pages: data.numpages });
+  } catch (e) {
+    console.error("[api/contacts/extract-pdf]", e);
+    return nextJsonError();
+  }
 }

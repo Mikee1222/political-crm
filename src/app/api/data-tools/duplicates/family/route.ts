@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { stablePairId } from "@/lib/duplicate-detection";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function POST(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -26,4 +28,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[api/data-tools/duplicates/family]", e);
+    return nextJsonError();
+  }
 }

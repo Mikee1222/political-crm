@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import { hasMinRole, type Role } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { callStatusLabel, callStatusPill } from "@/lib/luxury-styles";
 
 const SUGGESTED: string[] = [
@@ -155,7 +156,7 @@ export function AlexandraApp() {
   const loadList = useCallback(async () => {
     setListLoading(true);
     try {
-      const res = await fetch("/api/ai-conversations");
+      const res = await fetchWithTimeout("/api/ai-conversations");
       const data = (await res.json()) as { conversations?: RowConv[]; error?: string };
       if (!res.ok) {
         setError(data.error || "Σφάλμα");
@@ -179,7 +180,7 @@ export function AlexandraApp() {
       if (!silent) setMessagesLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/ai-conversations/${id}/messages`);
+        const res = await fetchWithTimeout(`/api/ai-conversations/${id}/messages`);
         const data = (await res.json()) as {
           messages?: Array<{
             id: string;
@@ -222,7 +223,7 @@ export function AlexandraApp() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/ai-conversations", { method: "POST" });
+      const res = await fetchWithTimeout("/api/ai-conversations", { method: "POST" });
       const data = (await res.json()) as { id?: string; title?: string; error?: string };
       if (!res.ok || !data.id) {
         setError(data.error || "Σφάλμα");
@@ -247,7 +248,7 @@ export function AlexandraApp() {
       setError(null);
       setLoading(true);
       try {
-        const res = await fetch(`/api/ai-conversations/${c.id}`, { method: "DELETE" });
+        const res = await fetchWithTimeout(`/api/ai-conversations/${c.id}`, { method: "DELETE" });
         const _data = (await res.json()) as { error?: string };
         if (!res.ok) {
           setError(_data.error || "Σφάλμα");
@@ -275,7 +276,7 @@ export function AlexandraApp() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/ai-assistant/execute", {
+      const res = await fetchWithTimeout("/api/ai-assistant/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
@@ -497,7 +498,7 @@ export function AlexandraApp() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/ai-assistant/execute", {
+      const res = await fetchWithTimeout("/api/ai-assistant/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: t.pendingAction }),

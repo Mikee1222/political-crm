@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
+import { nextJsonError } from "@/lib/api-resilience";
 
 const ELEVEN_GET_SIGNED = "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url";
 
@@ -12,6 +13,7 @@ const ELEVEN_GET_SIGNED = "https://api.elevenlabs.io/v1/convai/conversation/get-
  * 5. Copy Agent ID to NEXT_PUBLIC_ELEVENLABS_AGENT_ID
  */
 export async function POST() {
+  try {
   const { user } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -47,6 +49,10 @@ export async function POST() {
   }
 
   return NextResponse.json({ signed_url: data.signed_url });
+  } catch (e) {
+    console.error("[api/voice/session]", e);
+    return nextJsonError();
+  }
 }
 
 export const dynamic = "force-dynamic";

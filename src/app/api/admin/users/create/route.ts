@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { Role } from "@/lib/roles";
+import { nextJsonError } from "@/lib/api-resilience";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -12,6 +13,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  try {
   const { user, profile } = await getSessionWithProfile();
   if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   if (profile?.role !== "admin") return forbidden();
@@ -47,4 +49,8 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ user_id: created.user.id, email: created.user.email ?? email });
+  } catch (e) {
+    console.error("[api/admin/users/create]", e);
+    return nextJsonError();
+  }
 }

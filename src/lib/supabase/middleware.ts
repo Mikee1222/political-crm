@@ -1,6 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Refreshes session. Use the returned `user` and `response` in middleware only:
+ * do not create a second createServerClient — it reads stale `request` cookies
+ * while refreshed tokens only exist on the session `response`, which breaks
+ * auth + can contribute to redirect/auth loops.
+ */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -13,16 +19,40 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          );
+          try {
+            (cookiesToSet ?? []).forEach(({ name, value }) => {
+              request.cookies.set(name, value);
+            });
+            supabaseResponse = NextResponse.next({ request });
+            (cookiesToSet ?? []).forEach(({ name, value, options }) => {
+              supabaseResponse.cookies.set(name, value, options);
+            });
+          } catch {
+            // ignore
+          }
         },
       },
     },
   );
 
-  await supabase.auth.getUser();
-  return supabaseResponse;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return { supabase, response: supabaseResponse, user: user ?? null };
+}
+
+/** Preserves Set-Cookie from the session `next` response on a redirect (avoids lost refresh tokens). */
+export function redirectWithSession(
+  request: NextRequest,
+  path: string,
+  sessionRes: NextResponse
+): NextResponse {
+  const target = path.startsWith("http")
+    ? new URL(path)
+    : new URL(path, request.url);
+  const redirect = NextResponse.redirect(target);
+  for (const c of sessionRes.cookies.getAll()) {
+    redirect.cookies.set(c);
+  }
+  return redirect;
 }

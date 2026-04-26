@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import type { Role } from "@/lib/roles";
 
 export type Profile = {
@@ -25,7 +26,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/profile");
+      const res = await fetchWithTimeout("/api/profile", { timeoutMs: CLIENT_FETCH_TIMEOUT_MS, credentials: "same-origin" });
       if (!res.ok) {
         setProfile(null);
         return;

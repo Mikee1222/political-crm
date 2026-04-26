@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
 const MONTHS_HEADER = [
@@ -59,7 +60,7 @@ export default function NamedaysPage() {
 
   const loadToday = useCallback(async () => {
     setTodayErr(null);
-    const res = await fetch("/api/namedays/today-summary");
+    const res = await fetchWithTimeout("/api/namedays/today-summary");
     const data = (await res.json()) as { dateLabel?: string; calendarNames?: string[]; contactCount?: number; error?: string };
     if (!res.ok) {
       setTodayErr(data.error || "Σφάλμα");
@@ -79,7 +80,7 @@ export default function NamedaysPage() {
 
   const load = useCallback(async () => {
     setLoadErr(null);
-    const res = await fetch("/api/namedays/calendar");
+    const res = await fetchWithTimeout("/api/namedays/calendar");
     const data = (await res.json()) as { days?: DayRow[]; error?: string };
     if (!res.ok) {
       setLoadErr(data.error || "Σφάλμα φόρτωσης");

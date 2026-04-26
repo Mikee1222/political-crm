@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useProfile } from "@/contexts/profile-context";
 import type { Role } from "@/lib/roles";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
 type UserRow = {
@@ -28,14 +29,14 @@ export default function SettingsPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
-    const res = await fetch("/api/admin/users");
+    const res = await fetchWithTimeout("/api/admin/users");
     if (!res.ok) return;
     const data = await res.json();
     setUsers(data.users ?? []);
   }, []);
 
   const loadInt = useCallback(async () => {
-    const res = await fetch("/api/admin/integrations");
+    const res = await fetchWithTimeout("/api/admin/integrations");
     if (!res.ok) return;
     setIntegrations(await res.json());
   }, []);
@@ -49,7 +50,7 @@ export default function SettingsPage() {
 
   const setRole = async (userId: string, role: Role) => {
     setErr(null);
-    const res = await fetch(`/api/admin/users/${userId}`, {
+    const res = await fetchWithTimeout(`/api/admin/users/${userId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role }),
@@ -64,7 +65,7 @@ export default function SettingsPage() {
 
   const resetPassword = async (userId: string) => {
     setErr(null);
-    const res = await fetch(`/api/admin/users/${userId}/reset-password`, { method: "POST" });
+    const res = await fetchWithTimeout(`/api/admin/users/${userId}/reset-password`, { method: "POST" });
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       setErr(j.error ?? "Σφάλμα");
@@ -75,7 +76,7 @@ export default function SettingsPage() {
 
   const deleteUser = async (userId: string) => {
     setErr(null);
-    const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+    const res = await fetchWithTimeout(`/api/admin/users/${userId}`, { method: "DELETE" });
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       setErr(j.error ?? "Σφάλμα");
@@ -86,7 +87,7 @@ export default function SettingsPage() {
   };
 
   const disconnectGoogle = async () => {
-    await fetch("/api/auth/google/disconnect", { method: "DELETE" });
+    await fetchWithTimeout("/api/auth/google/disconnect", { method: "DELETE" });
     await loadInt();
   };
 
@@ -267,7 +268,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/admin/users/create", {
+      const res = await fetchWithTimeout("/api/admin/users/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ full_name: full_name.trim(), email: email.trim(), password, role }),

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -56,9 +58,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const c = (data as { contacts?: unknown }).contacts;
   const contact = Array.isArray(c) ? c[0] : c;
   return NextResponse.json({ task: { ...data, contacts: contact ?? null } });
+  } catch (e) {
+    console.error("[api/tasks/id PATCH]", e);
+    return nextJsonError();
+  }
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -69,4 +76,8 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   const { error } = await supabase.from("tasks").delete().eq("id", params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[api/tasks/id DELETE]", e);
+    return nextJsonError();
+  }
 }

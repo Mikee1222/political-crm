@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { nextJsonError } from "@/lib/api-resilience";
 import {
   pairScoreAndReasons,
   stablePairId,
@@ -17,6 +18,7 @@ type Row = {
 };
 
 export async function POST() {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -85,4 +87,8 @@ export async function POST() {
 
   pairs.sort((x, y) => y.score - x.score);
   return NextResponse.json({ pairs, scanned: list.length });
+  } catch (e) {
+    console.error("[api/data-tools/duplicates/scan]", e);
+    return nextJsonError();
+  }
 }

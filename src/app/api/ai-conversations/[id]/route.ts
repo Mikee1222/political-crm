@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile } from "@/lib/auth-helpers";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { id } = params;
   const { user, supabase } = await getSessionWithProfile();
   if (!user) {
@@ -28,6 +30,10 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
   }
 
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[api/ai-conversations/id]", e);
+    return nextJsonError();
+  }
 }
 
 export const dynamic = "force-dynamic";

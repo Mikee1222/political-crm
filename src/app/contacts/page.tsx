@@ -8,6 +8,7 @@ import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { useProfile } from "@/contexts/profile-context";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { hasMinRole } from "@/lib/roles";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { avatarContact, callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 
 type Contact = {
@@ -166,7 +167,7 @@ function ContactsPage() {
     if (namedayToday) {
       params.set("nameday_today", "1");
     }
-    const res = await fetch(`/api/contacts?${params.toString()}`);
+    const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
     const data = await res.json();
     setContacts(data.contacts ?? []);
   }, [search, callStatus, area, municipality, priority, tag, namedayToday]);
@@ -182,7 +183,7 @@ function ContactsPage() {
 
   useEffect(() => {
     if (!canManage) return;
-    fetch("/api/campaigns")
+    fetchWithTimeout("/api/campaigns")
       .then((r) => r.json())
       .then((d) => {
         setCampaigns((d.campaigns as Camp[] | undefined) ?? []);
@@ -200,7 +201,7 @@ function ContactsPage() {
 
   const triggerCall = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await fetch("/api/retell/call", {
+    await fetchWithTimeout("/api/retell/call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contact_id: id }),
@@ -208,7 +209,7 @@ function ContactsPage() {
   };
 
   const triggerCallById = async (id: string) => {
-    await fetch("/api/retell/call", {
+    await fetchWithTimeout("/api/retell/call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contact_id: id }),
@@ -220,7 +221,7 @@ function ContactsPage() {
     setBulkErr(null);
     setSaving(true);
     try {
-      const res = await fetch("/api/contacts/bulk-action", {
+      const res = await fetchWithTimeout("/api/contacts/bulk-action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contact_ids: selectedIds, action, value: value ?? "" }),
@@ -708,7 +709,7 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
   });
 
   const postCreate = async () => {
-    const res = await fetch("/api/contacts", {
+    const res = await fetchWithTimeout("/api/contacts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildPayload()),
@@ -740,7 +741,7 @@ function CreateContactModal({ onClose, onSaved }: { onClose: () => void; onSaved
     });
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/contacts/precheck?${qs.toString()}`);
+      const res = await fetchWithTimeout(`/api/contacts/precheck?${qs.toString()}`);
       const j = (await res.json()) as {
         phoneMatch: { id: string; name: string } | null;
         nameMatch: { id: string; name: string } | null;

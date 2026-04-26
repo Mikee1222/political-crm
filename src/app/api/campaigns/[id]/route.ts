@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { getCampaignRollup } from "@/lib/campaign-stats";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -43,9 +45,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     contactTotal: rollup.assignedCount,
     calls,
   });
+  } catch (e) {
+    console.error("[api/campaigns/id GET]", e);
+    return nextJsonError();
+  }
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -71,9 +78,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ campaign: data });
+  } catch (e) {
+    console.error("[api/campaigns/id PATCH]", e);
+    return nextJsonError();
+  }
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -86,4 +98,8 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[api/campaigns/id DELETE]", e);
+    return nextJsonError();
+  }
 }

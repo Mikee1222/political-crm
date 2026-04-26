@@ -11,10 +11,12 @@ type MobileBottomNavProps = {
   openRequestsCount: number;
 };
 
-const activeIcon = "text-white";
-const inactiveIcon = "text-[#8FA3BF]";
+const activeIcon = "text-[var(--nav-mobile-active)]";
+const inactiveIcon = "text-[var(--nav-mobile-inactive)]";
 const itemBase = "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 min-h-[44px] text-[10px] font-medium transition duration-200 ease-out";
-const itemLabel = (active: boolean) => (active ? "text-white" : "text-[#8FA3BF]");
+const itemLabel = (active: boolean) => (active ? "text-[var(--nav-mobile-active)]" : "text-[var(--nav-mobile-inactive)]");
+const navClass =
+  "hq-bottom-nav bottom-nav safe-bottom fixed bottom-0 left-0 right-0 z-40 flex h-14 w-full border-t border-[var(--border)] backdrop-blur-md md:hidden";
 
 export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileBottomNavProps) {
   const pathname = usePathname();
@@ -28,7 +30,7 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
   if (mgr) {
     return (
       <nav
-        className="bottom-nav safe-bottom fixed bottom-0 left-0 right-0 z-40 flex h-14 min-h-14 w-full border-t border-[rgba(201,168,76,0.2)] bg-[#0A1628]/98 backdrop-blur-md md:hidden"
+        className={navClass + " min-h-14"}
         role="navigation"
         aria-label="Κύρια πλοήγηση"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
@@ -42,21 +44,24 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
           <span>Επαφές</span>
         </Link>
         <Link href="/alexandra" className={`${itemBase} ${itemLabel(pathname.startsWith("/alexandra"))}`} prefetch>
-          <Sparkles className={`h-5 w-5 shrink-0 ${pathname.startsWith("/alexandra") ? activeIcon : "text-[#8FA3BF]"}`} />
+          <Sparkles className={`h-5 w-5 shrink-0 ${pathname.startsWith("/alexandra") ? activeIcon : inactiveIcon}`} />
           <span className={itemLabel(pathname.startsWith("/alexandra"))}>Αλεξάνδρα</span>
         </Link>
         <Link href="/requests" className={`${itemBase} ${itemLabel(isActive("/requests", true))} relative`} prefetch>
           <Inbox className={`h-5 w-5 shrink-0 ${isActive("/requests", true) ? activeIcon : inactiveIcon}`} />
           <span>Αιτήματα</span>
           {openRequestsCount > 0 && (
-            <span className="absolute right-2 top-0.5 min-w-[1rem] rounded-full bg-[var(--accent-gold)] px-1 text-center text-[9px] font-bold text-[#0a0f1a]">
+            <span
+              className="absolute right-2 top-0.5 min-w-[1rem] rounded-full px-1 text-center text-[9px] font-bold"
+              style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}
+            >
               {openRequestsCount > 9 ? "9+" : openRequestsCount}
             </span>
           )}
         </Link>
         <button
           type="button"
-          className={itemBase + " w-full border-0 bg-transparent p-0 text-[#8FA3BF]"}
+          className={itemBase + " w-full border-0 bg-transparent p-0 text-[var(--nav-mobile-inactive)]"}
           onClick={onOpenMore}
           aria-label="Περισσότερα"
         >
@@ -69,7 +74,7 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
 
   return (
     <nav
-      className="bottom-nav safe-bottom fixed bottom-0 left-0 right-0 z-40 flex h-14 w-full border-t border-[rgba(201,168,76,0.2)] bg-[#0A1628]/98 backdrop-blur-md md:hidden"
+      className={navClass}
       role="navigation"
       aria-label="Κύρια πλοήγηση"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
@@ -83,12 +88,12 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
         <span>Εορτ.</span>
       </Link>
       <Link href="/alexandra" className={`${itemBase} ${itemLabel(pathname.startsWith("/alexandra"))}`} prefetch>
-        <Sparkles className={`h-5 w-5 ${pathname.startsWith("/alexandra") ? activeIcon : "text-[#8FA3BF]"}`} />
+        <Sparkles className={`h-5 w-5 ${pathname.startsWith("/alexandra") ? activeIcon : inactiveIcon}`} />
         <span className={itemLabel(pathname.startsWith("/alexandra"))}>Αλεξάνδρα</span>
       </Link>
       <button
         type="button"
-        className={itemBase + " flex-1 border-0 bg-transparent p-0 text-[#8FA3BF]"}
+        className={itemBase + " flex-1 border-0 bg-transparent p-0 text-[var(--nav-mobile-inactive)]"}
         onClick={onOpenMore}
         aria-label="Περισσότερα"
       >

@@ -12,6 +12,7 @@ import {
   suggestCrmField,
   tryParseDelimited,
 } from "@/lib/csv-import-mapping";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
 const BATCH = 30;
@@ -104,7 +105,7 @@ export function ContactsImportWizard({ onImported }: Props) {
       if (isPdf) {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch("/api/contacts/extract-pdf", { method: "POST", body: formData });
+        const res = await fetchWithTimeout("/api/contacts/extract-pdf", { method: "POST", body: formData });
         if (!res.ok) {
           const j = (await res.json().catch(() => ({}))) as { error?: string };
           setErrMsg(j.error ?? "Αποτυχία εξαγωγής PDF");
@@ -189,7 +190,7 @@ export function ContactsImportWizard({ onImported }: Props) {
     const errorDetails: { phone: string; message: string }[] = [];
     for (let i = 0; i < mappedRows.length; i += BATCH) {
       const chunk = mappedRows.slice(i, i + BATCH);
-      const res = await fetch("/api/contacts/import-mapped", {
+      const res = await fetchWithTimeout("/api/contacts/import-mapped", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contacts: chunk }),

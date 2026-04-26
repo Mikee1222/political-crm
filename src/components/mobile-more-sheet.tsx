@@ -30,12 +30,12 @@ export function MobileMoreSheet({ open, onClose, items, openRequestsCount, role 
         onClick={onClose}
       />
       <div
-            className="mobile-more-sheet max-h-[85dvh] fixed bottom-0 left-0 right-0 z-[101] overflow-y-auto rounded-t-2xl border-t border-[rgba(201,168,76,0.25)] bg-[#0A1628] shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition duration-200 ease-out"
+            className="mobile-more-sheet max-h-[85dvh] fixed bottom-0 left-0 right-0 z-[101] overflow-y-auto rounded-t-2xl border-t border-[var(--border)] bg-[var(--bg-secondary)] shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition duration-200 ease-out"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))" }}
         role="dialog"
         aria-label="Περισσότερα"
       >
-        <div className="sticky top-0 z-10 flex h-7 items-center justify-center border-b border-[var(--border)]/60 bg-[#0A1628] pt-2">
+        <div className="sticky top-0 z-10 flex h-7 items-center justify-center border-b border-[var(--border)]/60 bg-[var(--bg-secondary)] pt-2">
           <div className="h-1 w-10 rounded-full bg-[var(--text-muted)]/50" />
         </div>
         <div className="flex items-center justify-between border-b border-[var(--border)]/40 px-4 py-3">

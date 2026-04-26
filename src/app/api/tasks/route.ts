@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { defaultAnchorYmd, weekRangeYmd, type TaskTabFilter } from "@/lib/task-filters";
+import { nextJsonError } from "@/lib/api-resilience";
 
 const taskSelect = [
   "id",
@@ -26,6 +27,7 @@ function mapRow(row: Row) {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -89,9 +91,14 @@ export async function GET(request: NextRequest) {
     completed: cList,
     anchor,
   });
+  } catch (e) {
+    console.error("[api/tasks GET]", e);
+    return nextJsonError();
+  }
 }
 
 export async function POST(request: Request) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -131,4 +138,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   return NextResponse.json({ task: data });
+  } catch (e) {
+    console.error("[api/tasks POST]", e);
+    return nextJsonError();
+  }
 }

@@ -4,6 +4,7 @@ import { hasMinRole } from "@/lib/roles";
 import { buildContactsQuery, contactMatchesLocalSearch } from "@/lib/contacts-query";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { callStatusLabel } from "@/lib/luxury-styles";
+import { nextJsonError } from "@/lib/api-resilience";
 
 function escapeCsvCell(v: string | number | null | undefined): string {
   const s = v == null ? "" : String(v);
@@ -22,6 +23,7 @@ const SELECT_EXPORT =
   "id, first_name, last_name, phone, email, area, municipality, electoral_district, call_status, priority, political_stance, notes, nickname";
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   if (!hasMinRole(profile?.role, "caller")) {
@@ -146,4 +148,8 @@ export async function GET(request: NextRequest) {
       "Content-Disposition": `attachment; filename="epafes-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });
+  } catch (e) {
+    console.error("[api/contacts/export]", e);
+    return nextJsonError();
+  }
 }

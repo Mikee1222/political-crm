@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
@@ -46,7 +47,7 @@ export function HeatmapClient() {
 
   const load = useCallback(async (m: MapMode) => {
     setErr(null);
-    const res = await fetch(`/api/heatmap/municipalities?mode=${encodeURIComponent(m)}`);
+    const res = await fetchWithTimeout(`/api/heatmap/municipalities?mode=${encodeURIComponent(m)}`);
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       setErr(j.error ?? "Σφάλμα φόρτωσης");

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { nextJsonError } from "@/lib/api-resilience";
 
 const rowSchema = z.object({
   first_name: z.string().min(1).max(400),
@@ -40,6 +41,7 @@ type InsertRow = {
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -84,4 +86,8 @@ export async function POST(request: Request) {
     }
   }
   return NextResponse.json({ inserted, errors: errorCount, errorDetails: lastErrors });
+  } catch (e) {
+    console.error("[api/contacts/import-mapped]", e);
+    return nextJsonError();
+  }
 }

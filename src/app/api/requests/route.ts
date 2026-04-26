@@ -3,8 +3,10 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -32,9 +34,14 @@ export async function GET(request: NextRequest) {
     return { ...row, contacts: contact ?? null };
   });
   return NextResponse.json({ requests });
+  } catch (e) {
+    console.error("[api/requests GET]", e);
+    return nextJsonError();
+  }
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -57,4 +64,8 @@ export async function POST(request: NextRequest) {
     details: { actor_name: firstNameFromFull(profile?.full_name) },
   });
   return NextResponse.json({ request: data });
+  } catch (e) {
+    console.error("[api/requests POST]", e);
+    return nextJsonError();
+  }
 }

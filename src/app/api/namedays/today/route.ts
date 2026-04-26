@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { API_RACE_MS, runWithTimeCap } from "@/lib/api-resilience";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+
+export const dynamic = "force-dynamic";
 
 function monthDay(date: Date) {
   return { month: date.getMonth() + 1, day: date.getDate() };
@@ -13,7 +16,16 @@ function normalizeGreek(value: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+const emptyNamedays = {
+  today: [] as string[],
+  tomorrow: [] as string[],
+  dayAfter: [] as string[],
+  celebratingContacts: [] as unknown[],
+  birthdaysToday: [] as unknown[],
+};
+
 export async function GET() {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -22,6 +34,9 @@ export async function GET() {
     return forbidden();
   }
 
+  return await runWithTimeCap<NextResponse>(
+    API_RACE_MS,
+    async () => {
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
@@ -61,4 +76,11 @@ export async function GET() {
     celebratingContacts: contacts,
     birthdaysToday: birthdaysRows.data ?? [],
   });
+    },
+    NextResponse.json(emptyNamedays) as NextResponse,
+  );
+  } catch (e) {
+    console.error("[api/namedays/today]", e);
+    return NextResponse.json(emptyNamedays);
+  }
 }

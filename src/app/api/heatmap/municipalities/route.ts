@@ -3,6 +3,7 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { MUNI_CENTROIDS, findCanonicalMuni, KNOWN_MUNICIPALITY_NAMES } from "@/lib/aitoloakarnania-map-centroids";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
+import { nextJsonError } from "@/lib/api-resilience";
 
 type Mode = "contacts" | "positive" | "negative";
 
@@ -26,6 +27,7 @@ function tally(status: string | null | undefined, bucket: { positive: number; ne
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -99,4 +101,8 @@ export async function GET(request: NextRequest) {
     maxCount,
     maxTotal,
   });
+  } catch (e) {
+    console.error("[api/heatmap/municipalities]", e);
+    return nextJsonError();
+  }
 }

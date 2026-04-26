@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 // API key: header `x-api-key` or query `?key=` (see requirePublicApiKey)
 import { requirePublicApiKey } from "@/lib/public-api-auth";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(request: NextRequest) {
+  try {
   const authErr = requirePublicApiKey(request);
   if (authErr) return authErr;
 
@@ -52,6 +54,10 @@ export async function GET(request: NextRequest) {
     pendingContacts: pendingContacts ?? 0,
     recentActivity,
   });
+  } catch (e) {
+    console.error("[api/public/stats]", e);
+    return nextJsonError();
+  }
 }
 
 export const dynamic = "force-dynamic";

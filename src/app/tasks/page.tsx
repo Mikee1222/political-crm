@@ -20,6 +20,7 @@ import {
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { ymdToNextMonth, ymdToPrevMonth } from "@/lib/task-filters";
 import type { TaskTabFilter } from "@/lib/task-filters";
@@ -89,7 +90,7 @@ export default function TasksPage() {
     setLoading(true);
     try {
       const q = new URLSearchParams({ filter: tab, date: athensTodayYmd() });
-      const res = await fetch(`/api/tasks?${q.toString()}`);
+      const res = await fetchWithTimeout(`/api/tasks?${q.toString()}`);
       const d = (await res.json().catch(() => ({}))) as { error?: string; pending?: TaskT[]; completed?: TaskT[]; anchor?: string };
       if (!res.ok) {
         setErr(d.error ?? "Σφάλμα");
@@ -108,7 +109,7 @@ export default function TasksPage() {
 
   const loadHeat = useCallback(async () => {
     const { year, m } = heat;
-    const res = await fetch(`/api/tasks/heatmap?year=${year}&month=${m}`);
+    const res = await fetchWithTimeout(`/api/tasks/heatmap?year=${year}&month=${m}`);
     const d = (await res.json().catch(() => ({}))) as { counts?: Record<string, number>; max?: number };
     if (res.ok && d.counts) {
       setHeatCounts(d.counts);
@@ -280,14 +281,14 @@ export default function TasksPage() {
 
 async function markDone(id: string, setE: (s: string | null) => void, onOk: () => void) {
   setE(null);
-  const r = await fetch(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: true }) });
+  const r = await fetchWithTimeout(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: true }) });
   const d = (await r.json().catch(() => ({}))) as { error?: string };
   if (!r.ok) setE(d.error ?? "Σφάλμα");
   else onOk();
 }
 async function markUndone(id: string, setE: (s: string | null) => void, onOk: () => void) {
   setE(null);
-  const r = await fetch(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: false }) });
+  const r = await fetchWithTimeout(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: false }) });
   const d = (await r.json().catch(() => ({}))) as { error?: string };
   if (!r.ok) setE(d.error ?? "Σφάλμα");
   else onOk();
@@ -295,7 +296,7 @@ async function markUndone(id: string, setE: (s: string | null) => void, onOk: ()
 async function removeTask(id: string, setE: (s: string | null) => void, onOk: () => void) {
   setE(null);
   if (!confirm("Διαγραφή εργασίας;")) return;
-  const r = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+  const r = await fetchWithTimeout(`/api/tasks/${id}`, { method: "DELETE" });
   if (!r.ok) {
     const d = (await r.json().catch(() => ({}))) as { error?: string };
     setE(d.error ?? "Σφάλμα");
@@ -359,7 +360,7 @@ function TaskCard({
       return;
     }
     const tm = setTimeout(() => {
-      void fetch(`/api/contacts?search=${encodeURIComponent(q)}`)
+      void fetchWithTimeout(`/api/contacts?search=${encodeURIComponent(q)}`)
         .then((r) => r.json())
         .then((d: { contacts?: { id: string; first_name: string; last_name: string; phone: string }[] }) =>
           setHits((d.contacts ?? []).slice(0, 12)),
@@ -595,7 +596,7 @@ function TaskCard({
                 setDErr(null);
                 setSaving(true);
                 try {
-                  const r = await fetch(`/api/tasks/${task.id}`, {
+                  const r = await fetchWithTimeout(`/api/tasks/${task.id}`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -652,7 +653,7 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       return;
     }
     const tm = setTimeout(() => {
-      void fetch(`/api/contacts?search=${encodeURIComponent(q)}`)
+      void fetchWithTimeout(`/api/contacts?search=${encodeURIComponent(q)}`)
         .then((r) => r.json())
         .then((d: { contacts?: typeof hits }) => setHits((d.contacts ?? []).slice(0, 12)));
     }, 200);
@@ -668,7 +669,7 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     }
     setSaving(true);
     try {
-      const r = await fetch("/api/tasks", {
+      const r = await fetchWithTimeout("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

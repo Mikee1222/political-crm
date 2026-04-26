@@ -14,6 +14,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import type { ComponentType } from "react";
 import { lux } from "@/lib/luxury-styles";
+import { fetchJsonWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/safe-json-fetch";
 
 type DashboardData = {
   totalContacts: number;
@@ -33,24 +34,107 @@ type Briefing = {
 
 type Act = { id: string; text: string; timeAgo: string; avatar: string };
 
+const EMPTY_DASH: DashboardData = {
+  totalContacts: 0,
+  totalCallsToday: 0,
+  positiveRate: 0,
+  pendingContacts: 0,
+  recentActivity: [],
+};
+
+const EMPTY_BRIEF: Briefing = {
+  namedays: { names: [], matchingContactsCount: 0, contactNames: [] },
+  tasksDueToday: [],
+  openRequestsCount: 0,
+  contactsAddedThisWeek: 0,
+  campaigns: [],
+};
+
+function parseDashboard(raw: unknown): DashboardData {
+  if (!raw || typeof raw !== "object") return EMPTY_DASH;
+  const o = raw as Record<string, unknown>;
+  if ("error" in o && o.error) return EMPTY_DASH;
+  return {
+    totalContacts: typeof o.totalContacts === "number" ? o.totalContacts : 0,
+    totalCallsToday: typeof o.totalCallsToday === "number" ? o.totalCallsToday : 0,
+    positiveRate: typeof o.positiveRate === "number" ? o.positiveRate : 0,
+    pendingContacts: typeof o.pendingContacts === "number" ? o.pendingContacts : 0,
+    recentActivity: Array.isArray(o.recentActivity) ? (o.recentActivity as DashboardData["recentActivity"]) : [],
+  };
+}
+
+function parseBriefing(raw: unknown): Briefing {
+  if (!raw || typeof raw !== "object") return EMPTY_BRIEF;
+  const o = raw as Record<string, unknown>;
+  if ("error" in o && o.error) return EMPTY_BRIEF;
+  const n = o.namedays;
+  const namedays =
+    n && typeof n === "object"
+      ? {
+          names: Array.isArray((n as { names?: unknown }).names) ? ((n as { names: string[] }).names) : [],
+          matchingContactsCount:
+            typeof (n as { matchingContactsCount?: unknown }).matchingContactsCount === "number"
+              ? (n as { matchingContactsCount: number }).matchingContactsCount
+              : 0,
+          contactNames: Array.isArray((n as { contactNames?: unknown }).contactNames)
+            ? ((n as { contactNames: string[] }).contactNames)
+            : [],
+        }
+      : EMPTY_BRIEF.namedays;
+  return {
+    namedays,
+    tasksDueToday: Array.isArray(o.tasksDueToday) ? (o.tasksDueToday as Briefing["tasksDueToday"]) : [],
+    openRequestsCount: typeof o.openRequestsCount === "number" ? o.openRequestsCount : 0,
+    contactsAddedThisWeek: typeof o.contactsAddedThisWeek === "number" ? o.contactsAddedThisWeek : 0,
+    campaigns: Array.isArray(o.campaigns) ? (o.campaigns as Briefing["campaigns"]) : [],
+  };
+}
+
+function parseActs(raw: unknown): Act[] {
+  if (!raw || typeof raw !== "object") return [];
+  const o = raw as { activities?: unknown };
+  if (!Array.isArray(o.activities)) return [];
+  return o.activities
+    .map((a) => {
+      if (!a || typeof a !== "object") return null;
+      const r = a as Record<string, unknown>;
+      if (typeof r.id !== "string" || typeof r.text !== "string") return null;
+      return {
+        id: r.id,
+        text: r.text,
+        timeAgo: typeof r.timeAgo === "string" ? r.timeAgo : "",
+        avatar: typeof r.avatar === "string" ? r.avatar : "•",
+      };
+    })
+    .filter((x): x is Act => x !== null);
+}
+
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [briefing, setBriefing] = useState<Briefing | null>(null);
+  const [ready, setReady] = useState(false);
+  const [data, setData] = useState<DashboardData>(EMPTY_DASH);
+  const [briefing, setBriefing] = useState<Briefing>(EMPTY_BRIEF);
   const [acts, setActs] = useState<Act[]>([]);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/dashboard").then((res) => res.json()),
-      fetch("/api/briefing/today").then((res) => res.json()),
-      fetch("/api/activity/recent").then((res) => res.json()),
-    ]).then(([dashboardData, br, actData]) => {
-      setData(dashboardData);
-      if (!br.error) setBriefing(br);
-      setActs(Array.isArray(actData.activities) ? actData.activities : []);
-    });
+    let cancelled = false;
+    (async () => {
+      const [d, b, a] = await Promise.all([
+        fetchJsonWithTimeout<unknown>("/api/dashboard", {}, CLIENT_FETCH_TIMEOUT_MS),
+        fetchJsonWithTimeout<unknown>("/api/briefing/today", {}, CLIENT_FETCH_TIMEOUT_MS),
+        fetchJsonWithTimeout<unknown>("/api/activity/recent", {}, CLIENT_FETCH_TIMEOUT_MS),
+      ]);
+      if (cancelled) return;
+      setData(parseDashboard(d));
+      setBriefing(parseBriefing(b));
+      setActs(parseActs(a));
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  if (!data) {
+  if (!ready) {
     return (
       <div className="flex min-h-[30vh] items-center justify-center">
         <p className="text-sm text-[var(--text-subtitle)]">Φόρτωση…</p>
@@ -65,14 +149,13 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {briefing && (
-        <section
-          className={[
-            lux.cardFlat,
-            "relative !overflow-hidden border-l-[3px] !border-l-[var(--accent-gold)] !p-0",
-            "grid gap-0 md:grid-cols-2",
-          ].join(" ")}
-        >
+      <section
+        className={[
+          lux.cardFlat,
+          "relative !overflow-hidden border-l-[3px] !border-l-[var(--accent-gold)] !p-0",
+          "grid gap-0 md:grid-cols-2",
+        ].join(" ")}
+      >
           <div className="col-span-full border-b border-[var(--border)] bg-gradient-to-r from-[rgba(201,168,76,0.08)] to-transparent px-5 py-3">
             <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--accent-gold)]">Ημερήσια ενημέρωση</h2>
           </div>
@@ -142,8 +225,7 @@ export default function DashboardPage() {
               </ul>
             </div>
           )}
-        </section>
-      )}
+      </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat

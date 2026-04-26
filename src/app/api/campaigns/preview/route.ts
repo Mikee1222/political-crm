@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { countContactsMatching, type ContactFilter } from "@/lib/contacts-filter-query";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -23,4 +25,8 @@ export async function GET(request: NextRequest) {
   const { count, error } = await countContactsMatching(supabase, f);
   if (error) return NextResponse.json({ error }, { status: 400 });
   return NextResponse.json({ count });
+  } catch (e) {
+    console.error("[api/campaigns/preview]", e);
+    return nextJsonError();
+  }
 }

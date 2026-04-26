@@ -4,6 +4,7 @@ import { ArrowLeft, FileText, Phone, Play, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
@@ -63,7 +64,7 @@ export default function CampaignDetailPage() {
     try {
       const q = new URLSearchParams();
       if (outcome) q.set("outcome", outcome);
-      const res = await fetch(`/api/campaigns/${id}?${q.toString()}`);
+      const res = await fetchWithTimeout(`/api/campaigns/${id}?${q.toString()}`);
       const j = await res.json();
       if (!res.ok) {
         setErr((j as { error?: string }).error ?? "Σφάλμα");
@@ -128,7 +129,7 @@ export default function CampaignDetailPage() {
             setDialing(true);
             setErr(null);
             try {
-              const r = await fetch(`/api/campaigns/${id}/dial-next`, { method: "POST" });
+              const r = await fetchWithTimeout(`/api/campaigns/${id}/dial-next`, { method: "POST" });
               const j = (await r.json().catch(() => ({}))) as { error?: string };
               if (!r.ok) {
                 setErr(j.error ?? "Σφάλμα");

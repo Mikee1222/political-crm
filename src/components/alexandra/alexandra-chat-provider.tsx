@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { useProfile } from "@/contexts/profile-context";
 import { mapDbToMsg, type Msg, type MsgWithT, type RowConv, type StreamMeta } from "./alexandra-chat-helpers";
 
@@ -21,7 +22,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MsgWithT[]>([]);
   const [loading, setLoading] = useState(false);
-  const [listLoading, setListLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +35,8 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   const sendInFlight = useRef(false);
   const role = profile?.role;
   const router = useRouter();
+  const pathname = usePathname();
+  const isAlexandraPage = Boolean(pathname?.startsWith("/alexandra"));
   const [miniWindowOpen, setMiniWindowOpen] = useState(false);
   const [miniWindowMinimized, setMiniWindowMinimized] = useState(false);
 
@@ -65,24 +68,40 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
 
   const loadList = useCallback(async () => {
     setListLoading(true);
+    setError(null);
     try {
-      const res = await fetch("/api/ai-conversations");
+      const res = await fetchWithTimeout("/api/ai-conversations", { timeoutMs: CLIENT_FETCH_TIMEOUT_MS });
       const data = (await res.json()) as { conversations?: RowConv[]; error?: string };
       if (!res.ok) {
-        setError(data.error || "Σφάλμα");
+        if (res.status === 401) {
+          setError(data.error || "Μη εξουσιοδότηση");
+        } else {
+          setError(data.error || "Σφάλμα");
+        }
+        setConversations([]);
         return;
       }
       setConversations(data.conversations ?? []);
-    } catch {
-      setError("Σφάλμα δικτύου");
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setConversations([]);
+      } else {
+        setError("Σφάλμα δικτύου");
+        setConversations([]);
+      }
     } finally {
       setListLoading(false);
     }
   }, []);
 
+  /** Do not block dashboard/login: only load conversation list on /alexandra. */
   useEffect(() => {
+    if (!isAlexandraPage) {
+      setListLoading(false);
+      return;
+    }
     void loadList();
-  }, [loadList]);
+  }, [isAlexandraPage, loadList]);
 
   const loadMessages = useCallback(
     async (id: string, options?: { silent?: boolean }) => {
@@ -90,7 +109,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
       if (!silent) setMessagesLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/ai-conversations/${id}/messages`);
+        const res = await fetchWithTimeout(`/api/ai-conversations/${id}/messages`, { timeoutMs: CLIENT_FETCH_TIMEOUT_MS });
         const data = (await res.json()) as {
           messages?: Array<{
             id: string;
@@ -133,7 +152,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/ai-conversations", { method: "POST" });
+      const res = await fetchWithTimeout("/api/ai-conversations", { method: "POST", timeoutMs: CLIENT_FETCH_TIMEOUT_MS });
       const data = (await res.json()) as { id?: string; title?: string; error?: string };
       if (!res.ok || !data.id) {
         setError(data.error || "Σφάλμα");
@@ -158,7 +177,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
       setError(null);
       setLoading(true);
       try {
-        const res = await fetch(`/api/ai-conversations/${c.id}`, { method: "DELETE" });
+        const res = await fetchWithTimeout(`/api/ai-conversations/${c.id}`, { method: "DELETE", timeoutMs: CLIENT_FETCH_TIMEOUT_MS });
         const _data = (await res.json()) as { error?: string };
         if (!res.ok) {
           setError(_data.error || "Σφάλμα");
@@ -186,10 +205,11 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/ai-assistant/execute", {
+      const res = await fetchWithTimeout("/api/ai-assistant/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
+        timeoutMs: CLIENT_FETCH_TIMEOUT_MS,
       });
       const data = (await res.json()) as { ok?: boolean; error?: string; message?: string };
       if (!res.ok) {
@@ -408,10 +428,11 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/ai-assistant/execute", {
+      const res = await fetchWithTimeout("/api/ai-assistant/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: t.pendingAction }),
+        timeoutMs: CLIENT_FETCH_TIMEOUT_MS,
       });
       const j = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) {

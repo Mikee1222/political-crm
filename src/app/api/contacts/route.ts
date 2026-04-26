@@ -5,8 +5,10 @@ import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
+import { nextJsonError } from "@/lib/api-resilience";
 
 export async function GET(request: NextRequest) {
+  try {
   const { user, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -67,9 +69,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ contacts: list });
   }
   return NextResponse.json({ contacts: data });
+  } catch (e) {
+    console.error("[api/contacts GET]", e);
+    return nextJsonError();
+  }
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const { user, profile, supabase } = await getSessionWithProfile();
   if (!user) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
@@ -95,4 +102,8 @@ export async function POST(request: NextRequest) {
     details: { actor_name: firstNameFromFull(profile?.full_name) },
   });
   return NextResponse.json({ contact: data });
+  } catch (e) {
+    console.error("[api/contacts POST]", e);
+    return nextJsonError();
+  }
 }

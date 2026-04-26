@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { buildCreatePhoneCallBody } from "@/lib/retell-outbound";
 
 /**
  * Dials the next contact in the campaign (first assigned contact with no call yet in this campaign).
@@ -71,21 +72,32 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       { status: 503 },
     );
   }
+  let retellBody: Record<string, unknown>;
+  try {
+    retellBody = buildCreatePhoneCallBody(
+      (contact as { phone: string }).phone,
+      String((contact as { first_name: string }).first_name || ""),
+      (contact as { id: string }).id,
+      campaignId,
+    );
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Ρύθμιση Retell" },
+      { status: 503 },
+    );
+  }
   const retellRes = await fetch("https://api.retellai.com/v2/create-phone-call", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.RETELL_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      from_number: process.env.RETELL_FROM_NUMBER,
-      to_number: contact.phone,
-      override_agent_id: process.env.RETELL_AGENT_ID,
-      retell_llm_dynamic_variables: { first_name: contact.first_name, contact_id: contact.id },
-    }),
+    body: JSON.stringify(retellBody),
   });
   const payload = await retellRes.json();
   if (!retellRes.ok) return NextResponse.json({ error: payload }, { status: 400 });
+
+  await supabase.from("contacts").update({ call_status: "Pending" }).eq("id", nextId);
 
   return NextResponse.json({
     success: true,
