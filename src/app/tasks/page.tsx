@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   Circle,
   FileText,
+  LayoutGrid,
+  List,
   ListTodo,
   Loader2,
   MapPin,
@@ -24,6 +26,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { ymdToNextMonth, ymdToPrevMonth } from "@/lib/task-filters";
 import type { TaskTabFilter } from "@/lib/task-filters";
+import { PageHeader } from "@/components/ui/page-header";
 
 type TaskT = {
   id: string;
@@ -71,6 +74,7 @@ function athensTodayYmd() {
 }
 
 export default function TasksPage() {
+  const [view, setView] = useState<"list" | "kanban">("list");
   const [tab, setTab] = useState<TaskTabFilter>("all");
   const [pending, setPending] = useState<TaskT[]>([]);
   const [completed, setCompleted] = useState<TaskT[]>([]);
@@ -125,9 +129,59 @@ export default function TasksPage() {
   }, [loadHeat]);
 
   const anchorYmd = athensTodayYmd();
+  const colNew = useMemo(
+    () =>
+      pending.filter((t) => {
+        const d = t.due_date?.slice(0, 10);
+        return !d || d > anchorYmd;
+      }),
+    [pending, anchorYmd],
+  );
+  const colProg = useMemo(
+    () =>
+      pending.filter((t) => {
+        const d = t.due_date?.slice(0, 10);
+        return Boolean(d && d <= anchorYmd);
+      }),
+    [pending, anchorYmd],
+  );
 
   return (
     <div className="space-y-6 max-md:space-y-4">
+      <PageHeader
+        title="Εργασίες"
+        subtitle="Κέντρο ενεργειών, λήξεις και follow-up — εναλλαγή μεταξύ λίστας και πίνακα Kanban."
+        actions={
+          <div className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
+            <button
+              type="button"
+              onClick={() => setView("list")}
+              className={[
+                "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition",
+                view === "list"
+                  ? "bg-[#003476] text-white shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+              ].join(" ")}
+            >
+              <List className="h-4 w-4" />
+              Λίστα
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("kanban")}
+              className={[
+                "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition",
+                view === "kanban"
+                  ? "bg-[#003476] text-white shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+              ].join(" ")}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Kanban
+            </button>
+          </div>
+        }
+      />
       <CalendarStrip
         year={heat.year}
         month1={heat.m}
@@ -151,8 +205,8 @@ export default function TasksPage() {
         />
         <div className="relative z-[1] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Εργασίες</h1>
-            <p className="text-sm text-[var(--text-secondary)]">Κέντρο ενεργειών, λήξεις &amp; follow-up.</p>
+            <h2 className="hq-section-label !m-0 !mb-0 !mt-0 border-0 !p-0">Ημερολόγιο φόρτου</h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">Ζέσταμα εργασιών ανα μήνα — κλικ σε ημέρα.</p>
           </div>
           <div className="mx-auto w-full min-w-0 sm:mx-0 sm:max-w-none sm:self-end sm:justify-end md:flex-1">
             <button
@@ -202,66 +256,156 @@ export default function TasksPage() {
         {loading ? <Loader2 className="h-5 w-5 animate-spin text-[#C9A84C]" /> : null}
       </div>
 
-      <div className="max-md:space-y-6 grid gap-4 md:grid-cols-2 md:items-start md:gap-6 max-md:grid-cols-1 max-md:grid-cols-1">
-        <div className="min-w-0 max-md:order-1 max-md:space-y-3 order-1">
-          <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] sm:text-xs">Σε αναμονή</h2>
-          {pending.length === 0 && !loading && (
-            <p className="text-sm text-[var(--text-muted)]">Καμία ενεργή εργασία για το φίλτρο.</p>
-          )}
-          {pending.map((t) => (
-            <TaskCard
-              key={t.id}
-              t={t}
-              anchor={anchorYmd}
-              isCompleted={false}
-              expanded={expanded === t.id}
-              onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
-              onDone={() => void markDone(t.id, setErr, () => {
-                void load();
-                void loadHeat();
-              })}
-              onDelete={() => void removeTask(t.id, setErr, () => {
-                void load();
-                void loadHeat();
-              })}
-              onSaved={async () => {
-                setExpanded(null);
-                await load();
-                await loadHeat();
-              }}
-            />
-          ))}
+      {view === "list" ? (
+        <div className="max-md:space-y-6 grid gap-4 md:grid-cols-2 md:items-start md:gap-6 max-md:grid-cols-1 max-md:grid-cols-1">
+          <div className="min-w-0 max-md:order-1 max-md:space-y-3 order-1">
+            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] sm:text-xs">Σε αναμονή</h2>
+            {pending.length === 0 && !loading && (
+              <p className="text-sm text-[var(--text-muted)]">Καμία ενεργή εργασία για το φίλτρο.</p>
+            )}
+            {pending.map((t) => (
+              <TaskCard
+                key={t.id}
+                t={t}
+                anchor={anchorYmd}
+                isCompleted={false}
+                expanded={expanded === t.id}
+                onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
+                onDone={() => void markDone(t.id, setErr, () => {
+                  void load();
+                  void loadHeat();
+                })}
+                onDelete={() => void removeTask(t.id, setErr, () => {
+                  void load();
+                  void loadHeat();
+                })}
+                onSaved={async () => {
+                  setExpanded(null);
+                  await load();
+                  await loadHeat();
+                }}
+              />
+            ))}
+          </div>
+          <div className="min-w-0 max-md:order-2 max-md:space-y-3 order-2">
+            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#94A3B8] sm:text-xs">Ολοκληρωμένες</h2>
+            {completed.length === 0 && !loading && (
+              <p className="text-sm text-[var(--text-muted)]">Καμία ολοκληρωμένη για το φίλτρο.</p>
+            )}
+            {completed.map((t) => (
+              <TaskCard
+                key={t.id}
+                t={t}
+                anchor={anchorYmd}
+                isCompleted
+                expanded={expanded === t.id}
+                onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
+                onDone={() => void markUndone(t.id, setErr, () => {
+                  void load();
+                  void loadHeat();
+                })}
+                onDelete={() => void removeTask(t.id, setErr, () => {
+                  void load();
+                  void loadHeat();
+                })}
+                onSaved={async () => {
+                  setExpanded(null);
+                  await load();
+                  await loadHeat();
+                }}
+              />
+            ))}
+          </div>
         </div>
-        <div className="min-w-0 max-md:order-2 max-md:space-y-3 order-2">
-          <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#94A3B8] sm:text-xs">Ολοκληρωμένες</h2>
-          {completed.length === 0 && !loading && (
-            <p className="text-sm text-[var(--text-muted)]">Καμία ολοκληρωμένη για το φίλτρο.</p>
-          )}
-          {completed.map((t) => (
-            <TaskCard
-              key={t.id}
-              t={t}
-              anchor={anchorYmd}
-              isCompleted
-              expanded={expanded === t.id}
-              onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
-              onDone={() => void markUndone(t.id, setErr, () => {
-                void load();
-                void loadHeat();
-              })}
-              onDelete={() => void removeTask(t.id, setErr, () => {
-                void load();
-                void loadHeat();
-              })}
-              onSaved={async () => {
-                setExpanded(null);
-                await load();
-                await loadHeat();
-              }}
-            />
-          ))}
+      ) : (
+        <div className="grid min-h-[240px] grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3">
+            <h3 className="mb-2 text-center text-xs font-bold uppercase tracking-wider text-[#C9A84C]">Νέο</h3>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+              {colNew.map((t) => (
+                <TaskCard
+                  key={t.id}
+                  t={t}
+                  anchor={anchorYmd}
+                  isCompleted={false}
+                  expanded={expanded === t.id}
+                  onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
+                  onDone={() => void markDone(t.id, setErr, () => {
+                    void load();
+                    void loadHeat();
+                  })}
+                  onDelete={() => void removeTask(t.id, setErr, () => {
+                    void load();
+                    void loadHeat();
+                  })}
+                  onSaved={async () => {
+                    setExpanded(null);
+                    await load();
+                    await loadHeat();
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3">
+            <h3 className="mb-2 text-center text-xs font-bold uppercase tracking-wider text-amber-200">Σε εξέλιξη</h3>
+            <p className="mb-2 text-center text-[10px] text-[var(--text-muted)]">Λήγει σήμερα / ληξιπρόθεσμα</p>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+              {colProg.map((t) => (
+                <TaskCard
+                  key={t.id}
+                  t={t}
+                  anchor={anchorYmd}
+                  isCompleted={false}
+                  expanded={expanded === t.id}
+                  onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
+                  onDone={() => void markDone(t.id, setErr, () => {
+                    void load();
+                    void loadHeat();
+                  })}
+                  onDelete={() => void removeTask(t.id, setErr, () => {
+                    void load();
+                    void loadHeat();
+                  })}
+                  onSaved={async () => {
+                    setExpanded(null);
+                    await load();
+                    await loadHeat();
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3">
+            <h3 className="mb-2 text-center text-xs font-bold uppercase tracking-wider text-emerald-300">Ολοκληρώθηκε</h3>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+              {completed.map((t) => (
+                <TaskCard
+                  key={t.id}
+                  t={t}
+                  anchor={anchorYmd}
+                  isCompleted
+                  expanded={expanded === t.id}
+                  onToggleExpand={() => setExpanded((e) => (e === t.id ? null : t.id))}
+                  onDone={() => void markUndone(t.id, setErr, () => {
+                    void load();
+                    void loadHeat();
+                  })}
+                  onDelete={() => void removeTask(t.id, setErr, () => {
+                    void load();
+                    void loadHeat();
+                  })}
+                  onSaved={async () => {
+                    setExpanded(null);
+                    await load();
+                    await loadHeat();
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {modal && (
         <NewTaskModal
@@ -371,7 +515,7 @@ function TaskCard({
       className={clsx(
         "relative flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-sm [data-theme='light']:shadow-[0_1px_8px_rgba(0,0,0,0.06)]",
         isCompleted && "bg-[var(--bg-elevated)]/80",
-        !isCompleted && overdue && "border-l-4 !border-l-red-500/85",
+        !isCompleted && overdue && "border-l-4 !border-l-red-500/85 animate-pulse",
         !isCompleted && dueToday && !overdue && "border-l-4 !border-l-[#C9A84C]",
       )}
     >
@@ -437,7 +581,16 @@ function TaskCard({
           }}
         >
           <div className="flex min-w-0 items-start justify-between gap-1">
-            <p className="line-clamp-2 font-bold text-[var(--text-primary)] break-words">{task.title}</p>
+            <p
+              className={[
+                "line-clamp-2 font-bold break-words text-[var(--text-primary)]",
+                isCompleted && "text-[var(--text-muted)] line-through decoration-emerald-500/60",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {task.title}
+            </p>
             <div className="shrink-0 self-start rounded-md border border-[#C9A84C]/30 bg-[var(--bg-elevated)]/90 p-1.5 text-[#C9A84C]">
               <C className="h-3.5 w-3.5" />
             </div>

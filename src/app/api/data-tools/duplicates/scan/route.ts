@@ -7,7 +7,9 @@ import {
   stablePairId,
   type ContactForDedup,
 } from "@/lib/duplicate-detection";
-export const dynamic = 'force-dynamic';
+import { claudeDuplicateVerdict } from "@/lib/duplicate-claude";
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 type Row = {
   id: string;
@@ -86,8 +88,41 @@ export async function POST() {
     }
   }
 
-  pairs.sort((x, y) => y.score - x.score);
-  return NextResponse.json({ pairs, scanned: list.length });
+  const MAX_AI = 50;
+  let aiUsed = 0;
+  const refined: typeof pairs = [];
+  for (const p of pairs) {
+    if (p.score >= 100) {
+      refined.push(p);
+      continue;
+    }
+    if (p.score < 50) {
+      continue;
+    }
+    if (aiUsed >= MAX_AI) {
+      refined.push(p);
+      continue;
+    }
+    const A: ContactForDedup = p.contactA;
+    const B: ContactForDedup = p.contactB;
+    const v = await claudeDuplicateVerdict(A, B);
+    aiUsed += 1;
+    if (v == null) {
+      refined.push(p);
+      continue;
+    }
+    if (!v.samePerson) {
+      continue;
+    }
+    refined.push({
+      ...p,
+      score: Math.max(p.score, v.score),
+      reasons: [...p.reasons, "Claude: ίδιο πρόσωπο"],
+    });
+  }
+
+  refined.sort((x, y) => y.score - x.score);
+  return NextResponse.json({ pairs: refined, scanned: list.length, claude_verdicts: aiUsed });
   } catch (e) {
     console.error("[api/data-tools/duplicates/scan]", e);
     return nextJsonError();

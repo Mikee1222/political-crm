@@ -20,7 +20,7 @@ export async function GET() {
 
   const { data: campaignRows, error } = await supabase
     .from("campaigns")
-    .select("id, name, started_at, created_at, description, status")
+    .select("id, name, started_at, created_at, description, status, sentiment_data")
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   const campaigns = (campaignRows ?? []) as Array<{
@@ -30,6 +30,7 @@ export async function GET() {
     created_at: string | null;
     description: string | null;
     status: string | null;
+    sentiment_data: unknown;
   }>;
 
   const withStats = await Promise.all(
@@ -47,7 +48,22 @@ export async function GET() {
     }),
   );
 
-  return NextResponse.json({ campaigns: withStats });
+  const pr = (s: { total: number; positive: number }) => (s.total > 0 ? (s.positive / s.total) * 100 : 0);
+  const withSentiment = withStats.map((c, i) => {
+    const cur = pr(c.stats);
+    const prev = i < withStats.length - 1 ? pr(withStats[i + 1]!.stats) : null;
+    const trendDelta = prev != null ? Math.round((cur - prev) * 10) / 10 : null;
+    return {
+      ...c,
+      sentiment: {
+        positiveRate: Math.round(cur * 10) / 10,
+        trendDelta,
+        previousCampaignId: i < withStats.length - 1 ? withStats[i + 1]!.id : null,
+      },
+    };
+  });
+
+  return NextResponse.json({ campaigns: withSentiment });
   } catch (e) {
     console.error("[api/campaigns GET]", e);
     return nextJsonError();
@@ -68,31 +84,38 @@ export async function POST(request: NextRequest) {
     name?: string;
     description?: string;
     filter?: ContactFilter;
+    contact_ids?: string[];
   };
   const name = String(body.name ?? "").trim();
   if (!name) {
     return NextResponse.json({ error: "Υποχρεωτικό όνομα" }, { status: 400 });
   }
 
-  const f: ContactFilter = {
-    call_status: body.filter?.call_status,
-    area: body.filter?.area,
-    municipality: body.filter?.municipality,
-    priority: body.filter?.priority,
-    tag: body.filter?.tag,
-  };
-  const hasFilter = Boolean(
-    f.call_status || f.area || f.municipality || f.priority || f.tag,
-  );
-  if (!hasFilter) {
-    return NextResponse.json(
-      { error: "Επιλέξτε τουλάχιστον ένα κριτήριο φίλτρου για τις επαφές" },
-      { status: 400 },
+  let contactIds: string[] = [];
+  if (Array.isArray(body.contact_ids) && body.contact_ids.length > 0) {
+    contactIds = [...new Set(body.contact_ids.map((x) => String(x).trim()).filter(Boolean))];
+  } else {
+    const f: ContactFilter = {
+      call_status: body.filter?.call_status,
+      area: body.filter?.area,
+      municipality: body.filter?.municipality,
+      priority: body.filter?.priority,
+      tag: body.filter?.tag,
+    };
+    const hasFilter = Boolean(
+      f.call_status || f.area || f.municipality || f.priority || f.tag,
     );
-  }
+    if (!hasFilter) {
+      return NextResponse.json(
+        { error: "Επιλέξτε τουλάχιστον ένα κριτήριο φίλτρου για τις επαφές ή contact_ids" },
+        { status: 400 },
+      );
+    }
 
-  const { ids: contactIds, error: idErr } = await listContactIdsMatching(supabase, f);
-  if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
+    const { ids, error: idErr } = await listContactIdsMatching(supabase, f);
+    if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
+    contactIds = ids;
+  }
   if (contactIds.length === 0) {
     return NextResponse.json(
       { error: "Καμία επαφή δεν ταιριάζει με το φίλτρο" },

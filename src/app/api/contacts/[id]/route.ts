@@ -6,7 +6,20 @@ import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
-export const dynamic = 'force-dynamic';
+import { resolveProfileNames } from "@/lib/profile-names";
+export const dynamic = "force-dynamic";
+
+function enrichContact(
+  c: Record<string, unknown> | null,
+  names: { created?: string | null; updated?: string | null },
+) {
+  if (!c) return null;
+  return {
+    ...c,
+    created_by_name: names.created ?? null,
+    updated_by_name: names.updated ?? null,
+  };
+}
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -24,6 +37,14 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+  const raw = contact as Record<string, unknown>;
+  const nameMap = await resolveProfileNames([raw?.created_by as string | null, raw?.updated_by as string | null]);
+  const cb = (raw?.created_by as string | null) ?? null;
+  const ub = (raw?.updated_by as string | null) ?? null;
+  const contactOut = enrichContact(raw, {
+    created: cb ? (nameMap.get(cb) ?? null) : null,
+    updated: ub ? (nameMap.get(ub) ?? null) : null,
+  });
 
   const { data: calls } = await supabase
     .from("calls")
@@ -33,7 +54,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   if (role === "caller") {
     return NextResponse.json({
-      contact,
+      contact: contactOut,
       calls: calls ?? [],
       tasks: [],
       requests: [],
@@ -52,7 +73,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     .eq("contact_id", params.id)
     .order("created_at", { ascending: false });
 
-  return NextResponse.json({ contact, calls, tasks, requests });
+  return NextResponse.json({ contact: contactOut, calls, tasks, requests });
   } catch (e) {
     console.error("[api/contacts/id GET]", e);
     return nextJsonError();
@@ -85,9 +106,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (Object.keys(updatePayload).length === 0) {
       return NextResponse.json({ error: "Κενό" }, { status: 400 });
     }
+    const now = new Date().toISOString();
     const { data, error } = await supabase
       .from("contacts")
-      .update(updatePayload)
+      .update({
+        ...updatePayload,
+        updated_at: now,
+        updated_by: user.id,
+      })
       .eq("id", params.id)
       .select("*")
       .single();
@@ -110,11 +136,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return forbidden();
   }
   delete body.contact_code;
+  delete (body as { created_by?: unknown }).created_by;
+  delete (body as { updated_by?: unknown }).updated_by;
   if (!("name_day" in body) && body.first_name !== undefined) {
     const iso = nameDayDateStringFromFirstName(String(body.first_name));
     if (iso) body.name_day = iso;
   }
-  const { data, error } = await supabase.from("contacts").update(body).eq("id", params.id).select("*").single();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("contacts")
+    .update({ ...body, updated_at: now, updated_by: user.id } as Record<string, unknown>)
+    .eq("id", params.id)
+    .select("*")
+    .single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

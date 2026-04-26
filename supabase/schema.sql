@@ -451,3 +451,324 @@ alter table public.request_categories enable row level security;
 drop policy if exists "authenticated request_categories" on public.request_categories;
 create policy "authenticated request_categories" on public.request_categories
   for all to authenticated using (true) with check (true);
+
+-- Καμπάνιες: τάση positive rate (json cache / analytics)
+alter table public.campaigns
+  add column if not exists sentiment_data jsonb;
+
+-- SLA αιτημάτων
+alter table public.request_categories
+  add column if not exists sla_days integer not null default 14;
+alter table public.requests
+  add column if not exists sla_due_date date,
+  add column if not exists sla_status text;
+
+comment on column public.requests.sla_status is 'on_track | at_risk | overdue (για ανοικτά αιτήματα)';
+
+-- Ρυθμίσεις εφαρμογής (Telegram, κ.λπ.)
+create table if not exists public.crm_settings (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.crm_settings enable row level security;
+drop policy if exists "crm_settings all" on public.crm_settings;
+create policy "crm_settings all" on public.crm_settings
+  for all to authenticated using (true) with check (true);
+
+-- Αποτελέσματα εκλογών ανά δήμο (π.χ. 2023)
+create table if not exists public.electoral_results (
+  id uuid primary key default gen_random_uuid(),
+  municipality text not null,
+  party text not null,
+  percentage numeric(6,2) not null,
+  year integer not null,
+  created_at timestamptz not null default now(),
+  unique (municipality, party, year)
+);
+create index if not exists idx_electoral_results_year on public.electoral_results (year);
+alter table public.electoral_results enable row level security;
+drop policy if exists "electoral_results all" on public.electoral_results;
+create policy "electoral_results all" on public.electoral_results
+  for all to authenticated using (true) with check (true);
+
+-- Προβλεπόμενο score επαφής
+alter table public.contacts
+  add column if not exists predicted_score integer;
+
+-- Έγγραφα
+create table if not exists public.analyzed_documents (
+  id uuid primary key default gen_random_uuid(),
+  title text,
+  content_summary text,
+  key_points jsonb,
+  analysis jsonb,
+  created_at timestamptz not null default now(),
+  user_id uuid references auth.users (id) on delete set null
+);
+create index if not exists idx_analyzed_documents_user on public.analyzed_documents (user_id, created_at desc);
+alter table public.analyzed_documents enable row level security;
+drop policy if exists "analyzed_documents all" on public.analyzed_documents;
+create policy "analyzed_documents all" on public.analyzed_documents
+  for all to authenticated using (true) with check (true);
+
+create table if not exists public.press_releases (
+  id uuid primary key default gen_random_uuid(),
+  title text,
+  content text,
+  tone text,
+  created_at timestamptz default now(),
+  user_id uuid references auth.users (id) on delete set null
+);
+alter table public.press_releases enable row level security;
+drop policy if exists "press_releases all" on public.press_releases;
+create policy "press_releases all" on public.press_releases
+  for all to authenticated using (true) with check (true);
+
+create table if not exists public.letters (
+  id uuid primary key default gen_random_uuid(),
+  recipient text,
+  subject text,
+  content text,
+  citizen_name text,
+  created_at timestamptz default now(),
+  user_id uuid references auth.users (id) on delete set null
+);
+alter table public.letters enable row level security;
+drop policy if exists "letters all" on public.letters;
+create policy "letters all" on public.letters
+  for all to authenticated using (true) with check (true);
+
+-- Βουλευτική δραστηριότητα
+create table if not exists public.parliamentary_questions (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  ministry text,
+  status text not null default 'Κατατέθηκε',
+  submitted_date date,
+  answer_date date,
+  answer_text text,
+  tags text[],
+  related_contact_id uuid references public.contacts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_parl_questions_status on public.parliamentary_questions (status);
+create index if not exists idx_parl_questions_muni on public.parliamentary_questions (ministry);
+alter table public.parliamentary_questions enable row level security;
+drop policy if exists "parl_questions all" on public.parliamentary_questions;
+create policy "parl_questions all" on public.parliamentary_questions
+  for all to authenticated using (true) with check (true);
+
+create table if not exists public.legislation (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  law_number text,
+  status text not null default 'Υπό Εξέταση',
+  vote text,
+  date date,
+  ministry text,
+  impact_description text,
+  url text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_legislation_status on public.legislation (status);
+alter table public.legislation enable row level security;
+drop policy if exists "legislation all" on public.legislation;
+create policy "legislation all" on public.legislation
+  for all to authenticated using (true) with check (true);
+
+-- Αποθηκευμένα άρθρα (media monitoring)
+create table if not exists public.media_saved_articles (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  source text,
+  link text,
+  published_at text,
+  snippet text,
+  query text,
+  created_at timestamptz not null default now(),
+  user_id uuid references auth.users (id) on delete set null
+);
+create index if not exists idx_media_saved_user on public.media_saved_articles (user_id, created_at desc);
+alter table public.media_saved_articles enable row level security;
+drop policy if exists "media_saved all" on public.media_saved_articles;
+create policy "media_saved all" on public.media_saved_articles
+  for all to authenticated using (true) with check (true);
+
+-- Εθελοντές (επαφή)
+alter table public.contacts
+  add column if not exists is_volunteer boolean default false,
+  add column if not exists volunteer_role text,
+  add column if not exists volunteer_area text,
+  add column if not exists volunteer_since date,
+  add column if not exists language text default 'el';
+
+-- Εκδηλώσεις
+create table if not exists public.events_local (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  date date not null,
+  start_time time,
+  end_time time,
+  location text,
+  type text not null default 'Εκδήλωση',
+  max_attendees int,
+  status text not null default 'Προγραμματισμένη',
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_events_local_date on public.events_local (date);
+alter table public.events_local enable row level security;
+drop policy if exists "events_local all" on public.events_local;
+create policy "events_local all" on public.events_local
+  for all to authenticated using (true) with check (true);
+
+create table if not exists public.event_rsvps (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.events_local (id) on delete cascade,
+  contact_id uuid not null references public.contacts (id) on delete cascade,
+  status text not null default 'Επιβεβαιωμένος',
+  created_at timestamptz not null default now(),
+  unique (event_id, contact_id)
+);
+create index if not exists idx_event_rsvps_event on public.event_rsvps (event_id);
+create index if not exists idx_event_rsvps_contact on public.event_rsvps (contact_id);
+alter table public.event_rsvps enable row level security;
+drop policy if exists "event_rsvps all" on public.event_rsvps;
+create policy "event_rsvps all" on public.event_rsvps
+  for all to authenticated using (true) with check (true);
+
+-- Υποστηρικτές / δωρεές
+create table if not exists public.supporters (
+  id uuid primary key default gen_random_uuid(),
+  contact_id uuid references public.contacts (id) on delete set null,
+  support_type text,
+  amount decimal(12,2),
+  date date,
+  notes text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_supporters_contact on public.supporters (contact_id);
+alter table public.supporters enable row level security;
+drop policy if exists "supporters all" on public.supporters;
+create policy "supporters all" on public.supporters
+  for all to authenticated using (true) with check (true);
+
+-- Ιχνηλάτης δημιουργού/επεξεργασίας επαφής
+alter table public.contacts
+  add column if not exists created_by uuid references auth.users (id) on delete set null,
+  add column if not exists updated_by uuid references auth.users (id) on delete set null,
+  add column if not exists updated_at timestamptz;
+update public.contacts
+  set updated_at = coalesce(updated_at, created_at::timestamptz, now())
+  where updated_at is null;
+
+-- Σημειώσεις επαφής (χρονολόγιο)
+create table if not exists public.contact_notes (
+  id uuid primary key default gen_random_uuid(),
+  contact_id uuid not null references public.contacts (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete set null,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_contact_notes_contact on public.contact_notes (contact_id, created_at desc);
+alter table public.contact_notes enable row level security;
+drop policy if exists "contact_notes all" on public.contact_notes;
+create policy "contact_notes all" on public.contact_notes
+  for all to authenticated using (true) with check (true);
+
+-- Γεωγραφικά: δήμοι, εκλ. διαμερίσματα, τοπωνύμια (admin CRM)
+create table if not exists public.municipalities (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  regional_unit text,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists uq_municipalities_name on public.municipalities (name);
+
+create table if not exists public.electoral_districts (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  municipality_id uuid not null references public.municipalities (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists uq_electoral_dist_muni_name
+  on public.electoral_districts (municipality_id, name);
+
+create table if not exists public.toponyms (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  municipality_id uuid not null references public.municipalities (id) on delete cascade,
+  electoral_district_id uuid references public.electoral_districts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_toponyms_muni_district on public.toponyms (municipality_id, electoral_district_id);
+
+alter table public.municipalities enable row level security;
+alter table public.electoral_districts enable row level security;
+alter table public.toponyms enable row level security;
+
+drop policy if exists "municipalities read" on public.municipalities;
+create policy "municipalities read" on public.municipalities for select to authenticated using (true);
+drop policy if exists "municipalities write admin" on public.municipalities;
+create policy "municipalities write admin" on public.municipalities for all to authenticated
+  using (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'))
+  with check (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'));
+
+drop policy if exists "electoral_districts read" on public.electoral_districts;
+create policy "electoral_districts read" on public.electoral_districts for select to authenticated using (true);
+drop policy if exists "electoral_districts write admin" on public.electoral_districts;
+create policy "electoral_districts write admin" on public.electoral_districts for all to authenticated
+  using (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'))
+  with check (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'));
+
+drop policy if exists "toponyms read" on public.toponyms;
+create policy "toponyms read" on public.toponyms for select to authenticated using (true);
+drop policy if exists "toponyms write admin" on public.toponyms;
+create policy "toponyms write admin" on public.toponyms for all to authenticated
+  using (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'))
+  with check (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'));
+
+-- Saved filter aliases (used on contacts + Alexandra)
+create table if not exists public.saved_filters (
+  id uuid primary key default gen_random_uuid (),
+  name text not null unique,
+  description text,
+  filters jsonb not null default '{}'::jsonb,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_saved_filters_name on public.saved_filters (name);
+
+alter table public.saved_filters enable row level security;
+
+drop policy if exists "saved_filters read" on public.saved_filters;
+create policy "saved_filters read" on public.saved_filters for select to authenticated using (true);
+drop policy if exists "saved_filters write admin" on public.saved_filters;
+create policy "saved_filters write admin" on public.saved_filters for all to authenticated
+  using (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'))
+  with check (exists (select 1 from public.profiles p where p.id = auth.uid () and p.role = 'admin'));
+
+-- Αιτήματα: επαφή που αφορά, προτεραιότητα, σημειώσεις
+alter table public.requests
+  add column if not exists affected_contact_id uuid references public.contacts (id) on delete set null;
+create index if not exists idx_requests_affected_contact on public.requests (affected_contact_id);
+alter table public.requests
+  add column if not exists priority text default 'Medium';
+
+create table if not exists public.request_notes (
+  id uuid primary key default gen_random_uuid (),
+  request_id uuid not null references public.requests (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete set null,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_request_notes_request on public.request_notes (request_id, created_at desc);
+alter table public.request_notes enable row level security;
+drop policy if exists "request_notes all" on public.request_notes;
+create policy "request_notes all" on public.request_notes
+  for all to authenticated
+  using (true)
+  with check (true);

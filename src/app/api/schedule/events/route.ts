@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { athensDayRange, athensWeekRange, todayYmdAthens } from "@/lib/athens-ranges";
 import { getCalendarClientForUser, listAllCalendarsEventsHttp, type ScheduleEventRow } from "@/lib/google-calendar";
 import { CAL_EVENT_TYPE_KEYS } from "@/lib/calendar-event-types";
 import { hasMinRole, type Role } from "@/lib/roles";
@@ -33,7 +34,7 @@ async function getUserAndManagerProfile() {
   return { user, profile: { role } };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { user, profile } = await getUserAndManagerProfile();
     if (!user) {
@@ -44,8 +45,20 @@ export async function GET() {
       return forbidden();
     }
 
-    console.log(`${LOG} 5) listAllCalendarsEventsHttp (calendarList + all calendars, ±3 months via lib)`);
-    const result = await listAllCalendarsEventsHttp(user.id);
+    const p = request.nextUrl.searchParams;
+    const dateParam = p.get("date");
+    const week = p.get("week") === "1" || p.get("week") === "true";
+    let range: { timeMin: string; timeMax: string } | undefined;
+    if (week) {
+      const ymd =
+        dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayYmdAthens();
+      range = athensWeekRange(ymd);
+    } else if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      range = athensDayRange(dateParam);
+    }
+
+    console.log(`${LOG} 5) listAllCalendarsEventsHttp`, { customRange: Boolean(range) });
+    const result = await listAllCalendarsEventsHttp(user.id, range);
     console.log(`${LOG} 6) result`, {
       ok: result.ok,
       code: result.ok ? "ok" : result.code,

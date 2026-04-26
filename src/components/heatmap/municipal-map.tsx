@@ -35,9 +35,43 @@ export type ForMapRow = {
   lat: number;
   lng: number;
   radius: number;
+  ndPercent?: number;
+  crmPositivePercent?: number;
+  compareHighlight?: boolean;
 };
 
-function pathOptionsForHeat(heat: number) {
+export type MapColorVariant = "gold" | "nd" | "compare";
+
+function pathOptionsForNd(heat: number): PathOptions {
+  const t = Math.max(0, Math.min(100, heat));
+  const a = 0.15 + (t / 100) * 0.8;
+  return {
+    fillColor: "#1e3a8a",
+    fillOpacity: a,
+    color: "rgba(30, 64, 175, 0.5)",
+    weight: 1.2,
+  };
+}
+
+function pathOptionsForCompare(heat: number, highlight: boolean): PathOptions {
+  if (highlight) {
+    return {
+      fillColor: "#10B981",
+      fillOpacity: 0.55,
+      color: "rgba(16, 185, 129, 0.7)",
+      weight: 2,
+    };
+  }
+  return pathOptionsForHeat(heat, "gold");
+}
+
+function pathOptionsForHeat(heat: number, variant: MapColorVariant = "gold", highlight = false): PathOptions {
+  if (variant === "nd") {
+    return pathOptionsForNd(heat);
+  }
+  if (variant === "compare") {
+    return pathOptionsForCompare(heat, highlight);
+  }
   if (heat === 0) {
     return {
       fillColor: "transparent",
@@ -118,6 +152,7 @@ function BreakdownBars({
 type MunicipalMapProps = {
   forMap: ForMapRow[];
   onSelect: (muni: string) => void;
+  colorVariant?: MapColorVariant;
 };
 
 const TILES = {
@@ -126,7 +161,7 @@ const TILES = {
   dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
 } as const;
 
-export function MunicipalMap({ forMap, onSelect }: MunicipalMapProps) {
+export function MunicipalMap({ forMap, onSelect, colorVariant = "gold" }: MunicipalMapProps) {
   const colorMode = useMapColorMode();
   const bounds = useMemo(
     () =>
@@ -150,12 +185,14 @@ export function MunicipalMap({ forMap, onSelect }: MunicipalMapProps) {
         url={TILES[colorMode]}
         attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OSM</a> &copy; <a href='https://carto.com/attributions'>CARTO</a>"
       />
-      {forMap.map((m) => (
+      {forMap.map((m) => {
+        const opts = pathOptionsForHeat(m.heat, colorVariant, m.compareHighlight === true) as PathOptions;
+        return (
         <Circle
           key={m.muni}
           center={[m.lat, m.lng]}
           radius={m.radius}
-          pathOptions={pathOptionsForHeat(m.heat) as PathOptions}
+          pathOptions={opts}
           eventHandlers={{
             click: () => onSelect(m.muni),
           }}
@@ -169,6 +206,12 @@ export function MunicipalMap({ forMap, onSelect }: MunicipalMapProps) {
           >
             <div className="max-w-[min(100vw,260px)] px-0.5 text-[12px] leading-tight text-[#f0f4ff]">
               <p className="font-semibold text-[var(--accent-gold-light)]">{m.muni.replace(/^Δήμος /, "Δ. ")}</p>
+              {m.ndPercent != null && (
+                <p className="mt-1 text-[#93C5FD]">ΝΔ 2023: {m.ndPercent.toFixed(1)}%</p>
+              )}
+              {m.crmPositivePercent != null && colorVariant === "compare" && (
+                <p className="text-[#A7F3D0]">Θετικοί CRM: {m.crmPositivePercent.toFixed(1)}%</p>
+              )}
               <p className="mt-1 text-[#8fa3bf]">
                 Σύνολο: <span className="text-[#f0f4ff]">{m.total}</span> επαφές
               </p>
@@ -183,7 +226,7 @@ export function MunicipalMap({ forMap, onSelect }: MunicipalMapProps) {
             </div>
           </Tooltip>
         </Circle>
-      ))}
+      );})}
     </MapContainer>
   );
 }

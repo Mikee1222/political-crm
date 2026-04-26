@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FileText, LayoutGrid, Megaphone, Plus, Play, Search, Trash2 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { BarChart3, CheckCircle2, FileText, LayoutGrid, Megaphone, Play, Search, Plus, Radio, Trash2 } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState, type ComponentType } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 
@@ -19,6 +19,11 @@ type Campaign = {
   progress: number;
   callsMade: number;
   contactTotal: number;
+  sentiment?: {
+    positiveRate: number;
+    trendDelta: number | null;
+    previousCampaignId: string | null;
+  };
 };
 
 type FieldOptions = { areas: string[]; municipalities: string[] };
@@ -31,11 +36,11 @@ type NewFilter = {
   tag: string;
 };
 
-const statusStyle =
-  "inline-flex min-h-7 min-w-0 max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide";
+const statusBadge =
+  "inline-flex min-h-7 min-w-0 max-w-full shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide";
 
-const goldBtnBase =
-  "no-mobile-scale inline-flex h-12 min-h-12 w-full min-w-0 max-w-sm items-center justify-center gap-2 self-start rounded-full border-2 border-[#8B6914] bg-gradient-to-b from-[#E8C96B] to-[#8B6914] px-6 text-sm font-bold text-[#0A1628] shadow-[0_0_0_1px_rgba(0,0,0,0.2)] transition duration-200 ease-out hover:brightness-110 active:scale-[0.99] sm:w-auto";
+const goldCta =
+  "no-mobile-scale inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full border-2 border-[#8B6914] bg-gradient-to-b from-[#E8C96B] to-[#8B6914] px-4 text-xs font-bold text-[#0A1628] shadow-sm transition duration-200 hover:brightness-110 sm:text-sm";
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -141,44 +146,47 @@ export default function CampaignsPage() {
   return (
     <div className="space-y-8 max-md:space-y-6">
       <section
-        className="data-hq-card relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.12)] [data-theme='light']:shadow-[0_2px_16px_rgba(0,0,0,0.08)] sm:p-6"
+        className="data-hq-card relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_2px_20px_rgba(0,0,0,0.06)] sm:p-6"
       >
         <div className="pointer-events-none absolute -right-12 -top-8 h-40 w-40 rounded-full bg-[var(--accent-gold)]/10 blur-3xl" aria-hidden />
-        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">Καμπάνιες</h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              Θέση κλήσεων, αποτελέσματα & πλήρες ίχνος επικοινωνίας.
-            </p>
-            <div className="mt-4 grid max-w-2xl grid-cols-3 gap-2 sm:gap-4">
-              <StatPill label="Σύνολο" value={String(totalN)} sub="εγγραφές" color="text-[var(--accent-gold)]" border="border-[#C9A84C]/35" />
-              <StatPill
-                label="Ενεργές"
-                value={String(activeN)}
-                sub="εκκινισμένες"
-                color="text-sky-200"
-                border="border-sky-500/30"
-              />
-              <StatPill
-                label="Ολοκληρώθηκαν"
-                value={String(doneN)}
-                sub="από το κέντρο"
-                color="text-emerald-300/90"
-                border="border-emerald-500/25"
-              />
+        <div className="relative flex flex-col gap-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">Καμπάνιες</h1>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Θέση κλήσεων, αποτελέσματα & ίχνος επικοινωνίας.</p>
             </div>
+            <button
+              type="button"
+              className={goldCta + " w-full min-w-0 sm:w-auto sm:self-center"}
+              onClick={() => {
+                setFormErr(null);
+                setModal(true);
+              }}
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.5} />
+              <span>Νέα Καμπάνια</span>
+            </button>
           </div>
-          <button
-            type="button"
-            className={goldBtnBase + " w-full min-w-0 sm:self-end sm:justify-end"}
-            onClick={() => {
-              setFormErr(null);
-              setModal(true);
-            }}
-          >
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
-            <span>Νέα Καμπάνια</span>
-          </button>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <TopMetric
+              label="Σύνολο"
+              value={totalN}
+              sub="Όλες οι καταχωρήσεις"
+              icon={BarChart3}
+            />
+            <TopMetric
+              label="Ενεργές"
+              value={activeN}
+              sub="Σε εξέλιξη"
+              icon={Radio}
+            />
+            <TopMetric
+              label="Ολοκληρώθηκαν"
+              value={doneN}
+              sub="Έκλεισαν"
+              icon={CheckCircle2}
+            />
+          </div>
         </div>
       </section>
 
@@ -190,89 +198,112 @@ export default function CampaignsPage() {
         <p className="text-center text-sm text-[var(--text-secondary)]">Δεν έχετε ακόμα δημιουργήσει καμία καμπάνια.</p>
       )}
 
-      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <ul className="flex flex-col gap-4">
         {campaigns.map((c) => {
           const isActive = c.status === "active";
+          const isDone = c.status === "completed";
           const s = c.stats;
           const hasPool = c.contactTotal > 0;
           const barPct = hasPool ? Math.min(100, c.progress) : s.total > 0 ? 100 : 0;
+          const leftBorder = isActive
+            ? "border-l-[var(--accent-gold)]"
+            : isDone
+              ? "border-l-emerald-500"
+              : "border-l-stone-400/70 [data-theme='light']:border-l-stone-300";
           return (
             <li
               key={c.id}
-              className="group data-hq-card relative flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.12)] [data-theme='light']:shadow-[0_2px_12px_rgba(0,0,0,0.07)]"
+              className={[
+                "data-hq-card relative flex w-full max-w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] border-l-4 bg-[var(--bg-card)] p-5 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_2px_20px_rgba(0,0,0,0.06)]",
+                leftBorder,
+              ].join(" ")}
             >
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/[0.02] to-transparent [data-theme='light']:from-black/[0.02]" aria-hidden />
-              <div className="relative flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="truncate text-lg font-bold text-[var(--text-primary)]">{c.name}</h3>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                    <h2 className="min-w-0 text-[1.125rem] font-bold leading-tight text-[var(--text-primary)]">{c.name}</h2>
                     <span
                       className={
-                        statusStyle +
+                        statusBadge +
                         (isActive
-                          ? " border border-sky-500/40 bg-sky-500/10 text-sky-200"
-                          : " border border-stone-500/35 bg-stone-500/10 text-stone-200")
+                          ? " border-[#C9A84C]/45 bg-[var(--accent-gold)]/10 text-[var(--accent-gold)]"
+                          : isDone
+                            ? " border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
+                            : " border-[var(--border)] bg-[var(--bg-elevated)]/50 text-[var(--text-secondary)]")
                       }
                     >
-                      {isActive ? "Ενεργή" : "Ολοκληρώθηκε"}
+                      {isActive ? "Ενεργή" : isDone ? "Ολοκληρώθηκε" : c.status ?? "—"}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                  <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                     {c.created_at
                       ? new Date(c.created_at).toLocaleDateString("el-GR", { day: "2-digit", month: "2-digit", year: "numeric" })
-                      : "—"}{" "}
-                    {c.created_at ? "·" : null}{" "}
+                      : "—"}
                     {c.started_at
-                      ? `Έναρξη: ${new Date(c.started_at).toLocaleDateString("el-GR")}`
+                      ? ` · Έναρξη: ${new Date(c.started_at).toLocaleDateString("el-GR")}`
                       : ""}
                   </p>
                 </div>
-                <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl border border-[#C9A84C]/30 bg-[var(--bg-elevated)]">
-                  <Megaphone className="h-4 w-4 text-[#C9A84C]" />
-                </div>
+                <Megaphone
+                  className="h-5 w-5 shrink-0 text-[#C9A84C] opacity-90 [data-theme='light']:text-amber-700"
+                  strokeWidth={2}
+                  aria-hidden
+                />
               </div>
 
-              {c.description && (
-                <p className="relative mt-2 line-clamp-2 text-sm text-[var(--text-secondary)]">{c.description}</p>
-              )}
+              {c.description ? (
+                <p className="mt-2 line-clamp-2 text-sm text-[var(--text-secondary)]">{c.description}</p>
+              ) : null}
 
-              <div className="relative mt-3">
+              <div className="mt-4">
                 <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                  <span>Πρόοδος {hasPool ? "επαφών" : ""}</span>
+                  <span>Κλήσεις {hasPool ? "προς επαφές" : ""}</span>
                   <span className="text-[var(--text-secondary)]">
                     {hasPool
                       ? `${c.callsMade} / ${c.contactTotal}`
                       : s.total
-                        ? `${s.total} κλήση/εις (χωρίς αναλυτική δέσμευση περιοχών)`
+                        ? `${s.total} κλήση/εις (χωρίς δεσμ. περιοχών)`
                         : "0 / 0"}
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)] ring-1 ring-[#C9A84C]/15">
+                <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)]/90 ring-1 ring-inset ring-[#C9A84C]/12">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#1e5fa8] via-[#C9A84C] to-[#2dd4bf]"
-                    style={{ width: `${barPct}%`, transition: "width 0.2s ease" }}
+                    className="h-full rounded-full bg-[#C9A84C] shadow-[0_0_10px_rgba(201,168,76,0.35)]"
+                    style={{ width: `${barPct}%`, transition: "width 0.25s ease" }}
                   />
                 </div>
               </div>
 
-              <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <StatBadge label="Σύνολο" value={s.total} className="text-[#F0F4FF]" bg="bg-slate-500/15" ring="ring-slate-500/20" />
-                <StatBadge label="Θετικοί" value={s.positive} className="text-[#4ADE80]" bg="bg-emerald-500/10" ring="ring-emerald-500/20" />
-                <StatBadge label="Αρνητικοί" value={s.negative} className="text-[#FB7185]" bg="bg-red-500/10" ring="ring-red-500/20" />
-                <StatBadge label="Δεν Απάντησαν" value={s.noAnswer} className="text-amber-300" bg="bg-amber-500/10" ring="ring-amber-500/25" />
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <CampaignStat label="Σύνολο" value={s.total} numClass="text-slate-600 [data-theme='light']:text-slate-800" />
+                <CampaignStat label="Θετικοί" value={s.positive} numClass="text-emerald-500" />
+                <CampaignStat label="Αρνητικοί" value={s.negative} numClass="text-rose-500" />
+                <CampaignStat label="Δεν Απάντησαν" value={s.noAnswer} numClass="text-amber-600" />
               </div>
 
-              <div className="relative mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+              {c.sentiment && c.sentiment.trendDelta != null && (
+                <p className="mt-3 text-xs text-[var(--text-muted)]">
+                  Θετική αναλογία {c.sentiment.positiveRate}%
+                  {c.sentiment.trendDelta >= 0 ? (
+                    <span className="ml-1 font-semibold text-emerald-500">+{c.sentiment.trendDelta}%</span>
+                  ) : (
+                    <span className="ml-1 font-semibold text-rose-400">{c.sentiment.trendDelta}%</span>
+                  )}{" "}
+                  <span>έναντι προηγούμενης</span>
+                </p>
+              )}
+
+              <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                 <Link
                   href={`/campaigns/${c.id}`}
-                  className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:flex-1 sm:!w-auto sm:!shrink-0 sm:!px-3"}
+                  className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-transparent px-3 text-sm font-medium text-[var(--text-primary)] transition hover:border-[#C9A84C]/40 hover:bg-[var(--bg-elevated)]/60 sm:min-w-[6.5rem] sm:flex-none"
                 >
-                  <FileText className="h-4 w-4 text-[var(--text-muted)]" />
+                  <FileText className="h-4 w-4 opacity-70" />
                   Προβολή
                 </Link>
                 <button
                   type="button"
-                  className={lux.btnPrimary + " !min-h-11 w-full !items-center !justify-center gap-2 !py-2.5 sm:!flex-1 sm:!w-auto sm:!shrink-0 sm:!px-2"}
+                  className={goldCta + " flex-1 min-w-0 sm:flex-none sm:px-4"}
                   disabled={dialingId === c.id || !isActive || !c.contactTotal}
                   title={!c.contactTotal ? "Δεν υπάρχει αναλυτική λίστα επαφών" : undefined}
                   onClick={async () => {
@@ -291,7 +322,7 @@ export default function CampaignsPage() {
                   }}
                 >
                   {dialingId === c.id ? (
-                    <span>Σύνδεση…</span>
+                    "Σύνδεση…"
                   ) : (
                     <>
                       <Play className="h-3.5 w-3.5" />
@@ -302,7 +333,7 @@ export default function CampaignsPage() {
                 {isActive ? (
                   <button
                     type="button"
-                    className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:min-w-0 sm:!flex-1 sm:!w-auto sm:!shrink-0 sm:!px-2"}
+                    className="h-10 min-w-0 flex-1 rounded-xl border-2 border-emerald-500/50 bg-transparent px-3 text-sm font-semibold text-emerald-500 transition hover:bg-emerald-500/10 sm:min-w-[7rem] sm:flex-none [data-theme='light']:text-emerald-600"
                     disabled={togglingId === c.id}
                     onClick={async () => {
                       setTogglingId(c.id);
@@ -318,12 +349,12 @@ export default function CampaignsPage() {
                       }
                     }}
                   >
-                    {togglingId === c.id ? "…" : "Ολοκλ."}
+                    {togglingId === c.id ? "…" : "Ολοκλήρωση"}
                   </button>
                 ) : (
                   <button
                     type="button"
-                    className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:min-w-0 sm:!flex-1 sm:!w-auto sm:!shrink-0 sm:!px-2"}
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-transparent px-3 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)]/80 sm:min-w-[7rem] sm:flex-none"
                     disabled={togglingId === c.id}
                     onClick={async () => {
                       setTogglingId(c.id);
@@ -339,12 +370,13 @@ export default function CampaignsPage() {
                       }
                     }}
                   >
-                    Επανενεργοποίηση
+                    {togglingId === c.id ? "…" : "Επανενεργοπ."}
                   </button>
                 )}
                 <button
                   type="button"
-                  className={lux.btnDanger + " !min-h-11 w-full !items-center !justify-center gap-2 !py-2.5 sm:!w-auto sm:!shrink-0 sm:!self-center sm:!px-2"}
+                  className="group inline-flex h-10 w-10 shrink-0 items-center justify-center self-center rounded-xl border border-red-500/40 bg-transparent text-red-500 transition hover:border-red-500/70 hover:bg-red-500/5 sm:ml-0.5"
+                  title="Διαγραφή"
                   disabled={deletingId === c.id}
                   onClick={async () => {
                     if (!confirm("Διαγραφή καμπάνιας; Δεν ανακαλείται.")) return;
@@ -364,7 +396,7 @@ export default function CampaignsPage() {
                   }}
                 >
                   <Trash2 className="h-4 w-4" />
-                  {deletingId === c.id ? "—" : "Διαγραφή"}
+                  <span className="sr-only">Διαγραφή</span>
                 </button>
               </div>
             </li>
@@ -524,7 +556,7 @@ export default function CampaignsPage() {
                 </button>
                 <button
                   type="submit"
-                  className={goldBtnBase + " !h-12 !w-full !rounded-xl sm:!w-auto !min-w-0"}
+                  className={goldCta + " !h-12 !w-full !rounded-xl sm:!w-auto !min-w-0 sm:!px-6"}
                   disabled={saving}
                 >
                   {saving ? "…" : "Δημιουργία"}
@@ -538,33 +570,40 @@ export default function CampaignsPage() {
   );
 }
 
-function StatPill({ label, value, sub, color, border }: { label: string; value: string; sub: string; color: string; border: string }) {
+function TopMetric({
+  label,
+  value,
+  sub,
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  sub: string;
+  icon: ComponentType<{ className?: string }>;
+}) {
   return (
-    <div className={["rounded-lg border", border, "bg-[#0A1628]/80 p-2.5 sm:p-3"].join(" ")}>
-      <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-subtitle)]">{label}</p>
-      <p className={["mt-0.5 text-xl font-bold tabular-nums sm:text-2xl", color].join(" ")}>{value}</p>
-      <p className="text-[9px] text-[var(--text-subtitle)] sm:text-[10px]">{sub}</p>
+    <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4 [data-theme='light']:bg-slate-50/90">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#C9A84C]/20 bg-[var(--accent-gold)]/5 text-[#C9A84C] [data-theme='light']:bg-amber-50 [data-theme='light']:text-amber-800">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
+        <p className="text-2xl font-bold tabular-nums text-[var(--accent-gold)] [data-theme='light']:text-amber-800 sm:text-3xl" style={{ fontFeatureSettings: '"tnum"' }}>
+          {value}
+        </p>
+        <p className="text-[10px] text-[var(--text-muted)] sm:text-xs">{sub}</p>
+      </div>
     </div>
   );
 }
 
-function StatBadge({
-  label,
-  value,
-  className: cls,
-  bg,
-  ring,
-}: {
-  label: string;
-  value: number;
-  className: string;
-  bg: string;
-  ring: string;
-}) {
+function CampaignStat({ label, value, numClass }: { label: string; value: number; numClass: string }) {
   return (
-    <div className={["flex flex-col rounded-lg p-1.5 ring-1 sm:p-2", bg, ring, "min-h-[2.5rem] justify-center"].join(" ")}>
-      <span className="text-[9px] font-semibold leading-tight text-[var(--text-subtitle)]">{label}</span>
-      <span className={["text-sm font-bold tabular-nums sm:text-base", cls].join(" ")}>{value}</span>
+    <div className="flex flex-col justify-center rounded-xl border border-[var(--border)]/80 bg-[var(--bg-elevated)]/25 p-2.5 [data-theme='light']:border-slate-200/90 [data-theme='light']:bg-slate-50/80">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
+      <span className={["mt-0.5 text-lg font-bold tabular-nums sm:text-xl", numClass].join(" ")} style={{ fontFeatureSettings: '"tnum"' }}>
+        {value}
+      </span>
     </div>
   );
 }

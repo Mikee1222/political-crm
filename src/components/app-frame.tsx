@@ -10,14 +10,20 @@ import {
   ChartColumnBig,
   CheckSquare,
   Cog,
+  FileText,
   Map,
   Megaphone,
   Menu,
   NotebookText,
+  PenLine,
   Search,
   Sparkles,
   Users,
   Wrench,
+  BarChart3,
+  Building2,
+  CalendarCheck,
+  HeartHandshake,
 } from "lucide-react";
 import { AlexaMiniWindow } from "@/components/alexandra/alexa-mini-window";
 import { AiAssistantWidget } from "@/components/ai-assistant-widget";
@@ -38,11 +44,17 @@ const navigationItems: NavItem[] = [
   { href: "/heatmap", label: "Χάρτης", icon: Map, minRole: "manager" },
   { href: "/namedays", label: "Εορτολόγιο", icon: CalendarDays, minRole: "caller" },
   { href: "/campaigns", label: "Καμπάνιες", icon: Megaphone, minRole: "manager" },
+  { href: "/parliament", label: "Βουλή", icon: Building2, minRole: "manager" },
+  { href: "/events", label: "Εκδηλώσεις", icon: CalendarCheck, minRole: "manager" },
+  { href: "/volunteers", label: "Εθελοντές", icon: HeartHandshake, minRole: "manager" },
+  { href: "/analytics", label: "Αναλυτικά", icon: BarChart3, minRole: "manager" },
   { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager", badge: "requests" },
   { href: "/tasks", label: "Εργασίες", icon: CheckSquare, minRole: "manager" },
   { href: "/schedule", label: "Πρόγραμμα", icon: Calendar, minRole: "manager" },
   { href: "/data-tools", label: "Εργαλεία", icon: Wrench, minRole: "manager" },
-  { href: "/settings", label: "Ρυθμίσεις", icon: Cog, minRole: "admin" },
+  { href: "/documents", label: "Έγγραφα", icon: FileText, minRole: "manager" },
+  { href: "/content", label: "Περιεχόμενο", icon: PenLine, minRole: "manager" },
+  { href: "/settings", label: "Ρυθμίσεις", icon: Cog, minRole: "manager" },
 ];
 
 function pageTitle(pathname: string) {
@@ -51,10 +63,16 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/heatmap")) return "Χάρτης";
   if (pathname.startsWith("/namedays")) return "Εορτολόγιο";
   if (pathname.startsWith("/campaigns")) return "Καμπάνιες";
+  if (pathname.startsWith("/parliament")) return "Βουλή";
+  if (pathname.startsWith("/events")) return "Εκδηλώσεις";
+  if (pathname.startsWith("/volunteers")) return "Εθελοντές";
+  if (pathname.startsWith("/analytics")) return "Αναλυτικά";
   if (pathname.startsWith("/requests")) return "Αιτήματα";
   if (pathname.startsWith("/tasks")) return "Εργασίες";
   if (pathname.startsWith("/schedule")) return "Πρόγραμμα";
   if (pathname.startsWith("/data-tools")) return "Εργαλεία δεδομένων";
+  if (pathname.startsWith("/documents")) return "Έγγραφα";
+  if (pathname.startsWith("/content")) return "Περιεχόμενο";
   if (pathname.startsWith("/settings")) return "Ρυθμίσεις";
   if (pathname.startsWith("/alexandra")) return "Αλεξάνδρα";
   return "Καραγκούνης CRM";
@@ -336,7 +354,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="hq-fade-in-up main-scroll mobile-page-transition min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-md:pb-24 max-md:pt-2 sm:p-6 md:p-8">
+        <main className="hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-md:pb-24 max-md:pt-2 sm:p-6 md:p-8">
           {children}
         </main>
         <AlexaMiniWindow />

@@ -1,16 +1,26 @@
 "use client";
 
-import { ChevronDown, Download, Eye, Pencil, Phone, Plus } from "lucide-react";
+import { ChevronDown, Download, Eye, Pencil, Phone, Plus, Search } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
+import {
+  getDefaultContactFilters,
+  searchParamsToFilters,
+  buildContactsPageUrl,
+  contactFiltersToExportParams,
+  contactFiltersToSearchParams,
+  applySavedFilterJson,
+  type ContactListFilters,
+} from "@/lib/contacts-filters";
 import { useProfile } from "@/contexts/profile-context";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { hasMinRole } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { avatarContact, callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Contact = {
   id: string;
@@ -26,8 +36,24 @@ type Contact = {
   tags: string[] | null;
   contact_code?: string | null;
   group_id?: string | null;
+  predicted_score?: number | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
 };
+
+function ContactScoreBar({ score }: { score: number | null | undefined }) {
+  const s = score == null || !Number.isFinite(score) ? null : Math.max(0, Math.min(100, Math.round(score)));
+  const fill =
+    s == null ? "var(--text-muted)" : s <= 33 ? "#b91c1c" : s <= 66 ? "#d97706" : "#15803d";
+  const w = s == null ? 0 : s;
+  return (
+    <div className="flex min-w-[4rem] max-w-[6rem] flex-col gap-0.5" title={s == null ? "Χωρίς σκορ" : `Σκορ: ${s}`}>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+        <div className="h-full rounded-full transition-all" style={{ width: `${w}%`, background: fill }} />
+      </div>
+      {s != null && <span className="text-[10px] font-medium text-[var(--text-muted)]">{s}</span>}
+    </div>
+  );
+}
 
 function PhoneListExtras({ phone2, landline }: { phone2?: string | null; landline?: string | null }) {
   if (!String(phone2 ?? "").trim() && !String(landline ?? "").trim()) return null;
@@ -176,6 +202,7 @@ function ContactSwipeCard({
             >
               {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
             </span>
+            <ContactScoreBar score={c.predicted_score} />
           </div>
         </div>
       </div>
@@ -183,37 +210,27 @@ function ContactSwipeCard({
   );
 }
 
-function filterParams(
-  search: string,
-  callStatus: string,
-  area: string,
-  priority: string,
-  tag: string,
-  namedayToday: boolean,
-  municipality: string,
-  groupId: string,
-) {
-  const p = new URLSearchParams();
-  if (search) p.set("search", search);
-  if (callStatus) p.set("call_status", callStatus);
-  if (area) p.set("area", area);
-  if (municipality) p.set("municipality", municipality);
-  if (priority) p.set("priority", priority);
-  if (tag) p.set("tag", tag);
-  if (groupId) p.set("group_id", groupId);
-  if (namedayToday) p.set("nameday_today", "1");
-  p.set("filters", "1");
-  return p;
-}
+const CALL_STATUS_OPTS: { v: string; l: string }[] = [
+  { v: "Pending", l: "Αναμονή" },
+  { v: "Positive", l: "Θετικός" },
+  { v: "Negative", l: "Αρνητικός" },
+  { v: "No Answer", l: "Δεν απάντησε" },
+];
 
-function GroupFilterSelect({
+function GroupMultiSelect({
+  id,
+  label,
   value,
   groups,
   onChange,
+  emptyLabel,
 }: {
-  value: string;
+  id: string;
+  label: string;
+  value: string[];
   groups: ContactGroupRow[];
-  onChange: (v: string) => void;
+  onChange: (v: string[]) => void;
+  emptyLabel: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -225,97 +242,165 @@ function GroupFilterSelect({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
-  const current = value ? groups.find((g) => g.id === value) : null;
+  const selected = groups.filter((g) => value.includes(g.id));
+  const labelText =
+    selected.length === 0
+      ? emptyLabel
+      : selected.length === 1
+        ? selected[0]!.name
+        : `${selected.length} επιλογές`;
+  const toggle = (idG: string) => {
+    if (value.includes(idG)) onChange(value.filter((x) => x !== idG));
+    else onChange([...value, idG]);
+  };
   return (
     <div className="relative w-full min-w-0 max-w-full" ref={ref}>
+      <span className={lux.label} id={id + "-label"}>
+        {label}
+      </span>
       <button
         type="button"
-        id="f-group"
-        className={lux.select + " flex w-full min-w-0 items-center justify-between gap-2 text-left"}
+        id={id}
+        className={lux.select + " mt-1 flex w-full min-w-0 items-center justify-between gap-2 text-left"}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        aria-labelledby={id + "-label"}
         aria-haspopup="listbox"
       >
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          {current ? (
-            <>
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
-                style={{ background: current.color || "#003476" }}
-                aria-hidden
-              />
-              <span className="min-w-0 truncate">
-                {current.name}
-                {current.year != null ? ` (${current.year})` : ""}
-              </span>
-            </>
-          ) : (
-            <span className="text-[var(--text-primary)]">Όλες οι ομάδες</span>
-          )}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-left text-[var(--text-primary)]">{labelText}</span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
       {open && (
         <ul
           className="absolute left-0 right-0 z-40 mt-1 max-h-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-[var(--card-shadow)]"
           role="listbox"
+          aria-multiselectable
         >
-          <li>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-            >
-              Όλες οι ομάδες
-            </button>
-          </li>
-          {groups.map((g) => (
-            <li key={g.id}>
-              <button
-                type="button"
-                className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-                onClick={() => {
-                  onChange(g.id);
-                  setOpen(false);
-                }}
-              >
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
-                  style={{ background: g.color || "#003476" }}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  {g.name}
-                  {g.year != null ? <span className="text-[var(--text-muted)]"> ({g.year})</span> : null}
-                </span>
-              </button>
-            </li>
-          ))}
+          {groups.map((g) => {
+            const on = value.includes(g.id);
+            return (
+              <li key={g.id}>
+                <button
+                  type="button"
+                  className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+                  onClick={() => toggle(g.id)}
+                >
+                  <span
+                    className={
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border " +
+                      (on ? "border-[var(--accent-gold)] bg-[var(--accent-gold)]/20" : "border-[var(--border)]")
+                    }
+                    aria-hidden
+                  >
+                    {on ? "✓" : ""}
+                  </span>
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
+                    style={{ background: g.color || "#003476" }}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    {g.name}
+                    {g.year != null ? <span className="text-[var(--text-muted)]"> ({g.year})</span> : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
   );
 }
 
+function CallStatusMultiSelect({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const labelText =
+    value.length === 0
+      ? "Όλες"
+      : value.length === 1
+        ? CALL_STATUS_OPTS.find((o) => o.v === value[0])?.l ?? value[0]!
+        : `${value.length} status`;
+  const toggle = (s: string) => {
+    if (value.includes(s)) onChange(value.filter((x) => x !== s));
+    else onChange([...value, s]);
+  };
+  return (
+    <div className="relative min-w-0 max-w-full" ref={ref}>
+      <label className={lux.label} htmlFor="f-call-m">
+        Κατάσταση
+      </label>
+      <button
+        type="button"
+        id="f-call-m"
+        className={lux.select + " flex w-full min-w-0 items-center justify-between gap-2 text-left"}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="min-w-0 flex-1 truncate text-left text-[var(--text-primary)]">{labelText}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+      {open && (
+        <ul
+          className="absolute z-30 mt-1 max-h-48 min-w-[11rem] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-[var(--card-shadow)]"
+          role="listbox"
+        >
+          {CALL_STATUS_OPTS.map((o) => {
+            const on = value.includes(o.v);
+            return (
+              <li key={o.v}>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-elevated)]"
+                  onClick={() => toggle(o.v)}
+                >
+                  <span
+                    className={
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border " +
+                      (on ? "border-[var(--accent-gold)] bg-[var(--accent-gold)]/20" : "border-[var(--border)]")
+                    }
+                  >
+                    {on ? "✓" : ""}
+                  </span>
+                  {o.l}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+type SavedFilterApi = { id: string; name: string; description: string | null; filters: Record<string, unknown> };
+
 function ContactsPage() {
   const { profile } = useProfile();
   const canManage = hasMinRole(profile?.role, "manager");
   const isAdmin = profile?.role === "admin";
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const namedayToday = searchParams.get("nameday_today") === "1";
+  const [f, setF] = useState<ContactListFilters>(getDefaultContactFilters);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [search, setSearch] = useState("");
-  const [callStatus, setCallStatus] = useState("");
-  const [area, setArea] = useState("");
-  const [municipality, setMunicipality] = useState("");
-  const [priority, setPriority] = useState("");
-  const [tag, setTag] = useState("");
-  const [groupId, setGroupId] = useState("");
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedFilterApi[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
@@ -326,13 +411,41 @@ function ContactsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const groupNameToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of groups) m.set(g.name.toLowerCase(), g.id);
+    return m;
+  }, [groups]);
+
+  const patch = useCallback(
+    (p: Partial<ContactListFilters>) => {
+      setF((prev) => {
+        const next = { ...prev, ...p };
+        startTransition(() => {
+          router.replace(buildContactsPageUrl(next), { scroll: false });
+        });
+        return next;
+      });
+    },
+    [router],
+  );
+
+  useLayoutEffect(() => {
+    setF(searchParamsToFilters(new URLSearchParams(searchParams.toString()), getDefaultContactFilters()));
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    if (canManage) setOpenCreate(true);
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("new");
+    const q = p.toString();
+    startTransition(() => router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false }));
+  }, [searchParams, router, pathname, canManage]);
+
   const load = useCallback(async () => {
-    const params = new URLSearchParams({ search, call_status: callStatus, area, priority, tag });
-    if (municipality) params.set("municipality", municipality);
-    if (groupId) params.set("group_id", groupId);
-    if (namedayToday) {
-      params.set("nameday_today", "1");
-    }
+    const q = f;
+    const params = contactFiltersToSearchParams(q);
     const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
     const data = (await res.json()) as { contacts?: Contact[] };
     const list = (data.contacts ?? []).map((c) => {
@@ -341,7 +454,7 @@ function ContactsPage() {
       return { ...c, contact_groups } as Contact;
     });
     setContacts(list);
-  }, [search, callStatus, area, municipality, priority, tag, groupId, namedayToday]);
+  }, [f]);
 
   useEffect(() => {
     fetchWithTimeout("/api/groups")
@@ -350,10 +463,12 @@ function ContactsPage() {
       .catch(() => setGroups([]));
   }, []);
 
-  useLayoutEffect(() => {
-    setMunicipality(searchParams.get("municipality") ?? "");
-    setCallStatus(searchParams.get("call_status") ?? "");
-  }, [searchParams]);
+  useEffect(() => {
+    fetchWithTimeout("/api/saved-filters")
+      .then((r) => r.json())
+      .then((d: { saved_filters?: SavedFilterApi[] }) => setSavedFilters(d.saved_filters ?? []))
+      .catch(() => setSavedFilters([]));
+  }, []);
 
   useEffect(() => {
     load();
@@ -419,7 +534,7 @@ function ContactsPage() {
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 pb-24 md:pb-6">
-      {namedayToday && (
+      {f.nameday_today && (
         <div
           className="flex w-full min-w-0 max-w-full flex-col gap-2 rounded-2xl border-2 border-[var(--accent-gold)]/45 bg-gradient-to-r from-[rgba(201,168,76,0.12)] to-[var(--bg-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           role="status"
@@ -430,22 +545,18 @@ function ContactsPage() {
           </p>
           <button
             type="button"
-            onClick={() => {
-              router.replace("/contacts", { scroll: false });
-            }}
+            onClick={() => patch({ nameday_today: false })}
             className={lux.btnSecondary + " !shrink-0 !py-2 text-xs sm:!text-sm"}
           >
             Εμφάνιση όλων
           </button>
         </div>
       )}
-      <div className={lux.card + " w-full min-w-0 max-w-full"}>
-        <div className="flex min-w-0 max-w-full flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className={lux.pageTitle}>Επαφές</h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">Διαχείριση εκλογικής βάσης</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title="Επαφές"
+        subtitle="Διαχείριση εκλογικής βάσης — αναζήτηση, φίλτρα, εξαγωγή και μαζικές ενέργειες."
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="relative">
               <button
                 type="button"
@@ -472,7 +583,7 @@ function ContactsPage() {
                   )}
                   <a
                     className="block px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-                    href={`/api/contacts/export?${filterParams(search, callStatus, area, priority, tag, namedayToday, municipality, groupId).toString()}`}
+                    href={`/api/contacts/export?${contactFiltersToExportParams(f).toString()}`}
                   >
                     Εξαγωγή φίλτρων
                   </a>
@@ -493,94 +604,246 @@ function ContactsPage() {
                 <a href="/api/contacts/import-template" className={lux.btnSecondary + " !py-2 text-sm"}>
                   CSV Template
                 </a>
-                <button type="button" onClick={() => setOpenCreate(true)} className={lux.btnPrimary + " !py-2 text-sm"}>
+                <button
+                  type="button"
+                  onClick={() => setOpenCreate(true)}
+                  className={lux.btnPrimary + " hq-shimmer-gold !rounded-full !py-2.5 text-sm !font-bold text-[var(--text-badge-on-gold)]"}
+                >
                   <Plus className="h-4 w-4" />
                   Νέα Επαφή
                 </button>
               </>
             )}
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className={lux.card + " !py-4 w-full min-w-0 max-w-full"}>
-        <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,11.5rem),1fr))]">
-        <div className="min-w-0 max-w-full">
-          <label className={lux.label} htmlFor="f-search">Αναζήτηση</label>
-          <input
-            id="f-search"
-            className={lux.input}
-            placeholder="Όνομα, τηλέφωνο..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="min-w-0 max-w-full">
-          <label className={lux.label} htmlFor="f-call">Κατάσταση</label>
-          <select
-            id="f-call"
-            className={lux.select}
-            value={callStatus}
-            onChange={(e) => setCallStatus(e.target.value)}
-          >
-            <option value="">Όλες</option>
-            <option value="Pending">Αναμονή</option>
-            <option value="Positive">Θετικός</option>
-            <option value="Negative">Αρνητικός</option>
-            <option value="No Answer">Δεν απάντησε</option>
-          </select>
-        </div>
-        <div className="min-w-0 max-w-full">
-          <label className={lux.label} htmlFor="f-area">Περιοχή</label>
-          <select id="f-area" className={lux.select} value={area} onChange={(e) => setArea(e.target.value)}>
-            <option value="">Όλες</option>
-            {areas.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="min-w-0 max-w-full">
-          <label className={lux.label} htmlFor="f-muni">Δήμος</label>
-          <select
-            id="f-muni"
-            className={lux.select}
-            value={municipality}
-            onChange={(e) => setMunicipality(e.target.value)}
-          >
-            <option value="">Όλοι</option>
-            {MUNICIPALITIES.map((m) => (
-              <option key={m.name} value={m.name}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="min-w-0 max-w-full">
-          <label className={lux.label} htmlFor="f-pri">Προτεραιότητα</label>
-          <select
-            id="f-pri"
-            className={lux.select}
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-          >
-            <option value="">Όλες</option>
-            <option value="High">Υψηλή</option>
-            <option value="Medium">Μεσαία</option>
-            <option value="Low">Χαμηλή</option>
-          </select>
-        </div>
-        <div className="min-w-0 max-w-full">
-          <label className={lux.label} htmlFor="f-tag">Ετικέτα</label>
-          <input id="f-tag" className={lux.input} placeholder="Φίλτρο tag" value={tag} onChange={(e) => setTag(e.target.value)} />
-        </div>
-        <div className="min-w-0 max-w-full">
-          <label className={lux.label} htmlFor="f-group">
-            Ομάδα
+        <div className="mb-3 min-w-0 max-w-full sm:max-w-md">
+          <label className={lux.label} htmlFor="f-saved-m">
+            Αποθηκευμένα φίλτρα
           </label>
-          <GroupFilterSelect value={groupId} groups={groups} onChange={setGroupId} />
+          <select
+            id="f-saved-m"
+            className={lux.select}
+            defaultValue=""
+            onChange={(e) => {
+              const v = e.target.value;
+              e.currentTarget.value = "";
+              if (!v) return;
+              const row = savedFilters.find((r) => r.id === v);
+              if (row) {
+                const next = applySavedFilterJson(row.filters, groupNameToId);
+                setF(next);
+                startTransition(() => router.replace(buildContactsPageUrl(next), { scroll: false }));
+              }
+            }}
+          >
+            <option value="">— επιλέξτε —</option>
+            {savedFilters.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.description ? ` — ${s.description}` : ""}
+              </option>
+            ))}
+          </select>
         </div>
+        <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,11.5rem),1fr))]">
+          <div className="min-w-0 max-w-full sm:col-span-2">
+            <label className={lux.label} htmlFor="f-search">
+              Αναζήτηση
+            </label>
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                aria-hidden
+              />
+              <input
+                id="f-search"
+                className={lux.input + " !h-12 !rounded-full !pl-10 !pr-4 hq-input-elevated text-base sm:!text-sm"}
+                placeholder="Όνομα, τηλέφωνο, δήμος…"
+                value={f.search}
+                onChange={(e) => patch({ search: e.target.value })}
+                autoComplete="off"
+              />
+            </div>
+            {(f.call_statuses.length > 0 ||
+              f.municipality ||
+              f.area ||
+              f.priority ||
+              f.search ||
+              f.tag) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {f.search.trim() ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-2.5 py-0.5 text-[10px] font-bold text-[var(--text-primary)]">
+                    Ζ: {f.search}
+                  </span>
+                ) : null}
+                {f.municipality ? (
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                    {f.municipality}
+                  </span>
+                ) : null}
+                {f.area ? (
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                    {f.area}
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 max-w-full">
+            <CallStatusMultiSelect
+              value={f.call_statuses.length ? f.call_statuses : f.call_status ? [f.call_status] : []}
+              onChange={(v) => {
+                patch({ call_statuses: v, call_status: "" });
+              }}
+            />
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-area">
+              Περιοχή
+            </label>
+            <select
+              id="f-area"
+              className={lux.select}
+              value={f.area}
+              onChange={(e) => patch({ area: e.target.value })}
+            >
+              <option value="">Όλες</option>
+              {areas.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-muni">
+              Δήμος
+            </label>
+            <select
+              id="f-muni"
+              className={lux.select}
+              value={f.municipality}
+              onChange={(e) => patch({ municipality: e.target.value })}
+            >
+              <option value="">Όλοι</option>
+              {MUNICIPALITIES.map((m) => (
+                <option key={m.name} value={m.name}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-pri">
+              Προτεραιότητα
+            </label>
+            <select
+              id="f-pri"
+              className={lux.select}
+              value={f.priority}
+              onChange={(e) => patch({ priority: e.target.value })}
+            >
+              <option value="">Όλες</option>
+              <option value="High">Υψηλή</option>
+              <option value="Medium">Μεσαία</option>
+              <option value="Low">Χαμηλή</option>
+            </select>
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-tag">
+              Ετικέτα
+            </label>
+            <input
+              id="f-tag"
+              className={lux.input}
+              placeholder="Φίλτρο tag"
+              value={f.tag}
+              onChange={(e) => patch({ tag: e.target.value })}
+            />
+          </div>
+          <div className="min-w-0 max-w-full sm:col-span-2">
+            <GroupMultiSelect
+              id="f-groups"
+              label="Ομάδα"
+              value={f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : []}
+              groups={groups}
+              onChange={(ids) => {
+                patch({
+                  group_ids: ids,
+                  group_id: "",
+                });
+              }}
+              emptyLabel="Όλες οι ομάδες"
+            />
+          </div>
+          <div className="min-w-0 max-w-full sm:col-span-2">
+            <GroupMultiSelect
+              id="f-groups-ex"
+              label="Εξαίρεση ομάδας"
+              value={f.exclude_group_ids}
+              groups={groups}
+              onChange={(ids) => patch({ exclude_group_ids: ids })}
+              emptyLabel="Χωρίς εξαίρεση"
+            />
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-byrf">
+              Έτος γέννησης από
+            </label>
+            <input
+              id="f-byrf"
+              className={lux.input}
+              inputMode="numeric"
+              placeholder="π.χ. 1960"
+              value={f.birth_year_from}
+              onChange={(e) => patch({ birth_year_from: e.target.value.replace(/[^\d]/g, "") })}
+            />
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-byrt">
+              Έτος γέννησης έως
+            </label>
+            <input
+              id="f-byrt"
+              className={lux.input}
+              inputMode="numeric"
+              placeholder="π.χ. 1990"
+              value={f.birth_year_to}
+              onChange={(e) => patch({ birth_year_to: e.target.value.replace(/[^\d]/g, "") })}
+            />
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-score">
+              Σκορ (πειθω)
+            </label>
+            <select
+              id="f-score"
+              className={lux.select}
+              value={f.score_tier}
+              onChange={(e) => patch({ score_tier: e.target.value })}
+            >
+              <option value="">Όλα</option>
+              <option value="low">0–33 (χαμηλό)</option>
+              <option value="mid">34–66 (μέτριο)</option>
+              <option value="high">67–100 (υψηλό)</option>
+            </select>
+          </div>
+          {canManage && (
+            <div className="min-w-0 max-w-full flex items-end">
+              <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-[var(--text-primary)]">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-[var(--border)]"
+                  checked={f.is_volunteer}
+                  onChange={(e) => patch({ is_volunteer: e.target.checked })}
+                />
+                Μόνο εθελοντές
+              </label>
+            </div>
+          )}
         </div>
       </div>
 
@@ -602,8 +865,8 @@ function ContactsPage() {
         </div>
       )}
 
-      <div className="data-hq-card hidden overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)] md:block">
-        <table className="min-w-full text-sm text-[var(--text-table)]">
+      <div className="data-hq-card hq-table-shell hidden max-h-[min(70vh,900px)] md:block">
+        <table className="hq-table-sortable min-w-full text-sm text-[var(--text-table)]">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
               <th className="sticky left-0 z-20 w-11 min-w-11 max-w-11 border-r border-[var(--border)] bg-[var(--bg-elevated)] p-2 pl-3 text-center sm:w-12">
@@ -628,6 +891,7 @@ function ContactsPage() {
               <th className="p-3">Δήμος</th>
               <th className="p-3">Status</th>
               <th className="p-3">Priority</th>
+              <th className="p-3 w-24">Σκορ</th>
               <th className="p-3 pr-4 text-right">Ενέργειες</th>
             </tr>
           </thead>
@@ -710,6 +974,9 @@ function ContactsPage() {
                       {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
                     </span>
                   </td>
+                  <td className="p-3">
+                    <ContactScoreBar score={c.predicted_score} />
+                  </td>
                   <td className="p-3 pr-4">
                     <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                       <button type="button" className={lux.btnIcon} title="Προβολή" onClick={() => router.push(`/contacts/${c.id}`)}>
@@ -744,7 +1011,7 @@ function ContactsPage() {
       )}
 
       {selectedIds.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-50 max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border)] bg-[var(--surface-bulk)] p-3 shadow-[var(--card-shadow)] backdrop-blur-md md:bottom-4 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:-translate-x-1/2 md:rounded-2xl md:border md:px-4">
+        <div className="hq-bulk-bar fixed inset-x-0 bottom-0 z-50 max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border)] bg-[var(--surface-bulk)] p-3 shadow-[var(--card-shadow)] backdrop-blur-md md:bottom-4 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:-translate-x-1/2 md:rounded-2xl md:border md:px-4">
           {bulkErr && <p className="mb-2 text-center text-xs text-[var(--status-negative-text)]">{bulkErr}</p>}
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <p className="text-center text-sm font-medium text-[var(--text-primary)] sm:text-left">

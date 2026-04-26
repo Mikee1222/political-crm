@@ -15,6 +15,8 @@ export function activityGreekLine(params: {
       return `Ο/Η ${a} δημιούργησε επαφή ${e}`;
     case "contact_updated":
       return `Ο/Η ${a} ενημέρωσε επαφή ${e}`;
+    case "contact_note_added":
+      return `Ο/Η ${a} πρόσθεσε σημείωση — ${e}`;
     case "call_made":
       if (actorFirstName && actorFirstName !== "Χρήστης") {
         return `Ο/Η ${a} ξεκίνησε κλήση — ${e}`;

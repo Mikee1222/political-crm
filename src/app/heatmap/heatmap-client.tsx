@@ -6,7 +6,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
-import type { ForMapRow, MapMode } from "@/components/heatmap/municipal-map";
+import type { ForMapRow, MapColorVariant, MapMode } from "@/components/heatmap/municipal-map";
 import { MunicipalMap } from "@/components/heatmap/municipal-map";
 
 type MuniRow = {
@@ -20,14 +20,22 @@ type MuniRow = {
 };
 
 type ApiPayload = {
+  view?: "crm" | "electoral" | "compare";
+  mapColorVariant?: MapColorVariant;
   mode: MapMode;
   forMap: ForMapRow[];
   top10: MuniRow[];
   maxTotal: number;
 };
 
-const modes: { id: MapMode; label: string }[] = [
-  { id: "contacts", label: "Επαφές" },
+const views: { id: "crm" | "electoral" | "compare"; label: string }[] = [
+  { id: "crm", label: "Επαφές" },
+  { id: "electoral", label: "Εκλογικά 2023" },
+  { id: "compare", label: "Σύγκριση" },
+];
+
+const crmSubModes: { id: MapMode; label: string }[] = [
+  { id: "contacts", label: "Όλες" },
   { id: "positive", label: "Θετικοί" },
   { id: "negative", label: "Αρνητικοί" },
 ];
@@ -39,15 +47,23 @@ function muniShort(name: string) {
 export function HeatmapClient() {
   const { profile, loading: profileLoading } = useProfile();
   const router = useRouter();
+  const [view, setView] = useState<"crm" | "electoral" | "compare">("crm");
   const [mode, setMode] = useState<MapMode>("contacts");
   const [data, setData] = useState<ApiPayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const canView = hasMinRole(profile?.role, "manager");
 
-  const load = useCallback(async (m: MapMode) => {
+  const load = useCallback(async (m: MapMode, v: "crm" | "electoral" | "compare") => {
     setErr(null);
-    const res = await fetchWithTimeout(`/api/heatmap/municipalities?mode=${encodeURIComponent(m)}`);
+    const q = new URLSearchParams();
+    q.set("view", v);
+    if (v === "crm") {
+      q.set("mode", m);
+    } else {
+      q.set("year", "2023");
+    }
+    const res = await fetchWithTimeout(`/api/heatmap/municipalities?${q.toString()}`);
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       setErr(j.error ?? "Σφάλμα φόρτωσης");
@@ -59,19 +75,25 @@ export function HeatmapClient() {
   }, []);
 
   useEffect(() => {
-    if (profileLoading || !canView) return;
-    void load(mode);
-  }, [load, mode, canView, profileLoading]);
+    if (profileLoading || !canView) {
+      return;
+    }
+    void load(mode, view);
+  }, [load, mode, view, canView, profileLoading]);
 
   const onSelectMuni = useCallback(
     (muni: string) => {
       const p = new URLSearchParams();
       p.set("municipality", muni);
-      if (mode === "positive") p.set("call_status", "Positive");
-      if (mode === "negative") p.set("call_status", "Negative");
+      if (view === "crm" && mode === "positive") {
+        p.set("call_status", "Positive");
+      }
+      if (view === "crm" && mode === "negative") {
+        p.set("call_status", "Negative");
+      }
       router.push(`/contacts?${p.toString()}`);
     },
-    [mode, router],
+    [mode, router, view],
   );
 
   if (profileLoading) {
@@ -104,22 +126,45 @@ export function HeatmapClient() {
             <h1 className={lux.pageTitle}>Χάρτης</h1>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">Αιτωλοακαρνανία — κατανομή επαφών ανά δήμο</p>
           </div>
-          <div className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/50 p-1">
-            {modes.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => setMode(b.id)}
-                className={[
-                  "btn-scale rounded-lg px-4 py-2 text-sm font-medium transition",
-                  mode === b.id
-                    ? "bg-[rgba(201,168,76,0.18)] text-[var(--accent-gold)] ring-1 ring-inset ring-[var(--accent-gold)]/40"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
-                ].join(" ")}
-              >
-                {b.label}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2 sm:items-end">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/50 p-1">
+              {views.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => {
+                    setView(b.id);
+                  }}
+                  className={[
+                    "btn-scale rounded-lg px-3 py-2 text-sm font-medium transition",
+                    view === b.id
+                      ? "bg-[rgba(201,168,76,0.18)] text-[var(--accent-gold)] ring-1 ring-inset ring-[var(--accent-gold)]/40"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+                  ].join(" ")}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+            {view === "crm" && (
+              <div className="inline-flex flex-wrap gap-1 rounded-lg border border-[var(--border)]/80 bg-[var(--bg-elevated)]/30 p-0.5">
+                {crmSubModes.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setMode(b.id)}
+                    className={[
+                      "rounded-md px-3 py-1.5 text-xs font-medium transition",
+                      mode === b.id
+                        ? "bg-[var(--bg-card)] text-[var(--text-primary)] shadow-sm"
+                        : "text-[var(--text-secondary)]",
+                    ].join(" ")}
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -131,7 +176,11 @@ export function HeatmapClient() {
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row">
         <div className="relative min-h-[min(60vh,560px)] flex-1">
           {data && (
-            <MunicipalMap forMap={data.forMap} onSelect={onSelectMuni} />
+            <MunicipalMap
+              forMap={data.forMap}
+              onSelect={onSelectMuni}
+              colorVariant={data.mapColorVariant ?? "gold"}
+            />
           )}
           <div
             className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[min(100%,220px)] rounded-xl border border-[var(--border)] bg-[var(--bg-card)]/95 px-3 py-2.5 text-[10px] text-[var(--text-secondary)] shadow-md backdrop-blur-md"

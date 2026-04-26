@@ -4,13 +4,22 @@ import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
 const CALLER_BLOCKED_PREFIXES = [
   "/dashboard",
   "/campaigns",
+  "/parliament",
+  "/events",
+  "/volunteers",
   "/tasks",
   "/requests",
   "/schedule",
   "/api/schedule",
   "/api/data-tools",
+  "/api/parliament",
+  "/api/events",
+  "/api/volunteers",
+  "/api/media",
   "/data-tools",
   "/settings",
+  "/documents",
+  "/content",
 ] as const;
 
 export async function middleware(request: NextRequest) {
@@ -61,9 +70,6 @@ export async function middleware(request: NextRequest) {
           return redirectWithSession(request, "/contacts", sessionResponse);
         }
       }
-    }
-    if (role === "manager" && (pathname === "/settings" || pathname.startsWith("/settings/"))) {
-      return redirectWithSession(request, "/dashboard", sessionResponse);
     }
   }
 

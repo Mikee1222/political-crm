@@ -141,16 +141,18 @@ function defaultFetchRange() {
 }
 
 /**
- * 1) calendarList — all calendars. 2) events from each. Bearer + 401 refresh. Wide time window (±3 months).
+ * 1) calendarList — all calendars. 2) events from each. Bearer + 401 refresh.
+ * Χωρίς `range`: παράθυρο ±3 μήνες. Με `range`: συγκεκριμένο timeMin/timeMax (ISO, π.χ. +03:00).
  */
 export async function listAllCalendarsEventsHttp(
   userId: string,
+  range?: { timeMin: string; timeMax: string },
 ): Promise<
   | ({ ok: true; events: ScheduleEventRow[] } & CalendarDebug)
   | ({ ok: false; code: "not_connected" } & CalendarDebug)
   | ({ ok: false; code: "calendar_error"; message: string } & CalendarDebug)
 > {
-  const time_range = defaultFetchRange();
+  const time_range = range ?? defaultFetchRange();
   const { timeMin, timeMax } = time_range;
   const emptyDebug: CalendarDebug = { calendars_found: [], time_range };
 

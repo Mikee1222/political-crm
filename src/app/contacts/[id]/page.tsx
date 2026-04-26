@@ -1,7 +1,9 @@
 "use client";
 
-import { Clipboard, Pencil, Phone, Plus } from "lucide-react";
+import Link from "next/link";
+import { Building2, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
@@ -12,9 +14,26 @@ import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-loca
 import type { ContactGroupRow } from "@/lib/contact-groups";
 
 const card =
-  "rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
+  "contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm";
+const cardGold = `${card} border-l-[3px] border-l-[var(--accent-gold)]`;
+const cardBlue = `${card} border-l-[3px] border-l-[var(--accent-blue)]`;
+const cardGreen = `${card} border-l-[3px] !border-l-[#10B981]`;
 const cardTitle =
-  "mb-4 border-b border-[var(--border)] pb-3 text-sm font-semibold text-[var(--text-primary)]";
+  "mb-4 border-b border-[var(--border)]/80 pb-3 text-sm font-semibold tracking-wide text-[var(--text-primary)]";
+function animDelay(n: number) {
+  return { style: { animationDelay: `${n * 50}ms` } as React.CSSProperties };
+}
+function ProfileField({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2.5 py-2.5 first:pt-0 last:pb-0">
+      <span className="mt-0.5 shrink-0 text-[var(--accent-gold)]/90 [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">{label}</p>
+        <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-snug text-[var(--text-primary)]">{value || "—"}</p>
+      </div>
+    </div>
+  );
+}
 const lbl = "text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--text-muted)]";
 const val = "text-sm text-[var(--text-primary)]";
 const fieldGap = "flex flex-col gap-2";
@@ -73,8 +92,36 @@ type Contact = {
   toponym: string | null;
   call_status: string | null;
   notes: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_by_name?: string | null;
+  updated_by_name?: string | null;
   group_id: string | null;
+  is_volunteer?: boolean | null;
+  volunteer_role?: string | null;
+  volunteer_area?: string | null;
+  volunteer_since?: string | null;
+  language?: string | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
+};
+
+type SupporterRow = {
+  id: string;
+  support_type: string | null;
+  amount: number | null;
+  date: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type ContactNoteItem = {
+  id: string;
+  user_id: string | null;
+  content: string;
+  created_at: string;
+  author_full_name: string;
 };
 
 const CALL_OPTS = [
@@ -131,6 +178,29 @@ function fmtDate(s: string | null | undefined) {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return disp(s);
   return d.toLocaleDateString("el-GR");
+}
+
+function fmtDateTime(s: string | null | undefined) {
+  if (s == null || String(s).trim() === "") return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function authorInitials(name: string) {
+  const w = name.trim().split(/\s+/).filter(Boolean);
+  if (w.length === 0) return "?";
+  if (w.length === 1) {
+    return w[0]!.slice(0, 2).toUpperCase() || (w[0]![0] ?? "?").toUpperCase();
+  }
+  return `${w[0]![0] ?? ""}${w[1]![0] ?? ""}`.toUpperCase() || "?";
 }
 
 function OutcomeBadge({ o }: { o: string | null | undefined }) {
@@ -244,15 +314,30 @@ export default function ContactDetailPage() {
   const [openTask, setOpenTask] = useState(false);
   const [headerCopied, setHeaderCopied] = useState(false);
   const [groupOptions, setGroupOptions] = useState<ContactGroupRow[]>([]);
+  const [supporters, setSupporters] = useState<SupporterRow[]>([]);
+  const [newSup, setNewSup] = useState({ support_type: "Οικονομική", amount: "", date: "", notes: "" });
+  const [contactNotes, setContactNotes] = useState<ContactNoteItem[]>([]);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSending, setNoteSending] = useState(false);
   const alexPage = useOptionalAlexandraPageContact();
 
   const load = useCallback(async () => {
     if (!id) return;
-    const res = await fetchWithTimeout(`/api/contacts/${id}`);
+    const [res, notesRes] = await Promise.all([
+      fetchWithTimeout(`/api/contacts/${id}`),
+      fetchWithTimeout(`/api/contacts/${id}/notes`),
+    ]);
     const data = await res.json();
     if (data.error) {
       setContact(null);
+      setContactNotes([]);
       return;
+    }
+    if (notesRes.ok) {
+      const njson = (await notesRes.json()) as { notes?: ContactNoteItem[] };
+      setContactNotes(njson.notes ?? []);
+    } else {
+      setContactNotes([]);
     }
     const raw = data.contact as Contact | null;
     if (raw) {
@@ -273,7 +358,16 @@ export default function ContactDetailPage() {
     setCalls((data.calls ?? []) as Call[]);
     setTasks((data.tasks ?? []) as Task[]);
     setRequests((data.requests ?? []) as RequestItem[]);
-  }, [id]);
+    if (hasMinRole(profile?.role, "manager")) {
+      const sr = await fetchWithTimeout(`/api/contacts/${id}/supporters`);
+      if (sr.ok) {
+        const sj = (await sr.json()) as { items?: SupporterRow[] };
+        setSupporters(sj.items ?? []);
+      } else {
+        setSupporters([]);
+      }
+    }
+  }, [id, profile?.role]);
 
   useEffect(() => {
     void load();
@@ -342,6 +436,7 @@ export default function ContactDetailPage() {
         tags: buf.tags,
         father_name: buf.father_name,
         mother_name: buf.mother_name,
+        language: buf.language,
       });
     } else if (s === "electoral") {
       await patch({
@@ -354,17 +449,14 @@ export default function ContactDetailPage() {
         call_status: buf.call_status,
         influence: buf.influence,
         group_id: buf.group_id,
+        is_volunteer: buf.is_volunteer,
+        volunteer_role: buf.volunteer_role,
+        volunteer_area: buf.volunteer_area,
+        volunteer_since: buf.volunteer_since,
       });
     } else if (s === "comm") {
       await patch({ phone: buf.phone, phone2: buf.phone2, landline: buf.landline, email: buf.email, area: buf.area });
     }
-  };
-
-  const onNotesBlur = async (next: string) => {
-    if (!c || !canManage) return;
-    const v = next.trim() ? next : null;
-    if (v === (c.notes ?? null)) return;
-    await patch({ notes: v });
   };
 
   const addRequest = async () => {
@@ -447,6 +539,9 @@ export default function ContactDetailPage() {
   const pr = c.priority ?? "Medium";
   const primaryGreek = greekHeaderPrimaryLine(c.last_name, c.first_name, c.father_name);
   const motherGreek = greekHeaderMotherLine(c.mother_name);
+  const nameHeadParts = primaryGreek.split(" του ");
+  const headNameLine = nameHeadParts[0]?.trim() || primaryGreek;
+  const headPatronym = nameHeadParts[1]?.trim();
   const initials = `${(c.first_name?.[0] ?? "?").toUpperCase()}${(c.last_name?.[0] ?? "?").toUpperCase()}`;
   const live = w ?? c;
   const onomaTeponymo = [live.first_name, live.last_name].filter(Boolean).join(" ").trim();
@@ -469,33 +564,34 @@ export default function ContactDetailPage() {
         </p>
       )}
 
-      {/* Header — premium profile card */}
+      {/* Header — full-width hero */}
       <div
-        className={
-          "mb-5 max-md:sticky max-md:top-0 z-20 max-md:backdrop-blur rounded-2xl border border-[var(--border)] " +
-          "bg-[var(--bg-card)]/98 p-5 shadow-[var(--card-shadow)] max-md:px-4 " +
-          "sm:p-6 ring-1 ring-[var(--border)]/50"
-        }
+        className="relative mb-6 max-md:sticky max-md:top-0 z-20 max-md:backdrop-blur-sm overflow-hidden rounded-2xl border border-[var(--border)] p-4 shadow-[var(--card-shadow)] sm:p-6"
+        style={{
+          background: `linear-gradient(128deg, var(--bg-secondary) 0%, var(--bg-card) 42%, color-mix(in srgb, var(--bg-elevated) 75%, var(--bg-card) 25%) 100%)`,
+        }}
       >
-        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-          <div className="flex min-w-0 flex-1 items-start gap-4">
-            <div
-              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-lg font-bold text-white shadow-md ring-2 ring-[var(--accent-gold)]/35"
-            >
+        <div
+          className="pointer-events-none absolute -right-8 -top-16 h-48 w-64 rounded-full bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent-gold)_14%,transparent),transparent)] opacity-80"
+          aria-hidden
+        />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-32 w-48 bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent)] opacity-70" aria-hidden />
+        <div className="relative flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-lg font-bold text-white shadow-lg ring-2 ring-[var(--accent-gold)] ring-offset-2 ring-offset-[var(--bg-card)]">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="text-balance text-2xl font-semibold leading-tight tracking-tight text-[var(--text-card-title)] sm:text-3xl sm:font-bold">
-                {primaryGreek}
+              <h1 className="text-balance text-2xl font-bold leading-tight text-[var(--text-card-title)]" style={{ fontSize: 24, lineHeight: 1.2 }}>
+                {headNameLine}
               </h1>
+              {headPatronym ? <p className="mt-1.5 text-base italic text-[var(--accent-gold)]">του {headPatronym}</p> : null}
+              {motherGreek ? <p className="mt-1 text-sm text-[var(--text-muted)]">{motherGreek}</p> : null}
               <div
-                className="mt-2.5 h-0.5 w-16 rounded-full bg-gradient-to-r from-[var(--accent-gold)] to-[var(--accent-gold)]/30"
+                className="mt-3 h-0.5 w-14 rounded-full bg-gradient-to-r from-[var(--accent-gold)] to-transparent"
                 aria-hidden
               />
-              {motherGreek ? (
-                <p className="mt-2.5 text-sm text-[var(--text-muted)]">{motherGreek}</p>
-              ) : null}
-              <div className="mt-4 flex min-w-0 flex-wrap items-center gap-1.5">
+              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
                 <span
                   className={
                     "inline-flex min-h-7 max-w-full items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold " +
@@ -517,19 +613,22 @@ export default function ContactDetailPage() {
                     {c.contact_code}
                   </span>
                 ) : null}
+                {((c as Contact).language ?? "el") !== "el" ? (
+                  <span className="inline-flex min-h-7 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                    {(c as Contact).language}
+                  </span>
+                ) : null}
               </div>
-              <p className="mt-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 font-mono text-sm text-[var(--text-secondary)]">
+              <p className="mt-2.5 flex flex-wrap items-baseline gap-x-1.5 font-mono text-sm text-[var(--text-secondary)]">
                 <span>{disp(c.phone)}</span>
                 {c.phone2?.trim() ? <span className="text-xs text-[var(--text-muted)]">· {c.phone2}</span> : null}
                 {c.landline?.trim() ? <span className="text-xs text-[var(--text-muted)]">· στ. {c.landline}</span> : null}
               </p>
-              {c.area?.trim() ? (
-                <p className="mt-0.5 text-xs text-[var(--text-muted)]">Περιοχή: {c.area}</p>
-              ) : null}
+              {c.area?.trim() ? <p className="mt-0.5 text-xs text-[var(--text-muted)]">Περιοχή: {c.area}</p> : null}
             </div>
           </div>
 
-          <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:max-w-[min(100%,320px)] sm:items-end">
+          <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:max-w-[min(100%,380px)] lg:items-end">
             {isCaller ? (
               <div className="flex w-full flex-wrap items-center justify-end gap-2">
                 <span
@@ -563,55 +662,79 @@ export default function ContactDetailPage() {
                 <button
                   type="button"
                   onClick={() => void copyHeaderInfo()}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)]"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-xs font-semibold text-[var(--text-primary)]"
                 >
                   <Clipboard className="h-3.5 w-3.5" />
                   {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
                 </button>
               </div>
             ) : (
-              <>
-                <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                {c.phone?.trim() ? (
+                  <a
+                    href={`tel:${c.phone.replace(/\s/g, "")}`}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    title="Κλήση"
+                    aria-label="Κλήση τηλεφώνου"
+                  >
+                    <Phone className="h-4 w-4" />
+                  </a>
+                ) : null}
+                {canManage && (
                   <button
                     type="button"
-                    onClick={triggerCall}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50 hover:bg-[var(--bg-card)]"
+                    onClick={() => startEdit("personal")}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    title="Επεξεργασία"
+                    aria-label="Επεξεργασία"
                   >
-                    <Phone className="h-3.5 w-3.5" />
-                    Κλήση
+                    <Pencil className="h-4 w-4" />
                   </button>
-                  {canManage && (
-                    <button
-                      type="button"
-                      onClick={() => startEdit("personal")}
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Επεξεργασία
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void copyHeaderInfo()}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
-                  >
-                    <Clipboard className="h-3.5 w-3.5" />
-                    {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
-                  </button>
-                </div>
-                <p className="hidden text-[10px] text-[var(--text-muted)] sm:text-right sm:block">Outbound (Retell) μέσω «Κλήση»</p>
-              </>
+                )}
+                <Link
+                  href="/alexandra"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--accent-gold)]/35 bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)] text-[var(--accent-gold)] transition hover:brightness-110"
+                  title="Αλεξάνδρα"
+                  aria-label="Ανοιχτό Αλεξάνδρα"
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void triggerCall()}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  Retell
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyHeaderInfo()}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-xs font-semibold text-[var(--text-primary)]"
+                >
+                  <Clipboard className="h-3.5 w-3.5" />
+                  {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
+                </button>
+                <p className="w-full text-right text-[10px] text-[var(--text-muted)] sm:hidden">Retell: εξερχόμενη κλήση</p>
+                <p className="hidden w-full text-right text-[10px] text-[var(--text-muted)] sm:block">Retell: εξερχόμενη κλήση (Outbound)</p>
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,55%)_minmax(0,45%)]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-5">
           <div className="flex min-w-0 flex-col gap-4">
             {/* A Personal */}
-            <div className={[card, canManage && editing === "personal" && mobileEditOverlay].filter(Boolean).join(" ")}>
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <h2 className={cardTitle + " m-0 flex-1 !mb-0 border-0 p-0"}>Προσωπικά στοιχεία</h2>
+            <div
+              {...animDelay(0)}
+              className={[cardGold, canManage && editing === "personal" && mobileEditOverlay].filter(Boolean).join(" ")}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <User className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                  <h2 className={cardTitle + " m-0 flex-1 !mb-0 border-0 p-0"}>Προσωπικά στοιχεία</h2>
+                </div>
                 {canManage && editing !== "personal" && (
                   <button type="button" onClick={() => startEdit("personal")} className={btnEdit}>
                     Επεξεργασία
@@ -661,10 +784,11 @@ export default function ContactDetailPage() {
                       ? fmtDate(raw as string | null)
                       : disp(raw as string | null);
                   return (
-                  <div key={row.k} className={fieldGap}>
-                    <span className={lbl}>{row.l}</span>
+                  <div key={row.k} className="sm:col-span-1">
                     {inEdit ? (
-                      isDate ? (
+                      <div className={fieldGap}>
+                        <span className={lbl}>{row.l}</span>
+                        {isDate ? (
                         <input
                           className={inputSm}
                           type="date"
@@ -690,9 +814,10 @@ export default function ContactDetailPage() {
                             setBuf({ ...w!, [row.k]: e.target.value || null } as Contact)
                           }
                         />
-                      )
+                      )}
+                      </div>
                     ) : (
-                      <p className={val}>{displayVal}</p>
+                      <ProfileField icon={<User className="h-4 w-4 opacity-90" />} label={row.l} value={displayVal} />
                     )}
                   </div>
                 );
@@ -721,13 +846,36 @@ export default function ContactDetailPage() {
                     )}
                   </div>
                 </div>
+                <div className="sm:col-span-2">
+                  <div className={fieldGap}>
+                    <span className={lbl}>Γλώσσα</span>
+                    {canManage && editing === "personal" && w ? (
+                      <input
+                        className={inputSm}
+                        placeholder="el, en, de…"
+                        value={String((w as Contact).language ?? "el")}
+                        onChange={(e) => setBuf({ ...w, language: e.target.value || "el" } as Contact)}
+                      />
+                    ) : (
+                      <p className={val}>
+                        {((c as Contact).language ?? "el") === "el" ? "Ελληνικά" : (c as Contact).language}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* B Electoral */}
-            <div className={[card, canManage && editing === "electoral" && mobileEditOverlay].filter(Boolean).join(" ")}>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className={cardTitle + " m-0 border-0 p-0 !mb-0"}>Εκλογική πληροφόρηση</h2>
+            <div
+              {...animDelay(1)}
+              className={[cardBlue, canManage && editing === "electoral" && mobileEditOverlay].filter(Boolean).join(" ")}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Building2 className="h-4 w-4 shrink-0 text-[var(--accent-blue)]" aria-hidden />
+                  <h2 className={cardTitle + " m-0 border-0 p-0 !mb-0 text-[var(--accent-blue-bright)]"}>Εκλογική πληροφόρηση</h2>
+                </div>
                 {canManage && editing !== "electoral" && (
                   <button type="button" onClick={() => startEdit("electoral")} className={btnEdit}>
                     Επεξεργασία
@@ -904,32 +1052,256 @@ export default function ContactDetailPage() {
                     )}
                   </label>
                 </div>
+                <div className="sm:col-span-2">
+                  <span className={lbl + " mb-1 block"}>Εθελοντική συμμετοχή</span>
+                  {canManage && editing === "electoral" && w ? (
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded"
+                          checked={Boolean((w as Contact).is_volunteer)}
+                          onChange={(e) => setBuf({ ...w, is_volunteer: e.target.checked } as Contact)}
+                        />
+                        Εθελοντής
+                      </label>
+                      <input
+                        className={inputSm}
+                        placeholder="Ρόλος (π.χ. πεζοπορία)"
+                        value={String((w as Contact).volunteer_role ?? "")}
+                        onChange={(e) => setBuf({ ...w, volunteer_role: e.target.value || null } as Contact)}
+                      />
+                      <input
+                        className={inputSm}
+                        placeholder="Περιοχή"
+                        value={String((w as Contact).volunteer_area ?? "")}
+                        onChange={(e) => setBuf({ ...w, volunteer_area: e.target.value || null } as Contact)}
+                      />
+                      <input
+                        className={inputSm}
+                        type="date"
+                        value={((w as Contact).volunteer_since ?? "").toString().slice(0, 10)}
+                        onChange={(e) => setBuf({ ...w, volunteer_since: e.target.value || null } as Contact)}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[var(--text-primary)]">
+                      {(c as Contact).is_volunteer ? "Ναι" : "Όχι"}
+                      {((c as Contact).volunteer_role ?? "") ? ` · Ρόλος: ${(c as Contact).volunteer_role}` : ""}
+                      {((c as Contact).volunteer_area ?? "") ? ` · ${(c as Contact).volunteer_area}` : ""}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* D Notes */}
-            <div className={card}>
+            {/* D Notes (timeline) */}
+            <div {...animDelay(2)} className={cardGold}>
               <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Σημειώσεις</h2>
-              <textarea
-                className="min-h-[100px] w-full resize-y rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[#003476] focus:outline-none focus:ring-1 focus:ring-[#003476]/20"
-                placeholder="Προσθήκη σημείωσης…"
-                value={c.notes ?? ""}
-                onChange={(e) => {
-                  const n = e.target.value || null;
-                  setContact((prev) => (prev ? { ...prev, notes: n } : null));
-                }}
-                onBlur={(e) => void onNotesBlur(e.target.value)}
-                disabled={!canManage}
-                readOnly={!canManage}
-              />
+              {(c.notes?.trim() ?? "") !== "" && (
+                <div
+                  className="mb-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-elevated)]/50 p-3 text-xs text-[var(--text-secondary)]"
+                  role="note"
+                >
+                  <span className="font-medium text-[var(--text-muted)]">Παλιά σημείωση: </span>
+                  <span className="whitespace-pre-wrap">{c.notes}</span>
+                </div>
+              )}
+              <ul className="mb-4 max-h-[min(50vh,420px)] space-y-2.5 overflow-y-auto pr-1">
+                {contactNotes.length === 0 && (c.notes?.trim() ?? "") === "" ? (
+                  <li className="text-xs text-[var(--text-muted)]">Καμία σημείωση ακόμα.</li>
+                ) : null}
+                {contactNotes.length === 0 && (c.notes?.trim() ?? "") !== "" && (
+                  <li className="text-xs text-[var(--text-muted)]">Χωρίς νέες σημειώσεις.</li>
+                )}
+                {contactNotes.map((n) => {
+                  const canDeleteThis =
+                    Boolean(profile?.id) &&
+                    (n.user_id === profile?.id || profile?.role === "admin");
+                  return (
+                    <li key={n.id}>
+                      <div className="group relative rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35 p-3 pl-3 pr-2">
+                        {canDeleteThis && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!id) return;
+                              const dres = await fetchWithTimeout(
+                                `/api/contacts/${id}/notes/${n.id}`,
+                                { method: "DELETE" },
+                              );
+                              if (dres.ok) {
+                                setContactNotes((prev) => prev.filter((x) => x.id !== n.id));
+                              }
+                            }}
+                            className="absolute right-1.5 top-1.5 z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-muted)] opacity-0 transition hover:bg-[var(--bg-card)] hover:text-red-400 group-hover:opacity-100"
+                            title="Διαγραφή"
+                            aria-label="Διαγραφή σημείωσης"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <div className="flex gap-3 pr-5">
+                          <div
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] font-bold text-[var(--text-primary)]"
+                            aria-hidden
+                          >
+                            {authorInitials(n.author_full_name || "—")}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-[var(--text-primary)]">{n.author_full_name || "—"}</p>
+                            <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                              {fmtDateTime(n.created_at)}
+                            </p>
+                            <p className="mt-1.5 whitespace-pre-wrap text-sm text-[var(--text-primary)]">
+                              {n.content}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {canManage && (
+                <div className="mt-1 flex flex-col gap-2">
+                  <textarea
+                    className="min-h-[80px] w-full resize-y rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[#003476] focus:outline-none focus:ring-1 focus:ring-[#003476]/20"
+                    placeholder="Νέα σημείωση…"
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    disabled={noteSending}
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={noteSending || !noteDraft.trim()}
+                      onClick={async () => {
+                        if (!id || !noteDraft.trim()) return;
+                        setNoteSending(true);
+                        try {
+                          const res = await fetchWithTimeout(`/api/contacts/${id}/notes`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ content: noteDraft.trim() }),
+                          });
+                          if (res.ok) {
+                            const j = (await res.json()) as { note?: ContactNoteItem };
+                            if (j.note) {
+                              setContactNotes((prev) => [j.note as ContactNoteItem, ...prev]);
+                            }
+                            setNoteDraft("");
+                            void load();
+                          }
+                        } finally {
+                          setNoteSending(false);
+                        }
+                      }}
+                      className="inline-flex min-h-9 min-w-[100px] items-center justify-center rounded-lg bg-[#003476] px-4 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {noteSending ? "…" : "Αποστολή"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {canManage && (
+              <div {...animDelay(3)} className={card}>
+                <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Υποστήριξη / δωρεές</h2>
+                <ul className="mb-3 space-y-2 text-sm">
+                  {supporters.map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] p-2"
+                    >
+                      <span>
+                        {s.support_type ?? "—"}{" "}
+                        {s.amount != null ? <strong>{Number(s.amount).toFixed(2)} €</strong> : null}
+                        {s.date ? <span className="text-xs text-[var(--text-muted)]"> · {s.date}</span> : null}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-red-400 hover:underline"
+                        onClick={async () => {
+                          await fetchWithTimeout(`/api/contacts/${id}/supporters?id=${s.id}`, { method: "DELETE" });
+                          await load();
+                        }}
+                      >
+                        Αφαίρεση
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <select
+                    className={inputSm}
+                    value={newSup.support_type}
+                    onChange={(e) => setNewSup((x) => ({ ...x, support_type: e.target.value }))}
+                  >
+                    {["Οικονομική", "Εθελοντισμός", "Προπαγάνδα", "Άλλο"].map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className={inputSm}
+                    type="number"
+                    step="0.01"
+                    placeholder="Ποσό (€)"
+                    value={newSup.amount}
+                    onChange={(e) => setNewSup((x) => ({ ...x, amount: e.target.value }))}
+                  />
+                  <input
+                    className={inputSm}
+                    type="date"
+                    value={newSup.date}
+                    onChange={(e) => setNewSup((x) => ({ ...x, date: e.target.value }))}
+                  />
+                  <input
+                    className={inputSm}
+                    placeholder="Σημειώσεις"
+                    value={newSup.notes}
+                    onChange={(e) => setNewSup((x) => ({ ...x, notes: e.target.value }))}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold text-[#16A34A] hover:underline"
+                  onClick={async () => {
+                    if (!c) return;
+                    await fetchWithTimeout(`/api/contacts/${c.id}/supporters`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        support_type: newSup.support_type,
+                        amount: newSup.amount ? Number(newSup.amount) : null,
+                        date: newSup.date || null,
+                        notes: newSup.notes || null,
+                      }),
+                    });
+                    setNewSup({ support_type: "Οικονομική", amount: "", date: "", notes: "" });
+                    await load();
+                  }}
+                >
+                  Προσθήκη
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex min-w-0 flex-col gap-4">
             {/* C Comm — right column, above αιτήματα */}
-            <div className={[card, canManage && editing === "comm" && mobileEditOverlay].filter(Boolean).join(" ")}>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className={cardTitle + " m-0 !mb-0 border-0 p-0"}>Επικοινωνία</h2>
+            <div
+              {...animDelay(4)}
+              className={[cardGreen, canManage && editing === "comm" && mobileEditOverlay].filter(Boolean).join(" ")}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Phone className="h-4 w-4 shrink-0 text-[#10B981]" aria-hidden />
+                  <h2 className={cardTitle + " m-0 !mb-0 border-0 p-0 text-[#34d399]"}>Επικοινωνία</h2>
+                </div>
                 {canManage && editing !== "comm" && (
                   <button type="button" onClick={() => startEdit("comm")} className={btnEdit}>
                     Επεξεργασία
@@ -1028,7 +1400,7 @@ export default function ContactDetailPage() {
 
             {/* E Requests */}
             {canManage && (
-              <div className={card}>
+              <div {...animDelay(5)} className={card}>
                 <h2 className={cardTitle}>Αιτήματα</h2>
                 <ul className="mb-3 space-y-2">
                   {requests.length === 0 && <li className="text-xs text-[var(--text-muted)]">Κανένα αίτημα.</li>}
@@ -1119,7 +1491,7 @@ export default function ContactDetailPage() {
 
             {/* F Tasks */}
             {canManage && (
-              <div className={card}>
+              <div {...animDelay(6)} className={card}>
                 <h2 className={cardTitle}>Εργασίες</h2>
                 <ul className="mb-2 space-y-1.5">
                   {tasks.length === 0 && <li className="text-xs text-[var(--text-muted)]">Καμία εργασία.</li>}
@@ -1188,7 +1560,7 @@ export default function ContactDetailPage() {
             )}
 
             {/* G Calls timeline */}
-            <div className={card}>
+            <div {...animDelay(7)} className={card}>
               <h2 className={cardTitle}>Ιστορικό κλήσεων</h2>
               {calls.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Δεν υπάρχουν κλήσεις ακόμα</p>
@@ -1223,6 +1595,20 @@ export default function ContactDetailPage() {
             </div>
           </div>
         </div>
+      <div className="mt-6 border-t border-[var(--border)] pt-4 text-[11px] leading-relaxed text-[var(--text-muted)]">
+        <p>
+          Δημιουργήθηκε από <span className="text-[var(--text-secondary)]">{c.created_by_name?.trim() || "—"}</span> στις{" "}
+          <span className="text-[var(--text-secondary)]">{fmtDateTime(c.created_at)}</span>
+        </p>
+        {c.updated_by && c.updated_at ? (
+          <p className="mt-1.5">
+            Τελευταία ενημέρωση: <span className="text-[var(--text-secondary)]">{fmtDateTime(c.updated_at)}</span>
+            {c.updated_by_name?.trim() ? (
+              <span> ({c.updated_by_name.trim()})</span>
+            ) : null}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

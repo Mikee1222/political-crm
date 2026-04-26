@@ -10,6 +10,11 @@ const empty = {
   totalCallsToday: 0,
   positiveRate: 0,
   pendingContacts: 0,
+  notCalled30Count: 0,
+  overdueRequestCount: 0,
+  contactsWithoutPhoneCount: 0,
+  supporterCount: 0,
+  totalSupportAmount: 0,
   recentActivity: [] as Array<{ id: string; type: string; text: string; created_at: string }>,
 };
 
@@ -30,7 +35,15 @@ export async function GET() {
         today.setHours(0, 0, 0, 0);
         const todayIso = today.toISOString();
 
-        const [c1, c2, c3, c4, c5] = await Promise.all([
+        const cut30 = new Date(today);
+        cut30.setDate(cut30.getDate() - 30);
+        const cutIso = cut30.toISOString();
+        const y = today.getFullYear();
+        const mo = String(today.getMonth() + 1).padStart(2, "0");
+        const da = String(today.getDate()).padStart(2, "0");
+        const todayYmd = `${y}-${mo}-${da}`;
+
+        const [c1, c2, c3, c4, c5, c6, c7, c7b, c7c, c8, c9] = await Promise.all([
           supabase.from("contacts").select("*", { count: "exact", head: true }),
           supabase.from("calls").select("*", { count: "exact", head: true }).gte("called_at", todayIso),
           supabase.from("calls").select("outcome"),
@@ -40,9 +53,22 @@ export async function GET() {
             .select("id, called_at, outcome, contacts(first_name,last_name)")
             .order("called_at", { ascending: false })
             .limit(8),
+          supabase
+            .from("contacts")
+            .select("id", { count: "exact", head: true })
+            .or(`last_contacted_at.is.null,last_contacted_at.lt."${cutIso}"`),
+          supabase
+            .from("requests")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["Νέο", "Σε εξέλιξη"])
+            .lt("sla_due_date", todayYmd),
+          supabase.from("contacts").select("id", { count: "exact", head: true }).is("phone", null),
+          supabase.from("contacts").select("id", { count: "exact", head: true }).eq("phone", ""),
+          supabase.from("supporters").select("id", { count: "exact", head: true }),
+          supabase.from("supporters").select("amount"),
         ]);
 
-        if (c1.error || c2.error || c3.error || c4.error || c5.error) {
+        if (c1.error || c2.error || c3.error || c4.error || c5.error || c6.error || c7.error || c7b.error || c7c.error || c8.error || c9.error) {
           return NextResponse.json(empty);
         }
 
@@ -66,11 +92,24 @@ export async function GET() {
           };
         });
 
+        const supportRows = (c9.data ?? []) as Array<{ amount: number | null }>;
+        const totalSupportAmount = supportRows.reduce(
+          (a, r) => a + (r.amount != null ? Number(r.amount) : 0),
+          0,
+        );
+
+        const noPhone = (c7b.count ?? 0) + (c7c.count ?? 0);
+
         return NextResponse.json({
           totalContacts,
           totalCallsToday,
           positiveRate,
           pendingContacts,
+          notCalled30Count: c6.count ?? 0,
+          overdueRequestCount: c7.count ?? 0,
+          contactsWithoutPhoneCount: noPhone,
+          supporterCount: c8.count ?? 0,
+          totalSupportAmount,
           recentActivity,
         });
       },

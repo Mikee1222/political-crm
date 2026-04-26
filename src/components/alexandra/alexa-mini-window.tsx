@@ -158,11 +158,13 @@ export function AlexaMiniWindow() {
           paddingBottom: "max(0px, env(safe-area-inset-bottom, 0px))",
         }}
       >
-        <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[#0a1628]/95 px-3 py-2 shadow-2xl backdrop-blur-md">
-          <span className="min-w-0 flex-1 cursor-grab select-none truncate text-xs font-medium text-[var(--accent-gold)]">{currentTitle || "Αλεξάνδρα"}</span>
+        <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 shadow-2xl backdrop-blur-md">
+          <span className="min-w-0 flex-1 cursor-grab select-none truncate text-xs font-semibold text-[var(--accent-gold)] transition duration-200">
+            {currentTitle || "Αλεξάνδρα"}
+          </span>
           <button
             type="button"
-            className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
+            className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition duration-200 hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
             aria-label="Ανάπτυξη"
             onClick={() => setMiniWindowMinimized(false)}
           >
@@ -170,7 +172,7 @@ export function AlexaMiniWindow() {
           </button>
           <button
             type="button"
-            className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-red-500/15 hover:text-red-300"
+            className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition duration-200 hover:bg-[var(--status-negative-bg)] hover:text-[var(--status-negative-text)]"
             aria-label="Κλείσιμο"
             onClick={closeMiniWindow}
           >
@@ -207,7 +209,7 @@ export function AlexaMiniWindow() {
 
   const shell = (
     <div
-      className="fixed z-[60] flex flex-col overflow-hidden rounded-2xl border border-[rgba(201,168,76,0.25)] bg-[#0a0f1a] shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+      className="fixed z-[60] flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-[var(--card-shadow)]"
       style={{
         left: pos.x,
         top: pos.y,
@@ -218,7 +220,7 @@ export function AlexaMiniWindow() {
       }}
     >
       <div
-        className="flex shrink-0 cursor-grab select-none items-center gap-1 border-b border-[var(--border)] bg-gradient-to-r from-[#0f1e35] to-[#0a1628] px-2 py-1.5 active:cursor-grabbing"
+        className="flex shrink-0 cursor-grab select-none items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2 py-1.5 transition duration-200 active:cursor-grabbing"
         onPointerDown={onPointerDownHeader}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -226,10 +228,10 @@ export function AlexaMiniWindow() {
         role="toolbar"
         aria-label="Μετακίνηση"
       >
-        <span className="min-w-0 flex-1 truncate pl-1 text-xs font-semibold text-[var(--accent-gold-light)]">{currentTitle || "Αλεξάνδρα"}</span>
+        <span className="min-w-0 flex-1 truncate pl-1 text-xs font-semibold text-[var(--accent-gold)]">{currentTitle || "Αλεξάνδρα"}</span>
         <button
           type="button"
-          className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+          className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition duration-200 hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
           title="Ελαχιστοποίηση"
           aria-label="Ελαχιστοποίηση"
           onClick={() => setMiniWindowMinimized(true)}
@@ -238,7 +240,7 @@ export function AlexaMiniWindow() {
         </button>
         <button
           type="button"
-          className="shrink-0 rounded-lg p-1.5 text-[var(--accent-gold)] transition hover:bg-[var(--bg-elevated)]"
+          className="shrink-0 rounded-lg p-1.5 text-[var(--accent-gold)] transition duration-200 hover:bg-[var(--bg-elevated)]"
           title="Πλήρης οθόνη (σελίδα Αλεξάνδρα)"
           aria-label="Πλήρης οθόνη"
           onClick={goToFullAlexandra}
@@ -247,7 +249,7 @@ export function AlexaMiniWindow() {
         </button>
         <button
           type="button"
-          className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-red-500/15 hover:text-red-200"
+          className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition duration-200 hover:bg-[var(--status-negative-bg)] hover:text-[var(--status-negative-text)]"
           title="Κλείσιμο"
           aria-label="Κλείσιμο"
           onClick={closeMiniWindow}

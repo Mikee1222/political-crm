@@ -7,6 +7,16 @@ import { hasMinRole, type Role } from "@/lib/roles";
 import type { UserProfile } from "@/lib/auth-helpers";
 import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
 import { greekTitleCaseWords, parseGreekPhoneFieldsFromText } from "@/lib/greek-contact-import";
+import { anthropicComplete } from "@/lib/anthropic-once";
+import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
+import { todayYmdAthens } from "@/lib/athens-ranges";
+import {
+  applyFindContactsToolInput,
+  applySavedFilterJson,
+  buildContactsPageUrl,
+  contactFiltersToSearchParams,
+  getDefaultContactFilters,
+} from "@/lib/contacts-filters";
 
 /** Fields allowed when merging spreadsheet row into existing contact (no phone change here). */
 const ALEX_BULK_UPDATE_FIELDS = new Set<string>([
@@ -50,16 +60,55 @@ export const ALEX_TOOLS: Tool[] = [
   {
     name: "find_contacts",
     description:
-      "Αναζήτηση επαφών. ΠΑΝΤΑ χρησιμοποιεί ασαφή/fuzzy αναζήτηση ονομάτων (tonos, Greek/Latin, ψευδώνυμο, κοινές παραλλαγές Γιάννης–Ιωάννης κ.λπ.): pass το κείμενο στο search. Φίλτρα: call_status, area, municipality, priority",
+      "Αναζήτηση επαφών. Fuzzy search: pass το search. Φίλτρα: call_status, call_statuses, ομάδες (group_ids, exclude, groups_include/exclude by name), birth_year_from/to, δήμος, κ.λπ. Αν ο χρήστης αναφέρει αποθηκευμένο φίλτρο (π.χ. ‘κλασσικά’), get_saved_filters ή/και saved_filter_name· επιστρέφει filter_url για /contacts. Πάντα αναφέρει filter_url από το tool result (για κουμπί Ιστορικού/πλοήγησης).",
     input_schema: {
       type: "object" as const,
       properties: {
-        search: { type: "string" as const, description: "Όρος αναζήτησης (όνομα, επίθετο, ψευδώνυμο, τηλέφωνο)" },
-        call_status: { type: "string" as const, enum: ["Pending", "Positive", "Negative", "No Answer"] as const },
+        search: { type: "string" as const, description: "Όρος αναζήτησης" },
+        saved_filter_name: {
+          type: "string" as const,
+          description: "Όνομα αποθηκευμένου φίλτρου (π.χ. κλασσικά)—φορτώνει τα αποθηκευμένα json φίλτρα",
+        },
+        call_status: {
+          type: "string" as const,
+          enum: ["Pending", "Positive", "Negative", "No Answer"] as const,
+        },
+        call_statuses: {
+          type: "array" as const,
+          items: { type: "string" as const, enum: ["Pending", "Positive", "Negative", "No Answer"] as const },
+          description: "Πολλαπλά status μαζί",
+        },
         area: { type: "string" as const },
         municipality: { type: "string" as const },
         priority: { type: "string" as const, enum: ["High", "Medium", "Low"] as const },
+        tag: { type: "string" as const },
+        phone: { type: "string" as const },
+        political_stance: { type: "string" as const },
+        group_id: { type: "string" as const, description: "Μονή ομάδα (UUID)" },
+        group_ids: { type: "array" as const, items: { type: "string" as const } },
+        exclude_group_ids: { type: "array" as const, items: { type: "string" as const } },
+        groups_include: { type: "array" as const, items: { type: "string" as const }, description: "Όπως group_ids" },
+        groups_exclude: { type: "array" as const, items: { type: "string" as const }, description: "Όνομα ομάδας ή UUID" },
+        birth_year_from: { type: "number" as const },
+        birth_year_to: { type: "number" as const },
+        age_min: { type: "number" as const },
+        age_max: { type: "number" as const },
+        not_contacted_days: { type: "number" as const },
+        score_tier: { type: "string" as const, enum: ["low", "mid", "high"] as const },
+        is_volunteer: { type: "boolean" as const },
+        volunteer_area: { type: "string" as const },
+        nameday_today: { type: "boolean" as const },
+        limit: { type: "number" as const, description: "Μέγιστα αποτελέσματα API (προαιρ.)" },
       },
+    },
+  },
+  {
+    name: "get_saved_filters",
+    description:
+      "Λίστα αποθηκευμένων φίλτρων (name, description, filters, filter_url) για /contacts. Χρήση πριν το find όταν ο χρήστης ζητά ‘τα κλασσικά’ ή παρόμοιο.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
     },
   },
   {
@@ -376,6 +425,215 @@ export const ALEX_TOOLS: Tool[] = [
       required: ["message", "datetime"],
     },
   },
+  {
+    name: "add_calendar_event",
+    description:
+      "Προσθήκη event στο Google Calendar του βουλευτή (manager). Χρειάζεται σύνδεση Google Calendar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string" as const },
+        date: { type: "string" as const, description: "YYYY-MM-DD" },
+        start_time: { type: "string" as const, description: "HH:MM" },
+        end_time: { type: "string" as const, description: "HH:MM" },
+        location: { type: "string" as const },
+        description: { type: "string" as const },
+        type: { type: "string" as const, description: "meeting|event|campaign|other" },
+      },
+      required: ["title", "date", "start_time", "end_time"],
+    },
+  },
+  {
+    name: "get_calendar_events",
+    description: "Εμφάνιση προγράμματος βουλευτή από Google Calendar (ημέρα ή εβδομάδα).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        date: { type: "string" as const, description: "YYYY-MM-DD, προαιρετικό (default σήμερα)" },
+        week: { type: "boolean" as const, description: "Αν true, εβδομάδα που περιέχει την date" },
+      },
+    },
+  },
+  {
+    name: "analyze_contacts",
+    description:
+      "Ανάλυση επαφών: ομαδοποίηση & ποσοστά (municipality, area, political_stance, age_group, call_status, priority).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        group_by: {
+          type: "string" as const,
+          enum: ["municipality", "area", "political_stance", "age_group", "call_status", "priority"] as const,
+        },
+        filters: { type: "object" as const, description: "Ίδια με get_all_contacts" },
+      },
+      required: ["group_by"],
+    },
+  },
+  {
+    name: "generate_letter",
+    description: "Σύνταξη επίσημης επιστολής προς υπουργείο/δημόσιο (ελληνικά, Claude).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        recipient_name: { type: "string" as const },
+        recipient_title: { type: "string" as const },
+        recipient_ministry: { type: "string" as const },
+        subject: { type: "string" as const },
+        issue_description: { type: "string" as const },
+        citizen_name: { type: "string" as const },
+        letter_type: {
+          type: "string" as const,
+          enum: ["αίτηση", "καταγγελία", "ερώτημα", "παρέμβαση"] as const,
+        },
+      },
+      required: ["recipient_name", "subject", "issue_description", "letter_type"],
+    },
+  },
+  {
+    name: "generate_press_release",
+    description: "Σύνταξη ανακοίνωσης τύπου (Claude, ελληνικά).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        topic: { type: "string" as const },
+        key_points: { type: "array" as const, items: { type: "string" as const } },
+        tone: { type: "string" as const, enum: ["επίσημο", "φιλικό", "επείγον"] as const },
+      },
+      required: ["topic", "key_points", "tone"],
+    },
+  },
+  {
+    name: "generate_social_post",
+    description: "Post για social media (ελληνικά).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        topic: { type: "string" as const },
+        platform: { type: "string" as const, enum: ["facebook", "instagram", "twitter"] as const },
+        tone: { type: "string" as const },
+        include_hashtags: { type: "boolean" as const },
+      },
+      required: ["topic", "platform", "tone"],
+    },
+  },
+  {
+    name: "bulk_send_nameday_wishes",
+    description: "Καμπάνια ευχών (επαφές που γιορτάζουν) — δημιουργία καμπάνιας Retell/κλήσεων.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        date: { type: "string" as const, description: "YYYY-MM-DD, default σήμερα" },
+        municipality: { type: "string" as const },
+      },
+    },
+  },
+  {
+    name: "find_contacts_not_called",
+    description: "Επαφές χωρίς κλήση (ποτέ ή > X ημερών).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        days_ago: { type: "number" as const },
+        municipality: { type: "string" as const },
+        limit: { type: "number" as const },
+      },
+    },
+  },
+  {
+    name: "analyze_document",
+    description: "Ανάλυση εγγράφου/νόμου — σύνοψη & σημεία (Claude).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string" as const },
+        question: { type: "string" as const },
+        document_type: { type: "string" as const, enum: ["νόμος", "άρθρο", "αίτημα", "έγγραφο"] as const },
+      },
+      required: ["text", "document_type"],
+    },
+  },
+  {
+    name: "morning_briefing",
+    description: "Ημερήσια ενημέρωση βουλευτή: briefing, calendar, αιτήματα, κλήσεις (σύνθεση).",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "calculate_scores",
+    description: "Υπολογισμός predicted score (0–100, πειθω) για όλες τις επαφές. Ενημερώνει τη στήλη predicted_score.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "generate_content",
+    description:
+      "Δημιουργία περιεχομένου: ανακοίνωση τύπου, post social, ή επιστολή. Εκτέλεση: POST /api/content/generate με type και params.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        type: { type: "string" as const, enum: ["press_release", "social_post", "letter"] as const },
+        params: { type: "object" as const, description: "Παράμετροι ανά τύπο (topic, key_points, tone, κ.λπ.)" },
+      },
+      required: ["type", "params"],
+    },
+  },
+  {
+    name: "translate_text",
+    description: "Μετάφραση κειμένου (Claude).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string" as const },
+        from_language: { type: "string" as const },
+        to_language: { type: "string" as const },
+      },
+      required: ["text", "to_language"],
+    },
+  },
+  {
+    name: "add_parliamentary_question",
+    description: "Καταχώριση ερώτησης βουλής (POST /api/parliament/questions).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string" as const },
+        ministry: { type: "string" as const },
+        description: { type: "string" as const },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "search_media",
+    description: "Αναζήτηση ειδήσεων (GET /api/media/search).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string" as const },
+      },
+    },
+  },
+  {
+    name: "add_event_rsvp",
+    description: "Προσθήκη RSVP σε εκδήλωση (POST /api/events/:id/rsvps).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string" as const },
+        contact_id: { type: "string" as const },
+      },
+      required: ["event_id", "contact_id"],
+    },
+  },
+  {
+    name: "get_volunteer_list",
+    description: "Λίστα εθελοντών (GET /api/volunteers), προαιρετικό area.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        area: { type: "string" as const },
+      },
+    },
+  },
 ];
 
 export type ToolContext = {
@@ -399,20 +657,38 @@ function pickContactId(raw: unknown, ctx: ToolContext): string {
   return ctx.defaultContactId?.trim() ?? "";
 }
 
-function buildContactsQueryParams(input: {
-  search?: string;
-  call_status?: string;
-  area?: string;
-  municipality?: string;
-  priority?: string;
-}): string {
-  const p = new URLSearchParams();
-  if (input.search) p.set("search", input.search);
-  if (input.call_status) p.set("call_status", input.call_status);
-  if (input.area) p.set("area", input.area);
-  if (input.municipality) p.set("municipality", input.municipality);
-  if (input.priority) p.set("priority", input.priority);
-  return p.toString();
+async function buildGroupNameToIdMap(supabase: SupabaseClient) {
+  const { data } = await supabase.from("contact_groups").select("id,name");
+  const m = new Map<string, string>();
+  for (const r of data ?? []) m.set(String(r.name).toLowerCase(), r.id);
+  return m;
+}
+
+/** Resolve saved filter JSON by name (exact, then contains). */
+export async function findSavedFilterJson(
+  supabase: SupabaseClient,
+  name: string,
+): Promise<Record<string, unknown> | null> {
+  const t = name.trim();
+  if (!t) return null;
+  const { data: d1 } = await supabase.from("saved_filters").select("filters").eq("name", t).maybeSingle();
+  if (d1?.filters && typeof d1.filters === "object" && !Array.isArray(d1.filters)) {
+    return d1.filters as Record<string, unknown>;
+  }
+  const { data: rows } = await supabase
+    .from("saved_filters")
+    .select("name,filters")
+    .ilike("name", `%${t.replace(/[%_\\]/g, " ")}%`)
+    .limit(8);
+  const lower = t.toLowerCase();
+  const hit = rows?.find(
+    (r) =>
+      String(r.name).toLowerCase() === lower || String(r.name).toLowerCase().includes(lower),
+  );
+  if (hit?.filters && typeof hit.filters === "object" && !Array.isArray(hit.filters)) {
+    return hit.filters as Record<string, unknown>;
+  }
+  return null;
 }
 
 const BULK_OPTIONAL_FIELDS = [
@@ -553,11 +829,45 @@ export type ToolRunResult = {
   /** String passed back to Anthropic as tool_result */
   content: string;
   findResults?: FindRow[];
+  /** /contacts?… for «Δείξε στις Επαφές» */
+  filterUrl?: string;
   confirmCall?: { contact_id: string; name: string; phone: string };
   /** For UI "✓ Εκτελέστηκε" — false for start_call (χρειάζεται Ναι/Όχι) */
   executedToolName?: string;
   showExecutedTag?: boolean;
 };
+
+function contactAgeGroup(age: unknown): string {
+  const a = typeof age === "number" ? age : parseInt(String(age), 10);
+  if (!Number.isFinite(a)) return "Άγνωστο";
+  if (a <= 30) return "18–30";
+  if (a <= 45) return "31–45";
+  if (a <= 60) return "46–60";
+  return "60+";
+}
+
+function groupContactsRaw(
+  rows: Array<Record<string, unknown>>,
+  groupBy: string,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    let k = "Άγνωστο";
+    if (groupBy === "municipality")
+      k = String(r.municipality ?? "Άγνωστο").trim() || "Άγνωστο";
+    else if (groupBy === "area")
+      k = String(r.area ?? "Άγνωστο").trim() || "Άγνωστο";
+    else if (groupBy === "political_stance")
+      k = String(r.political_stance ?? "Άγνωστο").trim() || "Άγνωστο";
+    else if (groupBy === "call_status")
+      k = String(r.call_status ?? "Άγνωστο").trim() || "Άγνωστο";
+    else if (groupBy === "priority")
+      k = String(r.priority ?? "Άγνωστο").trim() || "Άγνωστο";
+    else if (groupBy === "age_group") k = contactAgeGroup(r.age);
+    out[k] = (out[k] ?? 0) + 1;
+  }
+  return out;
+}
 
 export async function runAlexTool(
   name: string,
@@ -569,28 +879,63 @@ export async function runAlexTool(
   const isCaller = ctx.profile.role === "caller";
 
   if (name === "find_contacts") {
-    const i = {
-      search: raw.search as string | undefined,
-      call_status: raw.call_status as string | undefined,
-      area: raw.area as string | undefined,
-      municipality: raw.municipality as string | undefined,
-      priority: raw.priority as string | undefined,
-    };
-    const q = buildContactsQueryParams(i);
+    const gMap = await buildGroupNameToIdMap(ctx.supabase);
+    let f = getDefaultContactFilters();
+    const sfn =
+      (typeof raw.saved_filter_name === "string" && raw.saved_filter_name.trim() ? raw.saved_filter_name : null) ??
+      (typeof raw.filter_alias === "string" && raw.filter_alias.trim() ? raw.filter_alias : null) ??
+      (typeof raw.saved_filter === "string" && raw.saved_filter.trim() ? raw.saved_filter : null);
+    if (sfn) {
+      const jSaved = await findSavedFilterJson(ctx.supabase, sfn);
+      if (jSaved) f = applySavedFilterJson(jSaved, gMap);
+    }
+    f = applyFindContactsToolInput(f, raw, gMap);
+    const filterUrl = buildContactsPageUrl(f);
+    const q = contactFiltersToSearchParams(f).toString();
     const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
     const j = (await r.json()) as { contacts?: FindRow[]; error?: string };
     if (!r.ok) {
-      return { content: JSON.stringify({ error: j.error || "Σφάλμα αναζήτησης" }) };
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα αναζήτησης" }), filterUrl };
     }
-    const list = (j.contacts ?? []).slice(0, 10) as FindRow[];
+    const all = (j.contacts ?? []) as FindRow[];
+    const list = all.slice(0, 10) as FindRow[];
     return {
       content: JSON.stringify({
         ok: true,
-        count: list.length,
+        count: all.length,
+        filter_url: filterUrl,
         contacts: list,
       }),
       findResults: list,
+      filterUrl,
       executedToolName: "find_contacts",
+    };
+  }
+
+  if (name === "get_saved_filters") {
+    const gMap = await buildGroupNameToIdMap(ctx.supabase);
+    const { data, error } = await ctx.supabase
+      .from("saved_filters")
+      .select("id, name, description, filters, created_at")
+      .order("name", { ascending: true });
+    if (error) {
+      return { content: JSON.stringify({ error: error.message }) };
+    }
+    const rows = data ?? [];
+    const saved_filters = rows.map((row) => {
+      const j = row.filters as Record<string, unknown> | null;
+      const f = applySavedFilterJson(j && typeof j === "object" && !Array.isArray(j) ? j : null, gMap);
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        filters: row.filters,
+        filter_url: buildContactsPageUrl(f),
+      };
+    });
+    return {
+      content: JSON.stringify({ ok: true, saved_filters }),
+      executedToolName: "get_saved_filters",
     };
   }
 
@@ -1548,6 +1893,411 @@ export async function runAlexTool(
     };
   }
 
+  if (name === "add_calendar_event") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const title = String(raw.title ?? "").trim();
+    const date = String(raw.date ?? "").trim();
+    const sTime = String(raw.start_time ?? "").trim();
+    const eTime = String(raw.end_time ?? "").trim();
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !sTime || !eTime) {
+      return { content: JSON.stringify({ error: "Υποχρεωτικά title, date (YYYY-MM-DD), start_time, end_time (HH:MM)" }) };
+    }
+    const sNorm = sTime.length === 5 ? `${sTime}:00` : sTime;
+    const eNorm = eTime.length === 5 ? `${eTime}:00` : eTime;
+    const start = `${date}T${sNorm}+03:00`;
+    const end = `${date}T${eNorm}+03:00`;
+    const typeStr = String(raw.type ?? "meeting").toLowerCase();
+    const typeMap: Record<string, "meeting" | "event" | "campaign" | "other"> = {
+      meeting: "meeting",
+      event: "event",
+      campaign: "campaign",
+      other: "other",
+    };
+    const eventType = typeMap[typeStr] ?? "meeting";
+    const r = await ctx.forward("/api/schedule/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        start,
+        end,
+        location: raw.location != null ? String(raw.location) : undefined,
+        description: raw.description != null ? String(raw.description) : undefined,
+        eventType,
+      }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Δεν αποθηκεύτηκε το event" }) };
+    }
+    return { content: JSON.stringify({ ok: true, message: "Το event προστέθηκε στο ημερολόγιο." }), executedToolName: "add_calendar_event" };
+  }
+
+  if (name === "get_calendar_events") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const dateIn = raw.date != null && String(raw.date).trim() ? String(raw.date).trim() : todayYmdAthens();
+    const week = raw.week === true;
+    const q = new URLSearchParams();
+    if (week) {
+      q.set("week", "1");
+      q.set("date", /^\d{4}-\d{2}-\d{2}$/.test(dateIn) ? dateIn : todayYmdAthens());
+    } else {
+      q.set("date", /^\d{4}-\d{2}-\d{2}$/.test(dateIn) ? dateIn : todayYmdAthens());
+    }
+    const r = await ctx.forward(`/api/schedule/events?${q.toString()}`, { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as { events?: unknown; error?: string; connected?: boolean };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα ημερολογίου" }) };
+    }
+    return { content: JSON.stringify({ ok: true, events: j.events ?? [], connected: j.connected !== false }), executedToolName: "get_calendar_events" };
+  }
+
+  if (name === "analyze_contacts") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const groupBy = String(raw.group_by ?? "municipality");
+    if (!["municipality", "area", "political_stance", "age_group", "call_status", "priority"].includes(groupBy)) {
+      return { content: JSON.stringify({ error: "Άκυρο group_by" }) };
+    }
+    const fl = (raw.filters as Record<string, unknown>) || {};
+    const q = buildAdvancedContactFilters(fl, { limit: 10_000 });
+    const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
+    const j = (await r.json()) as { contacts?: Array<Record<string, unknown>>; error?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
+    }
+    const list = (j.contacts ?? []) as Array<Record<string, unknown>>;
+    const groups = groupContactsRaw(list, groupBy);
+    const sorted = Object.entries(groups)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50);
+    return {
+      content: JSON.stringify({ ok: true, total: list.length, group_by: groupBy, groups: Object.fromEntries(sorted) }),
+      executedToolName: "analyze_contacts",
+    };
+  }
+
+  if (name === "generate_letter") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const recipient_name = String(raw.recipient_name ?? "");
+    const recipient_title = String(raw.recipient_title ?? "");
+    const recipient_ministry = String(raw.recipient_ministry ?? "");
+    const subject = String(raw.subject ?? "");
+    const issue_description = String(raw.issue_description ?? "");
+    const citizen_name = String(raw.citizen_name ?? "");
+    const letter_type = String(raw.letter_type ?? "αίτηση");
+    if (!recipient_name || !subject || !issue_description) {
+      return { content: JSON.stringify({ error: "Υποχρεωτικά: recipient_name, subject, issue_description" }) };
+    }
+    const sys = `Είσαι πολιτική γραμματέας. Γράψε επίσημη επιστολή στα ελληνικά. Τύπος: ${letter_type}. Χώρος: Αιτωλοακαρνανία. Μόνο το κείμενο επιστολής, χωρίς προλόγια.`;
+    const user = `Προς: ${recipient_name}${recipient_title ? ", " + recipient_title : ""}${recipient_ministry ? " — " + recipient_ministry : ""}\nΘέμα: ${subject}\nΖήτημα: ${issue_description}\nΠολίτης/αναφορά: ${citizen_name || "—"}\nΥπογραφή: placeholder βουλευτή.`;
+    const out = await anthropicComplete(sys, user);
+    if (!out.ok) {
+      return { content: JSON.stringify({ error: out.error }) };
+    }
+    return { content: JSON.stringify({ ok: true, letter: out.text }), executedToolName: "generate_letter" };
+  }
+
+  if (name === "generate_press_release") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const topic = String(raw.topic ?? "");
+    const key_points = Array.isArray(raw.key_points) ? raw.key_points.map((x) => String(x)) : [];
+    const tone = String(raw.tone ?? "επίσημο");
+    if (!topic) {
+      return { content: JSON.stringify({ error: "Υποχρεωτικό topic" }) };
+    }
+    const sys = `Σύνταξε ανακοίνωση τύπου στα ελληνικά, τόνος: ${tone}. Βουλευτής Αιτωλοακαρνανίας. Μόνο το κείμενο.`;
+    const user = `Θέμα: ${topic}\nΒασικά σημεία:\n${key_points.map((k, i) => `${i + 1}. ${k}`).join("\n")}`;
+    const out = await anthropicComplete(sys, user);
+    if (!out.ok) {
+      return { content: JSON.stringify({ error: out.error }) };
+    }
+    return { content: JSON.stringify({ ok: true, press_release: out.text }), executedToolName: "generate_press_release" };
+  }
+
+  if (name === "generate_social_post") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const topic = String(raw.topic ?? "");
+    const platform = String(raw.platform ?? "facebook");
+    const tone = String(raw.tone ?? "επίσημο");
+    const include_hashtags = raw.include_hashtags === true;
+    if (!topic) {
+      return { content: JSON.stringify({ error: "Υποχρεωτικό topic" }) };
+    }
+    const sys = `Δημιούργησε post social media στα ελληνικά. Πλατφόρμα: ${platform}. Ύφος: ${tone}.${include_hashtags ? " Συμπέρασε 3–5 hashtags." : " Χωρίς hashtags."} Σύντομα, 1–3 παράγραφοι.`;
+    const out = await anthropicComplete(sys, topic);
+    if (!out.ok) {
+      return { content: JSON.stringify({ error: out.error }) };
+    }
+    return { content: JSON.stringify({ ok: true, post: out.text, platform }), executedToolName: "generate_social_post" };
+  }
+
+  if (name === "bulk_send_nameday_wishes") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const ymd = raw.date != null && /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date)) ? String(raw.date) : todayYmdAthens();
+    const d = new Date(ymd + "T12:00:00");
+    let ids = await getContactIdsForNameDay(ctx.supabase, d.getMonth() + 1, d.getDate());
+    const municipality = raw.municipality != null ? String(raw.municipality).trim() : "";
+    if (municipality && ids.length > 0) {
+      const { data: rows, error: e2 } = await ctx.supabase
+        .from("contacts")
+        .select("id")
+        .in("id", ids)
+        .ilike("municipality", `%${municipality}%`);
+      if (e2) {
+        return { content: JSON.stringify({ error: e2.message }) };
+      }
+      ids = (rows ?? []).map((x) => (x as { id: string }).id);
+    }
+    if (ids.length === 0) {
+      return { content: JSON.stringify({ ok: false, message: "Καμία επαφή για αυτό το εορτολόγιο/δήμο." }) };
+    }
+    const r = await ctx.forward("/api/campaigns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: `Ευχές ονομαστικής ${ymd}`,
+        description: `Καμπάνια αυτόματη (Αλεξάνδρα)${municipality ? ` — ${municipality}` : ""}`,
+        contact_ids: ids,
+      }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; campaign?: { id: string }; assigned_contacts?: number };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα καμπάνιας" }) };
+    }
+    return {
+      content: JSON.stringify({
+        ok: true,
+        campaign_id: j.campaign?.id,
+        contact_count: j.assigned_contacts ?? ids.length,
+        message: "Η καμπάνια ευχών δημιουργήθηκε. Ξεκινήστε κλήσεις από τη σελίδα καμπανιών.",
+      }),
+      executedToolName: "bulk_send_nameday_wishes",
+    };
+  }
+
+  if (name === "find_contacts_not_called") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const muni = raw.municipality != null ? String(raw.municipality).trim() : "";
+    const limit = Math.min(500, Math.max(1, Number(raw.limit) || 200));
+    const onlyNever = raw.days_ago === 0;
+    const days = onlyNever
+      ? 0
+      : Math.min(365, Math.max(1, parseInt(String(raw.days_ago ?? 30), 10) || 30));
+    let q = ctx.supabase
+      .from("contacts")
+      .select("id, first_name, last_name, phone, municipality, last_contacted_at");
+    if (onlyNever) {
+      q = q.is("last_contacted_at", null);
+    } else {
+      const cut = new Date();
+      cut.setDate(cut.getDate() - days);
+      const iso = cut.toISOString();
+      q = q.or(`last_contacted_at.is.null,last_contacted_at.lt."${iso}"`);
+    }
+    if (muni) {
+      q = q.ilike("municipality", `%${muni}%`);
+    }
+    q = q.order("created_at", { ascending: false }).limit(4000);
+    const { data, error } = await q;
+    if (error) {
+      return { content: JSON.stringify({ error: error.message }) };
+    }
+    const rows = (data ?? []).slice(0, limit) as Array<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      phone: string;
+      municipality: string | null;
+    }>;
+    return {
+      content: JSON.stringify({
+        ok: true,
+        filter: onlyNever ? "never_called" : { days_ago: days },
+        count: rows.length,
+        contacts: rows,
+      }),
+      findResults: rows as unknown as FindRow[],
+      executedToolName: "find_contacts_not_called",
+    };
+  }
+
+  if (name === "analyze_document") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const text = String(raw.text ?? "");
+    const q = raw.question != null ? String(raw.question) : "";
+    const docType = String(raw.document_type ?? "έγγραφο");
+    if (!text.trim()) {
+      return { content: JSON.stringify({ error: "Χρειάζεται text" }) };
+    }
+    const user = `Τύπος: ${docType}.\n\nΚείμενο:\n${text}\n\n${q ? "Ερώτηση: " + q : "Ζητούμενο: περίληψη, 5+ κύρια σημεία, σημασία για Αιτωλοακαρνανία."}`;
+    const out = await anthropicComplete(
+      "Είσαι νομικός αναλυτής. Απαντάς πάντα στα ελληνικά, δομημένα: Περίληψη, Κύρια σημεία, Σχέση με Αιτωλοακαρνανία.",
+      user,
+    );
+    if (!out.ok) {
+      return { content: JSON.stringify({ error: out.error }) };
+    }
+    return { content: JSON.stringify({ ok: true, analysis: out.text }), executedToolName: "analyze_document" };
+  }
+
+  if (name === "morning_briefing") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const r = await ctx.forward("/api/briefing/today", { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: (j as { error?: string }).error || "Σφάλμα briefing" }) };
+    }
+    return { content: JSON.stringify({ ok: true, briefing: j }), executedToolName: "morning_briefing" };
+  }
+
+  if (name === "calculate_scores") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο υπεύθυνοι (manager) μπορούν να υπολογίσουν σκορ" }) };
+    }
+    const r = await ctx.forward("/api/contacts/calculate-scores", { method: "POST" });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; updated?: number; total?: number };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα υπολογισμού σκορ" }) };
+    }
+    return {
+      content: JSON.stringify({ ok: true, updated: j.updated, total: j.total }),
+      executedToolName: "calculate_scores",
+    };
+  }
+
+  if (name === "generate_content") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο υπεύθυνοι (manager)" }) };
+    }
+    const genType = raw.type as string | undefined;
+    const params = raw.params;
+    if (!genType || params == null || typeof params !== "object" || Array.isArray(params)) {
+      return { content: JSON.stringify({ error: "Χρειάζονται type (press_release|social_post|letter) και params (object)" }) };
+    }
+    const r = await ctx.forward("/api/content/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: genType, params }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; content?: string; type?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα δημιουργίας" }) };
+    }
+    return {
+      content: JSON.stringify({ ok: true, type: j.type ?? genType, content: j.content ?? "" }),
+      executedToolName: "generate_content",
+    };
+  }
+
+  if (name === "translate_text") {
+    const text = String(raw.text ?? "").trim();
+    const to = String(raw.to_language ?? "el");
+    const from = String(raw.from_language ?? "auto");
+    if (!text) {
+      return { content: JSON.stringify({ error: "Κενό κείμενο" }) };
+    }
+    const out = await anthropicComplete(
+      `Μετάφρασε στα ${to}. Αν from_language=${from}, αναγνώρισε πηγή. Μόνο το αποτέλεσμα, χωρίς σχόλια.`,
+      text.slice(0, 20_000),
+    );
+    if (!out.ok) {
+      return { content: JSON.stringify({ error: out.error }) };
+    }
+    return { content: JSON.stringify({ ok: true, translated: out.text }), executedToolName: "translate_text" };
+  }
+
+  if (name === "add_parliamentary_question") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const title = String(raw.title ?? "").trim();
+    if (!title) {
+      return { content: JSON.stringify({ error: "Χρειάζεται title" }) };
+    }
+    const r = await ctx.forward("/api/parliament/questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        ministry: raw.ministry != null ? String(raw.ministry) : null,
+        description: raw.description != null ? String(raw.description) : null,
+      }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; id?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
+    }
+    return { content: JSON.stringify({ ok: true, id: j.id }), executedToolName: "add_parliamentary_question" };
+  }
+
+  if (name === "search_media") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const q = String(raw.query ?? "Καραγκούνης").trim();
+    const r = await ctx.forward(`/api/media/search?q=${encodeURIComponent(q)}`, { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; results?: unknown[] };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: (j as { error?: string }).error || "Σφάλμα" }) };
+    }
+    return { content: JSON.stringify({ ok: true, results: j.results ?? [] }), executedToolName: "search_media" };
+  }
+
+  if (name === "add_event_rsvp") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const eventId = String(raw.event_id ?? "").trim();
+    const contactId = pickContactId(raw.contact_id, ctx);
+    if (!eventId || !contactId) {
+      return { content: JSON.stringify({ error: "Χρειάζονται event_id και contact_id" }) };
+    }
+    const r = await ctx.forward(`/api/events/${eventId}/rsvps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contact_id: contactId, status: "Επιβεβαιωμένος" }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; id?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
+    }
+    return { content: JSON.stringify({ ok: true, id: j.id }), executedToolName: "add_event_rsvp" };
+  }
+
+  if (name === "get_volunteer_list") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const area = raw.area != null ? String(raw.area).trim() : "";
+    const q = area ? `?volunteer_area=${encodeURIComponent(area)}` : "";
+    const r = await ctx.forward(`/api/volunteers${q}`, { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; volunteers?: unknown[] };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: (j as { error?: string }).error || "Σφάλμα" }) };
+    }
+    return { content: JSON.stringify({ ok: true, volunteers: j.volunteers ?? [] }), executedToolName: "get_volunteer_list" };
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
@@ -1573,10 +2323,15 @@ export function buildSystemPrompt({
 - contacts: first_name, last_name, phone, phone2, landline, municipality, area, toponym, call_status (Pending/Positive/Negative/No Answer), priority, political_stance, father_name, mother_name, notes, tags, group_id, nickname
 - requests: title, description, category, status (Νέο/Σε εξέλιξη/Ολοκληρώθηκε/Απορρίφθηκε), assigned_to
 - tasks: title, due_date, completed, contact_id
-- campaigns: name, status, calls
+- campaigns: name, status, calls, τάση positive rate vs προηγούμενη καμπάνια
 - calls: outcome, duration_seconds, transferred_to_politician
 - Duplicate = ίδιο phone
 - contact_code: EP-000001
+- Ημερολόγιο Google: πρόσθεση/ανάγνωση events (manager)
+- SLA αιτημάτων: sla_due_date, ένδειξη on_track / at_risk / overdue
+- predicted_score: ακέραιο 0–100 (πειθω/πειθωτικότητα) — χαμηλό 0–33, μέτριο 34–66, υψηλό 67–100. Υπολογισμός από Εργαλεία δεδομένων ή εργαλείο calculate_scores.
+- Σελίδες: /documents, /content, /analytics, /parliament (βουλή, ερωτήσεις, νομοθεσία, media), /events (εκδηλώσεις, RSVP), /volunteers (εθελοντές), /contacts (γλώσσα επαφής language, εθελοντικά πεδία).
+- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, add_parliamentary_question, search_media, add_event_rsvp, get_volunteer_list
 
 ΚΑΝΟΝΕΣ TOOLS:
 - Χρησιμοποίησε tools ΑΜΕΣΩΣ χωρίς να ρωτάς άδεια για απλές ενέργειες

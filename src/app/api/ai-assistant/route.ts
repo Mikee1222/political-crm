@@ -41,6 +41,8 @@ const MODEL = "claude-sonnet-4-6";
 
 type AssistantActionBlob = {
   findResults?: FindRow[];
+  /** /contacts?… for «Δείξε στις Επαφές» */
+  filterUrl?: string;
   toolsExecuted?: string[];
   confirmCall?: { contact_id: string; name: string; phone: string } | null;
   startCallMeta?: { name: string; phone: string } | null;
@@ -204,6 +206,7 @@ export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   const toolsExecuted: string[] = [];
   let lastFind: FindRow[] | null = null;
+  let lastFilterUrl: string | undefined;
   let confirm: { contact_id: string; name: string; phone: string } | null = null;
   const fullTextParts: string[] = [];
 
@@ -257,6 +260,9 @@ export async function POST(request: NextRequest) {
               );
               if (tr.findResults) {
                 lastFind = tr.findResults;
+              }
+              if (tr.filterUrl) {
+                lastFilterUrl = tr.filterUrl;
               }
               if (tr.confirmCall) {
                 confirm = tr.confirmCall;
@@ -314,6 +320,7 @@ export async function POST(request: NextRequest) {
         if (confirm && hasMinRole(p.role, "manager")) {
           actionBlob = {
             findResults: lastFind ?? undefined,
+            filterUrl: lastFilterUrl,
             toolsExecuted: uniq.length ? uniq : undefined,
             confirmCall: confirm,
             startCallMeta: { name: confirm.name, phone: confirm.phone },
@@ -323,12 +330,14 @@ export async function POST(request: NextRequest) {
         } else if (confirm && !hasMinRole(p.role, "manager")) {
           actionBlob = {
             findResults: lastFind ?? undefined,
+            filterUrl: lastFilterUrl,
             toolsExecuted: uniq.length ? uniq : undefined,
             executed: uniq.length > 0,
           };
         } else {
           actionBlob = {
             findResults: lastFind ?? undefined,
+            filterUrl: lastFilterUrl,
             toolsExecuted: uniq.length ? uniq : undefined,
             executed: uniq.length > 0,
           };

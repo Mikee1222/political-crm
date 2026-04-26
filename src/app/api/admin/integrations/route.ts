@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,7 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
     }
-    if (profile?.role !== "admin") {
+    if (!hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }
     const service = createServiceClient();

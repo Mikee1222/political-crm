@@ -5,7 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import type { Role } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
+import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
+import { GeographicDataSection } from "@/components/settings/geographic-data-section";
+import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
+import { TelegramSettingsSection } from "@/components/settings/telegram-settings-section";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { EventCategoryRow } from "@/lib/event-categories";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
@@ -38,6 +43,7 @@ function GoogleCalendarReturnHandler({ onConnected }: { onConnected: () => void 
 export default function SettingsPage() {
   const { profile } = useProfile();
   const isAdmin = profile?.role === "admin";
+  const canAccess = hasMinRole(profile?.role, "manager");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [integrations, setIntegrations] = useState<{
     retell: boolean;
@@ -64,9 +70,14 @@ export default function SettingsPage() {
   useEffect(() => {
     if (isAdmin) {
       void loadUsers();
+    }
+  }, [isAdmin, loadUsers]);
+
+  useEffect(() => {
+    if (canAccess) {
       void loadInt();
     }
-  }, [isAdmin, loadUsers, loadInt]);
+  }, [canAccess, loadInt]);
 
   const googleConnected = Boolean(integrations?.hasStoredGoogleTokens);
 
@@ -113,21 +124,28 @@ export default function SettingsPage() {
     await loadInt();
   };
 
-  if (!isAdmin) {
+  if (!canAccess) {
     return (
-      <div className={lux.card + " !border-amber-500/40 !bg-[var(--status-noanswer-bg)] !shadow-sm"}>
-        <p className="text-sm text-[var(--status-noanswer-text)]">Δεν έχετε πρόσβαση.</p>
+      <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+        <div className={lux.card + " w-full min-w-0 max-w-full !border-amber-500/40 !bg-[var(--status-noanswer-bg)] !shadow-sm"}>
+          <p className="text-sm text-[var(--status-noanswer-text)]">Δεν έχετε πρόσβαση.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {isAdmin && (
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+    <div className="w-full min-w-0 max-w-full space-y-6 [&>section]:w-full [&>section]:min-w-0 [&>section]:max-w-full">
+      {canAccess && (
         <Suspense fallback={null}>
           <GoogleCalendarReturnHandler onConnected={loadInt} />
         </Suspense>
       )}
+
+      <TelegramSettingsSection />
+
+      {isAdmin && (
       <section className={lux.card}>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -143,9 +161,8 @@ export default function SettingsPage() {
             {err}
           </p>
         )}
-        <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-          <div className="min-w-[720px]">
-            <table className="w-full text-sm">
+        <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+            <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
                   <th className="sticky left-0 z-10 min-w-[140px] bg-[var(--bg-elevated)] p-3 pl-4">Όνομα</th>
@@ -205,11 +222,11 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
         </div>
       </section>
+      )}
 
-      {addOpen && (
+      {isAdmin && addOpen && (
         <AddUserModal
           onClose={() => setAddOpen(false)}
           onCreated={async () => {
@@ -219,7 +236,7 @@ export default function SettingsPage() {
         />
       )}
 
-      {deleteId && (
+      {isAdmin && deleteId && (
         <ConfirmModal
           title="Διαγραφή χρήστη"
           body="Θα διαγραφούν ο λογαριασμός auth και το προφίλ. Η ενέργεια δεν ανακαλείται."
@@ -229,11 +246,17 @@ export default function SettingsPage() {
         />
       )}
 
-      <EventCategoriesSection />
+      {isAdmin && <EventCategoriesSection />}
 
-      <GroupsSection />
+      {isAdmin && <GroupsSection />}
 
-      <TagsSection />
+      {isAdmin && <TagsSection />}
+
+      {isAdmin && <ElectoralSettingsSection />}
+
+      {isAdmin && <GeographicDataSection />}
+
+      <SavedFiltersSection isAdmin={isAdmin} />
 
       <section className={lux.card}>
         <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -269,21 +292,23 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className={lux.card}>
-        <h2 className={lux.sectionTitle + " mb-2"}>Retell AI</h2>
-        {integrations && (
-          <p className="text-sm text-[var(--text-primary)]">
-            Κατάσταση API:{" "}
-            <span className="font-semibold text-[#16A34A]">{integrations.retell ? "Συνδεδεμένο" : "Μη ρυθμισμένο"}</span>
-          </p>
-        )}
-      </section>
+      {isAdmin && (
+        <section className={lux.card}>
+          <h2 className={lux.sectionTitle + " mb-2"}>Retell AI</h2>
+          {integrations && (
+            <p className="text-sm text-[var(--text-primary)]">
+              Κατάσταση API:{" "}
+              <span className="font-semibold text-[#16A34A]">{integrations.retell ? "Συνδεδεμένο" : "Μη ρυθμισμένο"}</span>
+            </p>
+          )}
+        </section>
+      )}
 
-      <NamedaySyncSection />
+      {isAdmin && <NamedaySyncSection />}
 
-      <PriorityLevelsSection />
+      {isAdmin && <PriorityLevelsSection />}
 
-      <RequestCategoriesSettingsSection />
+      {isAdmin && <RequestCategoriesSettingsSection />}
 
       <section className={lux.card}>
         <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>
@@ -294,6 +319,7 @@ export default function SettingsPage() {
           Πολιτική φιγούρα: <strong className="text-[var(--text-primary)]">Κώστας Καραγκούνης</strong>
         </p>
       </section>
+    </div>
     </div>
   );
 }
@@ -405,7 +431,7 @@ function PriorityLevelsSection() {
         </p>
       )}
       {loading && <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>}
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[400px] text-sm">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
@@ -489,7 +515,7 @@ function RequestCategoriesSettingsSection() {
           {err}
         </p>
       )}
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[360px] text-sm">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
@@ -738,7 +764,7 @@ function EventCategoriesSection() {
         </p>
       )}
       {loading && <p className="mb-3 text-sm text-[var(--text-muted)]">Φόρτωση…</p>}
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[420px] text-sm">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
@@ -831,7 +857,7 @@ function TagsSection() {
           {err}
         </p>
       )}
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[360px] text-sm">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
@@ -1028,7 +1054,7 @@ function GroupsSection() {
           {err}
         </p>
       )}
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>

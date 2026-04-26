@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { buildContactsQuery, contactMatchesLocalSearch } from "@/lib/contacts-query";
+import {
+  applyContactListFiltersToBuilder,
+  buildContactsQueryFromListFilters,
+  contactMatchesLocalSearch,
+} from "@/lib/contacts-query";
+import { getDefaultContactFilters, searchParamsToFilters } from "@/lib/contacts-filters";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { callStatusLabel } from "@/lib/luxury-styles";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -21,7 +26,7 @@ function priorityGr(p: string | null | undefined): string {
 }
 
 const SELECT_EXPORT =
-  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, electoral_district, call_status, priority, political_stance, notes, nickname";
+  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, electoral_district, call_status, priority, political_stance, notes, nickname, predicted_score";
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,11 +39,11 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const idsParam = sp.get("ids");
   const filtered = sp.get("filters") === "1" || sp.get("filtered") === "1";
+  const f = searchParamsToFilters(sp, getDefaultContactFilters());
 
   const isManager = hasMinRole(profile?.role, "manager");
 
-  // Branches use different .select() shapes (export vs buildContactsQuery) — single builder type is impractical.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- postgrest builder union from mixed branches
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query: any = supabase.from("contacts").select(SELECT_EXPORT);
 
   if (idsParam?.trim()) {
@@ -47,37 +52,19 @@ export async function GET(request: NextRequest) {
       .map((x) => x.trim())
       .filter(Boolean);
     if (ids.length) query = query.in("id", ids);
-  } else if (filtered && sp.get("nameday_today") === "1") {
+  } else if (filtered && f.nameday_today) {
     const now = new Date();
     const ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
     if (ids.length === 0) {
       query = supabase.from("contacts").select(SELECT_EXPORT).limit(0);
     } else {
-      let qn = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
-      const callStatus = sp.get("call_status");
-      const area = sp.get("area");
-      const municipality = sp.get("municipality");
-      const priority = sp.get("priority");
-      const tag = sp.get("tag");
-      const groupId = sp.get("group_id");
-      if (callStatus) qn = qn.eq("call_status", callStatus);
-      if (area) qn = qn.eq("area", area);
-      if (municipality) qn = qn.ilike("municipality", `%${municipality}%`);
-      if (priority) qn = qn.eq("priority", priority);
-      if (tag) qn = qn.contains("tags", [tag]);
-      if (groupId) qn = qn.eq("group_id", groupId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
+      qn = applyContactListFiltersToBuilder(qn, f);
       query = qn;
     }
   } else if (filtered) {
-    query = buildContactsQuery(supabase, {
-      search: sp.get("search") ?? undefined,
-      call_status: sp.get("call_status") ?? undefined,
-      area: sp.get("area") ?? undefined,
-      municipality: sp.get("municipality") ?? undefined,
-      priority: sp.get("priority") ?? undefined,
-      tag: sp.get("tag") ?? undefined,
-      group_id: sp.get("group_id") ?? undefined,
-    });
+    query = buildContactsQueryFromListFilters(supabase, f);
   } else {
     if (!isManager) {
       return NextResponse.json({ error: "Η εξαγωγή όλων απαιτεί δικαιώματα υπευθύνου" }, { status: 403 });
@@ -104,11 +91,11 @@ export async function GET(request: NextRequest) {
     political_stance: string | null;
     notes: string | null;
     nickname: string | null;
+    predicted_score: number | null;
   }>;
 
-  if (filtered && sp.get("search")?.trim()) {
-    const sq = sp.get("search");
-    rawRows = rawRows.filter((c) => contactMatchesLocalSearch(c, sq));
+  if (filtered && f.search?.trim()) {
+    rawRows = rawRows.filter((c) => contactMatchesLocalSearch(c, f.search));
   }
 
   const rows = rawRows;
@@ -126,6 +113,7 @@ export async function GET(request: NextRequest) {
     "Κατάσταση",
     "Προτεραιότητα",
     "Πολιτική Τοποθέτηση",
+    "Σκορ (0-100)",
     "Σημειώσεις",
   ];
   const lines = [
@@ -144,6 +132,7 @@ export async function GET(request: NextRequest) {
         callStatusLabel(r.call_status),
         priorityGr(r.priority),
         r.political_stance,
+        r.predicted_score ?? "",
         r.notes,
       ]
         .map(escapeCsvCell)

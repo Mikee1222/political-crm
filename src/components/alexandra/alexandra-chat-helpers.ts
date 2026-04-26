@@ -28,6 +28,8 @@ export type FindRow = {
 export type StoredAssistantAction = {
   parsed?: ActionPayload | null;
   findResults?: FindRow[];
+  /** /contacts?… for «Δείξε στις Επαφές» */
+  filterUrl?: string;
   toolsExecuted?: string[];
   executed?: boolean;
   startCallMeta?: { name: string; phone: string } | null;
@@ -47,6 +49,7 @@ export type Msg = {
   pendingAction?: ActionPayload | null;
   executed?: boolean;
   findResults?: FindRow[] | null;
+  filterUrl?: string | null;
   startCallMeta?: { name: string; phone: string } | null;
   toolsExecutedFromDb?: string[] | null;
   isStreaming?: boolean;
@@ -65,6 +68,7 @@ export type MsgWithT = Msg & { _createdAt?: string };
 export function greekToolLabel(t: string) {
   const m: Record<string, string> = {
     find_contacts: "Αναζήτηση επαφών",
+    get_saved_filters: "Αποθηκευμένα φίλτρα",
     update_contact: "Ενημέρωση επαφής",
     edit_contact: "Επεξεργασία επαφής",
     create_contact: "Νέα επαφή",
@@ -87,6 +91,16 @@ export function greekToolLabel(t: string) {
     save_memory: "Μνήμη",
     get_memories: "Φόρτωση μνημών",
     schedule_reminder: "Υπενθύμιση",
+    add_calendar_event: "Ημερολόγιο (νέο event)",
+    get_calendar_events: "Ημερολόγιο (πρόγραμμα)",
+    analyze_contacts: "Ανάλυση επαφών",
+    generate_letter: "Επιστολή (επίσημη)",
+    generate_press_release: "Ανακοίνωση τύπου",
+    generate_social_post: "Social post",
+    bulk_send_nameday_wishes: "Καμπάνια ευχών (εορτές)",
+    find_contacts_not_called: "Χωρίς κλήση",
+    analyze_document: "Ανάλυση εγγράφου",
+    morning_briefing: "Ημερήσια ενημέρωση",
   };
   return m[t] ?? t;
 }
@@ -150,6 +164,7 @@ export function mapDbToMsg(row: {
     pendingAction: st?.parsed ?? null,
     executed: st?.executed,
     findResults: st?.findResults,
+    filterUrl: st?.filterUrl,
     startCallMeta: st?.startCallMeta,
     toolsExecutedFromDb: st?.toolsExecuted ?? null,
     _createdAt: row.created_at,

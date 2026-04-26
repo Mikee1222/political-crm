@@ -3,9 +3,11 @@ import { createServiceClient } from "@/lib/supabase/admin";
 export type ActivityAction =
   | "contact_created"
   | "contact_updated"
+  | "contact_note_added"
   | "call_made"
   | "request_created"
   | "request_updated"
+  | "request_note_added"
   | "campaign_started";
 
 export type ActivityEntityType = "contact" | "request" | "campaign" | "task";

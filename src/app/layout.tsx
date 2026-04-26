@@ -60,7 +60,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex min-h-[-webkit-fill-available] flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      <body className="min-h-full flex min-h-[-webkit-fill-available] flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] leading-[1.6]">
         <Script id="crm-theme-init" strategy="beforeInteractive">
           {`(function(){try{var t=localStorage.getItem('crm-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`}
         </Script>

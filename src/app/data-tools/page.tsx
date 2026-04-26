@@ -44,6 +44,8 @@ export default function DataToolsPage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<DupPair | null>(null);
   const [keepSide, setKeepSide] = useState<"a" | "b">("a");
+  const [scoring, setScoring] = useState(false);
+  const [scoreMsg, setScoreMsg] = useState<string | null>(null);
 
   const runDup = useCallback(async () => {
     setScanning(true);
@@ -82,6 +84,26 @@ export default function DataToolsPage() {
       setStats(null);
     } finally {
       setStatsLoading(false);
+    }
+  }, []);
+
+  const runPredictedScores = useCallback(async () => {
+    setScoreMsg(null);
+    setScoring(true);
+    try {
+      const res = await fetchWithTimeout("/api/contacts/calculate-scores", { method: "POST" });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; updated?: number; total?: number };
+      if (!res.ok) {
+        setScoreMsg(j.error ?? "Σφάλμα");
+        return;
+      }
+      setScoreMsg(
+        `Ενημερώθηκαν ${typeof j.updated === "number" ? j.updated : 0} από ${typeof j.total === "number" ? j.total : "?"} επαφές.`,
+      );
+    } catch {
+      setScoreMsg("Σφάλμα δικτύου");
+    } finally {
+      setScoring(false);
     }
   }, []);
 
@@ -136,6 +158,21 @@ export default function DataToolsPage() {
       <div className={lux.card}>
         <h1 className={lux.pageTitle}>Εργαλεία δεδομένων</h1>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">Έλεγχος ποιότητας, διπλοτύπων και στατιστικών (προτεινόμενο μόνον — αποφασίζετε εσείς)</p>
+        <div className="mt-4 flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-[var(--text-primary)]">Υπολογισμός σκορ πειθώ (0–100)</p>
+            <p className="text-xs text-[var(--text-secondary)]">Βασίζεται σε κατάσταση κλήσης, πολιτική στάση, τηλέφωνο, επιρροή, ηλικία και εκλογικά δεδομένα ΝΔ ανά δήμο.</p>
+            {scoreMsg && <p className="mt-1 text-xs text-[var(--accent-gold)]">{scoreMsg}</p>}
+          </div>
+          <button
+            type="button"
+            className={lux.btnPrimary + " shrink-0 !py-2.5"}
+            disabled={scoring}
+            onClick={() => void runPredictedScores()}
+          >
+            {scoring ? "Υπολογισμός…" : "Υπολογισμός σκορ"}
+          </button>
+        </div>
         <div className="mt-4 flex flex-wrap gap-2 border-b border-[var(--border)] pb-2">
           {(
             [
