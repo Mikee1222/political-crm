@@ -14,10 +14,23 @@ type Ctx = {
 
 const AlexandraPageContext = createContext<Ctx | null>(null);
 
+function samePageContact(
+  a: AlexandraPageContactContext | null,
+  b: AlexandraPageContactContext | null,
+) {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return a === b;
+  }
+  return a.contactId === b.contactId && a.contactName === b.contactName;
+}
+
 export function AlexandraPageProvider({ children }: { children: ReactNode }) {
   const [contact, setContact] = useState<AlexandraPageContactContext | null>(null);
   const setContactPage = useCallback((v: AlexandraPageContactContext | null) => {
-    setContact(v);
+    setContact((prev) => (samePageContact(prev, v) ? prev : v));
   }, []);
   const value = useMemo(() => ({ contact, setContactPage }), [contact, setContactPage]);
   return <AlexandraPageContext.Provider value={value}>{children}</AlexandraPageContext.Provider>;

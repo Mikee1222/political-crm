@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { ArrowLeft, Building2, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { hasMinRole } from "@/lib/roles";
@@ -293,6 +293,7 @@ function QuickCopyRow({ label, value, mono, copyLabel }: { label: string; value:
 
 function ContactDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = typeof params?.id === "string" ? params.id : "";
   const { profile } = useProfile();
   const isCaller = profile?.role === "caller";
@@ -343,125 +344,153 @@ function ContactDetailPage() {
     };
   }, []);
 
-  const load = useCallback(async () => {
-    if (!id) return;
-    try {
-      const [res, notesRes] = await Promise.all([
-        fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}`),
-        fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/notes`),
-      ]);
-      if (!aliveRef.current) {
-        return;
-      }
-      const data = (await res.json().catch(() => ({}))) as { error?: string; contact?: Contact | null; calls?: Call[]; tasks?: Task[]; requests?: RequestItem[] };
-      if (data.error) {
-        if (!aliveRef.current) return;
-        setContact(null);
-        setContactNotes([]);
-        return;
-      }
-      if (notesRes.ok) {
-        try {
-          const njson = (await notesRes.json()) as { notes?: ContactNoteItem[] };
-          if (!aliveRef.current) return;
-          setContactNotes(njson.notes ?? []);
-        } catch {
-          if (!aliveRef.current) return;
-          setContactNotes([]);
-        }
-      } else {
-        if (!aliveRef.current) return;
-        setContactNotes([]);
-      }
-      const raw = data.contact as Contact | null;
-      if (raw) {
-        const g = raw.contact_groups;
-        const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
-        if (!aliveRef.current) return;
-        setContact({
-          ...raw,
-          contact_groups,
-          group_id: raw.group_id ?? null,
-          phone2: raw.phone2 ?? null,
-          landline: raw.landline ?? null,
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!id) return;
+      const dead = () => Boolean(signal?.aborted) || !aliveRef.current;
+      const apply = (fn: () => void) => {
+        startTransition(() => {
+          if (dead()) return;
+          fn();
         });
-      } else {
-        if (!aliveRef.current) return;
-        setContact(null);
-      }
-      if (!aliveRef.current) return;
-      setBuf(null);
-      setEditing(null);
-      setCalls((data.calls ?? []) as Call[]);
-      setTasks((data.tasks ?? []) as Task[]);
-      setRequests((data.requests ?? []) as RequestItem[]);
-      if (hasMinRole(profile?.role, "manager")) {
-        try {
-          const sr = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/supporters`);
-          if (!aliveRef.current) {
-            return;
+      };
+      try {
+        const [res, notesRes] = await Promise.all([
+          fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}`, { signal }),
+          fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/notes`, { signal }),
+        ]);
+        if (dead()) return;
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          contact?: Contact | null;
+          calls?: Call[];
+          tasks?: Task[];
+          requests?: RequestItem[];
+        };
+        let notes: ContactNoteItem[] = [];
+        if (notesRes.ok) {
+          try {
+            const njson = (await notesRes.json()) as { notes?: ContactNoteItem[] };
+            notes = njson.notes ?? [];
+          } catch {
+            notes = [];
           }
-          if (sr.ok) {
-            try {
-              const sj = (await sr.json()) as { items?: SupporterRow[] };
-              if (!aliveRef.current) return;
-              setSupporters(sj.items ?? []);
-            } catch {
-              if (!aliveRef.current) return;
-              setSupporters([]);
-            }
-          } else {
-            if (!aliveRef.current) return;
-            setSupporters([]);
-          }
-        } catch {
-          if (!aliveRef.current) return;
-          setSupporters([]);
         }
+        if (dead()) return;
+        if (data.error) {
+          apply(() => {
+            setContact(null);
+            setContactNotes([]);
+            setBuf(null);
+            setEditing(null);
+            setCalls([]);
+            setTasks([]);
+            setRequests([]);
+            setSupporters([]);
+          });
+          return;
+        }
+        const raw = data.contact as Contact | null;
+        const calls = (data.calls ?? []) as Call[];
+        const tasks = (data.tasks ?? []) as Task[];
+        const requests = (data.requests ?? []) as RequestItem[];
+        let supporters: SupporterRow[] = [];
+        if (hasMinRole(profile?.role, "manager")) {
+          try {
+            const sr = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/supporters`, { signal });
+            if (dead()) return;
+            if (sr.ok) {
+              try {
+                const sj = (await sr.json()) as { items?: SupporterRow[] };
+                supporters = sj.items ?? [];
+              } catch {
+                supporters = [];
+              }
+            } else {
+              supporters = [];
+            }
+          } catch {
+            supporters = [];
+          }
+        }
+        if (dead()) return;
+        apply(() => {
+          setContactNotes(notes);
+          if (raw) {
+            const g = raw.contact_groups;
+            const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+            setContact({
+              ...raw,
+              contact_groups,
+              group_id: raw.group_id ?? null,
+              phone2: raw.phone2 ?? null,
+              landline: raw.landline ?? null,
+            });
+          } else {
+            setContact(null);
+          }
+          setBuf(null);
+          setEditing(null);
+          setCalls(calls);
+          setTasks(tasks);
+          setRequests(requests);
+          setSupporters(supporters);
+        });
+      } catch {
+        if (dead()) return;
+        apply(() => {
+          setContact(null);
+          setContactNotes([]);
+          setSupporters([]);
+          setCalls([]);
+          setTasks([]);
+          setRequests([]);
+        });
       }
-    } catch {
-      if (!aliveRef.current) return;
-      setContact(null);
-      setContactNotes([]);
-      setSupporters([]);
-      setCalls([]);
-      setTasks([]);
-      setRequests([]);
-    }
-  }, [id, profile?.role]);
+    },
+    [id, profile?.role],
+  );
 
   useEffect(() => {
-    void load();
+    const ac = new AbortController();
+    void load(ac.signal);
+    return () => {
+      ac.abort();
+    };
   }, [load]);
 
+  const setContactPage = alexPage?.setContactPage;
   useEffect(() => {
-    if (!alexPage) return;
-    if (!contact) {
-      alexPage.setContactPage(null);
+    if (!setContactPage) return;
+    if (!contact || contact.id !== id) {
+      setContactPage(null);
       return;
     }
     const name = `${contact.first_name} ${contact.last_name}`.trim();
-    alexPage.setContactPage({ contactId: contact.id, contactName: name || "Επαφή" });
-    return () => alexPage.setContactPage(null);
-  }, [alexPage, contact]);
+    setContactPage({ contactId: contact.id, contactName: name || "Επαφή" });
+    return () => {
+      setContactPage(null);
+    };
+    // Primitives only — `contact` identity updates on every fetch and would retrigger Alexandra sync in a loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setContactPage, id, contact?.id, contact?.first_name, contact?.last_name]);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/groups");
+        const r = await fetchWithTimeout("/api/groups", { signal: ac.signal });
+        if (ac.signal.aborted) return;
         const d = (await r.json()) as { groups?: ContactGroupRow[] };
-        if (!cancelled) {
-          setGroupOptions(d.groups ?? []);
-        }
+        if (ac.signal.aborted) return;
+        setGroupOptions(d.groups ?? []);
       } catch {
-        if (!cancelled) {
-          setGroupOptions([]);
-        }
+        if (ac.signal.aborted) return;
+        setGroupOptions([]);
       }
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, []);
 
@@ -469,37 +498,65 @@ function ContactDetailPage() {
     if (!canManage || !id || !historyOpen) {
       return;
     }
-    let cancelled = false;
+    const ac = new AbortController();
     setHistoryLoading(true);
     void (async () => {
-      const res = await fetchWithTimeout(`/api/contacts/${id}/history`);
-      if (cancelled) {
-        return;
+      try {
+        const res = await fetchWithTimeout(`/api/contacts/${id}/history`, { signal: ac.signal });
+        if (ac.signal.aborted) return;
+        if (res.ok) {
+          const j = (await res.json()) as {
+            entries?: {
+              id: string;
+              user_id: string | null;
+              action: string;
+              entity_type: string;
+              entity_name: string | null;
+              details: unknown;
+              created_at: string;
+              user_name?: string;
+            }[];
+          };
+          if (ac.signal.aborted) return;
+          setHistoryRows(
+            (j.entries ?? []).map((e) => ({
+              id: e.id,
+              user_name: e.user_name ?? "—",
+              action: e.action,
+              entity_type: e.entity_type,
+              entity_name: e.entity_name,
+              details: (e.details as Record<string, unknown>) ?? null,
+              created_at: e.created_at,
+            })),
+          );
+        } else {
+          setHistoryRows([]);
+        }
+      } catch {
+        if (!ac.signal.aborted) {
+          setHistoryRows([]);
+        }
+      } finally {
+        if (!ac.signal.aborted) {
+          setHistoryLoading(false);
+        }
       }
-      if (res.ok) {
-        const j = (await res.json()) as {
-          entries?: { id: string; user_id: string | null; action: string; entity_type: string; entity_name: string | null; details: unknown; created_at: string; user_name?: string }[];
-        };
-        setHistoryRows(
-          (j.entries ?? []).map((e) => ({
-            id: e.id,
-            user_name: e.user_name ?? "—",
-            action: e.action,
-            entity_type: e.entity_type,
-            entity_name: e.entity_name,
-            details: (e.details as Record<string, unknown>) ?? null,
-            created_at: e.created_at,
-          })),
-        );
-      } else {
-        setHistoryRows([]);
-      }
-      setHistoryLoading(false);
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
+      setHistoryLoading(false);
     };
   }, [canManage, id, historyOpen]);
+
+  useEffect(() => {
+    return () => {
+      try {
+        router.prefetch("/contacts");
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [router]);
 
   const c = contact;
   const w = buf ?? c;
