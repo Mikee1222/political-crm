@@ -14,6 +14,8 @@ import {
 } from "@/lib/csv-import-mapping";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const BATCH = 30;
 
@@ -49,6 +51,7 @@ function StepDots({ current }: { current: number }) {
 }
 
 export function ContactsImportWizard({ onImported }: Props) {
+  const { showToast } = useFormToast();
   const [fileInputKey, setFileInputKey] = useState(0);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -108,7 +111,9 @@ export function ContactsImportWizard({ onImported }: Props) {
         const res = await fetchWithTimeout("/api/contacts/extract-pdf", { method: "POST", body: formData });
         if (!res.ok) {
           const j = (await res.json().catch(() => ({}))) as { error?: string };
-          setErrMsg(j.error ?? "Αποτυχία εξαγωγής PDF");
+          const msg = j.error ?? "Αποτυχία εξαγωγής PDF";
+          setErrMsg(msg);
+          showToast(msg, "error");
           return;
         }
         const { text = "" } = (await res.json()) as { text: string; pages?: number };
@@ -140,7 +145,9 @@ export function ContactsImportWizard({ onImported }: Props) {
       const text = await file.text();
       const parsed = tryParseDelimited(text);
       if (!parsed || parsed.data.length === 0) {
-        setErrMsg("Δεν αναλύθηκε αρχείο. Δοκιμάστε CSV (διαχωριστή , ; ή tab).");
+        const msg = "Δεν αναλύθηκε αρχείο. Δοκιμάστε CSV (διαχωριστή , ; ή tab).";
+        setErrMsg(msg);
+        showToast(msg, "error");
         return;
       }
       setFields(parsed.fields);
@@ -156,7 +163,9 @@ export function ContactsImportWizard({ onImported }: Props) {
       setParseNote(null);
       setOpen(true);
     } catch {
-      setErrMsg("Σφάλμα ανάγνωσης αρχείου.");
+      const msg = "Σφάλμα ανάγνωσης αρχείου.";
+      setErrMsg(msg);
+      showToast(msg, "error");
     }
   };
 
@@ -178,7 +187,9 @@ export function ContactsImportWizard({ onImported }: Props) {
 
   const runImport = useCallback(async () => {
     if (mappedRows.length === 0) {
-      setErrMsg("Καμία έγκυρη γραμμή με τηλέφωνο.");
+      const msg = "Καμία έγκυρη γραμμή με τηλέφωνο.";
+      setErrMsg(msg);
+      showToast(msg, "error");
       return;
     }
     setErrMsg(null);
@@ -202,7 +213,9 @@ export function ContactsImportWizard({ onImported }: Props) {
         error?: string;
       };
       if (!res.ok) {
-        setErrMsg(j.error ?? "Σφάλμα API");
+        const msg = j.error ?? "Σφάλμα API";
+        setErrMsg(msg);
+        showToast(msg, "error");
         setImporting(false);
         return;
       }
@@ -219,7 +232,12 @@ export function ContactsImportWizard({ onImported }: Props) {
     setResult({ inserted, errors, errorDetails });
     setStep(4);
     onImported();
-  }, [mappedRows, onImported]);
+    if (inserted > 0) {
+      showToast(`Ολοκληρώθηκε: ${inserted} επαφές${errors ? `, ${errors} σφάλματα` : ""}.`, "success");
+    } else {
+      showToast("Η εισαγωγή ολοκληρώθηκε χωρίς νέες εγγραφές.", "error");
+    }
+  }, [mappedRows, onImported, showToast]);
 
   if (typeof document === "undefined") {
     return null;
@@ -358,8 +376,9 @@ export function ContactsImportWizard({ onImported }: Props) {
                           <div key={f} className="grid gap-2 sm:grid-cols-[1fr,auto] sm:items-center">
                             <p className="min-w-0 break-words text-sm font-medium text-[#F0F4FF]">«{f}»</p>
                             <div className="relative w-full min-w-0 sm:max-w-[320px]">
-                              <select
+                              <HqSelect
                                 className={lux.select + " w-full !text-sm"}
+                                wrapperClassName="w-full min-w-0 sm:max-w-[320px]"
                                 value={mapping[f] ?? "ignore"}
                                 onChange={(e) => setMap(f, e.target.value as CrmFieldId)}
                               >
@@ -368,7 +387,7 @@ export function ContactsImportWizard({ onImported }: Props) {
                                     {crmFieldLabel(id)}
                                   </option>
                                 ))}
-                              </select>
+                              </HqSelect>
                             </div>
                           </div>
                         ))}

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Activity, Filter, Phone, User, FileText, Megaphone, Loader2 } from "lucide-react";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { fmtTime } from "./alexandra-chat-helpers";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const ACTION_OPTS: { value: string; label: string }[] = [
   { value: "", label: "Όλες" },
@@ -36,6 +38,7 @@ type Row = {
 };
 
 export function AlexandraActivityPanel() {
+  const { showToast } = useFormToast();
   const [filter, setFilter] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,18 +53,22 @@ export function AlexandraActivityPanel() {
       const res = await fetchWithTimeout(`/api/alexandra/activity-history?${q}`, { timeoutMs: CLIENT_FETCH_TIMEOUT_MS });
       const j = (await res.json()) as { items?: Row[]; error?: string };
       if (!res.ok) {
-        setErr(j.error || "Σφάλμα");
+        const msg = j.error || "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         setRows([]);
         return;
       }
       setRows(j.items ?? []);
     } catch {
-      setErr("Δίκτυο");
+      const msg = "Δίκτυο";
+      setErr(msg);
+      showToast(msg, "error");
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, showToast]);
 
   useEffect(() => {
     void load();
@@ -74,17 +81,18 @@ export function AlexandraActivityPanel() {
           <Filter className="mr-1 inline h-3 w-3" aria-hidden />
           Τύπος
         </label>
-        <select
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+        <HqSelect
+          className="w-full !rounded-lg !border-[var(--border)] !bg-[var(--bg-elevated)] !px-2 !py-1.5 !text-xs text-[var(--text-primary)]"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
+          aria-label="Τύπος ενέργειας"
         >
           {ACTION_OPTS.map((o) => (
             <option key={o.value || "all"} value={o.value}>
               {o.label}
             </option>
           ))}
-        </select>
+        </HqSelect>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
         {loading && (

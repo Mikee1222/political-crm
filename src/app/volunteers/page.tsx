@@ -9,6 +9,9 @@ import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { PageHeader } from "@/components/ui/page-header";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type V = {
   id: string;
@@ -39,14 +42,18 @@ function roleStyle(role: string | null): { border: string; bg: string; label: st
 }
 
 function VolunteersBody() {
+  const { showToast } = useFormToast();
   const { profile } = useProfile();
   const can = hasMinRole(profile?.role, "manager");
   const router = useRouter();
   const [list, setList] = useState<V[]>([]);
   const [nd, setNd] = useState({ first_name: "", last_name: "", phone: "" });
+  const [nvOpen, setNvOpen] = useState(false);
+  const [nvSaving, setNvSaving] = useState(false);
   const [tOpen, setTOpen] = useState(false);
   const [sel, setSel] = useState<V | null>(null);
   const [t, setT] = useState({ title: "", due: "" });
+  const [taskSaving, setTaskSaving] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetchWithTimeout("/api/volunteers");
@@ -152,7 +159,15 @@ function VolunteersBody() {
       </div>
 
       <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-3">
-        <div className="grid w-full min-w-0 max-w-2xl grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+        <button type="button" className={lux.btnPrimary + " inline-flex items-center gap-1.5 shrink-0"} onClick={() => setNvOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Νέος εθελοντής
+        </button>
+      </div>
+
+      <CenteredModal open={nvOpen} onClose={() => setNvOpen(false)} className="!max-w-lg !p-5" ariaLabel="Νέος εθελοντής">
+        <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">Νέος εθελοντής</h3>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <input
             className={lux.input}
             placeholder="Όνομα"
@@ -172,33 +187,52 @@ function VolunteersBody() {
             onChange={(e) => setNd((x) => ({ ...x, phone: e.target.value }))}
           />
         </div>
-        <button
-          type="button"
-          className={lux.btnPrimary + " inline-flex items-center gap-1.5 shrink-0"}
-          onClick={async () => {
-            if (!nd.first_name.trim() || !nd.last_name.trim() || !nd.phone.trim()) return;
-            const res = await fetchWithTimeout("/api/contacts", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...nd,
-                call_status: "Pending",
-                is_volunteer: true,
-                priority: "Medium",
-              }),
-            });
-            const j = (await res.json().catch(() => ({}))) as { contact?: { id: string } };
-            if (j.contact?.id) {
-              setNd({ first_name: "", last_name: "", phone: "" });
-              void load();
-              router.push(`/contacts/${j.contact.id}`);
-            }
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Νέος εθελοντής
-        </button>
-      </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className={lux.btnSecondary} onClick={() => setNvOpen(false)}>
+            Άκυρο
+          </button>
+          <FormSubmitButton
+            type="button"
+            variant="gold"
+            loading={nvSaving}
+            onClick={async () => {
+              if (!nd.first_name.trim() || !nd.last_name.trim() || !nd.phone.trim()) {
+                showToast("Συμπληρώστε όνομα, επίθετο και τηλέφωνο.", "error");
+                return;
+              }
+              setNvSaving(true);
+              try {
+                const res = await fetchWithTimeout("/api/contacts", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    ...nd,
+                    call_status: "Pending",
+                    is_volunteer: true,
+                    priority: "Medium",
+                  }),
+                });
+                const j = (await res.json().catch(() => ({}))) as { contact?: { id: string }; error?: string };
+                if (!res.ok || !j.contact?.id) {
+                  showToast(j.error ?? "Αποτυχία δημιουργίας.", "error");
+                  return;
+                }
+                showToast("Η επαφή-εθελοντής δημιουργήθηκε.", "success");
+                setNd({ first_name: "", last_name: "", phone: "" });
+                setNvOpen(false);
+                void load();
+                router.push(`/contacts/${j.contact.id}`);
+              } catch {
+                showToast("Σφάλμα δικτύου.", "error");
+              } finally {
+                setNvSaving(false);
+              }
+            }}
+          >
+            Δημιουργία
+          </FormSubmitButton>
+        </div>
+      </CenteredModal>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {list.map((v) => {
@@ -264,42 +298,57 @@ function VolunteersBody() {
       </div>
 
       {tOpen && sel && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="dialog">
-          <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-2xl">
-            <p className="text-sm font-medium">
-              {sel.first_name} {sel.last_name}
-            </p>
-            <input
-              className={lux.input + " mt-2"}
-              placeholder="Τίτλος εργασίας"
-              value={t.title}
-              onChange={(e) => setT((x) => ({ ...x, title: e.target.value }))}
-            />
-            <input className={lux.input + " mt-1"} type="date" value={t.due} onChange={(e) => setT((x) => ({ ...x, due: e.target.value }))} />
-            <div className="mt-2 flex justify-end gap-2">
-              <button type="button" className={lux.btnSecondary} onClick={() => setTOpen(false)}>
-                Άκυρο
-              </button>
-              <button
-                type="button"
-                className={lux.btnPrimary}
-                onClick={async () => {
-                  if (!t.title.trim()) return;
-                  await fetchWithTimeout("/api/tasks", {
+        <CenteredModal open onClose={() => setTOpen(false)} className="!max-w-sm !p-5" ariaLabel="Νέα εργασία εθελοντή">
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {sel.first_name} {sel.last_name}
+          </p>
+          <input
+            className={lux.input + " mt-2"}
+            placeholder="Τίτλος εργασίας"
+            value={t.title}
+            onChange={(e) => setT((x) => ({ ...x, title: e.target.value }))}
+          />
+          <input className={lux.input + " mt-1"} type="date" value={t.due} onChange={(e) => setT((x) => ({ ...x, due: e.target.value }))} />
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" className={lux.btnSecondary} onClick={() => setTOpen(false)}>
+              Άκυρο
+            </button>
+            <FormSubmitButton
+              type="button"
+              variant="gold"
+              loading={taskSaving}
+              onClick={async () => {
+                if (!t.title.trim()) {
+                  showToast("Συμπληρώστε τίτλο εργασίας.", "error");
+                  return;
+                }
+                setTaskSaving(true);
+                try {
+                  const res = await fetchWithTimeout("/api/tasks", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ contact_id: sel.id, title: t.title.trim(), due_date: t.due || null }),
                   });
+                  if (!res.ok) {
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
+                    showToast(j.error ?? "Αποτυχία.", "error");
+                    return;
+                  }
+                  showToast("Η εργασία δημιουργήθηκε.", "success");
                   setTOpen(false);
                   setT({ title: "", due: "" });
                   void load();
-                }}
-              >
-                OK
-              </button>
-            </div>
+                } catch {
+                  showToast("Σφάλμα δικτύου.", "error");
+                } finally {
+                  setTaskSaving(false);
+                }
+              }}
+            >
+              OK
+            </FormSubmitButton>
           </div>
-        </div>
+        </CenteredModal>
       )}
     </div>
   );

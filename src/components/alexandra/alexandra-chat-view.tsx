@@ -24,6 +24,9 @@ import {
 } from "./alexandra-chat-helpers";
 import { useAlexandraSpeechToText } from "@/hooks/use-alexandra-speech-to-text";
 import { useAlexandraChat, type BriefingToday } from "./alexandra-chat-provider";
+import { AlexandraActivityPanel } from "./alexandra-activity-panel";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 function isBriefingReady(b: BriefingToday | "loading" | null): b is BriefingToday {
   return b != null && b !== "loading";
@@ -69,9 +72,9 @@ function BriefingDetails({ b }: { b: BriefingToday }) {
     </>
   );
 }
-import { AlexandraActivityPanel } from "./alexandra-activity-panel";
 
 export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
+  const { showToast } = useFormToast();
   const {
     role, conversations, selectedId, setSelectedId, messages, loading,
     listLoading, messagesLoading, input, setInput, error, toDelete, setToDelete,
@@ -141,7 +144,9 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
         const buf = await file.arrayBuffer();
         const p = parseSpreadsheetToRows(buf);
         if (p.columns.length === 0 || p.rows.length === 0) {
-          setError("Κενό αρχείο· δεν βρέθηκαν γραμμές");
+          const msg = "Κενό αρχείο· δεν βρέθηκαν γραμμές";
+          setError(msg);
+          showToast(msg, "error");
           return;
         }
         let convId: string | null = selectedId;
@@ -160,11 +165,14 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           sheetName: p.sheetName,
         });
         void send(text, convId);
+        showToast("Το υπολογιστικό φύλλο φορτώθηκε για προεπισκόπηση.", "success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Σφάλμα αναγνώρισης αρχείου");
+        const msg = err instanceof Error ? err.message : "Σφάλμα αναγνώρισης αρχείου";
+        setError(msg);
+        showToast(msg, "error");
       }
     },
-    [canImportSpreadsheet, newConversation, selectedId, send, setError, setSpreadsheetImport],
+    [canImportSpreadsheet, newConversation, selectedId, send, setError, setSpreadsheetImport, showToast],
   );
 
   const onChatDrop = useCallback(
@@ -176,13 +184,16 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
       if (!file) return;
       const ext = file.name.toLowerCase();
       if (!/\.(xlsx|xls|csv)$/.test(ext) && !file.type.includes("spreadsheet") && !file.type.includes("csv")) {
+        showToast("Μόνο αρχεία .xlsx, .xls ή .csv.", "error");
         return;
       }
       try {
         const buf = await file.arrayBuffer();
         const p = parseSpreadsheetToRows(buf);
         if (p.columns.length === 0 || p.rows.length === 0) {
-          setError("Κενό αρχείο");
+          const msg = "Κενό αρχείο";
+          setError(msg);
+          showToast(msg, "error");
           return;
         }
         let convId: string | null = selectedId;
@@ -201,11 +212,14 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           sheetName: p.sheetName,
         });
         void send(text, convId);
+        showToast("Το υπολογιστικό φύλλο φορτώθηκε για προεπισκόπηση.", "success");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Σφάλμα");
+        const msg = err instanceof Error ? err.message : "Σφάλμα";
+        setError(msg);
+        showToast(msg, "error");
       }
     },
-    [canImportSpreadsheet, newConversation, selectedId, send, setError, setSpreadsheetImport],
+    [canImportSpreadsheet, newConversation, selectedId, send, setError, setSpreadsheetImport, showToast],
   );
 
   return (
@@ -379,9 +393,10 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           {mode === "mini" && (
             <div className="flex shrink-0 items-center gap-1.5 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2 py-1.5">
               <label className="sr-only" htmlFor="alexa-mini-conv">Συνομιλία</label>
-              <select
+              <HqSelect
                 id="alexa-mini-conv"
-                className="h-8 min-w-0 flex-1 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 text-xs text-[var(--text-primary)] transition duration-200"
+                wrapperClassName="min-w-0 flex-1"
+                className="!h-8 min-w-0 flex-1 cursor-pointer !rounded-lg !border-[var(--border)] !bg-[var(--bg-elevated)] !px-2 !py-1 !text-xs text-[var(--text-primary)] transition duration-200"
                 value={selectedId ?? ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -395,7 +410,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                     {c.title || "Νέα συνομιλία"}
                   </option>
                 ))}
-              </select>
+              </HqSelect>
               <button
                 type="button"
                 onClick={() => void newConversation()}

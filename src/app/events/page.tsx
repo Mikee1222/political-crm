@@ -7,6 +7,10 @@ import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { PageHeader } from "@/components/ui/page-header";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type Ev = {
   id: string;
@@ -100,6 +104,8 @@ function EventsBody() {
   const [detail, setDetail] = useState<Ev | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [f, setF] = useState({ title: "", date: "", location: "", type: "Εκδήλωση" });
+  const [createSaving, setCreateSaving] = useState(false);
+  const { showToast } = useFormToast();
 
   const load = useCallback(async () => {
     const r = await fetchWithTimeout("/api/events");
@@ -219,81 +225,106 @@ function EventsBody() {
         </div>
       )}
 
-      {openCreate && (
-        <div className="fixed inset-0 z-[200] flex min-h-0 items-center justify-center overflow-y-auto overflow-x-hidden p-4 backdrop-blur-sm [background:var(--overlay-scrim)]" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Νέα εκδήλωση</h3>
-              <button
-                type="button"
-                className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]"
-                onClick={() => setOpenCreate(false)}
-                aria-label="Κλείσιμο"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="mt-3 space-y-2">
-              <input
-                className={lux.input}
-                placeholder="Τίτλος"
-                value={f.title}
-                onChange={(e) => setF((x) => ({ ...x, title: e.target.value }))}
-              />
-              <input className={lux.input} type="date" value={f.date} onChange={(e) => setF((x) => ({ ...x, date: e.target.value }))} />
-              <input
-                className={lux.input}
-                placeholder="Τοποθεσία"
-                value={f.location}
-                onChange={(e) => setF((x) => ({ ...x, location: e.target.value }))}
-              />
-              <select className={lux.select} value={f.type} onChange={(e) => setF((x) => ({ ...x, type: e.target.value }))}>
-                {["Εκδήλωση", "Συνάντηση", "Προεκλογικό", "Άλλο"].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className={lux.btnSecondary} onClick={() => setOpenCreate(false)}>
-                Άκυρο
-              </button>
-              <button
-                type="button"
-                className={lux.btnPrimary}
-                onClick={async () => {
-                  if (!f.title.trim() || !f.date) {
-                    return;
-                  }
-                  await fetchWithTimeout("/api/events", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(f),
-                  });
-                  setOpenCreate(false);
-                  setF({ title: "", date: "", location: "", type: "Εκδήλωση" });
-                  void load();
-                }}
-              >
-                Αποθήκευση
-              </button>
-            </div>
+      <CenteredModal
+        open={openCreate}
+        onClose={() => setOpenCreate(false)}
+        className="max-w-md p-6"
+        ariaLabel="Νέα εκδήλωση"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Νέα εκδήλωση</h3>
+          <button
+            type="button"
+            className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]"
+            onClick={() => setOpenCreate(false)}
+            aria-label="Κλείσιμο"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-3 grid gap-4">
+          <div>
+            <label className={lux.label}>Τίτλος</label>
+            <input
+              className={lux.input}
+              placeholder="Τίτλος"
+              value={f.title}
+              onChange={(e) => setF((x) => ({ ...x, title: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className={lux.label}>Ημερομηνία</label>
+            <input
+              className={[lux.input, lux.dateInput].join(" ")}
+              type="date"
+              value={f.date}
+              onChange={(e) => setF((x) => ({ ...x, date: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className={lux.label}>Τοποθεσία</label>
+            <input
+              className={lux.input}
+              placeholder="Τοποθεσία"
+              value={f.location}
+              onChange={(e) => setF((x) => ({ ...x, location: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className={lux.label}>Τύπος</label>
+            <HqSelect value={f.type} onChange={(e) => setF((x) => ({ ...x, type: e.target.value }))}>
+              {["Εκδήλωση", "Συνάντηση", "Προεκλογικό", "Άλλο"].map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </HqSelect>
           </div>
         </div>
-      )}
-
-      {detail && (
-        <div
-          className="fixed inset-0 z-[200] flex min-h-0 items-center justify-center overflow-y-auto overflow-x-hidden p-4 backdrop-blur-sm [background:var(--overlay-scrim)]"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setDetail(null)}
-        >
-          <div
-            className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl"
-            onClick={(ev) => ev.stopPropagation()}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className={lux.btnSecondary} onClick={() => setOpenCreate(false)} disabled={createSaving}>
+            Άκυρο
+          </button>
+          <FormSubmitButton
+            type="button"
+            variant="gold"
+            loading={createSaving}
+            onClick={async () => {
+              if (!f.title.trim() || !f.date) {
+                showToast("Συμπληρώστε τίτλο και ημερομηνία.", "error");
+                return;
+              }
+              setCreateSaving(true);
+              try {
+                const res = await fetchWithTimeout("/api/events", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(f),
+                });
+                const j = (await res.json().catch(() => ({}))) as { error?: string };
+                if (!res.ok) {
+                  showToast(j.error ?? "Σφάλμα", "error");
+                  return;
+                }
+                showToast("Η εκδήλωση δημιουργήθηκε.", "success");
+                setOpenCreate(false);
+                setF({ title: "", date: "", location: "", type: "Εκδήλωση" });
+                void load();
+              } catch {
+                showToast("Σφάλμα δικτύου.", "error");
+              } finally {
+                setCreateSaving(false);
+              }
+            }}
           >
+            Αποθήκευση
+          </FormSubmitButton>
+        </div>
+      </CenteredModal>
+
+      <CenteredModal open={!!detail} onClose={() => setDetail(null)} className="max-w-lg overflow-hidden p-0" ariaLabel="Εκδήλωση">
+        {detail ? (
+          <>
             <div className="relative h-40 w-full overflow-hidden border-b border-[var(--border)] bg-gradient-to-br from-[#0A1628] to-[#1e5fa8]/50">
               <div className="absolute left-4 top-3 flex h-16 w-14 flex-col items-center justify-center rounded-xl border border-white/10 bg-[#0a0f1a]/90 px-1">
                 <span className="text-[10px] font-bold uppercase text-[#C9A84C]">
@@ -348,9 +379,9 @@ function EventsBody() {
                 </>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </CenteredModal>
     </div>
   );
 }

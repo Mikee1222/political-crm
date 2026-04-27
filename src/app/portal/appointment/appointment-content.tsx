@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const ND = "#003476";
 
@@ -13,6 +14,7 @@ const label = "mb-1.5 block text-xs font-bold uppercase tracking-[0.08em] text-[
 const input = "w-full rounded-xl border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-[#1A1A2E]";
 
 export function PortalAppointmentContent() {
+  const { showToast } = useFormToast();
   const sp = useSearchParams();
   const contact = sp.get("contact") ?? "";
   const phone = sp.get("phone") ?? "";
@@ -28,6 +30,7 @@ export function PortalAppointmentContent() {
   const [pick, setPick] = useState<Slot | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
+  const [booking, setBooking] = useState(false);
 
   const loadSlots = useCallback(async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -38,7 +41,9 @@ export function PortalAppointmentContent() {
     const res = await fetchWithTimeout(`/api/portal/appointments/slots?date=${encodeURIComponent(date)}`);
     const j = (await res.json().catch(() => ({}))) as { slots?: Slot[]; error?: string };
     if (!res.ok) {
-      setErr(j.error ?? "Σφάλμα");
+      const msg = j.error ?? "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
       setSlots([]);
       setLoading(false);
       return;
@@ -46,7 +51,7 @@ export function PortalAppointmentContent() {
     setSlots(j.slots ?? []);
     setPick(null);
     setLoading(false);
-  }, [date]);
+  }, [date, showToast]);
 
   useEffect(() => {
     void loadSlots();
@@ -55,28 +60,42 @@ export function PortalAppointmentContent() {
   const book = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contact || !pick) {
-      setErr("Συμπληρώστε όλα τα πεδία");
+      const msg = "Συμπληρώστε όλα τα πεδία";
+      setErr(msg);
+      showToast(msg, "error");
       return;
     }
     setErr(null);
-    const res = await fetchWithTimeout("/api/portal/appointments/book", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contact_id: contact,
-        phone: phoneIn,
-        name: name || "—",
-        reason,
-        start: pick.start,
-        end: pick.end,
-      }),
-    });
-    const j = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) {
-      setErr(j.error ?? "Σφάλμα");
-      return;
+    setBooking(true);
+    try {
+      const res = await fetchWithTimeout("/api/portal/appointments/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: contact,
+          phone: phoneIn,
+          name: name || "—",
+          reason,
+          start: pick.start,
+          end: pick.end,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
+        return;
+      }
+      showToast("Το αίτημα ραντεβού στάλθηκε.", "success");
+      setOk(true);
+    } catch {
+      const msg = "Σφάλμα δικτύου";
+      setErr(msg);
+      showToast(msg, "error");
+    } finally {
+      setBooking(false);
     }
-    setOk(true);
   };
 
   if (ok) {
@@ -182,9 +201,9 @@ export function PortalAppointmentContent() {
             type="submit"
             className="w-full rounded-xl py-3.5 text-sm font-extrabold text-white disabled:opacity-50"
             style={{ background: ND }}
-            disabled={!pick}
+            disabled={!pick || booking}
           >
-            Αίτημα ραντεβού
+            {booking ? "Υποβολή…" : "Αίτημα ραντεβού"}
           </button>
         </form>
       </div>

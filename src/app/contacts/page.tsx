@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 type Contact = {
@@ -435,7 +436,9 @@ function ContactsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bulkWaMessage, setBulkWaMessage] = useState("");
+  const [savedFilterMenuKey, setSavedFilterMenuKey] = useState(0);
   const filtersUrlKeyRef = useRef<string | null>(null);
+  const { showToast: showListToast } = useFormToast();
 
   const groupNameToId = useMemo(() => {
     const m = new Map<string, string>();
@@ -609,9 +612,20 @@ function ContactsPage() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        setBulkErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setBulkErr(msg);
+        showListToast(msg, "error");
         return;
       }
+      const okMsg =
+        action === "delete"
+          ? "Οι επαφές διαγράφηκαν."
+          : action === "update_status"
+            ? "Η κατάσταση κλήσης ενημερώθηκε."
+            : action === "add_to_campaign"
+              ? "Οι επαφές προστέθηκαν στην καμπάνια."
+              : "Η αποστολή WhatsApp ολοκληρώθηκε.";
+      showListToast(okMsg, "success");
       setSelected(new Set());
       if (action === "delete") setDeleteOpen(false);
       await load();
@@ -723,13 +737,12 @@ function ContactsPage() {
           <label className={lux.label} htmlFor="f-saved-m">
             Αποθηκευμένα φίλτρα
           </label>
-          <select
+          <HqSelect
+            key={savedFilterMenuKey}
             id="f-saved-m"
-            className={lux.select}
             defaultValue=""
             onChange={(e) => {
               const v = e.target.value;
-              e.currentTarget.value = "";
               if (!v) return;
               const row = savedFilters.find((r) => r.id === v);
               if (row) {
@@ -737,6 +750,7 @@ function ContactsPage() {
                 setF(next);
                 startTransition(() => router.replace(buildContactsPageUrl(next), { scroll: false }));
               }
+              setSavedFilterMenuKey((k) => k + 1);
             }}
           >
             <option value="">— επιλέξτε —</option>
@@ -746,7 +760,7 @@ function ContactsPage() {
                 {s.description ? ` — ${s.description}` : ""}
               </option>
             ))}
-          </select>
+          </HqSelect>
         </div>
         <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,11.5rem),1fr))]">
           <div className="min-w-0 max-w-full sm:col-span-2">
@@ -804,53 +818,38 @@ function ContactsPage() {
             <label className={lux.label} htmlFor="f-area">
               Περιοχή
             </label>
-            <select
-              id="f-area"
-              className={lux.select}
-              value={f.area}
-              onChange={(e) => patch({ area: e.target.value })}
-            >
+            <HqSelect id="f-area" value={f.area} onChange={(e) => patch({ area: e.target.value })}>
               <option value="">Όλες</option>
               {areas.map((item) => (
                 <option key={item} value={item}>
                   {item}
                 </option>
               ))}
-            </select>
+            </HqSelect>
           </div>
           <div className="min-w-0 max-w-full">
             <label className={lux.label} htmlFor="f-muni">
               Δήμος
             </label>
-            <select
-              id="f-muni"
-              className={lux.select}
-              value={f.municipality}
-              onChange={(e) => patch({ municipality: e.target.value })}
-            >
+            <HqSelect id="f-muni" value={f.municipality} onChange={(e) => patch({ municipality: e.target.value })}>
               <option value="">Όλοι</option>
               {MUNICIPALITIES.map((m) => (
                 <option key={m.name} value={m.name}>
                   {m.name}
                 </option>
               ))}
-            </select>
+            </HqSelect>
           </div>
           <div className="min-w-0 max-w-full">
             <label className={lux.label} htmlFor="f-pri">
               Προτεραιότητα
             </label>
-            <select
-              id="f-pri"
-              className={lux.select}
-              value={f.priority}
-              onChange={(e) => patch({ priority: e.target.value })}
-            >
+            <HqSelect id="f-pri" value={f.priority} onChange={(e) => patch({ priority: e.target.value })}>
               <option value="">Όλες</option>
               <option value="High">Υψηλή</option>
               <option value="Medium">Μεσαία</option>
               <option value="Low">Χαμηλή</option>
-            </select>
+            </HqSelect>
           </div>
           <div className="min-w-0 max-w-full">
             <label className={lux.label} htmlFor="f-tag">
@@ -919,17 +918,12 @@ function ContactsPage() {
             <label className={lux.label} htmlFor="f-score">
               Σκορ (πειθω)
             </label>
-            <select
-              id="f-score"
-              className={lux.select}
-              value={f.score_tier}
-              onChange={(e) => patch({ score_tier: e.target.value })}
-            >
+            <HqSelect id="f-score" value={f.score_tier} onChange={(e) => patch({ score_tier: e.target.value })}>
               <option value="">Όλα</option>
               <option value="low">0–33 (χαμηλό)</option>
               <option value="mid">34–66 (μέτριο)</option>
               <option value="high">67–100 (υψηλό)</option>
-            </select>
+            </HqSelect>
           </div>
           {canManage && (
             <div className="min-w-0 max-w-full flex items-end">
@@ -1274,9 +1268,9 @@ function ContactsPage() {
                 <>
                   <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:items-center">
                     <label className="sr-only" htmlFor="bulk-status">Αλλαγή status</label>
-                    <select
+                    <HqSelect
                       id="bulk-status"
-                      className={lux.select + " !h-9 w-full sm:min-w-[11rem]"}
+                      className="!h-9 w-full sm:min-w-[11rem]"
                       value={bulkStatus}
                       onChange={(e) => setBulkStatus(e.target.value)}
                     >
@@ -1284,7 +1278,7 @@ function ContactsPage() {
                       <option value="Positive">Θετικός</option>
                       <option value="Negative">Αρνητικός</option>
                       <option value="No Answer">Δεν απάντησε</option>
-                    </select>
+                    </HqSelect>
                     <button
                       type="button"
                       className={lux.btnPrimary + " w-full !py-2 text-xs sm:w-auto sm:!px-3"}
@@ -1296,9 +1290,9 @@ function ContactsPage() {
                   </div>
                   <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:items-center">
                     <label className="sr-only" htmlFor="bulk-camp">Καμπάνια</label>
-                    <select
+                    <HqSelect
                       id="bulk-camp"
-                      className={lux.select + " !h-9 w-full sm:min-w-[12rem]"}
+                      className="!h-9 w-full sm:min-w-[12rem]"
                       value={bulkCampaign}
                       onChange={(e) => setBulkCampaign(e.target.value)}
                     >
@@ -1308,7 +1302,7 @@ function ContactsPage() {
                           {cc.name}
                         </option>
                       ))}
-                    </select>
+                    </HqSelect>
                     <button
                       type="button"
                       className={lux.btnSecondary + " w-full !py-2 text-xs sm:w-auto sm:!px-3"}
@@ -1640,12 +1634,7 @@ function CreateContactModal({
               <label className={lux.label} htmlFor="new-contact-group">
                 Ομάδα
               </label>
-              <select
-                id="new-contact-group"
-                className={lux.select}
-                value={form.group_id}
-                onChange={(e) => setForm({ ...form, group_id: e.target.value })}
-              >
+              <HqSelect id="new-contact-group" value={form.group_id} onChange={(e) => setForm({ ...form, group_id: e.target.value })}>
                 <option value="">— Χωρίς ομάδα —</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -1653,7 +1642,7 @@ function CreateContactModal({
                     {g.year != null ? ` (${g.year})` : ""}
                   </option>
                 ))}
-              </select>
+              </HqSelect>
             </div>
             <FormField label="Email" value={form.email} placeholder="email@example.com" onChange={(v) => setForm({ ...form, email: v })} />
             <FormField label="Περιοχή" value={form.area} placeholder="Περιοχή / περιφέρεια" onChange={(v) => setForm({ ...form, area: v })} />
@@ -1701,17 +1690,10 @@ function CreateContactModal({
             />
             <div>
               <label className={lux.label}>Επιρροή</label>
-              <div className="relative">
-                <select
-                  className={lux.select}
-                  value={form.influence ? "Ναι" : "Όχι"}
-                  onChange={(e) => setForm({ ...form, influence: e.target.value === "Ναι" })}
-                >
-                  <option>Όχι</option>
-                  <option>Ναι</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-              </div>
+              <HqSelect value={form.influence ? "Ναι" : "Όχι"} onChange={(e) => setForm({ ...form, influence: e.target.value === "Ναι" })}>
+                <option>Όχι</option>
+                <option>Ναι</option>
+              </HqSelect>
             </div>
             <div className="md:col-span-2">
               <label className={lux.label}>Ετικέτες (διαχωρισμός με κόμμα)</label>
@@ -1877,21 +1859,14 @@ function SelectFormField({
   return (
     <div>
       <label className={lux.label}>{label}</label>
-      <div className="relative">
-        <select className={lux.select} value={value} onChange={(e) => onChange(e.target.value)}>
-          {allowEmpty && (
-            <option value="">
-              {emptyLabel}
-            </option>
-          )}
-          {options.map((o) => (
-            <option key={o} value={o}>
-              {valueLabels?.[o] ?? o}
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-      </div>
+      <HqSelect value={value} onChange={(e) => onChange(e.target.value)}>
+        {allowEmpty && <option value="">{emptyLabel}</option>}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {valueLabels?.[o] ?? o}
+          </option>
+        ))}
+      </HqSelect>
     </div>
   );
 }

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 
 type LogRow = {
@@ -15,6 +17,7 @@ type LogRow = {
 };
 
 export function EmailSettingsSection() {
+  const { showToast } = useFormToast();
   const [log, setLog] = useState<LogRow[] | null>(null);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -69,13 +72,18 @@ export function EmailSettingsSection() {
               const res = await fetchWithTimeout("/api/email/test", { method: "POST" });
               const j = (await res.json().catch(() => ({}))) as { error?: string; to?: string };
               if (!res.ok) {
-                setErr(j.error ?? "Σφάλμα");
+                const msg = j.error ?? "Σφάλμα";
+                setErr(msg);
+                showToast(msg, "error");
                 return;
               }
-              setOk(j.to ? `Δοκιμαστικό email στο ${j.to}` : "Στάλθηκε.");
+              const msg = j.to ? `Δοκιμαστικό email στο ${j.to}` : "Στάλθηκε.";
+              setOk(msg);
+              showToast(msg, "success");
               void load();
             } catch {
               setErr("Δίκτυο");
+              showToast("Δίκτυο", "error");
             } finally {
               setSending(false);
             }
@@ -105,8 +113,9 @@ export function EmailSettingsSection() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div>
               <span className="text-xs text-[var(--text-muted)]">Ομάδα παραληπτών (προαιρετικό = όλοι)</span>
-              <select
-                className="mt-1 min-h-11 w-full max-w-xs rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 px-2"
+              <HqSelect
+                className="mt-1 min-h-11 w-full max-w-xs !rounded-lg !border-[var(--border)] !bg-[var(--bg-elevated)]/40"
+                wrapperClassName="mt-1 w-full max-w-xs"
                 value={gId}
                 onChange={(e) => setGId(e.target.value)}
                 aria-label="Ομάδα"
@@ -117,7 +126,7 @@ export function EmailSettingsSection() {
                     {g.name}
                   </option>
                 ))}
-              </select>
+              </HqSelect>
             </div>
             <button
               type="button"
@@ -126,6 +135,7 @@ export function EmailSettingsSection() {
               onClick={async () => {
                 if (!ns.trim() || !nhtml.trim()) {
                   setErr("Θέμα + περιεχόμενο");
+                  showToast("Συμπληρώστε θέμα και περιεχόμενο.", "error");
                   return;
                 }
                 setNews(true);
@@ -144,13 +154,18 @@ export function EmailSettingsSection() {
                   });
                   const j = (await res.json().catch(() => ({}))) as { error?: string; sent?: number; total?: number };
                   if (!res.ok) {
-                    setErr(j.error ?? "Σφάλμα");
+                    const msg = j.error ?? "Σφάλμα";
+                    setErr(msg);
+                    showToast(msg, "error");
                     return;
                   }
-                  setOk(`Στάλθηκαν ${j.sent ?? 0} από ${j.total ?? "?"}.`);
+                  const msg = `Στάλθηκαν ${j.sent ?? 0} από ${j.total ?? "?"}.`;
+                  setOk(msg);
+                  showToast(msg, "success");
                   void load();
                 } catch {
                   setErr("Δίκτυο");
+                  showToast("Δίκτυο", "error");
                 } finally {
                   setNews(false);
                 }

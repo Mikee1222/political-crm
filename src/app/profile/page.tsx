@@ -7,6 +7,9 @@ import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { PageHeader } from "@/components/ui/page-header";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { mergePreferences, type UserPreferences } from "@/lib/user-preferences";
 
 function sectionCard(title: string, children: ReactNode) {
@@ -19,6 +22,7 @@ function sectionCard(title: string, children: ReactNode) {
 }
 
 export default function ProfilePage() {
+  const { showToast } = useFormToast();
   const { profile, loading, refresh } = useProfile();
   const { setTheme, resolvedTheme } = useTheme();
   const [fullName, setFullName] = useState("");
@@ -77,15 +81,18 @@ export default function ProfilePage() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
       setOk("Αποθηκεύτηκε");
+      showToast("Αποθηκεύτηκε.", "success");
       await refresh();
     } finally {
       setSaving(false);
     }
-  }, [fullName, refresh]);
+  }, [fullName, refresh, showToast]);
 
   const savePreferences = useCallback(async () => {
     setErr(null);
@@ -106,15 +113,18 @@ export default function ProfilePage() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
       setOk("Οι προτιμήσεις αποθηκεύτηκαν");
+      showToast("Οι προτιμήσεις αποθηκεύτηκαν.", "success");
       await refresh();
     } finally {
       setPrefBusy(false);
     }
-  }, [lang, notif, refresh, resolvedTheme]);
+  }, [lang, notif, refresh, resolvedTheme, showToast]);
 
   const changeEmail = useCallback(async () => {
     setErr(null);
@@ -130,16 +140,20 @@ export default function ProfilePage() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
-      setOk(j.message ?? "Αιτήμα email εστάλη");
+      const okMsg = j.message ?? "Αιτήμα email εστάλη";
+      setOk(okMsg);
+      showToast(okMsg, "success");
       setNewEmail("");
       setNewEmail2("");
     } finally {
       setEmailBusy(false);
     }
-  }, [newEmail, newEmail2]);
+  }, [newEmail, newEmail2, showToast]);
 
   const changePassword = useCallback(async () => {
     setErr(null);
@@ -155,17 +169,20 @@ export default function ProfilePage() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
       setOk("Ο κωδικός άλλαξε");
+      showToast("Ο κωδικός άλλαξε.", "success");
       setCurPw("");
       setNewPw("");
       setNewPw2("");
     } finally {
       setPwBusy(false);
     }
-  }, [curPw, newPw, newPw2]);
+  }, [curPw, newPw, newPw2, showToast]);
 
   const onAvatar = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,16 +198,19 @@ export default function ProfilePage() {
         const res = await fetchWithTimeout("/api/profile/avatar", { method: "POST", body: fd, credentials: "same-origin" });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) {
-          setErr(j.error ?? "Αποτυχία μεταφόρτωσης");
+          const msg = j.error ?? "Αποτυχία μεταφόρτωσης";
+          setErr(msg);
+          showToast(msg, "error");
           return;
         }
         setOk("Η φωτογραφία ενημερώθηκε");
+        showToast("Η φωτογραφία ενημερώθηκε.", "success");
         await refresh();
       } finally {
         setAvatarUploading(false);
       }
     },
-    [refresh],
+    [refresh, showToast],
   );
 
   if (loading && !profile) {
@@ -226,9 +246,9 @@ export default function ProfilePage() {
               {profile?.email ?? "—"}
             </p>
           </div>
-          <button type="button" className={lux.btnPrimary} onClick={() => void savePersonal()} disabled={saving}>
-            {saving ? "Αποθήκευση…" : "Αποθήκευση στοιχείων"}
-          </button>
+          <FormSubmitButton type="button" variant="gold" loading={saving} onClick={() => void savePersonal()}>
+            Αποθήκευση στοιχείων
+          </FormSubmitButton>
         </div>,
       )}
 
@@ -281,14 +301,9 @@ export default function ProfilePage() {
             </label>
             <input id="p-e2" type="email" className={lux.input} value={newEmail2} onChange={(e) => setNewEmail2(e.target.value)} />
           </div>
-          <button
-            type="button"
-            className={lux.btnPrimary}
-            onClick={() => void changeEmail()}
-            disabled={emailBusy}
-          >
-            {emailBusy ? "Υποβολή…" : "Υποβολή αλλαγής email"}
-          </button>
+          <FormSubmitButton type="button" variant="gold" loading={emailBusy} onClick={() => void changeEmail()}>
+            Υποβολή αλλαγής email
+          </FormSubmitButton>
         </div>,
       )}
 
@@ -334,14 +349,9 @@ export default function ProfilePage() {
               onChange={(e) => setNewPw2(e.target.value)}
             />
           </div>
-          <button
-            type="button"
-            className={lux.btnPrimary}
-            onClick={() => void changePassword()}
-            disabled={pwBusy}
-          >
-            {pwBusy ? "Αποθήκευση…" : "Ενημέρωση κωδικού"}
-          </button>
+          <FormSubmitButton type="button" variant="gold" loading={pwBusy} onClick={() => void changePassword()}>
+            Ενημέρωση κωδικού
+          </FormSubmitButton>
         </div>,
       )}
 
@@ -357,7 +367,7 @@ export default function ProfilePage() {
             <label className={lux.label} htmlFor="p-lng">
               Γλώσσα διεπαφής
             </label>
-            <select
+            <HqSelect
               id="p-lng"
               className={lux.select}
               value={lang}
@@ -365,7 +375,7 @@ export default function ProfilePage() {
             >
               <option value="el">Ελληνικά</option>
               <option value="en">English</option>
-            </select>
+            </HqSelect>
           </div>
           <div className="space-y-2">
             <p className={lux.label}>Ειδοποιήσεις (τύποι)</p>
@@ -397,9 +407,9 @@ export default function ProfilePage() {
               SMS
             </label>
           </div>
-          <button type="button" className={lux.btnPrimary} onClick={() => void savePreferences()} disabled={prefBusy}>
-            {prefBusy ? "Αποθήκευση…" : "Αποθήκευση προτιμήσεων"}
-          </button>
+          <FormSubmitButton type="button" variant="gold" loading={prefBusy} onClick={() => void savePreferences()}>
+            Αποθήκευση προτιμήσεων
+          </FormSubmitButton>
         </div>,
       )}
     </div>

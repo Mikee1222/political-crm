@@ -7,6 +7,9 @@ import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { HqSelect } from "@/components/ui/hq-select";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type Rsvp = {
   id: string;
@@ -31,6 +34,7 @@ const rsvpBadge = (s: string) => {
 };
 
 function EventDetail() {
+  const { showToast } = useFormToast();
   const { id: raw } = useParams();
   const id = typeof raw === "string" ? raw : "";
   const { profile } = useProfile();
@@ -43,6 +47,7 @@ function EventDetail() {
   >([]);
   const [taskContactId, setTaskContactId] = useState("");
   const [newT, setNewT] = useState({ title: "", due: "" });
+  const [taskBusy, setTaskBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -174,11 +179,12 @@ function EventDetail() {
       <div>
         <h2 className="text-sm font-semibold">Ανάθεση εργασίας σε εθελοντή</h2>
         <div className="mt-2 max-w-md space-y-2">
-          <select
+          <HqSelect
             className={lux.select}
             value={taskContactId}
             onChange={(e) => setTaskContactId(e.target.value)}
             disabled={!rsvps.length}
+            aria-label="Εθελοντής για εργασία"
           >
             {rsvps.map((r) => (
               <option key={r.id} value={r.contact_id}>
@@ -187,7 +193,7 @@ function EventDetail() {
                   : r.contact_id}
               </option>
             ))}
-          </select>
+          </HqSelect>
           <input
             className={lux.input}
             placeholder="Τίτλος εργασίας"
@@ -201,25 +207,42 @@ function EventDetail() {
             onChange={(e) => setNewT((x) => ({ ...x, due: e.target.value }))}
           />
           {rsvps[0] ? (
-            <button
+            <FormSubmitButton
               type="button"
-              className={lux.btnPrimary}
+              variant="gold"
+              loading={taskBusy}
               onClick={async () => {
-                if (!newT.title.trim() || !taskContactId) return;
-                await fetchWithTimeout("/api/tasks", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    contact_id: taskContactId,
-                    title: newT.title.trim(),
-                    due_date: newT.due || null,
-                  }),
-                });
-                setNewT({ title: "", due: "" });
+                if (!newT.title.trim() || !taskContactId) {
+                  showToast("Συμπληρώστε τίτλο εργασίας.", "error");
+                  return;
+                }
+                setTaskBusy(true);
+                try {
+                  const res = await fetchWithTimeout("/api/tasks", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      contact_id: taskContactId,
+                      title: newT.title.trim(),
+                      due_date: newT.due || null,
+                    }),
+                  });
+                  if (!res.ok) {
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
+                    showToast(j.error ?? "Αποτυχία.", "error");
+                    return;
+                  }
+                  showToast("Η εργασία ανατέθηκε.", "success");
+                  setNewT({ title: "", due: "" });
+                } catch {
+                  showToast("Σφάλμα δικτύου.", "error");
+                } finally {
+                  setTaskBusy(false);
+                }
               }}
             >
               Ανάθεση
-            </button>
+            </FormSubmitButton>
           ) : (
             <p className="text-xs text-[var(--text-muted)]">Προσθέστε πρώτα συμμετέχοντες.</p>
           )}

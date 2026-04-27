@@ -8,7 +8,10 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { validateEmail, requiredText } from "@/lib/form-validation";
 import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
@@ -62,6 +65,7 @@ export default function SettingsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { showToast } = useFormToast();
 
   const loadUsers = useCallback(async () => {
     const res = await fetchWithTimeout("/api/admin/users");
@@ -99,9 +103,12 @@ export default function SettingsPage() {
     });
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
-      setErr(j.error ?? "Σφάλμα");
+      const msg = j.error ?? "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
       return;
     }
+    showToast("Ο ρόλος ενημερώθηκε.", "success");
     await loadUsers();
   };
 
@@ -110,10 +117,14 @@ export default function SettingsPage() {
     const res = await fetchWithTimeout(`/api/admin/users/${userId}/reset-password`, { method: "POST" });
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
-      setErr(j.error ?? "Σφάλμα");
+      const msg = j.error ?? "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
       return;
     }
-    setErr("Στάλθηκε email επαναφοράς (ελέγξτε spam).");
+    const msg = "Στάλθηκε email επαναφοράς (ελέγξτε spam).";
+    setErr(msg);
+    showToast(msg, "success");
   };
 
   const deleteUser = async (userId: string) => {
@@ -121,9 +132,12 @@ export default function SettingsPage() {
     const res = await fetchWithTimeout(`/api/admin/users/${userId}`, { method: "DELETE" });
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
-      setErr(j.error ?? "Σφάλμα");
+      const msg = j.error ?? "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
       return;
     }
+    showToast("Ο χρήστης διαγράφηκε.", "success");
     setDeleteId(null);
     await loadUsers();
   };
@@ -194,8 +208,8 @@ export default function SettingsPage() {
                     </td>
                     <td className="p-3 text-[var(--text-secondary)]">{u.email}</td>
                     <td className="p-3">
-                      <select
-                        className={lux.select + " !h-9 max-w-[200px]"}
+                      <HqSelect
+                        className="!h-9 max-w-[200px]"
                         value={u.role}
                         onChange={(e) => setRole(u.id, e.target.value as Role)}
                         disabled={u.id === profile?.id}
@@ -204,7 +218,7 @@ export default function SettingsPage() {
                         <option value="caller">Καλείς</option>
                         <option value="manager">Υπεύθυνος</option>
                         <option value="admin">Διαχειριστής</option>
-                      </select>
+                      </HqSelect>
                     </td>
                     <td className="p-3 text-[var(--text-secondary)]">
                       {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("el-GR") : "—"}
@@ -1291,6 +1305,7 @@ function GroupEditModal({
 }
 
 function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void | Promise<void> }) {
+  const { showToast } = useFormToast();
   const [full_name, setFull] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1302,15 +1317,18 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     setLocalErr(null);
     if (!full_name.trim() || !email.trim() || !password) {
       setLocalErr("Συμπληρώστε όλα τα πεδία");
+      showToast("Συμπληρώστε όλα τα πεδία.", "error");
       return;
     }
     const em = validateEmail(email);
     if (em) {
       setLocalErr(em);
+      showToast(em, "error");
       return;
     }
     if (password.length < 8) {
       setLocalErr("Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες");
+      showToast("Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες.", "error");
       return;
     }
     setBusy(true);
@@ -1322,10 +1340,15 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        setLocalErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setLocalErr(msg);
+        showToast(msg, "error");
         return;
       }
+      showToast("Ο χρήστης δημιουργήθηκε.", "success");
       await onCreated();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
     } finally {
       setBusy(false);
     }
@@ -1366,20 +1389,20 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
         </div>
         <div>
           <HqLabel>Ρόλος</HqLabel>
-          <select className={lux.select} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+          <HqSelect value={role} onChange={(e) => setRole(e.target.value as Role)}>
             <option value="caller">Καλείς</option>
             <option value="manager">Υπεύθυνος</option>
             <option value="admin">Διαχειριστής</option>
-          </select>
+          </HqSelect>
         </div>
       </div>
       <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
         <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
           Άκυρο
         </button>
-        <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy}>
-          {busy ? "…" : "Δημιουργία χρήστη"}
-        </button>
+        <FormSubmitButton type="button" variant="gold" loading={busy} onClick={() => void submit()}>
+          Δημιουργία χρήστη
+        </FormSubmitButton>
       </div>
     </CenteredModal>
   );

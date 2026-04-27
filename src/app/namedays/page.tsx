@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const MONTHS_HEADER = [
   "Ιανουάριος",
@@ -52,6 +53,7 @@ function formatDateLabel(day: number, month: number) {
 type TodaySummary = { dateLabel: string; calendarNames: string[]; contactCount: number };
 
 export default function NamedaysPage() {
+  const { showToast } = useFormToast();
   const [days, setDays] = useState<DayRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
@@ -63,7 +65,9 @@ export default function NamedaysPage() {
     const res = await fetchWithTimeout("/api/namedays/today-summary");
     const data = (await res.json()) as { dateLabel?: string; calendarNames?: string[]; contactCount?: number; error?: string };
     if (!res.ok) {
-      setTodayErr(data.error || "Σφάλμα");
+      const msg = data.error || "Σφάλμα";
+      setTodayErr(msg);
+      showToast(msg, "error");
       return;
     }
     setTodaySummary({
@@ -71,7 +75,7 @@ export default function NamedaysPage() {
       calendarNames: data.calendarNames ?? [],
       contactCount: typeof data.contactCount === "number" ? data.contactCount : 0,
     });
-  }, []);
+  }, [showToast]);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -83,11 +87,13 @@ export default function NamedaysPage() {
     const res = await fetchWithTimeout("/api/namedays/calendar");
     const data = (await res.json()) as { days?: DayRow[]; error?: string };
     if (!res.ok) {
-      setLoadErr(data.error || "Σφάλμα φόρτωσης");
+      const msg = data.error || "Σφάλμα φόρτωσης";
+      setLoadErr(msg);
+      showToast(msg, "error");
       return;
     }
     setDays(data.days ?? []);
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     void load();

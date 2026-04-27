@@ -16,6 +16,9 @@ import {
 } from "recharts";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { PageHeader } from "@/components/ui/page-header";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
+import { lux } from "@/lib/luxury-styles";
 import { BarChart3 } from "lucide-react";
 
 /** Gold + navy + accents — matches luxury theme */
@@ -66,16 +69,22 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
+type ChartScope = "all" | "geo" | "trends";
+
 export default function AnalyticsPage() {
+  const { showToast } = useFormToast();
   const [data, setData] = useState<AnalyticsPayload>(empty);
   const [err, setErr] = useState<string | null>(null);
+  const [chartScope, setChartScope] = useState<ChartScope>("all");
 
   const load = useCallback(async () => {
     setErr(null);
     const res = await fetchWithTimeout("/api/analytics");
     const j = (await res.json()) as AnalyticsPayload & { error?: string };
     if (!res.ok) {
-      setErr(j.error ?? "Σφάλμα");
+      const msg = j.error ?? "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
       return;
     }
     setData({
@@ -86,7 +95,7 @@ export default function AnalyticsPage() {
       callsOverTime: j.callsOverTime ?? [],
       campaignSuccess: j.campaignSuccess ?? [],
     });
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     void load();
@@ -111,7 +120,26 @@ export default function AnalyticsPage() {
       />
       {err && <p className="text-sm text-red-400">{err}</p>}
 
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 max-w-xs flex-1">
+          <label className={lux.label} htmlFor="analytics-scope">
+            Φίλτρο διαγραμμάτων
+          </label>
+          <HqSelect
+            id="analytics-scope"
+            className={lux.select + " mt-1"}
+            value={chartScope}
+            onChange={(e) => setChartScope(e.target.value as ChartScope)}
+          >
+            <option value="all">Όλα</option>
+            <option value="geo">Δήμοι, στάση, κλήσεις, ηλικίες</option>
+            <option value="trends">Κλήσεις 30 ημ. & καμπάνιες</option>
+          </HqSelect>
+        </div>
+      </div>
+
       <div className="grid min-w-0 grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2 lg:items-stretch">
+        {(chartScope === "all" || chartScope === "geo") && (
         <ChartCard title="Επαφές ανά δήμο (πρώτοι 15)">
           {muniV.length === 0 ? (
             <NoChartData />
@@ -144,7 +172,9 @@ export default function AnalyticsPage() {
             </ChartFrame>
           )}
         </ChartCard>
+        )}
 
+        {(chartScope === "all" || chartScope === "geo") && (
         <ChartCard title="Πολιτική στάση">
           {stanceV.length === 0 ? (
             <NoChartData />
@@ -180,7 +210,9 @@ export default function AnalyticsPage() {
             </ChartFrame>
           )}
         </ChartCard>
+        )}
 
+        {(chartScope === "all" || chartScope === "geo") && (
         <ChartCard title="Κατάσταση κλήσης">
           {callStatusV.length === 0 ? (
             <NoChartData />
@@ -213,7 +245,9 @@ export default function AnalyticsPage() {
             </ChartFrame>
           )}
         </ChartCard>
+        )}
 
+        {(chartScope === "all" || chartScope === "geo") && (
         <ChartCard title="Ηλικίες (ομάδες)">
           {ageV.length === 0 ? (
             <NoChartData />
@@ -234,7 +268,9 @@ export default function AnalyticsPage() {
             </ChartFrame>
           )}
         </ChartCard>
+        )}
 
+        {(chartScope === "all" || chartScope === "trends") && (
         <ChartCard title="Κλήσεις (30 ημέρες)">
           {callsT.length === 0 ? (
             <NoChartData />
@@ -258,7 +294,9 @@ export default function AnalyticsPage() {
             </ChartFrame>
           )}
         </ChartCard>
+        )}
 
+        {(chartScope === "all" || chartScope === "trends") && (
         <ChartCard title="Επιτυχία καμπανιών (θετικό / σύνολο)">
           {(data.campaignSuccess ?? []).length === 0 ? (
             <NoChartData />
@@ -301,6 +339,7 @@ export default function AnalyticsPage() {
             </ChartFrame>
           )}
         </ChartCard>
+        )}
       </div>
     </div>
   );

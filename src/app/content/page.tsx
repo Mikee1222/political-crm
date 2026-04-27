@@ -8,6 +8,8 @@ import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const MINISTRIES = [
   "Υπουργείο Υγείας",
@@ -65,6 +67,7 @@ function downloadText(filename: string, text: string) {
 }
 
 function ContentBody() {
+  const { showToast } = useFormToast();
   const { profile } = useProfile();
   const can = hasMinRole(profile?.role, "manager");
   const sp = useSearchParams();
@@ -148,11 +151,13 @@ function ContentBody() {
         setSocialItems(j.items ?? []);
       }
     } catch {
-      setErr("Σφάλμα φόρτωσης λιστών");
+      const msg = "Σφάλμα φόρτωσης λιστών";
+      setErr(msg);
+      showToast(msg, "error");
     } finally {
       setListLoad(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (!can) return;
@@ -177,16 +182,21 @@ function ContentBody() {
       });
       const j = (await res.json()) as { content?: string; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
       setPressOut(j.content ?? "");
+      showToast("Η ανακοίνωση δημιουργήθηκε.", "success");
     } catch {
-      setErr("Σφάλμα");
+      const msg = "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
     } finally {
       setBusy(false);
     }
-  }, [pressPoints, pressTone, pressTopic]);
+  }, [pressPoints, pressTone, pressTopic, showToast]);
 
   const savePress = async () => {
     if (!pressOut) return;
@@ -196,7 +206,11 @@ function ContentBody() {
       body: JSON.stringify({ title: pressTopic, content: pressOut, tone: pressTone }),
     });
     if (res.ok) {
+      showToast("Η ανακοίνωση αποθηκεύτηκε.", "success");
       void loadLists();
+    } else {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      showToast(j.error ?? "Αποτυχία αποθήκευσης.", "error");
     }
   };
 
@@ -214,16 +228,21 @@ function ContentBody() {
       });
       const j = (await res.json()) as { content?: string; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
       setSocialOut(j.content ?? "");
+      showToast("Το post δημιουργήθηκε.", "success");
     } catch {
-      setErr("Σφάλμα");
+      const msg = "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
     } finally {
       setBusy(false);
     }
-  }, [socialPlatform, socialTags, socialTone, socialTopic]);
+  }, [socialPlatform, socialTags, socialTone, socialTopic, showToast]);
 
   const saveSocial = async () => {
     if (!socialOut?.trim()) return;
@@ -234,7 +253,11 @@ function ContentBody() {
     });
     if (res.ok) {
       setSocialOut("");
+      showToast("Το post αποθηκεύτηκε.", "success");
       void loadLists();
+    } else {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      showToast(j.error ?? "Αποτυχία αποθήκευσης.", "error");
     }
   };
 
@@ -259,16 +282,21 @@ function ContentBody() {
       });
       const j = (await res.json()) as { content?: string; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
       setLetterOut(j.content ?? "");
+      showToast("Η επιστολή δημιουργήθηκε.", "success");
     } catch {
-      setErr("Σφάλμα");
+      const msg = "Σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
     } finally {
       setBusy(false);
     }
-  }, [letterCitizen, letterIssue, letterMin, letterSubj, letterTo, letterType]);
+  }, [letterCitizen, letterIssue, letterMin, letterSubj, letterTo, letterType, showToast]);
 
   const saveLetter = async () => {
     if (!letterOut) return;
@@ -283,7 +311,11 @@ function ContentBody() {
       }),
     });
     if (res.ok) {
+      showToast("Η επιστολή αποθηκεύτηκε.", "success");
       void loadLists();
+    } else {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      showToast(j.error ?? "Αποτυχία αποθήκευσης.", "error");
     }
   };
 
@@ -291,7 +323,10 @@ function ContentBody() {
     if (!confirm("Διαγραφή αυτού του post;")) return;
     const res = await fetchWithTimeout(`/api/content/social-saved?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     if (res.ok) {
+      showToast("Διαγράφηκε.", "success");
       void loadLists();
+    } else {
+      showToast("Αποτυχία διαγραφής.", "error");
     }
   };
 
@@ -399,13 +434,13 @@ function ContentBody() {
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className={lux.label}>Υπουργείο</label>
-                <select className={lux.select} value={letterMin} onChange={(e) => setLetterMin(e.target.value)}>
+                <HqSelect className={lux.select} value={letterMin} onChange={(e) => setLetterMin(e.target.value)}>
                   {MINISTRIES.map((m) => (
                     <option key={m} value={m}>
                       {m}
                     </option>
                   ))}
-                </select>
+                </HqSelect>
               </div>
               <div>
                 <label className={lux.label}>Όνομα / Θέμα παραλήπτη (προαιρετικό)</label>
@@ -529,11 +564,11 @@ function ContentBody() {
                 <label className={lux.label}>Θέμα</label>
                 <input className={lux.input} value={pressTopic} onChange={(e) => setPressTopic(e.target.value)} />
                 <label className={lux.label}>Τόνος</label>
-                <select className={lux.select} value={pressTone} onChange={(e) => setPressTone(e.target.value)}>
+                <HqSelect className={lux.select} value={pressTone} onChange={(e) => setPressTone(e.target.value)}>
                   <option>Επίσημο</option>
                   <option>Φιλικό</option>
                   <option>Επείγον</option>
-                </select>
+                </HqSelect>
                 <p className="text-xs text-[var(--text-muted)]">Κύρια σημεία</p>
                 {pressPoints.map((p, i) => (
                   <input
@@ -658,15 +693,15 @@ function ContentBody() {
                 <label className={lux.label}>Θέμα</label>
                 <input className={lux.input} value={socialTopic} onChange={(e) => setSocialTopic(e.target.value)} />
                 <label className={lux.label}>Πλατφόρμα</label>
-                <select className={lux.select} value={socialPlatform} onChange={(e) => setSocialPlatform(e.target.value)}>
+                <HqSelect className={lux.select} value={socialPlatform} onChange={(e) => setSocialPlatform(e.target.value)}>
                   <option value="facebook">Facebook</option>
                   <option value="instagram">Instagram</option>
-                </select>
+                </HqSelect>
                 <label className={lux.label}>Τόνος</label>
-                <select className={lux.select} value={socialTone} onChange={(e) => setSocialTone(e.target.value)}>
+                <HqSelect className={lux.select} value={socialTone} onChange={(e) => setSocialTone(e.target.value)}>
                   <option>Επίσημο</option>
                   <option>Φιλικό</option>
-                </select>
+                </HqSelect>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={socialTags} onChange={(e) => setSocialTags(e.target.checked)} />
                   Hashtags

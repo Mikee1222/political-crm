@@ -10,6 +10,10 @@ import { NewRequestModal } from "@/components/requests/new-request-modal";
 import type { RequestCategoryRow } from "@/lib/request-categories";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type RequestRow = {
   id: string;
@@ -69,41 +73,31 @@ export default function RequestsPage() {
       />
 
       <div className={lux.card + " !p-4 sm:!p-5"}>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className={lux.label} htmlFor="r-st">
               Κατάσταση
             </label>
-            <select
-              id="r-st"
-              className={lux.select + " hq-input-elevated"}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
+            <HqSelect id="r-st" className="hq-input-elevated" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">Όλες οι καταστάσεις</option>
               <option value="Νέο">Νέο</option>
               <option value="Σε εξέλιξη">Σε εξέλιξη</option>
               <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
               <option value="Απορρίφθηκε">Απορρίφθηκε</option>
-            </select>
+            </HqSelect>
           </div>
           <div>
             <label className={lux.label} htmlFor="r-cat">
               Κατηγορία
             </label>
-            <select
-              id="r-cat"
-              className={lux.select + " hq-input-elevated"}
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
+            <HqSelect id="r-cat" className="hq-input-elevated" value={category} onChange={(e) => setCategory(e.target.value)}>
               <option value="">Όλες οι κατηγορίες</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
-            </select>
+            </HqSelect>
           </div>
         </div>
       </div>
@@ -317,6 +311,7 @@ function EditRequestModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { showToast } = useFormToast();
   const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
   const [form, setForm] = useState({
     title: request.title,
@@ -329,6 +324,7 @@ function EditRequestModal({
       | "Low",
     assigned_to: request.assigned_to ?? "",
   });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -341,24 +337,50 @@ function EditRequestModal({
   }, []);
 
   const save = async () => {
-    await fetchWithTimeout(`/api/requests/${request.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    await onSaved();
-    onClose();
+    setSaving(true);
+    try {
+      const res = await fetchWithTimeout(`/api/requests/${request.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Σφάλμα αποθήκευσης", "error");
+        return;
+      }
+      showToast("Το αίτημα ενημερώθηκε.", "success");
+      await onSaved();
+      onClose();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const remove = async () => {
-    await fetchWithTimeout(`/api/requests/${request.id}`, { method: "DELETE" });
-    await onSaved();
-    onClose();
+    setSaving(true);
+    try {
+      const res = await fetchWithTimeout(`/api/requests/${request.id}`, { method: "DELETE" });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία διαγραφής", "error");
+        return;
+      }
+      showToast("Το αίτημα διαγράφηκε.", "success");
+      await onSaved();
+      onClose();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm [background:var(--overlay-scrim)]">
-      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl">
+    <CenteredModal open onClose={onClose} className="flex w-full max-w-xl flex-col overflow-hidden p-0" ariaLabel="Επεξεργασία αιτήματος">
+      <div className="max-h-[min(90vh,720px)] overflow-y-auto p-6 shadow-2xl">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
             {request.request_code ?? "—"}
@@ -366,12 +388,13 @@ function EditRequestModal({
         </div>
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Επεξεργασία αιτήματος</h3>
         <p className="mt-1 line-clamp-2 text-sm text-[var(--text-secondary)]">{request.title}</p>
-        <div className="mt-4 grid gap-3">
+        <div className="mt-4 grid max-w-[640px] gap-4">
           <div>
             <label className={lux.label}>Τίτλος</label>
             <input
               className={lux.input}
               value={form.title}
+              placeholder="Τίτλος αιτήματος"
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
           </div>
@@ -380,16 +403,13 @@ function EditRequestModal({
             <textarea
               className={lux.textarea}
               value={form.description}
+              placeholder="Περιγραφή…"
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </div>
           <div>
             <label className={lux.label}>Κατηγορία</label>
-            <select
-              className={lux.select}
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-            >
+            <HqSelect value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {categories.length === 0
                 ? ["Άλλο", "Υγεία", "Εκπαίδευση", "Υποδομές", "Δημόσια υπηρεσία"].map((n) => (
                     <option key={n} value={n}>
@@ -401,21 +421,20 @@ function EditRequestModal({
                       {c.name}
                     </option>
                   ))}
-            </select>
+            </HqSelect>
           </div>
           <div>
             <label className={lux.label}>Κατάσταση</label>
-            <select className={lux.select} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+            <HqSelect value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
               <option>Νέο</option>
               <option>Σε εξέλιξη</option>
               <option>Ολοκληρώθηκε</option>
               <option>Απορρίφθηκε</option>
-            </select>
+            </HqSelect>
           </div>
           <div>
             <label className={lux.label}>Priority</label>
-            <select
-              className={lux.select}
+            <HqSelect
               value={form.priority}
               onChange={(e) =>
                 setForm({ ...form, priority: e.target.value as "High" | "Medium" | "Low" })
@@ -424,31 +443,32 @@ function EditRequestModal({
               <option value="High">High</option>
               <option value="Medium">Medium</option>
               <option value="Low">Low</option>
-            </select>
+            </HqSelect>
           </div>
           <div>
             <label className={lux.label}>Ανάθεση</label>
             <input
               className={lux.input}
               value={form.assigned_to}
+              placeholder="Όνομα υπευθύνου"
               onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
             />
           </div>
         </div>
         <div className="mt-6 flex flex-col justify-between gap-3 border-t border-[var(--border)] pt-4 sm:flex-row sm:items-center">
-          <button type="button" onClick={remove} className="text-sm font-medium text-[#DC2626] hover:underline">
+          <button type="button" onClick={() => void remove()} className="text-sm font-medium text-[#DC2626] hover:underline" disabled={saving}>
             Διαγραφή
           </button>
           <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={onClose} className={lux.btnSecondary}>
+            <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={saving}>
               Ακύρωση
             </button>
-            <button type="button" onClick={save} className={lux.btnPrimary}>
+            <FormSubmitButton type="button" loading={saving} variant="gold" onClick={() => void save()}>
               Αποθήκευση
-            </button>
+            </FormSubmitButton>
           </div>
         </div>
       </div>
-    </div>
+    </CenteredModal>
   );
 }

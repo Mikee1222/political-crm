@@ -4,10 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type Row = { id: string; municipality: string; party: string; percentage: number; year: number };
 
 export function ElectoralSettingsSection() {
+  const { showToast } = useFormToast();
   const year = 2023;
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,16 +28,20 @@ export function ElectoralSettingsSection() {
       const res = await fetchWithTimeout(`/api/electoral-results?year=${year}`);
       const j = (await res.json()) as { rows?: Row[]; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Φόρτωση");
+        const msg = j.error ?? "Φόρτωση";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
       setRows(j.rows ?? []);
     } catch {
-      setErr("Σφάλμα δικτύου");
+      const msg = "Σφάλμα δικτύου";
+      setErr(msg);
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }
-  }, [year]);
+  }, [year, showToast]);
 
   useEffect(() => {
     void load();
@@ -72,13 +79,19 @@ export function ElectoralSettingsSection() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; inserted?: number };
       if (!res.ok) {
-        setErr(j.error ?? "Αποτυχία");
+        const msg = j.error ?? "Αποτυχία";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
-      setMsg(`Αποθηκεύτηκαν ${j.inserted ?? rows.length} γραμμές.`);
+      const msg = `Αποθηκεύτηκαν ${j.inserted ?? rows.length} γραμμές.`;
+      setMsg(msg);
+      showToast(msg, "success");
       await load();
     } catch {
-      setErr("Σφάλμα δικτύου");
+      const msg = "Σφάλμα δικτύου";
+      setErr(msg);
+      showToast(msg, "error");
     } finally {
       setSaving(false);
     }
@@ -98,13 +111,13 @@ export function ElectoralSettingsSection() {
           <label className={lux.label} htmlFor="el-muni">
             Δήμος
           </label>
-          <select id="el-muni" className={lux.select} value={muni} onChange={(e) => setMuni(e.target.value)}>
+          <HqSelect id="el-muni" className={lux.select} value={muni} onChange={(e) => setMuni(e.target.value)}>
             {MUNICIPALITIES.map((m) => (
               <option key={m.name} value={m.name}>
                 {m.name}
               </option>
             ))}
-          </select>
+          </HqSelect>
         </div>
         <div className="w-full min-w-0 sm:w-32">
           <label className={lux.label} htmlFor="el-party">

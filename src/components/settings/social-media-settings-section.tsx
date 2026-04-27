@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { HqLabel } from "@/components/ui/hq-form-primitives";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type SocialSettings = {
   id: number;
@@ -24,6 +26,7 @@ type SocialPost = {
 };
 
 export function SocialMediaSettingsSection() {
+  const { showToast } = useFormToast();
   const [settings, setSettings] = useState<SocialSettings | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -83,6 +86,7 @@ export function SocialMediaSettingsSection() {
     setSaving(false);
     if (!res.ok) {
       setErr("Αποτυχία αποθήκευσης.");
+      showToast("Αποτυχία αποθήκευσης.", "error");
       return;
     }
     const j = (await res.json()) as { settings: SocialSettings };
@@ -93,6 +97,7 @@ export function SocialMediaSettingsSection() {
     const u = url.trim();
     if (!u) {
       setErr("Εισάγετε URL.");
+      showToast("Εισάγετε URL.", "error");
       return;
     }
     setAdding(true);
@@ -105,9 +110,11 @@ export function SocialMediaSettingsSection() {
     setAdding(false);
     if (!res.ok) {
       setErr("Αποτυχία προσθήκης.");
+      showToast("Αποτυχία προσθήκης.", "error");
       return;
     }
     setUrl("");
+    showToast("Προστέθηκε post.", "success");
     await load();
   };
 
@@ -117,8 +124,10 @@ export function SocialMediaSettingsSection() {
     const res = await fetchWithTimeout(`/api/admin/social-posts/${id}`, { method: "DELETE" });
     if (!res.ok) {
       setErr("Αποτυχία διαγραφής.");
+      showToast("Αποτυχία διαγραφής.", "error");
       return;
     }
+    showToast("Διαγράφηκε.", "success");
     await load();
   };
 
@@ -221,14 +230,15 @@ export function SocialMediaSettingsSection() {
 
       <p className="mb-2 text-sm font-semibold text-[var(--text-primary)]">TikTok / Facebook URLs</p>
       <div className="mb-4 flex max-w-2xl flex-col gap-2 sm:flex-row">
-        <select
+        <HqSelect
           className={lux.select + " sm:w-40"}
+          wrapperClassName="sm:w-40 shrink-0"
           value={platform}
           onChange={(e) => setPlatform(e.target.value as "tiktok" | "facebook")}
         >
           <option value="tiktok">TikTok</option>
           <option value="facebook">Facebook</option>
-        </select>
+        </HqSelect>
         <input
           className={lux.input + " min-w-0 flex-1"}
           value={url}

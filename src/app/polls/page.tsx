@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
@@ -21,6 +25,7 @@ type Poll = {
 };
 
 export default function PollsPage() {
+  const { showToast } = useFormToast();
   const { profile } = useProfile();
   const can = hasMinRole(profile?.role, "manager");
   const [polls, setPolls] = useState<Poll[]>([]);
@@ -57,24 +62,35 @@ export default function PollsPage() {
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const r = await fetchWithTimeout("/api/polls", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        question,
-        options: opts.map((o, i) => ({ id: o.id || `o${i}`, text: o.text })).filter((o) => o.text.trim()),
-        target_group_id: groupId || null,
-        ends_at: ends || null,
-      }),
-    });
-    setSaving(false);
-    if (r.ok) {
+    try {
+      const r = await fetchWithTimeout("/api/polls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          question,
+          options: opts.map((o, i) => ({ id: o.id || `o${i}`, text: o.text })).filter((o) => o.text.trim()),
+          target_group_id: groupId || null,
+          ends_at: ends || null,
+        }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) {
+        showToast(j.error ?? "Αποτυχία δημιουργίας.", "error");
+        return;
+      }
+      showToast("Η δημοσκόπηση δημιουργήθηκε.", "success");
       setOpen(false);
       setTitle("");
       setQuestion("");
       setOpts([{ id: "a", text: "" }, { id: "b", text: "" }]);
+      setGroupId("");
+      setEnds("");
       void load();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -104,50 +120,50 @@ export default function PollsPage() {
         ))}
       </ul>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-          <form onSubmit={create} className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 sm:rounded-2xl">
-            <h2 className="text-lg font-bold">Νέα</h2>
-            <div className="mt-2 space-y-2">
-              <input className={lux.input} placeholder="Τίτλος" value={title} onChange={(e) => setTitle(e.target.value)} required />
-              <textarea className={lux.textarea} placeholder="Ερώτημα" value={question} onChange={(e) => setQuestion(e.target.value)} required />
-              {opts.map((o, i) => (
-                <input
-                  key={i}
-                  className={lux.input}
-                  value={o.text}
-                  onChange={(e) => {
-                    const n = [...opts];
-                    n[i] = { ...o, text: e.target.value, id: o.id || `o${i}` };
-                    setOpts(n);
-                  }}
-                  placeholder={`Επιλογή ${i + 1}`}
-                />
+      <CenteredModal open={open} onClose={() => setOpen(false)} className="flex !max-w-lg max-h-[90dvh] flex-col !p-0" ariaLabel="Νέα δημοσκόπηση" overlayClassName="z-[9999]">
+        <form onSubmit={create} className="flex max-h-[90dvh] flex-col overflow-hidden">
+          <div className="border-b border-[var(--border)] px-5 py-4">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Νέα δημοσκόπηση</h2>
+          </div>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
+            <input className={lux.input} placeholder="Τίτλος" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            <textarea className={lux.textarea} placeholder="Ερώτημα" value={question} onChange={(e) => setQuestion(e.target.value)} required />
+            {opts.map((o, i) => (
+              <input
+                key={i}
+                className={lux.input}
+                value={o.text}
+                onChange={(e) => {
+                  const n = [...opts];
+                  n[i] = { ...o, text: e.target.value, id: o.id || `o${i}` };
+                  setOpts(n);
+                }}
+                placeholder={`Επιλογή ${i + 1}`}
+              />
+            ))}
+            <button type="button" className={lux.btnSecondary + " !text-xs"} onClick={() => setOpts((x) => [...x, { id: `n${x.length}`, text: "" }])}>
+              + επιλογή
+            </button>
+            <HqSelect className={lux.select} value={groupId} onChange={(e) => setGroupId(e.target.value)} aria-label="Ομάδα στόχου">
+              <option value="">— Ομάδα (για αποστολή, προαιρετικό) —</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
               ))}
-              <button type="button" className={lux.btnSecondary + " !text-xs"} onClick={() => setOpts((x) => [...x, { id: `n${x.length}`, text: "" }])}>
-                + επιλογή
-              </button>
-              <select className={lux.select} value={groupId} onChange={(e) => setGroupId(e.target.value)} required>
-                <option value="">— Ομάδα (για αποστολή) —</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-              <input type="datetime-local" className={lux.input} value={ends} onChange={(e) => setEnds(e.target.value)} />
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button type="button" className={lux.btnSecondary} onClick={() => setOpen(false)}>
-                Άκυρο
-              </button>
-              <button type="submit" className={lux.btnPrimary} disabled={saving}>
-                {saving ? "…" : "Δημιουργία"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+            </HqSelect>
+            <input type="datetime-local" className={lux.input} value={ends} onChange={(e) => setEnds(e.target.value)} />
+          </div>
+          <div className="flex gap-2 border-t border-[var(--border)] px-5 py-4">
+            <button type="button" className={lux.btnSecondary} onClick={() => setOpen(false)}>
+              Άκυρο
+            </button>
+            <FormSubmitButton type="submit" variant="gold" loading={saving}>
+              Δημιουργία
+            </FormSubmitButton>
+          </div>
+        </form>
+      </CenteredModal>
     </div>
   );
 }
