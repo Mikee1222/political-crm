@@ -19,7 +19,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         strategy="lazyOnload"
         crossOrigin="anonymous"
       />
-      <Script id="tiktok-embed" src="https://www.tiktok.com/embed.js" strategy="lazyOnload" />
       <PortalShell>{children}</PortalShell>
       <PortalChatWidget />
     </div>

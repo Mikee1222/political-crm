@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadTikTokEmbedScript } from "@/lib/tiktok-embed";
 
 const ND = "#003476";
 
@@ -59,59 +58,40 @@ function InstagramGlyph({ className }: { className?: string }) {
   );
 }
 
-function TiktokBlockquote({ item, visible }: { item: TiktokItem; visible: boolean }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!visible) return;
-    const root = rootRef.current;
-    if (!root) return;
-    let cancelled = false;
-    const timers: number[] = [];
-    const parse = () => {
-      const w = window as unknown as {
-        tiktok?: { embed?: { lib?: (el?: Element | null) => void; load?: (el?: Element | null) => void } };
-        tiktokEmbed?: { version?: { load: (el?: Element | null) => void } };
-      };
-      try {
-        w.tiktok?.embed?.lib?.(root);
-        w.tiktok?.embed?.load?.(root);
-        w.tiktokEmbed?.version?.load?.(root);
-      } catch {
-        /* non-fatal */
-      }
-    };
-    void (async () => {
-      try {
-        await loadTikTokEmbedScript();
-        if (cancelled) return;
-        parse();
-        timers.push(window.setTimeout(parse, 200));
-        timers.push(window.setTimeout(parse, 900));
-        timers.push(window.setTimeout(parse, 2200));
-      } catch {
-        /* */
-      }
-    })();
-    return () => {
-      cancelled = true;
-      for (const id of timers) window.clearTimeout(id);
-    };
-  }, [visible, item.id, item.url, item.videoId]);
-
+function TiktokIframeCard({ item }: { item: TiktokItem }) {
+  const id = item.videoId?.trim();
+  if (!id) {
+    return (
+      <div
+        className="flex min-h-[200px] w-full min-w-0 max-w-full items-center justify-center overflow-hidden bg-[#000] p-4 text-center"
+        style={{ borderRadius: 16 }}
+      >
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-zinc-400 underline decoration-zinc-500 hover:text-white"
+        >
+          Άνοιγμα βίντεο στο TikTok
+        </a>
+      </div>
+    );
+  }
   return (
     <div
-      ref={rootRef}
-      className="min-h-[420px] w-full max-w-full overflow-x-auto overflow-y-hidden rounded-2xl border border-zinc-200 bg-zinc-50/80 p-2 shadow-inner sm:min-h-[500px]"
+      className="w-full min-w-0 max-w-full overflow-hidden bg-[#000] shadow-lg"
+      style={{ borderRadius: 16 }}
     >
-      <blockquote
-        className="tiktok-embed mx-auto"
-        cite={item.url}
-        data-video-id={item.videoId ?? undefined}
-        style={{ maxWidth: 605, minWidth: 280, margin: "0 auto" }}
-      >
-        <section />
-      </blockquote>
+      <iframe
+        title="TikTok"
+        src={`https://www.tiktok.com/embed/v2/${encodeURIComponent(id)}`}
+        className="m-0 block w-full max-w-full border-0 p-0"
+        style={{ width: "100%", height: 700 }}
+        height={700}
+        allow="autoplay; encrypted-media; fullscreen"
+        allowFullScreen
+        loading="lazy"
+      />
     </div>
   );
 }
@@ -306,9 +286,9 @@ export function PortalSocialSection() {
             {data.tiktok.length === 0 ? (
               <p className="text-center text-slate-600">Σύντομα βίντεο — επιστρέξτε αργότερα.</p>
             ) : (
-              <div className="grid gap-8 sm:grid-cols-1 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {data.tiktok.map((t) => (
-                  <TiktokBlockquote key={t.id} item={t} visible={active === "tiktok"} />
+                  <TiktokIframeCard key={t.id} item={t} />
                 ))}
               </div>
             )}
