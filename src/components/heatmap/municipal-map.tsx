@@ -36,6 +36,9 @@ export type ForMapRow = {
   lng: number;
   radius: number;
   ndPercent?: number;
+  syrizaPercent?: number;
+  pasokPercent?: number;
+  totalElectionVotes?: number;
   crmPositivePercent?: number;
   compareHighlight?: boolean;
 };
@@ -153,6 +156,8 @@ type MunicipalMapProps = {
   forMap: ForMapRow[];
   onSelect: (muni: string) => void;
   colorVariant?: MapColorVariant;
+  /** electoral / compare: εμφάνιση ποσοστών εκλογών + συνόλου ψήφων */
+  tooltipMode?: "crm" | "electoral" | "compare";
 };
 
 const TILES = {
@@ -161,7 +166,7 @@ const TILES = {
   dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
 } as const;
 
-export function MunicipalMap({ forMap, onSelect, colorVariant = "gold" }: MunicipalMapProps) {
+export function MunicipalMap({ forMap, onSelect, colorVariant = "gold", tooltipMode = "crm" }: MunicipalMapProps) {
   const colorMode = useMapColorMode();
   const bounds = useMemo(
     () =>
@@ -206,8 +211,17 @@ export function MunicipalMap({ forMap, onSelect, colorVariant = "gold" }: Munici
           >
             <div className="max-w-[min(100vw,260px)] px-0.5 text-[12px] leading-tight text-[#f0f4ff]">
               <p className="font-semibold text-[var(--accent-gold-light)]">{m.muni.replace(/^Δήμος /, "Δ. ")}</p>
-              {m.ndPercent != null && (
-                <p className="mt-1 text-[#93C5FD]">ΝΔ 2023: {m.ndPercent.toFixed(1)}%</p>
+              {m.ndPercent != null && (tooltipMode === "electoral" || tooltipMode === "compare" || colorVariant === "nd") && (
+                <p className="mt-1 text-[#93C5FD]">ΝΔ: {m.ndPercent.toFixed(1)}%</p>
+              )}
+              {m.syrizaPercent != null && (tooltipMode === "electoral" || tooltipMode === "compare") && (
+                <p className="text-[#F9A8D4]">ΣΥΡΙΖΑ: {m.syrizaPercent.toFixed(1)}%</p>
+              )}
+              {m.pasokPercent != null && (tooltipMode === "electoral" || tooltipMode === "compare") && (
+                <p className="text-[#6EE7B7]">ΠΑΣΟΚ: {m.pasokPercent.toFixed(1)}%</p>
+              )}
+              {m.totalElectionVotes != null && m.totalElectionVotes > 0 && (tooltipMode === "electoral" || tooltipMode === "compare") && (
+                <p className="text-[#e2e8f0]">Σύνολο ψήφων: {m.totalElectionVotes.toLocaleString("el-GR")}</p>
               )}
               {m.crmPositivePercent != null && colorVariant === "compare" && (
                 <p className="text-[#A7F3D0]">Θετικοί CRM: {m.crmPositivePercent.toFixed(1)}%</p>
@@ -215,6 +229,8 @@ export function MunicipalMap({ forMap, onSelect, colorVariant = "gold" }: Munici
               <p className="mt-1 text-[#8fa3bf]">
                 Σύνολο: <span className="text-[#f0f4ff]">{m.total}</span> επαφές
               </p>
+              {tooltipMode === "crm" ? (
+                <>
               <p className="mb-0.5 mt-1.5 text-[9px] uppercase tracking-wide text-[#4a6080]">Θετικοί / Αρνητικοί / Αναμονή / Δεν απάντησε</p>
               <BreakdownBars p={m.positive} neg={m.negative} pen={m.pending} na={m.noAnswer} />
               <p className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-[#8fa3bf]">
@@ -223,6 +239,12 @@ export function MunicipalMap({ forMap, onSelect, colorVariant = "gold" }: Munici
                 <span>Αναμονή: {m.pending}</span>
                 <span>Δεν απάντησε: {m.noAnswer}</span>
               </p>
+                </>
+              ) : (
+                <p className="mb-0.5 mt-1.5 text-[10px] text-[#8fa3bf]">
+                  CRM: {m.positive} θετ. · {m.negative} αρν. · {m.pending} αναμ. · {m.noAnswer} χωρίς απάντηση
+                </p>
+              )}
             </div>
           </Tooltip>
         </Circle>

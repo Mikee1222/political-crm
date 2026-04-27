@@ -18,6 +18,9 @@ type MuniStats = {
   /** Value used to drive heat colour for current `mode` */
   heat: number;
   ndPercent?: number;
+  syrizaPercent?: number;
+  pasokPercent?: number;
+  totalElectionVotes?: number;
   crmPositivePercent?: number;
   compareHighlight?: boolean;
 };
@@ -36,6 +39,16 @@ const ndParty = (p: string) => {
     t === "ΝΔ" || t.includes("Νέα Δημοκρατία") || t.toLowerCase().includes("nd") || t.includes("Nea")
   );
 };
+
+function syrizaParty(p: string) {
+  const t = p.trim().toLowerCase();
+  return t.includes("συριζα") || t.includes("syriza");
+}
+
+function pasokParty(p: string) {
+  const t = p.trim().toLowerCase();
+  return t.includes("πασοκ") || t.includes("pasok") || t.includes("πα.σο.κ");
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,19 +72,34 @@ export async function GET(request: NextRequest) {
     const crows = (cdata ?? []) as { municipality: string | null; call_status: string | null }[];
     const { data: edata, error: eErr } = await supabase
       .from("electoral_results")
-      .select("municipality, party, percentage")
+      .select("municipality, party, percentage, votes")
       .eq("year", elecYear);
     if (eErr) {
       return NextResponse.json({ error: eErr.message }, { status: 400 });
     }
     const ndByMun = new Map<string, number>();
-    for (const e of (edata ?? []) as { municipality: string; party: string; percentage: number }[]) {
+    const syrizaByMun = new Map<string, number>();
+    const pasokByMun = new Map<string, number>();
+    const votesByMun = new Map<string, number>();
+    for (const e of (edata ?? []) as {
+      municipality: string;
+      party: string;
+      percentage: number;
+      votes: number | null;
+    }[]) {
+      const m = e.municipality?.trim() ?? "";
+      if (!m) continue;
+      const pct = Number(e.percentage) || 0;
+      const v = e.votes != null ? Number(e.votes) : 0;
+      if (v > 0) {
+        votesByMun.set(m, (votesByMun.get(m) ?? 0) + v);
+      }
       if (ndParty(e.party)) {
-        const m = e.municipality?.trim() ?? "";
-        if (!m) {
-          continue;
-        }
-        ndByMun.set(m, Math.max(ndByMun.get(m) ?? 0, Number(e.percentage) || 0));
+        ndByMun.set(m, Math.max(ndByMun.get(m) ?? 0, pct));
+      } else if (syrizaParty(e.party)) {
+        syrizaByMun.set(m, Math.max(syrizaByMun.get(m) ?? 0, pct));
+      } else if (pasokParty(e.party)) {
+        pasokByMun.set(m, Math.max(pasokByMun.get(m) ?? 0, pct));
       }
     }
     const agg = new Map<string, { total: number; positive: number; negative: number; pending: number; noAnswer: number }>();
@@ -93,6 +121,10 @@ export async function GET(request: NextRequest) {
     const byMuni: MuniStats[] = MUNICIPALITIES.map((m) => {
       const b = agg.get(m.name)!;
       const rawNd = ndByMun.get(m.name) ?? ndByMun.get(m.name.replace(/^Δήμος /, "")) ?? 0;
+      const rawSy = syrizaByMun.get(m.name) ?? syrizaByMun.get(m.name.replace(/^Δήμος /, "")) ?? 0;
+      const rawPa = pasokByMun.get(m.name) ?? pasokByMun.get(m.name.replace(/^Δήμος /, "")) ?? 0;
+      const totVotes =
+        votesByMun.get(m.name) ?? votesByMun.get(m.name.replace(/^Δήμος /, "")) ?? 0;
       const crmP = b.total > 0 ? (b.positive / b.total) * 100 : 0;
       const highlight = crmP > rawNd;
       if (view === "electoral") {
@@ -105,6 +137,9 @@ export async function GET(request: NextRequest) {
           noAnswer: b.noAnswer,
           heat: Math.round(Math.min(100, rawNd)),
           ndPercent: rawNd,
+          syrizaPercent: rawSy,
+          pasokPercent: rawPa,
+          totalElectionVotes: totVotes,
           crmPositivePercent: Math.round(crmP * 10) / 10,
           compareHighlight: false,
         };
@@ -119,6 +154,9 @@ export async function GET(request: NextRequest) {
         noAnswer: b.noAnswer,
         heat: Math.round(50 + Math.max(-50, Math.min(50, diff * 2))),
         ndPercent: rawNd,
+        syrizaPercent: rawSy,
+        pasokPercent: rawPa,
+        totalElectionVotes: totVotes,
         crmPositivePercent: Math.round(crmP * 10) / 10,
         compareHighlight: highlight,
       };
@@ -135,7 +173,9 @@ export async function GET(request: NextRequest) {
       const radius = Math.max(500, Math.round(700 + (radBase / maxTot) * Math.min(c.r * 2.2, 12_000)));
       return { ...s, lat: c.lat, lng: c.lng, radius, compareHighlight: s.compareHighlight };
     }).filter((x): x is NonNullable<typeof x> => x != null);
-    const top10 = [...byMuni].sort((a, b) => b.heat - a.heat).slice(0, 10);
+    const top10 = [...byMuni]
+      .sort((a, b) => (view === "electoral" ? (b.ndPercent ?? 0) - (a.ndPercent ?? 0) : b.heat - a.heat))
+      .slice(0, 10);
     const maxCount = forMap.length ? Math.max(1, ...forMap.map((d) => d.heat)) : 1;
     const maxTotal = byMuni.length ? Math.max(1, ...byMuni.map((b) => b.total)) : 1;
     return NextResponse.json({

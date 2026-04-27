@@ -17,6 +17,7 @@ type MuniRow = {
   pending: number;
   noAnswer: number;
   heat: number;
+  ndPercent?: number;
 };
 
 type ApiPayload = {
@@ -180,6 +181,7 @@ export function HeatmapClient() {
               forMap={data.forMap}
               onSelect={onSelectMuni}
               colorVariant={data.mapColorVariant ?? "gold"}
+              tooltipMode={view}
             />
           )}
           <div
@@ -217,27 +219,39 @@ export function HeatmapClient() {
           className="data-hq-card w-full max-w-full shrink-0 space-y-3 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.4)] lg:max-w-[300px] xl:max-w-[320px]"
           aria-label="Κορυφαίοι δήμοι"
         >
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Top 10 δήμων</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            {view === "electoral" ? "Κορυφαίοι δήμοι (ΝΔ 2023)" : view === "compare" ? "Top 10 (επαφές CRM)" : "Top 10 δήμων"}
+          </h2>
           {top.length === 0 && !err && (
             <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>
           )}
           <ol className="space-y-3">
-            {top.map((r, i) => (
+            {top.map((r, i) => {
+              const elec = r as MuniRow & { ndPercent?: number };
+              const barVal = view === "electoral" && typeof elec.ndPercent === "number" ? elec.ndPercent : r.total;
+              const barMax = view === "electoral" ? 100 : maxTop;
+              return (
               <li key={r.muni} className="min-w-0">
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text-primary)]" title={r.muni}>
                     {i + 1}. {muniShort(r.muni)}
                   </span>
-                  <span className="shrink-0 text-[12px] tabular-nums text-[var(--accent-gold)]">{r.total}</span>
+                  <span className="shrink-0 text-[12px] tabular-nums text-[var(--accent-gold)]">
+                    {view === "electoral" && typeof elec.ndPercent === "number"
+                      ? `${elec.ndPercent.toFixed(1)}% ΝΔ`
+                      : r.total}
+                  </span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#6b4f18] to-[#C9A84C] shadow-[0_0_12px_rgba(201,168,76,0.4)]"
-                    style={{ width: `${Math.min(100, (r.total / maxTop) * 100)}%` }}
+                    className="h-full rounded-full bg-gradient-to-r from-[#1e3a8a] to-[#3b82f6] shadow-[0_0_12px_rgba(30,58,138,0.4)]"
+                    style={{
+                      width: `${Math.min(100, view === "electoral" ? barVal : (barVal / barMax) * 100)}%`,
+                    }}
                   />
                 </div>
               </li>
-            ))}
+            )})}
           </ol>
         </aside>
       </div>

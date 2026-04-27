@@ -98,6 +98,7 @@ export async function refreshAndPersistAccessToken(
 
 export function mapEventType(e: calendar_v3.Schema$Event): CalendarEventType {
   const t = (e.extendedProperties?.private as Record<string, string> | undefined)?.crmType;
+  if (t === "portal_appointment") return "meeting";
   if (t && t in CALENDAR_EVENT_TYPES) return t as CalendarEventType;
   return "other";
 }
@@ -328,4 +329,39 @@ export async function getCalendarClientForUser(
     return null;
   }
   return google.calendar({ version: "v3", auth: oauth2 });
+}
+
+/** Πρώτος λογαριασμός Google Calendar (ή APPOINTMENT_CALENDAR_USER_ID). */
+export async function getAppointmentCalendarUserId(): Promise<string | null> {
+  const env = process.env.APPOINTMENT_CALENDAR_USER_ID?.trim();
+  if (env) return env;
+  const s = createServiceClient();
+  const { data } = await s.from("google_tokens").select("user_id").limit(1).maybeSingle();
+  return (data as { user_id?: string } | null)?.user_id ?? null;
+}
+
+export async function getFreeBusyPrimary(
+  userId: string,
+  timeMin: string,
+  timeMax: string,
+): Promise<
+  { ok: true; busy: { start: string; end: string }[] } | { ok: false; code: "not_connected" }
+> {
+  const cal = await getCalendarClientForUser(userId);
+  if (!cal) return { ok: false, code: "not_connected" };
+  const r = await cal.freebusy.query({
+    requestBody: {
+      timeMin,
+      timeMax,
+      timeZone: "Europe/Athens",
+      items: [{ id: "primary" }],
+    },
+  });
+  const busy = (r.data.calendars?.primary?.busy ?? []) as { start?: string; end?: string }[];
+  return {
+    ok: true,
+    busy: busy
+      .filter((b) => b.start && b.end)
+      .map((b) => ({ start: b.start as string, end: b.end as string })),
+  };
 }

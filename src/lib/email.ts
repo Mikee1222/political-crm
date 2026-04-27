@@ -88,6 +88,21 @@ export const EmailTemplates = {
     );
     return { subj, html: body };
   },
+  appointmentConfirmation(
+    whenLabel: string,
+    reason: string,
+  ) {
+    const subj = "Επιβεβαίωση ραντεβού — γραφείο βουλευτή";
+    const body = wrapHtml(
+      subj,
+      `<p>Καλησπέρα σας,</p>
+       <p>Το αίτημά σας για <strong>ραντεβού</strong> καταχωρήθηκε.</p>
+       <p><strong>Ημερομηνία / ώρα:</strong> ${whenLabel}</p>
+       <p><strong>Θέμα:</strong> ${reason.replace(/</g, "&lt;")}</p>
+       <p style="color:#64748b;font-size:14px">Για αλλαγές επικοινωνήστε με το γραφείο.</p>`,
+    );
+    return { subj, html: body };
+  },
 };
 
 export async function logEmailRow(params: {

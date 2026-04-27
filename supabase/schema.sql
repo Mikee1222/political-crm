@@ -1000,3 +1000,222 @@ alter table public.contacts
 create unique index if not exists contacts_portal_invite_token_uniq on public.contacts (portal_invite_token)
   where
     portal_invite_token is not null;
+
+-- --- Feature pack: WhatsApp, documents, polls, predictive list, AI cache, appointments ---
+
+alter table public.electoral_results
+  add column if not exists votes integer;
+
+alter table public.campaigns
+  add column if not exists channel text not null default 'call';
+
+alter table public.contacts
+  add column if not exists ai_summary text,
+  add column if not exists ai_summary_updated_at timestamptz;
+
+create table if not exists public.whatsapp_messages (
+  id uuid primary key default gen_random_uuid (),
+  contact_id uuid references public.contacts (id) on delete set null,
+  direction text not null default 'outbound',
+  message text not null,
+  status text not null default 'sent',
+  whatsapp_message_id text,
+  created_at timestamptz not null default now ()
+);
+
+create index if not exists idx_whatsapp_messages_created on public.whatsapp_messages (created_at desc);
+create index if not exists idx_whatsapp_messages_contact on public.whatsapp_messages (contact_id);
+
+alter table public.whatsapp_messages enable row level security;
+drop policy if exists "whatsapp_messages crm" on public.whatsapp_messages;
+create policy "whatsapp_messages crm" on public.whatsapp_messages
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+create table if not exists public.documents (
+  id uuid primary key default gen_random_uuid (),
+  contact_id uuid references public.contacts (id) on delete cascade,
+  request_id uuid references public.requests (id) on delete cascade,
+  name text not null,
+  file_url text not null,
+  file_type text,
+  file_size integer,
+  uploaded_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now ()
+);
+
+create index if not exists idx_documents_contact on public.documents (contact_id, created_at desc);
+create index if not exists idx_documents_request on public.documents (request_id, created_at desc);
+
+alter table public.documents enable row level security;
+drop policy if exists "documents crm" on public.documents;
+create policy "documents crm" on public.documents
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+insert into storage.buckets (id, name, public)
+values ('documents', 'documents', false)
+on conflict (id) do nothing;
+
+drop policy if exists "documents storage crm read" on storage.objects;
+create policy "documents storage crm read" on storage.objects for
+select
+  to authenticated
+  using (
+    bucket_id = 'documents'
+    and exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+drop policy if exists "documents storage crm write" on storage.objects;
+create policy "documents storage crm write" on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'documents'
+    and exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+drop policy if exists "documents storage crm update" on storage.objects;
+create policy "documents storage crm update" on storage.objects for
+update
+  to authenticated
+  using (
+    bucket_id = 'documents'
+    and exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    bucket_id = 'documents'
+    and exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+drop policy if exists "documents storage crm delete" on storage.objects;
+create policy "documents storage crm delete" on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'documents'
+    and exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+create table if not exists public.office_appointments (
+  id uuid primary key default gen_random_uuid (),
+  contact_id uuid references public.contacts (id) on delete set null,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  citizen_name text,
+  citizen_phone text,
+  reason text,
+  google_event_id text,
+  created_at timestamptz not null default now ()
+);
+
+create index if not exists idx_office_appointments_contact on public.office_appointments (contact_id, starts_at desc);
+
+alter table public.office_appointments enable row level security;
+drop policy if exists "office_appointments crm" on public.office_appointments;
+create policy "office_appointments crm" on public.office_appointments
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+create table if not exists public.polls (
+  id uuid primary key default gen_random_uuid (),
+  title text not null,
+  question text not null,
+  options jsonb not null,
+  status text not null default 'active',
+  target_group_id uuid references public.contact_groups (id) on delete set null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now (),
+  ends_at timestamptz
+);
+
+create index if not exists idx_polls_status on public.polls (status, created_at desc);
+
+alter table public.polls enable row level security;
+drop policy if exists "polls crm" on public.polls;
+create policy "polls crm" on public.polls
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+create table if not exists public.poll_responses (
+  id uuid primary key default gen_random_uuid (),
+  poll_id uuid not null references public.polls (id) on delete cascade,
+  contact_id uuid not null references public.contacts (id) on delete cascade,
+  option_id text not null,
+  created_at timestamptz not null default now (),
+  unique (poll_id, contact_id)
+);
+
+create index if not exists idx_poll_responses_poll on public.poll_responses (poll_id);
+
+alter table public.poll_responses enable row level security;
+drop policy if exists "poll_responses crm" on public.poll_responses;
+create policy "poll_responses crm" on public.poll_responses
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+create table if not exists public.daily_call_lists (
+  id uuid primary key default gen_random_uuid (),
+  date date not null unique,
+  contact_ids jsonb not null,
+  scores jsonb not null,
+  created_at timestamptz not null default now ()
+);
+
+create table if not exists public.daily_call_list_skips (
+  id uuid primary key default gen_random_uuid (),
+  date date not null,
+  contact_id uuid not null references public.contacts (id) on delete cascade,
+  created_at timestamptz not null default now (),
+  unique (date, contact_id)
+);
+
+alter table public.daily_call_lists enable row level security;
+drop policy if exists "daily_call_lists crm" on public.daily_call_lists;
+create policy "daily_call_lists crm" on public.daily_call_lists
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+
+alter table public.daily_call_list_skips enable row level security;
+drop policy if exists "daily_call_list_skips crm" on public.daily_call_list_skips;
+create policy "daily_call_list_skips crm" on public.daily_call_list_skips
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );

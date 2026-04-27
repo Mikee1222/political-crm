@@ -9,6 +9,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { computeSlaStatus } from "@/lib/request-sla";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
+import { RequestDocumentsSection } from "@/components/request-documents-section";
 
 type ContactCard = {
   id: string;
@@ -349,6 +350,8 @@ export default function RequestDetailPage() {
               </div>
             </div>
           )}
+
+          <RequestDocumentsSection requestId={data.id} canManage={canManage} />
 
           <div
             className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-card)]/95 p-5 shadow-sm"

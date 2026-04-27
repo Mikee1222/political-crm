@@ -20,7 +20,7 @@ export async function GET() {
 
   const { data: campaignRows, error } = await supabase
     .from("campaigns")
-    .select("id, name, started_at, created_at, description, status, sentiment_data")
+    .select("id, name, started_at, created_at, description, status, sentiment_data, channel")
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   const campaigns = (campaignRows ?? []) as Array<{
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
     description?: string;
     filter?: ContactFilter;
     contact_ids?: string[];
+    channel?: string;
   };
   const name = String(body.name ?? "").trim();
   if (!name) {
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const channel = body.channel === "whatsapp" ? "whatsapp" : "call";
   const { data, error } = await supabase
     .from("campaigns")
     .insert({
@@ -130,6 +132,7 @@ export async function POST(request: NextRequest) {
       description: body.description ? String(body.description) : null,
       started_at: new Date().toISOString(),
       status: "active",
+      channel,
     })
     .select("*")
     .single();

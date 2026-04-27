@@ -21,7 +21,21 @@ type DupPair = { contactA: C; contactB: C; score: number; reasons: string[] };
 export default function DataToolsPage() {
   const { profile } = useProfile();
   const can = hasMinRole(profile?.role, "manager");
-  const [tab, setTab] = useState<"dup" | "phone" | "stats" | "export">("dup");
+  const [tab, setTab] = useState<"dup" | "phone" | "stats" | "export" | "predict">("dup");
+  const [predLoading, setPredLoading] = useState(false);
+  const [predList, setPredList] = useState<
+    | {
+        rank: number;
+        contact_id: string;
+        first_name: string;
+        last_name: string;
+        phone: string | null;
+        municipality: string | null;
+        score: number;
+        breakdown: { points: number; reason: string }[];
+      }[]
+    | null
+  >(null);
   const [dups, setDups] = useState<DupPair[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [phoneAudit, setPhoneAudit] = useState<{
@@ -180,6 +194,7 @@ export default function DataToolsPage() {
               { id: "phone" as const, label: "Έλεγχος τηλεφώνων" },
               { id: "stats" as const, label: "Στατιστικά βάσης" },
               { id: "export" as const, label: "Εξαγωγή & Backup" },
+              { id: "predict" as const, label: "Έξυπνη λίστα κλήσεων" },
             ] as const
           ).map((t) => (
             <button
@@ -402,6 +417,94 @@ export default function DataToolsPage() {
               Πλήρες backup (ZIP)
             </a>
           </div>
+        </div>
+      )}
+
+      {tab === "predict" && (
+        <div className={lux.card + " space-y-4"}>
+          <h2 className={lux.sectionTitle}>Έξυπνη λίστα κλήσεων (σήμερα)</h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            Σκορ βάσει γιορτής, προτεραιότητας, ιστορικού κλήσεων και κατάστασης. Αποθηκεύεται στη βάση.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={lux.btnPrimary}
+              disabled={predLoading}
+              onClick={async () => {
+                setPredLoading(true);
+                const r = await fetchWithTimeout("/api/data-tools/predictive-list", { method: "POST" });
+                const j = (await r.json().catch(() => ({}))) as { list?: typeof predList };
+                if (r.ok) {
+                  setPredList(j.list ?? []);
+                }
+                setPredLoading(false);
+              }}
+            >
+              {predLoading ? "…" : "Δημιουργία λίστας"}
+            </button>
+            <button
+              type="button"
+              className={lux.btnSecondary}
+              onClick={async () => {
+                const r = await fetchWithTimeout("/api/data-tools/predictive-list");
+                const j = (await r.json().catch(() => ({}))) as { list?: typeof predList };
+                if (r.ok) {
+                  setPredList(j.list ?? []);
+                }
+              }}
+            >
+              Φόρτωση σημερινής
+            </button>
+          </div>
+          {predList && predList.length > 0 ? (
+            <ul className="space-y-3">
+              {predList.map((row) => (
+                <li key={row.contact_id} className="rounded-xl border border-[var(--border)] p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-[var(--text-primary)]">
+                      #{row.rank} {row.first_name} {row.last_name} · {row.phone ?? "—"} · {row.municipality ?? "—"}
+                    </span>
+                    <span className="text-[var(--accent-gold)]">Σκορ: {row.score}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    {row.breakdown.map((b) => `${b.reason} (${b.points > 0 ? "+" : ""}${b.points})`).join(" · ")}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={lux.btnPrimary + " !py-1.5 !text-xs"}
+                      onClick={() =>
+                        void fetchWithTimeout("/api/retell/call", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ contact_id: row.contact_id }),
+                        })
+                      }
+                    >
+                      Κλήση
+                    </button>
+                    <button
+                      type="button"
+                      className={lux.btnSecondary + " !py-1.5 !text-xs"}
+                      onClick={async () => {
+                        await fetchWithTimeout("/api/data-tools/predictive-list/skip", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ contact_id: row.contact_id }),
+                        });
+                        setPredList((p) => (p ?? []).filter((x) => x.contact_id !== row.contact_id));
+                      }}
+                    >
+                      Παράλειψη
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">Καμία λίστα — πατήστε δημιουργία.</p>
+          )}
         </div>
       )}
 

@@ -634,6 +634,25 @@ export const ALEX_TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: "get_contact_summary",
+    description: "AI σύνοψη επαφής (2-3 προτάσεις) — cache ή νέα παραγωγή Claude.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        contact_id: { type: "string" as const, description: "UUID επαφής" },
+      },
+      required: ["contact_id"],
+    },
+  },
+  {
+    name: "get_todays_call_list",
+    description: "Έξυπνη λίστα κλήσεων σήμερα (αποθηκευμένη) με σκορ και εξήγηση παραγόντων.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
 ];
 
 export type ToolContext = {
@@ -2298,6 +2317,58 @@ export async function runAlexTool(
     return { content: JSON.stringify({ ok: true, volunteers: j.volunteers ?? [] }), executedToolName: "get_volunteer_list" };
   }
 
+  if (name === "get_contact_summary") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const contact_id = pickContactId(raw.contact_id, ctx);
+    if (!contact_id) {
+      return { content: JSON.stringify({ error: "Χρειάζεται contact_id" }) };
+    }
+    const g = await ctx.forward(`/api/contacts/${contact_id}/ai-summary`, { method: "GET" });
+    const j = (await g.json().catch(() => ({}))) as { summary?: string | null; error?: string };
+    if (g.ok && j.summary) {
+      return { content: JSON.stringify({ ok: true, summary: j.summary, cached: true }), executedToolName: "get_contact_summary" };
+    }
+    const p = await ctx.forward(`/api/contacts/${contact_id}/ai-summary`, { method: "POST" });
+    const j2 = (await p.json().catch(() => ({}))) as { summary?: string; error?: string };
+    if (!p.ok) {
+      return { content: JSON.stringify({ error: j2.error || "Σφάλμα AI" }) };
+    }
+    return { content: JSON.stringify({ ok: true, summary: j2.summary, cached: false }), executedToolName: "get_contact_summary" };
+  }
+
+  if (name === "get_todays_call_list") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const r = await ctx.forward("/api/data-tools/predictive-list", { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as {
+      list?: Array<{
+        rank: number;
+        first_name: string;
+        last_name: string;
+        score: number;
+        breakdown: { reason: string; points: number }[];
+      }>;
+      empty?: boolean;
+    };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: "Σφάλμα API" }) };
+    }
+    const list = j.list ?? [];
+    const expl = list
+      .map(
+        (row) =>
+          `#${row.rank} ${row.first_name} ${row.last_name} (σκορ ${row.score}): ${(row.breakdown ?? []).map((b) => `${b.reason} (${b.points})`).join(", ")}`,
+      )
+      .join("\n");
+    return {
+      content: JSON.stringify({ ok: true, list, explanation: expl || "Άδεια λίστα — δημιουργήστε από /data-tools." }),
+      executedToolName: "get_todays_call_list",
+    };
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
@@ -2331,7 +2402,7 @@ export function buildSystemPrompt({
 - SLA αιτημάτων: sla_due_date, ένδειξη on_track / at_risk / overdue
 - predicted_score: ακέραιο 0–100 (πειθω/πειθωτικότητα) — χαμηλό 0–33, μέτριο 34–66, υψηλό 67–100. Υπολογισμός από Εργαλεία δεδομένων ή εργαλείο calculate_scores.
 - Σελίδες: /documents, /content, /analytics, /parliament (βουλή, ερωτήσεις, νομοθεσία, media), /events (εκδηλώσεις, RSVP), /volunteers (εθελοντές), /contacts (γλώσσα επαφής language, εθελοντικά πεδία).
-- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, add_parliamentary_question, search_media, add_event_rsvp, get_volunteer_list
+- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, add_parliamentary_question, search_media, add_event_rsvp, get_volunteer_list, get_contact_summary, get_todays_call_list
 
 ΚΑΝΟΝΕΣ TOOLS:
 - Χρησιμοποίησε tools ΑΜΕΣΩΣ χωρίς να ρωτάς άδεια για απλές ενέργειες

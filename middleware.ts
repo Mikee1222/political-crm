@@ -26,6 +26,7 @@ function isPortalPublicPath(pathname: string) {
   if (pathname === "/portal" || pathname === "/portal/") return true;
   if (pathname === "/portal/login" || pathname === "/portal/register") return true;
   if (pathname === "/portal/news" || pathname.startsWith("/portal/news/")) return true;
+  if (pathname === "/portal/appointment" || pathname.startsWith("/portal/appointment/")) return true;
   return false;
 }
 
@@ -43,11 +44,24 @@ function isApiPortalPublic(pathname: string) {
   if (pathname === "/api/portal/auth/register" || pathname === "/api/portal/auth/login") return true;
   if (pathname === "/api/portal/news" || pathname.startsWith("/api/portal/news/")) return true;
   if (pathname === "/api/portal/chat" || pathname === "/api/portal/voice/session") return true;
+  if (pathname === "/api/portal/appointments/slots" || pathname === "/api/portal/appointments/book") {
+    return true;
+  }
   return false;
 }
 
 function isRetellPublic(pathname: string) {
   return pathname.startsWith("/api/retell/webhook") || pathname === "/api/retell/llm";
+}
+
+function isWhatsAppPublic(pathname: string) {
+  return pathname === "/api/whatsapp/webhook";
+}
+
+function isPollPublicPath(pathname: string) {
+  if (pathname.startsWith("/poll/")) return true;
+  if (pathname.startsWith("/api/public/polls/")) return true;
+  return false;
 }
 
 function jsonWithSession(
@@ -78,7 +92,13 @@ function isNextStaticOrAsset(pathname: string) {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  if (isNextStaticOrAsset(pathname) || isAlwaysPublicApi(pathname) || isRetellPublic(pathname)) {
+  if (
+    isNextStaticOrAsset(pathname) ||
+    isAlwaysPublicApi(pathname) ||
+    isRetellPublic(pathname) ||
+    isWhatsAppPublic(pathname) ||
+    isPollPublicPath(pathname)
+  ) {
     return NextResponse.next();
   }
 
@@ -89,8 +109,17 @@ export async function middleware(request: NextRequest) {
   if (!isLoggedIn) {
     if (isCrmLoginPage) return sessionResponse;
     if (isPortalPublicPath(pathname)) return sessionResponse;
+    if (isPollPublicPath(pathname) && !pathname.startsWith("/api/")) {
+      return sessionResponse;
+    }
     if (pathname.startsWith("/api/")) {
-      if (isApiPortalPublic(pathname) || isAlwaysPublicApi(pathname) || isRetellPublic(pathname)) {
+      if (
+        isApiPortalPublic(pathname) ||
+        isAlwaysPublicApi(pathname) ||
+        isRetellPublic(pathname) ||
+        isWhatsAppPublic(pathname) ||
+        (isPollPublicPath(pathname) && pathname.startsWith("/api/public/"))
+      ) {
         return sessionResponse;
       }
       return jsonWithSession(request, "Μη εξουσιοδότηση", 401, sessionResponse);

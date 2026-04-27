@@ -4,10 +4,11 @@ import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
+import { sendWhatsAppMessage, isWhatsAppConfigured } from "@/lib/whatsapp";
 export const dynamic = 'force-dynamic';
 const schema = z.object({
   contact_ids: z.array(z.string()).min(1),
-  action: z.enum(["update_status", "add_to_campaign", "delete"]),
+  action: z.enum(["update_status", "add_to_campaign", "delete", "send_whatsapp"]),
   value: z.string().optional(),
 });
 
@@ -52,6 +53,42 @@ export async function POST(request: NextRequest) {
     const { error } = await admin.from("contacts").delete().in("id", contact_ids);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, deleted: contact_ids.length });
+  }
+
+  if (action === "send_whatsapp") {
+    const message = (value ?? "").trim();
+    if (!message) {
+      return NextResponse.json({ error: "Κενό μήνυμα" }, { status: 400 });
+    }
+    if (!isWhatsAppConfigured()) {
+      return NextResponse.json({ error: "Το WhatsApp δεν έχει ρυθμιστεί" }, { status: 503 });
+    }
+    const { data: list, error: le } = await supabase
+      .from("contacts")
+      .select("id, phone")
+      .in("id", contact_ids);
+    if (le) {
+      return NextResponse.json({ error: le.message }, { status: 400 });
+    }
+    let sent = 0;
+    for (const row of list ?? []) {
+      const phone = (row as { phone: string | null }).phone;
+      const cid = (row as { id: string }).id;
+      if (!phone?.trim()) continue;
+      const r = await sendWhatsAppMessage(phone, message);
+      if (r.ok) {
+        sent += 1;
+        void supabase.from("whatsapp_messages").insert({
+          contact_id: cid,
+          direction: "outbound",
+          message,
+          status: "sent",
+          whatsapp_message_id: r.messageId,
+        });
+      }
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    return NextResponse.json({ ok: true, sent, requested: contact_ids.length });
   }
 
   return NextResponse.json({ error: "Άγνωστη ενέργεια" }, { status: 400 });

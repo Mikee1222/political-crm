@@ -548,6 +548,9 @@ export default function SchedulePage() {
                                 >
                                   <span className="line-clamp-1 text-[10px] font-medium leading-tight [text-shadow:0_1px_0_rgba(0,0,0,0.2)] drop-shadow-sm">
                                     {title}
+                                    {title.includes("Ραντεβού (Portal)") ? (
+                                      <span className="ml-1 inline-block rounded bg-white/20 px-1 text-[8px] font-bold">Ραντεβού</span>
+                                    ) : null}
                                   </span>
                                   <span className="mt-0.5 block text-[9px] font-bold text-white/95 [text-shadow:0_1px_0_rgba(0,0,0,0.15)]">
                                     Όλη η μέρα
@@ -602,6 +605,9 @@ export default function SchedulePage() {
                             )}
                             <span className="line-clamp-2 min-h-0 text-[12px] font-medium leading-tight [text-shadow:0_1px_0_rgba(0,0,0,0.15)]">
                               {title}
+                              {title.includes("Ραντεβού (Portal)") ? (
+                                <span className="ml-1 inline-block rounded bg-white/20 px-1 text-[9px] font-bold">Ραντεβού</span>
+                              ) : null}
                             </span>
                             {loc ? (
                               <span

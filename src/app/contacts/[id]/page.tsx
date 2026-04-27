@@ -11,6 +11,7 @@ import { hasMinRole } from "@/lib/roles";
 import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
+import { ContactExtraSections } from "@/components/contact-extra-sections";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 
 const card =
@@ -780,6 +781,11 @@ export default function ContactDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-5">
+        {canManage && (
+          <div className="min-w-0 md:col-span-2">
+            <ContactExtraSections contactId={c.id} phone={c.phone} canManage={canManage} />
+          </div>
+        )}
           <div className="flex min-w-0 flex-col gap-4">
             {/* A Personal */}
             <div

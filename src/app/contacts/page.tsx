@@ -412,6 +412,7 @@ function ContactsPage() {
   const [bulkErr, setBulkErr] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [bulkWaMessage, setBulkWaMessage] = useState("");
 
   const groupNameToId = useMemo(() => {
     const m = new Map<string, string>();
@@ -539,7 +540,10 @@ function ContactsPage() {
     });
   };
 
-  const postBulk = async (action: "update_status" | "add_to_campaign" | "delete", value?: string) => {
+  const postBulk = async (
+    action: "update_status" | "add_to_campaign" | "delete" | "send_whatsapp",
+    value?: string,
+  ) => {
     if (!selectedIds.length) return;
     setBulkErr(null);
     setSaving(true);
@@ -1135,6 +1139,28 @@ function ContactsPage() {
                       disabled={saving || !bulkCampaign}
                     >
                       Προσθήκη
+                    </button>
+                  </div>
+                  <div className="flex w-full max-w-full flex-col gap-1 sm:w-full sm:min-w-0 sm:flex-1 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1">
+                      <label className="mb-0.5 block text-[10px] font-medium uppercase text-[var(--text-muted)}" htmlFor="bulk-wa">
+                        Αποστολή WhatsApp
+                      </label>
+                      <input
+                        id="bulk-wa"
+                        className={lux.select + " !h-9 w-full !text-sm"}
+                        value={bulkWaMessage}
+                        onChange={(e) => setBulkWaMessage(e.target.value)}
+                        placeholder="Κείμενο (1 δευτερόλεπτο ανά επαφή)…"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className={lux.btnSecondary + " w-full !py-2 text-xs sm:w-auto sm:!shrink-0 sm:!px-3"}
+                      disabled={saving || !bulkWaMessage.trim()}
+                      onClick={() => void postBulk("send_whatsapp", bulkWaMessage)}
+                    >
+                      Αποστολή WA
                     </button>
                   </div>
                 </>

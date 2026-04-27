@@ -15,6 +15,7 @@ type Campaign = {
   created_at: string | null;
   description: string | null;
   status: string;
+  channel?: string;
   stats: OutcomeStats;
   progress: number;
   callsMade: number;
@@ -50,6 +51,7 @@ export default function CampaignsPage() {
   const [formErr, setFormErr] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [campaignChannel, setCampaignChannel] = useState<"call" | "whatsapp">("call");
   const [filter, setFilter] = useState<NewFilter>({
     call_status: "",
     area: "",
@@ -122,7 +124,7 @@ export default function CampaignsPage() {
       const res = await fetchWithTimeout("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: description || null, filter: f }),
+        body: JSON.stringify({ name, description: description || null, filter: f, channel: campaignChannel }),
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; assigned_contacts?: number };
       if (!res.ok) {
@@ -132,6 +134,7 @@ export default function CampaignsPage() {
       setModal(false);
       setName("");
       setDescription("");
+      setCampaignChannel("call");
       setFilter({ call_status: "", area: "", municipality: "", priority: "", tag: "" });
       await load();
     } finally {
@@ -234,6 +237,17 @@ export default function CampaignsPage() {
                     >
                       {isActive ? "Ενεργή" : isDone ? "Ολοκληρώθηκε" : c.status ?? "—"}
                     </span>
+                    {c.channel === "whatsapp" ? (
+                      <span
+                        className={
+                          statusBadge + " border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                        }
+                      >
+                        WhatsApp
+                      </span>
+                    ) : (
+                      <span className={statusBadge + " border-sky-500/30 bg-sky-500/10 text-sky-200"}>Κλήσεις</span>
+                    )}
                   </div>
                   <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                     {c.created_at
@@ -448,6 +462,22 @@ export default function CampaignsPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
                 />
+              </div>
+
+              <div>
+                <label className={lux.label} htmlFor="c-ch">Τύπος καμπάνιας</label>
+                <select
+                  id="c-ch"
+                  className={lux.select + " !min-h-11 !text-base"}
+                  value={campaignChannel}
+                  onChange={(e) => setCampaignChannel(e.target.value as "call" | "whatsapp")}
+                >
+                  <option value="call">Κλήσεις (Retell)</option>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
+                <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                  Ο τύπος αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
+                </p>
               </div>
 
               <p className="text-xs font-medium uppercase tracking-wider text-[#C9A84C]">Φιλτράρισμα επαφών</p>

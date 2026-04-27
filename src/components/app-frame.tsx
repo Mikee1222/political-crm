@@ -21,6 +21,7 @@ import {
   Users,
   Wrench,
   BarChart3,
+  QrCode,
   Building2,
   CalendarCheck,
   ChevronsDown,
@@ -64,6 +65,8 @@ const NAV_CONFIG: NavItem[] = [
   { href: "/namedays", label: "Εορτολόγιο", icon: CalendarDays, minRole: "caller" },
   { href: "/schedule", label: "Πρόγραμμα", icon: Calendar, minRole: "manager" },
   { href: "/data-tools", label: "Εργαλεία", icon: Wrench, minRole: "manager" },
+  { href: "/qrcode", label: "QR Code", icon: QrCode, minRole: "manager" },
+  { href: "/polls", label: "Δημοσκοπήσεις", icon: BarChart3, minRole: "manager" },
   { href: "/documents", label: "Έγγραφα", icon: FileText, minRole: "manager" },
   { href: "/content", label: "Περιεχόμενο", icon: PenLine, minRole: "manager" },
   { href: "/settings", label: "Ρυθμίσεις", icon: Cog, minRole: "manager" },
@@ -73,7 +76,7 @@ const groupDefs: { id: string; label: string; hrefs: string[] }[] = [
   { id: "kyria", label: "ΚΥΡΙΑ", hrefs: ["/dashboard", "/contacts", "/heatmap"] },
   { id: "politika", label: "ΠΟΛΙΤΙΚΑ", hrefs: ["/parliament", "/requests", "/campaigns", "/events"] },
   { id: "organosi", label: "ΟΡΓΑΝΩΣΗ", hrefs: ["/tasks", "/volunteers", "/analytics", "/namedays"] },
-  { id: "ergaleia", label: "ΕΡΓΑΛΕΙΑ", hrefs: ["/schedule", "/data-tools", "/documents", "/content"] },
+  { id: "ergaleia", label: "ΕΡΓΑΛΕΙΑ", hrefs: ["/schedule", "/data-tools", "/qrcode", "/polls", "/documents", "/content"] },
 ];
 
 const navItemByHref = (() => {
@@ -105,6 +108,8 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/tasks")) return "Εργασίες";
   if (pathname.startsWith("/schedule")) return "Πρόγραμμα";
   if (pathname.startsWith("/data-tools")) return "Εργαλεία δεδομένων";
+  if (pathname.startsWith("/qrcode")) return "QR Code";
+  if (pathname.startsWith("/polls")) return "Δημοσκοπήσεις";
   if (pathname.startsWith("/documents")) return "Έγγραφα";
   if (pathname.startsWith("/content")) return "Περιεχόμενο";
   if (pathname.startsWith("/settings")) return "Ρυθμίσεις";
