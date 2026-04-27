@@ -22,48 +22,143 @@ const CALLER_BLOCKED_PREFIXES = [
   "/content",
 ] as const;
 
-export async function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/api/public/")) {
-    return NextResponse.next();
-  }
+function isPortalPublicPath(pathname: string) {
+  if (pathname === "/portal" || pathname === "/portal/") return true;
+  if (pathname === "/portal/login" || pathname === "/portal/register") return true;
+  if (pathname === "/portal/news" || pathname.startsWith("/portal/news/")) return true;
+  return false;
+}
 
-  const pathname = request.nextUrl.pathname;
-  if (
-    pathname === "/sw.js" ||
-    pathname === "/offline.html" ||
-    pathname === "/manifest.json" ||
+function isPortalProtectedPath(pathname: string) {
+  if (pathname === "/portal/dashboard" || pathname.startsWith("/portal/dashboard/")) return true;
+  if (pathname === "/portal/requests" || pathname.startsWith("/portal/requests/")) return true;
+  return false;
+}
+
+function isAlwaysPublicApi(pathname: string) {
+  return pathname.startsWith("/api/public/");
+}
+
+function isApiPortalPublic(pathname: string) {
+  if (pathname === "/api/portal/auth/register" || pathname === "/api/portal/auth/login") return true;
+  if (pathname === "/api/portal/news" || pathname.startsWith("/api/portal/news/")) return true;
+  if (pathname === "/api/portal/chat" || pathname === "/api/portal/voice/session") return true;
+  return false;
+}
+
+function isRetellPublic(pathname: string) {
+  return pathname.startsWith("/api/retell/webhook") || pathname === "/api/retell/llm";
+}
+
+function jsonWithSession(
+  _request: NextRequest,
+  message: string,
+  status: number,
+  sessionRes: NextResponse,
+) {
+  const r = NextResponse.json({ error: message }, { status });
+  for (const c of sessionRes.cookies.getAll()) {
+    r.cookies.set(c);
+  }
+  return r;
+}
+
+function isNextStaticOrAsset(pathname: string) {
+  return (
+    pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
+    pathname === "/sw.js" ||
+    pathname === "/manifest.json" ||
+    pathname === "/offline.html" ||
     /^\/icon(-\d+)?\.(png|svg)$/.test(pathname) ||
     pathname === "/icon.svg"
-  ) {
+  );
+}
+
+export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  if (isNextStaticOrAsset(pathname) || isAlwaysPublicApi(pathname) || isRetellPublic(pathname)) {
     return NextResponse.next();
   }
 
   const { supabase, response: sessionResponse, user: authUser } = await updateSession(request);
   const isLoggedIn = Boolean(authUser);
-  const isLoginPage = pathname === "/login";
-  const isRetellPublic = pathname.startsWith("/api/retell/webhook") || pathname === "/api/retell/llm";
+  const isCrmLoginPage = pathname === "/login";
 
-  if (!isLoggedIn && !isLoginPage && !isRetellPublic) {
-    return redirectWithSession(request, "/login", sessionResponse);
+  if (!isLoggedIn) {
+    if (isCrmLoginPage) return sessionResponse;
+    if (isPortalPublicPath(pathname)) return sessionResponse;
+    if (pathname.startsWith("/api/")) {
+      if (isApiPortalPublic(pathname) || isAlwaysPublicApi(pathname) || isRetellPublic(pathname)) {
+        return sessionResponse;
+      }
+      return jsonWithSession(request, "Μη εξουσιοδότηση", 401, sessionResponse);
+    }
+    if (pathname.startsWith("/portal/") && !isPortalPublicPath(pathname)) {
+      const u = new URL("/portal/login", request.url);
+      u.searchParams.set("next", pathname);
+      return redirectWithSession(request, u.pathname + u.search, sessionResponse);
+    }
+    if (!pathname.startsWith("/portal/")) {
+      return redirectWithSession(request, "/login", sessionResponse);
+    }
   }
-  if (isLoggedIn && isLoginPage) {
-    await supabase
+
+  let isPortalUser = false;
+  let role: string = "caller";
+  if (isLoggedIn && authUser) {
+    const { data: pRow } = await supabase
       .from("profiles")
-      .select("role")
-      .eq("id", authUser!.id)
+      .select("is_portal, role")
+      .eq("id", authUser.id)
       .maybeSingle();
-    return redirectWithSession(request, "/dashboard", sessionResponse);
+    isPortalUser = Boolean((pRow as { is_portal?: boolean } | null)?.is_portal);
+    role = (pRow?.role as string) ?? "caller";
   }
 
-  if (isLoggedIn && !isLoginPage && !isRetellPublic) {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", authUser!.id)
-      .maybeSingle();
-    const role = (prof?.role as string) ?? "caller";
+  if (isLoggedIn && authUser) {
+    if (isCrmLoginPage) {
+      return redirectWithSession(request, isPortalUser ? "/portal/dashboard" : "/dashboard", sessionResponse);
+    }
+    if (isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
+      return redirectWithSession(request, "/portal/dashboard", sessionResponse);
+    }
+    if (!isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
+      return redirectWithSession(request, "/dashboard", sessionResponse);
+    }
 
+    if (pathname.startsWith("/api/")) {
+      if (isAlwaysPublicApi(pathname) || isRetellPublic(pathname) || isApiPortalPublic(pathname)) {
+        return sessionResponse;
+      }
+      if (isPortalUser) {
+        if (pathname.startsWith("/api/portal/") || pathname === "/api/profile" || pathname.startsWith("/api/profile/")) {
+          return sessionResponse;
+        }
+        return jsonWithSession(request, "Η πρόσβαση στο CRM δεν επιτρέπεται", 403, sessionResponse);
+      }
+      if (pathname.startsWith("/api/portal/") && !isApiPortalPublic(pathname)) {
+        return jsonWithSession(request, "Μόνο πολίτες πύλης", 403, sessionResponse);
+      }
+    }
+
+    if (isPortalUser) {
+      if (pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/")) {
+        // ok
+      } else if (isNextStaticOrAsset(pathname)) {
+        // ok
+      } else if (pathname.startsWith("/api/")) {
+        // handled
+      } else {
+        return redirectWithSession(request, "/portal/dashboard", sessionResponse);
+      }
+    } else if (isPortalProtectedPath(pathname)) {
+      return redirectWithSession(request, "/dashboard", sessionResponse);
+    }
+  }
+
+  if (isLoggedIn && !isCrmLoginPage && !isRetellPublic(pathname) && !isPortalUser) {
     if (role === "caller") {
       for (const p of CALLER_BLOCKED_PREFIXES) {
         if (pathname === p || pathname.startsWith(`${p}/`)) {

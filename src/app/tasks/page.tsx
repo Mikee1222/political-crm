@@ -501,7 +501,7 @@ function TaskCard({
       return;
     }
     const tm = setTimeout(() => {
-      void fetchWithTimeout(`/api/contacts?search=${encodeURIComponent(q)}`)
+      void fetchWithTimeout(`/api/contacts?search=${encodeURIComponent(q)}&limit=200`)
         .then((r) => r.json())
         .then((d: { contacts?: { id: string; first_name: string; last_name: string; phone: string }[] }) =>
           setHits((d.contacts ?? []).slice(0, 12)),
@@ -803,7 +803,7 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       return;
     }
     const tm = setTimeout(() => {
-      void fetchWithTimeout(`/api/contacts?search=${encodeURIComponent(q)}`)
+      void fetchWithTimeout(`/api/contacts?search=${encodeURIComponent(q)}&limit=200`)
         .then((r) => r.json())
         .then((d: { contacts?: typeof hits }) => setHits((d.contacts ?? []).slice(0, 12)));
     }, 200);

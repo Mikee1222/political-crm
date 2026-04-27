@@ -25,6 +25,8 @@ export type ContactListFilters = {
   birth_year_to: string;
   volunteer_area: string;
   limit: string;
+  /** 1-based page for list (50 per page when not using `limit` combobox mode) */
+  page: string;
 };
 
 function splitCsv(s: string | null | undefined): string[] {
@@ -73,6 +75,7 @@ export function searchParamsToFilters(sp: URLSearchParams, prev?: Partial<Contac
     birth_year_to: sp.get("birth_year_to") ?? prev?.birth_year_to ?? "",
     volunteer_area: sp.get("volunteer_area") ?? prev?.volunteer_area ?? "",
     limit: sp.get("limit") ?? prev?.limit ?? "",
+    page: sp.get("page") ?? prev?.page ?? "1",
   };
 }
 
@@ -110,6 +113,7 @@ export function contactFiltersToSearchParams(f: ContactListFilters, opts?: { for
   pushIf(p, "birth_year_to", f.birth_year_to);
   pushIf(p, "volunteer_area", f.volunteer_area);
   pushIf(p, "limit", f.limit);
+  if (f.page && f.page !== "1") p.set("page", f.page);
   if (opts?.forPage) p.set("vf", "1");
   return p;
 }
@@ -145,6 +149,7 @@ const DEFAULT_FILTERS: ContactListFilters = {
   birth_year_to: "",
   volunteer_area: "",
   limit: "",
+  page: "1",
 };
 
 export function getDefaultContactFilters(): ContactListFilters {

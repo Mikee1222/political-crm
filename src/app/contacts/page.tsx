@@ -399,6 +399,8 @@ function ContactsPage() {
   const searchParams = useSearchParams();
   const [f, setF] = useState<ContactListFilters>(getDefaultContactFilters);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const pageSize = 50;
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedFilterApi[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
@@ -420,7 +422,11 @@ function ContactsPage() {
   const patch = useCallback(
     (p: Partial<ContactListFilters>) => {
       setF((prev) => {
-        const next = { ...prev, ...p };
+        const next: ContactListFilters = { ...prev, ...p };
+        const anyNonPage = Object.keys(p).length > 0 && Object.keys(p).some((k) => k !== "page");
+        if (anyNonPage) {
+          next.page = "1";
+        }
         startTransition(() => {
           router.replace(buildContactsPageUrl(next), { scroll: false });
         });
@@ -446,15 +452,18 @@ function ContactsPage() {
   const load = useCallback(async () => {
     const q = f;
     const params = contactFiltersToSearchParams(q);
+    params.set("page", q.page || "1");
+    params.set("page_size", String(pageSize));
     const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
-    const data = (await res.json()) as { contacts?: Contact[] };
+    const data = (await res.json()) as { contacts?: Contact[]; total?: number };
     const list = (data.contacts ?? []).map((c) => {
       const g = c.contact_groups;
       const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
       return { ...c, contact_groups } as Contact;
     });
     setContacts(list);
-  }, [f]);
+    setListTotal(typeof data.total === "number" ? data.total : list.length);
+  }, [f, pageSize]);
 
   useEffect(() => {
     fetchWithTimeout("/api/groups")
@@ -488,6 +497,27 @@ function ContactsPage() {
     () => Array.from(new Set(contacts.map((c) => c.area).filter(Boolean))) as string[],
     [contacts],
   );
+
+  const currentPage = Math.max(1, parseInt(f.page || "1", 10) || 1);
+  const totalPages = Math.max(1, Math.ceil(listTotal / pageSize));
+  const rangeFrom = listTotal === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeTo = Math.min(currentPage * pageSize, listTotal);
+  const pageList = (() => {
+    const last = totalPages;
+    if (last <= 7) {
+      return Array.from({ length: last }, (_, i) => i + 1);
+    }
+    const r: number[] = [];
+    let end = Math.min(last, currentPage + 2);
+    const start = Math.max(1, end - 4);
+    if (end - start < 4) {
+      end = Math.min(last, start + 4);
+    }
+    for (let i = start; i <= end; i += 1) {
+      r.push(i);
+    }
+    return r;
+  })();
 
   const selectedIds = [...selected];
   const allChecked = contacts.length > 0 && contacts.every((c) => selected.has(c.id));
@@ -996,6 +1026,47 @@ function ContactsPage() {
       </div>
       {contacts.length === 0 && (
         <p className="p-4 text-center text-sm text-[var(--text-secondary)] md:hidden">Δεν βρέθηκαν επαφές</p>
+      )}
+
+      {listTotal > 0 && (
+        <div className="flex w-full min-w-0 max-w-full flex-col items-stretch justify-between gap-3 border-t border-[var(--border)]/60 pt-4 sm:flex-row sm:items-center">
+          <p className="w-full min-w-0 text-center text-sm text-[var(--text-secondary)] sm:max-w-[50%] sm:text-left" aria-live="polite">
+            Εμφάνιση {rangeFrom}–{rangeTo} από {listTotal} επαφές
+          </p>
+          <div className="flex min-w-0 flex-wrap items-center justify-center gap-1 sm:justify-end">
+            <button
+              type="button"
+              className={lux.btnSecondary + " !px-3 !py-2 text-xs sm:text-sm"}
+              disabled={currentPage <= 1}
+              onClick={() => patch({ page: String(currentPage - 1) })}
+            >
+              Προηγούμενο
+            </button>
+            {pageList.map((pn) => (
+              <button
+                key={pn}
+                type="button"
+                className={
+                  lux.btnSecondary +
+                  (pn === currentPage ? " !ring-1 !ring-[#C9A84C]" : "") +
+                  " !min-w-[2.5rem] !px-2 !py-2 text-xs sm:text-sm"
+                }
+                onClick={() => patch({ page: String(pn) })}
+                aria-current={pn === currentPage ? "page" : undefined}
+              >
+                {pn}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={lux.btnSecondary + " !px-3 !py-2 text-xs sm:text-sm"}
+              disabled={currentPage >= totalPages}
+              onClick={() => patch({ page: String(currentPage + 1) })}
+            >
+              Επόμενο
+            </button>
+          </div>
+        </div>
       )}
 
       {canManage && (

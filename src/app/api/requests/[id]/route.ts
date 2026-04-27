@@ -5,6 +5,8 @@ import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
 import { computeSlaStatus } from "@/lib/request-sla";
+import { fieldDiff } from "@/lib/field-diff";
+import { notifyRequestStatusToCitizen } from "@/lib/request-notifications";
 export const dynamic = "force-dynamic";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
@@ -19,7 +21,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const { data: row, error } = await supabase
     .from("requests")
     .select(
-      "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status",
+      "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, portal_message, portal_visible",
     )
     .eq("id", params.id)
     .single();
@@ -64,12 +66,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     return forbidden();
   }
   const body = (await request.json()) as Record<string, unknown>;
-  const { data: cur } = await supabase
-    .from("requests")
-    .select("status, sla_due_date")
-    .eq("id", params.id)
-    .maybeSingle();
-  const curRow = cur as { status?: string | null; sla_due_date?: string | null } | null;
+  const { data: before } = await supabase.from("requests").select("*").eq("id", params.id).single();
+  if (!before) {
+    return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+  }
+  const beforeRow = before as Record<string, unknown>;
+  const curRow = before as { status?: string | null; sla_due_date?: string | null };
   const newStatus = (body as { status?: string }).status != null ? String((body as { status?: string }).status) : curRow?.status;
   const newDue =
     (body as { sla_due_date?: string }).sla_due_date != null
@@ -93,14 +95,34 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   const title = String((data as { title?: string }).title ?? "Αίτημα");
+  const afterRow = data as Record<string, unknown>;
+  const changed = fieldDiff(beforeRow, afterRow);
+  const actor = firstNameFromFull(profile?.full_name);
   await logActivity({
     userId: user.id,
     action: "request_updated",
     entityType: "request",
     entityId: params.id,
     entityName: title,
-    details: { actor_name: firstNameFromFull(profile?.full_name) },
+    details:
+      Object.keys(changed).length > 0
+        ? { actor_name: actor, changed_fields: changed }
+        : { actor_name: actor },
   });
+  const oldS = String((beforeRow as { status?: string }).status ?? "");
+  const newS = String((afterRow as { status?: string }).status ?? "");
+  if (oldS !== newS) {
+    const code = String((data as { request_code?: string }).request_code ?? "");
+    const contactId = String((data as { contact_id: string }).contact_id ?? "");
+    if (code && contactId) {
+      void notifyRequestStatusToCitizen({
+        contactId,
+        requestCode: code,
+        oldStatus: oldS,
+        newStatus: newS,
+      });
+    }
+  }
   return NextResponse.json({ request: data });
   } catch (e) {
     console.error("[api/requests/id PUT]", e);

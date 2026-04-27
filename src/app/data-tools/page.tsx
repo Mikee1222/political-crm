@@ -21,7 +21,7 @@ type DupPair = { contactA: C; contactB: C; score: number; reasons: string[] };
 export default function DataToolsPage() {
   const { profile } = useProfile();
   const can = hasMinRole(profile?.role, "manager");
-  const [tab, setTab] = useState<"dup" | "phone" | "stats">("dup");
+  const [tab, setTab] = useState<"dup" | "phone" | "stats" | "export">("dup");
   const [dups, setDups] = useState<DupPair[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [phoneAudit, setPhoneAudit] = useState<{
@@ -179,6 +179,7 @@ export default function DataToolsPage() {
               { id: "dup" as const, label: "Διπλότυπα" },
               { id: "phone" as const, label: "Έλεγχος τηλεφώνων" },
               { id: "stats" as const, label: "Στατιστικά βάσης" },
+              { id: "export" as const, label: "Εξαγωγή & Backup" },
             ] as const
           ).map((t) => (
             <button
@@ -386,10 +387,41 @@ export default function DataToolsPage() {
         </div>
       )}
 
+      {tab === "export" && (
+        <div className={lux.card + " space-y-4"}>
+          <h2 className={lux.sectionTitle}>Εξαγωγή &amp; backup</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Κατέβασμα XLSX / ZIP. Το εβδομαδιαίο αυτόματο αποστέλλεται από το cron (Vercel) στο ADMIN_EMAIL.</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <a href="/api/export/contacts" className={lux.btnPrimary + " text-center !no-underline"} download>
+              Εξαγωγή επαφών (Excel)
+            </a>
+            <a href="/api/export/requests" className={lux.btnSecondary + " text-center !no-underline"} download>
+              Εξαγωγή αιτημάτων (Excel)
+            </a>
+            <a href="/api/export/full-backup" className={lux.btnGold + " text-center !no-underline"} download>
+              Πλήρες backup (ZIP)
+            </a>
+          </div>
+        </div>
+      )}
+
       {mergeTarget && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 [background:var(--overlay-scrim)]">
-          <div className="w-full max-w-md space-y-4 rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-[var(--text-primary)]">Συγχώνευση</h3>
+        <div
+          className={lux.modalOverlay}
+          onClick={() => setMergeTarget(null)}
+          onKeyDown={(e) => e.key === "Escape" && setMergeTarget(null)}
+          role="presentation"
+        >
+          <div
+            className={lux.modalPanel + " max-w-md space-y-4 p-6"}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal
+            aria-labelledby="merge-modal-title"
+          >
+            <h3 id="merge-modal-title" className="text-lg font-bold text-[var(--text-primary)]">
+              Συγχώνευση
+            </h3>
             <p className="text-sm text-[var(--text-secondary)]">Ποια εγγραφή να κρατήσουμε; (οι κλήσεις, tasks και αιτήματα μεταφέρονται)</p>
             <div className="space-y-2">
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border p-2">

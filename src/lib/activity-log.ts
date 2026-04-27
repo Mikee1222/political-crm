@@ -8,7 +8,8 @@ export type ActivityAction =
   | "request_created"
   | "request_updated"
   | "request_note_added"
-  | "campaign_started";
+  | "campaign_started"
+  | "task_updated";
 
 export type ActivityEntityType = "contact" | "request" | "campaign" | "task";
 

@@ -6,6 +6,7 @@ import { AppFrame } from "@/components/app-frame";
 import { PwaServiceWorkerRegister } from "@/components/pwa-service-worker-register";
 import { ProfileProvider } from "@/contexts/profile-context";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProfileSync } from "@/components/theme-profile-sync";
 import { AlexandraChatProvider } from "@/components/alexandra/alexandra-chat-provider";
 import { AlexandraPageProvider } from "@/contexts/alexandra-page-context";
 
@@ -67,6 +68,7 @@ export default function RootLayout({
         <PwaServiceWorkerRegister />
         <ThemeProvider>
           <ProfileProvider>
+            <ThemeProfileSync />
             <AlexandraPageProvider>
               <AlexandraChatProvider>
                 <AppFrame>{children}</AppFrame>

@@ -772,3 +772,231 @@ create policy "request_notes all" on public.request_notes
   for all to authenticated
   using (true)
   with check (true);
+
+-- User profile: public avatar URL + UI preferences
+alter table public.profiles
+  add column if not exists avatar_url text;
+alter table public.profiles
+  add column if not exists preferences jsonb not null default '{}';
+
+-- Public avatars (path: {userId}/{filename})
+insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true)
+  on conflict (id) do update set public = excluded.public;
+
+drop policy if exists "avatars public read" on storage.objects;
+create policy "avatars public read" on storage.objects for select to public using (bucket_id = 'avatars');
+
+drop policy if exists "avatars insert own" on storage.objects;
+create policy "avatars insert own" on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername (name))[1] = (select auth.uid()::text));
+
+drop policy if exists "avatars update own" on storage.objects;
+create policy "avatars update own" on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername (name))[1] = (select auth.uid()::text))
+  with check (bucket_id = 'avatars' and (storage.foldername (name))[1] = (select auth.uid()::text));
+
+drop policy if exists "avatars delete own" on storage.objects;
+create policy "avatars delete own" on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername (name))[1] = (select auth.uid()::text));
+
+-- ========== Πύλη πολιτών (Portal) + Νέα δημόσιας εμφάνισης ==========
+alter table public.profiles
+  add column if not exists is_portal boolean not null default false;
+
+create table if not exists public.portal_users (
+  id uuid primary key default gen_random_uuid (),
+  auth_user_id uuid not null unique references auth.users (id) on delete cascade,
+  contact_id uuid references public.contacts (id) on delete set null,
+  first_name text not null,
+  last_name text not null,
+  phone text,
+  email text not null,
+  verified boolean not null default false,
+  created_at timestamptz not null default now ()
+);
+
+create index if not exists idx_portal_users_auth on public.portal_users (auth_user_id);
+create index if not exists idx_portal_users_contact on public.portal_users (contact_id);
+create index if not exists idx_portal_users_email on public.portal_users (email);
+
+create table if not exists public.news_posts (
+  id uuid primary key default gen_random_uuid (),
+  title text not null,
+  slug text not null,
+  excerpt text,
+  content text not null,
+  cover_image text,
+  published boolean not null default false,
+  published_at timestamptz,
+  category text not null default 'Ανακοίνωση',
+  tags text[],
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now (),
+  updated_at timestamptz not null default now ()
+);
+create unique index if not exists news_posts_slug_uniq on public.news_posts (slug);
+create index if not exists news_posts_published on public.news_posts (published, published_at desc);
+
+alter table public.requests
+  add column if not exists portal_visible boolean not null default true;
+alter table public.requests
+  add column if not exists portal_message text;
+
+alter table public.portal_users enable row level security;
+alter table public.news_posts enable row level security;
+
+drop policy if exists "portal_users own" on public.portal_users;
+create policy "portal_users own"
+  on public.portal_users
+  for all
+  to authenticated
+  using (auth_user_id = auth.uid())
+  with check (auth_user_id = auth.uid());
+
+-- Δημόσια: δημοσιευμένα άρθρα (ανώνυμα + σύνδεση)
+drop policy if exists "news public read" on public.news_posts;
+create policy "news public read" on public.news_posts for
+select
+  to anon, authenticated
+  using (published = true);
+
+-- Διαχείριση: μόνον προσωπικό CRM (όχι is_portal)
+drop policy if exists "news staff write" on public.news_posts;
+create policy "news staff write" on public.news_posts
+  for all
+  to authenticated
+  using (
+    exists (
+        select
+          1
+        from
+          public.profiles p
+        where
+          p.id = auth.uid ()
+          and coalesce(p.is_portal, false) = false
+          and p.role in ('admin', 'manager')
+      )
+  )
+  with check (
+    exists (
+        select
+          1
+        from
+          public.profiles p
+        where
+          p.id = auth.uid ()
+          and coalesce(p.is_portal, false) = false
+          and p.role in ('admin', 'manager')
+      )
+  );
+
+-- RLS: επαφές — ξεχωριστά CRM vs πύλη
+drop policy if exists "authenticated contacts" on public.contacts;
+create policy "contacts_crm" on public.contacts
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+create policy "contacts_portal_read" on public.contacts for
+select
+  to authenticated
+  using (
+    exists (
+        select
+          1
+        from
+          public.portal_users pu
+        where
+          pu.auth_user_id = auth.uid ()
+          and contacts.id = pu.contact_id
+      )
+  );
+
+-- RLS: αιτήματα — CRM full access, πύλη read/insert own
+drop policy if exists "authenticated requests" on public.requests;
+create policy "requests_crm" on public.requests
+  for all
+  to authenticated
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  )
+  with check (
+    exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
+  );
+create policy "requests_portal_read" on public.requests for
+select
+  to authenticated
+  using (
+    exists (
+        select
+          1
+        from
+          public.portal_users pu
+        where
+          pu.auth_user_id = auth.uid ()
+          and requests.contact_id = pu.contact_id
+      )
+    and coalesce (requests.portal_visible, true) = true
+  );
+create policy "requests_portal_ins" on public.requests for insert to authenticated
+  with check (
+    exists (
+        select
+          1
+        from
+          public.portal_users pu
+        where
+          pu.auth_user_id = auth.uid ()
+          and pu.contact_id = contact_id
+      )
+  );
+
+-- Email αποστολές (καταγραφή)
+create table if not exists public.email_logs (
+  id uuid primary key default gen_random_uuid (),
+  to_email text not null,
+  subject text not null,
+  template text not null,
+  status text not null default 'sent',
+  contact_id uuid references public.contacts (id) on delete set null,
+  created_at timestamptz not null default now ()
+);
+
+create index if not exists idx_email_logs_created on public.email_logs (created_at desc);
+create index if not exists idx_email_logs_contact on public.email_logs (contact_id);
+
+alter table public.email_logs enable row level security;
+drop policy if exists "email_logs crm read" on public.email_logs;
+create policy "email_logs crm read" on public.email_logs for
+select
+  to authenticated
+  using (
+    exists (
+        select
+          1
+        from
+          public.profiles p
+        where
+          p.id = auth.uid ()
+          and coalesce(p.is_portal, false) = false
+          and p.role in ('admin', 'manager')
+      )
+  );
+
+alter table public.profiles
+  add column if not exists theme text not null default 'dark';
+
+alter table public.portal_users
+  add column if not exists verification_token text;
+alter table public.portal_users
+  add column if not exists push_subscription jsonb;
+
+alter table public.contacts
+  add column if not exists portal_invite_token text;
+create unique index if not exists contacts_portal_invite_token_uniq on public.contacts (portal_invite_token)
+  where
+    portal_invite_token is not null;

@@ -7,6 +7,7 @@ import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
 import { resolveProfileNames } from "@/lib/profile-names";
+import { fieldDiff } from "@/lib/field-diff";
 export const dynamic = "force-dynamic";
 
 function enrichContact(
@@ -106,6 +107,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (Object.keys(updatePayload).length === 0) {
       return NextResponse.json({ error: "Κενό" }, { status: 400 });
     }
+    const { data: beforeC } = await supabase.from("contacts").select("*").eq("id", params.id).single();
+    const beforeR = (beforeC ?? null) as Record<string, unknown> | null;
     const now = new Date().toISOString();
     const { data, error } = await supabase
       .from("contacts")
@@ -121,13 +124,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const nm = `${String(data.first_name)} ${String(data.last_name)}`.trim();
+    const ch = beforeR
+      ? fieldDiff(beforeR, data as Record<string, unknown>, [...Object.keys(updatePayload), "updated_at", "updated_by"])
+      : {};
+    const actorU = firstNameFromFull(profile?.full_name);
     await logActivity({
       userId: user.id,
       action: "contact_updated",
       entityType: "contact",
       entityId: data.id,
       entityName: nm,
-      details: { actor_name: firstNameFromFull(profile?.full_name) },
+      details: Object.keys(ch).length > 0 ? { actor_name: actorU, changed_fields: ch } : { actor_name: actorU },
     });
     return NextResponse.json({ contact: data });
   }
@@ -142,6 +149,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const iso = nameDayDateStringFromFirstName(String(body.first_name));
     if (iso) body.name_day = iso;
   }
+  const { data: beforeM } = await supabase.from("contacts").select("*").eq("id", params.id).single();
+  const beforeMr = (beforeM ?? null) as Record<string, unknown> | null;
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from("contacts")
@@ -153,13 +162,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   const nm2 = `${String(data.first_name)} ${String(data.last_name)}`.trim();
+  const ch2 = beforeMr ? fieldDiff(beforeMr, data as Record<string, unknown>) : {};
+  const actM = firstNameFromFull(profile?.full_name);
   await logActivity({
     userId: user.id,
     action: "contact_updated",
     entityType: "contact",
     entityId: data.id,
     entityName: nm2,
-    details: { actor_name: firstNameFromFull(profile?.full_name) },
+    details: Object.keys(ch2).length > 0 ? { actor_name: actM, changed_fields: ch2 } : { actor_name: actM },
   });
   return NextResponse.json({ contact: data });
   } catch (e) {

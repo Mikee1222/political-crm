@@ -34,6 +34,8 @@ type RequestDetail = {
   sla_status: string | null;
   created_at: string | null;
   updated_at: string | null;
+  portal_message: string | null;
+  portal_visible: boolean;
   requester: ContactCard | null;
   affected: ContactCard | null;
 };
@@ -214,6 +216,8 @@ export default function RequestDetailPage() {
   const [err, setErr] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [portalMsg, setPortalMsg] = useState("");
+  const [savingMsg, setSavingMsg] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -228,7 +232,9 @@ export default function RequestDetailPage() {
         setErr(String((rj as { error?: string }).error ?? "Σφάλμα"));
         return;
       }
-      setData((rj as { request: RequestDetail }).request);
+      const req = (rj as { request: RequestDetail }).request;
+      setData(req);
+      setPortalMsg(req.portal_message?.trim() ?? "");
       if (nRes.ok) {
         const nj = (await nRes.json()) as { notes?: Note[] };
         setNotes(nj.notes ?? []);
@@ -299,6 +305,50 @@ export default function RequestDetailPage() {
               {data.description?.trim() || "Χωρίς περιγραφή."}
             </p>
           </div>
+
+          {canManage && (
+            <div
+              className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-blue-500/50 bg-[var(--bg-card)]/95 p-5 shadow-sm"
+              data-hq-card
+            >
+              <h2 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">Μήνυμα στον πολίτη</h2>
+              <p className="mb-2 text-xs text-[var(--text-secondary)]">Εμφανίζεται στο portal του πολίτη (αίτημα) σε επισημασμένο πλαίσιο.</p>
+              <textarea
+                className="min-h-[72px] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--input-bg)] p-3 text-sm"
+                value={portalMsg}
+                onChange={(e) => setPortalMsg(e.target.value)}
+                disabled={savingMsg}
+                placeholder="Σύντομη ενημέρωση…"
+                aria-label="Μήνυμα portal"
+              />
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  className={lux.btnBlue + " !text-xs"}
+                  disabled={savingMsg}
+                  onClick={async () => {
+                    if (!id) return;
+                    setSavingMsg(true);
+                    try {
+                      const res = await fetchWithTimeout(`/api/requests/${id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ portal_message: portalMsg || null }),
+                      });
+                      if (res.ok) {
+                        const rj = (await res.json()) as { request: RequestDetail };
+                        setData(rj.request);
+                      }
+                    } finally {
+                      setSavingMsg(false);
+                    }
+                  }}
+                >
+                  {savingMsg ? "…" : "Αποθήκευση μηνύματος"}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div
             className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-card)]/95 p-5 shadow-sm"

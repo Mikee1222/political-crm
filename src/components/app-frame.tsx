@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   ArrowLeft,
   Calendar,
@@ -27,8 +27,12 @@ import {
   ChevronsLeft,
   ChevronsRight,
   HeartHandshake,
+  User,
   X,
+  HelpCircle,
 } from "lucide-react";
+import { GlobalSearchOverlay } from "@/components/global-search-overlay";
+import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
 import { AlexaMiniWindow } from "@/components/alexandra/alexa-mini-window";
 import { AiAssistantWidget } from "@/components/ai-assistant-widget";
 import { LogoutButton } from "@/components/logout-button";
@@ -104,6 +108,7 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/documents")) return "Έγγραφα";
   if (pathname.startsWith("/content")) return "Περιεχόμενο";
   if (pathname.startsWith("/settings")) return "Ρυθμίσεις";
+  if (pathname.startsWith("/profile")) return "Προφίλ";
   if (pathname.startsWith("/alexandra")) return "Αλεξάνδρα";
   return "Καραγκούνης CRM";
 }
@@ -425,17 +430,25 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { profile, loading: profileLoading } = useProfile();
-  const isPublic = pathname === "/login";
+  const isPortal = pathname === "/portal" || pathname.startsWith("/portal/");
+  const isCrmLoginPublic = pathname === "/login";
   const [openRequestsCount, setOpenRequestsCount] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [alexVoiceToast, setAlexVoiceToast] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [avatarImgErr, setAvatarImgErr] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const gNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gPendingRef = useRef(false);
   const isLg = useMediaQuery("(min-width: 1024px)", false);
   const [sidebarUserExpanded, setSidebarUserExpanded] = useState(true);
   const [groupState, setGroupState] = useState<Record<string, boolean>>({ ...DEFAULT_GROUP_STATE });
 
   useLayoutEffect(() => {
-    if (isPublic) return;
+    if (isCrmLoginPublic || isPortal) return;
     const ex = localStorage.getItem(STORAGE_SIDEBAR);
     if (ex === "0") setSidebarUserExpanded(false);
     else if (ex === "1") setSidebarUserExpanded(true);
@@ -448,7 +461,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
-  }, [isPublic]);
+  }, [isCrmLoginPublic, isPortal]);
 
   const role: Role = profile?.role ?? "caller";
   const depth = pathname.split("/").filter(Boolean).length;
@@ -503,7 +516,22 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (isPublic) return;
+    setAvatarImgErr(false);
+  }, [profile?.avatar_url]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [userMenuOpen]);
+
+  useEffect(() => {
+    if (isCrmLoginPublic || isPortal) return;
     if (typeof document === "undefined") return;
     if (!isLg && mobileNavOpen) {
       const prev = document.body.style.overflow;
@@ -512,31 +540,101 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         document.body.style.overflow = prev;
       };
     }
-  }, [isLg, mobileNavOpen, isPublic]);
+  }, [isLg, mobileNavOpen, isCrmLoginPublic, isPortal]);
+
+  const inputLike = (t: EventTarget | null) => {
+    if (!t || !(t instanceof Element)) {
+      return false;
+    }
+    return Boolean(t.closest("input,textarea,select,[contenteditable]"));
+  };
 
   useEffect(() => {
-    if (isPublic) return;
+    if (isCrmLoginPublic || isPortal) {
+      return;
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        if (hasMinRole(role, "caller")) {
-          router.push("/alexandra");
+        if (hasMinRole(role, "manager")) {
+          setSearchOpen(true);
         }
+        return;
+      }
+      if (e.key === "n" && (e.metaKey || e.ctrlKey) && hasMinRole(role, "manager") && pathname.startsWith("/contacts") && !inputLike(e.target)) {
+        e.preventDefault();
+        router.push("/contacts?new=1");
+        return;
+      }
+      if (e.key === "/" && (e.metaKey || e.ctrlKey) && !inputLike(e.target)) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+      if (e.key === "Escape") {
+        setSearchOpen(false);
+        setShortcutsOpen(false);
+        return;
       }
       if (e.key.toLowerCase() === "a" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
         e.preventDefault();
-        if (!hasMinRole(role, "caller")) return;
+        if (!hasMinRole(role, "caller")) {
+          return;
+        }
         window.dispatchEvent(new Event("alexandra-voice-shortcut"));
         setAlexVoiceToast(true);
         window.setTimeout(() => setAlexVoiceToast(false), 2600);
+        return;
+      }
+      if (inputLike(e.target)) {
+        return;
+      }
+      if (e.key === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        gPendingRef.current = true;
+        if (gNavTimerRef.current) {
+          clearTimeout(gNavTimerRef.current);
+        }
+        gNavTimerRef.current = setTimeout(() => {
+          gPendingRef.current = false;
+        }, 1000);
+        return;
+      }
+      if (gPendingRef.current && e.key.length === 1) {
+        gPendingRef.current = false;
+        if (gNavTimerRef.current) {
+          clearTimeout(gNavTimerRef.current);
+          gNavTimerRef.current = null;
+        }
+        if (!hasMinRole(role, "manager")) {
+          return;
+        }
+        const c = e.key.toLowerCase();
+        if (c === "d") {
+          e.preventDefault();
+          router.push("/dashboard");
+        } else if (c === "c") {
+          e.preventDefault();
+          router.push("/contacts");
+        } else if (c === "r") {
+          e.preventDefault();
+          router.push("/requests");
+        } else if (c === "a") {
+          e.preventDefault();
+          router.push("/alexandra");
+        }
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isPublic, role, router]);
+    return () => {
+      if (gNavTimerRef.current) {
+        clearTimeout(gNavTimerRef.current);
+      }
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isCrmLoginPublic, isPortal, role, router, pathname]);
 
   useEffect(() => {
-    if (isPublic) return;
+    if (isCrmLoginPublic || isPortal) return;
     if (!hasMinRole(role, "manager")) {
       return;
     }
@@ -550,10 +648,23 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         setOpenRequestsCount(count);
       })
       .catch(() => setOpenRequestsCount(0));
-  }, [isPublic, role]);
+  }, [isCrmLoginPublic, isPortal, role]);
 
   const pinBottom = (opts: { onNavigate?: () => void; showLabels: boolean }) => (
     <div className="mt-auto space-y-0.5 border-t border-[var(--border)]/40 pt-1.5">
+      <button
+        type="button"
+        onClick={() => setShortcutsOpen(true)}
+        className={[
+          "group flex h-10 w-full max-w-full shrink-0 items-center gap-2 rounded-lg pl-1.5 pr-2 text-left text-sm text-[var(--nav-ink)] transition hover:bg-[var(--nav-item-hover-bg)]",
+          !opts.showLabels && "min-w-0 justify-center pl-0 pr-0",
+        ].join(" ")}
+        title="Συντομεύσεις"
+        aria-label="Βοήθεια συντομεύσεων"
+      >
+        <HelpCircle className="h-5 w-5 shrink-0 text-[var(--nav-icon-inactive)] group-hover:text-[var(--nav-icon-hover)]" />
+        {opts.showLabels && <span className="text-[14px] font-medium">Βοήθεια</span>}
+      </button>
       {hasMinRole(role, settingsItem.minRole) && (
         <NavItemRow
           item={settingsItem}
@@ -575,7 +686,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   const shellStyle: CSSProperties = { ["--sidebar-width" as string]: `${sidebarW}px` };
 
-  if (isPublic) {
+  if (isCrmLoginPublic || isPortal) {
     return <>{children}</>;
   }
 
@@ -736,24 +847,70 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="box-border flex shrink-0 items-center gap-1 pl-1 sm:gap-2 sm:pl-2">
-              <Link
-                href="/contacts"
-                className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)] sm:inline-flex"
-                aria-label="Επαφές"
-              >
-                <Search className="h-[18px] w-[18px]" />
-              </Link>
+              {hasMinRole(role, "manager") ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)] sm:inline-flex"
+                  aria-label="Καθολική αναζήτηση"
+                  title="Αναζήτηση (⌘K)"
+                >
+                  <Search className="h-[18px] w-[18px]" />
+                </button>
+              ) : (
+                <Link
+                  href="/contacts"
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)] sm:inline-flex"
+                  aria-label="Επαφές"
+                >
+                  <Search className="h-[18px] w-[18px]" />
+                </Link>
+              )}
               {profile && (
                 <span className="max-w-[8rem] shrink-0 truncate rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/80 px-2 py-0.5 text-[10px] font-medium text-[var(--accent-gold)] sm:max-w-none sm:px-2.5 sm:py-1 sm:text-xs">
                   {ROLE_BADGE[role]}
                 </span>
               )}
               <ThemeToggle />
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/40 text-[10px] font-bold text-white shadow-sm sm:text-xs"
-                title={profile?.full_name ?? "Χρήστης"}
-              >
-                {profileLoading ? "—" : initials(profile?.full_name ?? null, "ΚΚ")}
+              <div className="relative shrink-0" ref={userMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setUserMenuOpen((o) => !o)}
+                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/40 text-[10px] font-bold text-white shadow-sm sm:text-xs"
+                  title={profile?.full_name ?? "Χρήστης"}
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  {profileLoading ? (
+                    "—"
+                  ) : profile?.avatar_url && !avatarImgErr ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- dynamic user URL from Supabase
+                    <img
+                      src={profile.avatar_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      onError={() => setAvatarImgErr(true)}
+                    />
+                  ) : (
+                    initials(profile?.full_name ?? null, "ΚΚ")
+                  )}
+                </button>
+                {userMenuOpen && (
+                  <div
+                    className="absolute right-0 top-full z-[250] mt-1.5 min-w-[14rem] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1.5 shadow-xl"
+                    role="menu"
+                  >
+                    <Link
+                      href="/profile"
+                      className="flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--text-primary)] transition hover:bg-[var(--bg-elevated)]"
+                      onClick={() => setUserMenuOpen(false)}
+                      role="menuitem"
+                    >
+                      <User className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                      Το προφίλ μου
+                    </Link>
+                  </div>
+                )}
               </div>
               <LogoutButton variant="icon" className="shrink-0" />
             </div>
@@ -785,6 +942,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           openRequestsCount={openRequestsCount}
           role={role}
         />
+        <GlobalSearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} role={role} />
+        <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       </div>
     </div>
   );

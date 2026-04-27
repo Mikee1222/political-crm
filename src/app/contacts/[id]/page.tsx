@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
+import { ArrowLeft, Building2, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { hasMinRole } from "@/lib/roles";
-import { callStatusLabel, callStatusPill, priorityPill } from "@/lib/luxury-styles";
+import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import type { ContactGroupRow } from "@/lib/contact-groups";
@@ -319,6 +319,19 @@ export default function ContactDetailPage() {
   const [contactNotes, setContactNotes] = useState<ContactNoteItem[]>([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSending, setNoteSending] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyRows, setHistoryRows] = useState<
+    {
+      id: string;
+      user_name: string;
+      action: string;
+      entity_type: string;
+      entity_name: string | null;
+      details: Record<string, unknown> | null;
+      created_at: string;
+    }[]
+  >([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const alexPage = useOptionalAlexandraPageContact();
 
   const load = useCallback(async () => {
@@ -390,6 +403,42 @@ export default function ContactDetailPage() {
       .then((d: { groups?: ContactGroupRow[] }) => setGroupOptions(d.groups ?? []))
       .catch(() => setGroupOptions([]));
   }, []);
+
+  useEffect(() => {
+    if (!canManage || !id || !historyOpen) {
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoading(true);
+    void (async () => {
+      const res = await fetchWithTimeout(`/api/contacts/${id}/history`);
+      if (cancelled) {
+        return;
+      }
+      if (res.ok) {
+        const j = (await res.json()) as {
+          entries?: { id: string; user_id: string | null; action: string; entity_type: string; entity_name: string | null; details: unknown; created_at: string; user_name?: string }[];
+        };
+        setHistoryRows(
+          (j.entries ?? []).map((e) => ({
+            id: e.id,
+            user_name: e.user_name ?? "—",
+            action: e.action,
+            entity_type: e.entity_type,
+            entity_name: e.entity_name,
+            details: (e.details as Record<string, unknown>) ?? null,
+            created_at: e.created_at,
+          })),
+        );
+      } else {
+        setHistoryRows([]);
+      }
+      setHistoryLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage, id, historyOpen]);
 
   const c = contact;
   const w = buf ?? c;
@@ -558,6 +607,13 @@ export default function ContactDetailPage() {
 
   return (
     <div className="min-h-full -m-6 bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8">
+      <Link
+        href="/contacts"
+        className={lux.btnSecondary + " mb-4 inline-flex w-fit items-center gap-2 !py-2 text-sm"}
+      >
+        <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+        Επαφές
+      </Link>
       {isCaller && (
         <p className="mb-4 rounded-[12px] border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">
           Προβολή — μπορείτε να αλλάξετε μόνο την <strong>κατάσταση κλήσης</strong>· αποθήκευση παρακάτω.
@@ -1094,6 +1150,56 @@ export default function ContactDetailPage() {
                 </div>
               </div>
             </div>
+
+            {canManage && (
+              <div {...animDelay(1)} className={card + " !p-0"}>
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen((o) => !o)}
+                  className="flex w-full items-center justify-between gap-2 rounded-[12px] p-4 text-left text-sm font-semibold text-[var(--text-primary)]"
+                >
+                  Ιστορικό αλλαγών
+                  <span className="text-xs text-[var(--text-muted)]">{historyOpen ? "▲" : "▼"}</span>
+                </button>
+                {historyOpen && (
+                  <div className="max-h-80 space-y-2 overflow-y-auto border-t border-[var(--border)]/50 px-4 py-3">
+                    {historyLoading && <p className="text-xs text-[var(--text-muted)]">Φόρτωση…</p>}
+                    {!historyLoading &&
+                      historyRows.length === 0 && (
+                        <p className="text-xs text-[var(--text-muted)]">Καμία καταχωρισμένη αλλαγή.</p>
+                      )}
+                    {!historyLoading &&
+                      historyRows.map((h) => {
+                        const ch = h.details?.changed_fields as
+                          | Record<string, { from: unknown; to: unknown }>
+                          | undefined;
+                        return (
+                          <div
+                            key={h.id}
+                            className="rounded border border-[var(--border)]/50 bg-[var(--bg-elevated)]/30 p-2 text-xs text-[var(--text-secondary)]"
+                          >
+                            <p className="text-[10px] text-[var(--text-muted)]">
+                              {new Date(h.created_at).toLocaleString("el-GR", { hour12: false })} — {h.user_name}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-[var(--text-primary)]/90">
+                              {h.action} · {h.entity_type} · {h.entity_name ?? "—"}
+                            </p>
+                            {ch && Object.keys(ch).length > 0 && (
+                              <ul className="mt-1 list-inside list-disc text-[10px] text-[var(--text-muted)]">
+                                {Object.entries(ch).map(([k, v]) => (
+                                  <li key={k}>
+                                    <span className="font-mono">{k}</span>: {JSON.stringify(v.from)} → {JSON.stringify(v.to)}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* D Notes (timeline) */}
             <div {...animDelay(2)} className={cardGold}>

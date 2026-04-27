@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+import { logActivity } from "@/lib/activity-log";
+import { firstNameFromFull } from "@/lib/activity-descriptions";
+import { fieldDiff } from "@/lib/field-diff";
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
@@ -49,6 +52,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: "Καμία αλλαγή" }, { status: 400 });
   }
 
+  const { data: beforeT } = await supabase.from("tasks").select("*").eq("id", params.id).single();
+  const beforeTask = (beforeT ?? null) as Record<string, unknown> | null;
   const { data, error } = await supabase
     .from("tasks")
     .update(patch)
@@ -58,6 +63,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   const c = (data as { contacts?: unknown }).contacts;
   const contact = Array.isArray(c) ? c[0] : c;
+  const { contacts: _c, ...rest } = data as Record<string, unknown> & { contacts?: unknown };
+  void _c;
+  const ch = beforeTask ? fieldDiff(beforeTask, rest as Record<string, unknown>) : {};
+  const titleL = String((data as { title?: string }).title ?? "Εργασία");
+  await logActivity({
+    userId: user.id,
+    action: "task_updated",
+    entityType: "task",
+    entityId: String((data as { id: string }).id),
+    entityName: titleL,
+    details:
+      Object.keys(ch).length > 0
+        ? { actor_name: firstNameFromFull(profile?.full_name), changed_fields: ch, contact_id: (data as { contact_id?: string }).contact_id }
+        : { actor_name: firstNameFromFull(profile?.full_name), contact_id: (data as { contact_id?: string }).contact_id },
+  });
   return NextResponse.json({ task: { ...data, contacts: contact ?? null } });
   } catch (e) {
     console.error("[api/tasks/id PATCH]", e);

@@ -3,12 +3,18 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import type { Role } from "@/lib/roles";
+import type { UserPreferences } from "@/lib/user-preferences";
 
 export type Profile = {
   id: string;
   full_name: string | null;
   role: Role;
+  is_portal?: boolean;
   created_at?: string;
+  email?: string | null;
+  avatar_url?: string | null;
+  theme?: "dark" | "light" | string;
+  preferences?: UserPreferences;
 };
 
 type Ctx = {
@@ -43,6 +49,16 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const path = typeof window !== "undefined" ? window.location.pathname : "";
     if (path === "/login") {
+      setLoading(false);
+      return;
+    }
+    if (
+      path === "/portal" ||
+      path.startsWith("/portal/login") ||
+      path.startsWith("/portal/register") ||
+      path === "/portal/news" ||
+      path.startsWith("/portal/news/")
+    ) {
       setLoading(false);
       return;
     }

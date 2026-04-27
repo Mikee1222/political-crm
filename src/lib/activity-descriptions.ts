@@ -26,6 +26,8 @@ export function activityGreekLine(params: {
       return `Ο/Η ${a} δημιούργησε αίτημα «${e}»`;
     case "request_updated":
       return `Ο/Η ${a} ενημέρωσε αίτημα «${e}»`;
+    case "task_updated":
+      return `Ο/Η ${a} ενημέρωσε εργασία «${e}»`;
     case "campaign_started":
       return `Η καμπάνια «${e}» ξεκίνησε (καταχώρηση: ${a})`;
     default:

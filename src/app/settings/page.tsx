@@ -10,7 +10,9 @@ import { lux } from "@/lib/luxury-styles";
 import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
 import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
+import { PortalNewsSection } from "@/components/settings/portal-news-section";
 import { TelegramSettingsSection } from "@/components/settings/telegram-settings-section";
+import { EmailSettingsSection } from "@/components/settings/email-settings-section";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { EventCategoryRow } from "@/lib/event-categories";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
@@ -144,6 +146,8 @@ export default function SettingsPage() {
       )}
 
       <TelegramSettingsSection />
+
+      <EmailSettingsSection />
 
       {isAdmin && (
       <section className={lux.card}>
@@ -309,6 +313,8 @@ export default function SettingsPage() {
       {isAdmin && <PriorityLevelsSection />}
 
       {isAdmin && <RequestCategoriesSettingsSection />}
+
+      {isAdmin && <PortalNewsSection />}
 
       <section className={lux.card}>
         <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>

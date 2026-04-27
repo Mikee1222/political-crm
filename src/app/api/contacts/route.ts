@@ -15,6 +15,24 @@ export const dynamic = "force-dynamic";
 const SELECT_LIST =
   "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, contact_groups ( id, name, color, description, year )";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type QueryBuilder = any;
+
+function afterFilterRows(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rows: any[],
+  search: string | null | undefined,
+) {
+  if (!search) return rows;
+  return rows.filter((c) => contactMatchesFuzzyGreekSearch(c, search));
+}
+
+function paginateList<T>(rows: T[], page: number, pageSize: number) {
+  const total = rows.length;
+  const from = (page - 1) * pageSize;
+  return { slice: rows.slice(from, from + pageSize), total };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { user, supabase } = await getSessionWithProfile();
@@ -26,54 +44,78 @@ export async function GET(request: NextRequest) {
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;
     const listLimit = Number.isFinite(parsedLimit) ? Math.min(10_000, Math.max(1, parsedLimit)) : null;
+    const comboboxMode = listLimit != null;
     const namedayToday = f.nameday_today;
+
+    const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") || "1", 10) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(request.nextUrl.searchParams.get("page_size") || "50", 10) || 50));
 
     if (namedayToday) {
       const now = new Date();
       const ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
       if (ids.length === 0) {
-        return NextResponse.json({ contacts: [] });
+        if (comboboxMode) {
+          return NextResponse.json({ contacts: [] });
+        }
+        return NextResponse.json({ contacts: [], total: 0, page, pageSize });
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let query: any = supabase
+      let query: QueryBuilder = supabase
         .from("contacts")
         .select(SELECT_LIST)
         .in("id", ids)
         .order("created_at", { ascending: false });
       query = applyContactListFiltersToBuilder(query, f);
-      if (listLimit != null) query = query.limit(listLimit);
+      if (comboboxMode) {
+        query = query.limit(listLimit!);
+      } else {
+        const cap = 15_000;
+        query = query.limit(cap);
+      }
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       const rows = data ?? [];
-      if (f.search) {
-        const filtered = rows.filter((c: (typeof rows)[number]) =>
-          contactMatchesFuzzyGreekSearch(c, f.search),
-        );
-        return NextResponse.json({ contacts: filtered });
+      const work = f.search ? afterFilterRows(rows, f.search) : rows;
+      if (comboboxMode) {
+        return NextResponse.json({ contacts: work.slice(0, listLimit!) });
       }
-      return NextResponse.json({ contacts: rows });
+      const { slice, total } = paginateList(work, page, pageSize);
+      return NextResponse.json({ contacts: slice, total, page, pageSize });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let query: any = supabase
+    if (f.search) {
+      let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
+      query = applyContactListFiltersToBuilder(query, f);
+      query = query.limit(12_000);
+      const { data, error } = await query;
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      const rows = data ?? [];
+      const list = afterFilterRows(rows, f.search);
+      if (comboboxMode) {
+        return NextResponse.json({ contacts: list.slice(0, listLimit!) });
+      }
+      const { slice, total } = paginateList(list, page, pageSize);
+      return NextResponse.json({ contacts: slice, total, page, pageSize });
+    }
+
+    let query: QueryBuilder = supabase
       .from("contacts")
-      .select(SELECT_LIST)
+      .select(SELECT_LIST, { count: "exact" })
       .order("created_at", { ascending: false });
     query = applyContactListFiltersToBuilder(query, f);
-    if (f.search) {
-      query = query.limit(12_000);
-    } else if (listLimit != null) {
-      query = query.limit(listLimit);
+
+    if (comboboxMode) {
+      query = query.limit(listLimit!);
+      const { data, error } = await query;
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ contacts: data ?? [] });
     }
 
-    const { data, error } = await query;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+    const { data, error, count } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    if (f.search) {
-      const rows = data ?? [];
-      const list = rows.filter((c: (typeof rows)[number]) => contactMatchesFuzzyGreekSearch(c, f.search));
-      return NextResponse.json({ contacts: list });
-    }
-    return NextResponse.json({ contacts: data });
+    return NextResponse.json({ contacts: data ?? [], total: count ?? 0, page, pageSize });
   } catch (e) {
     console.error("[api/contacts GET]", e);
     return nextJsonError();
