@@ -46,7 +46,7 @@ function isApiPortalPublic(pathname: string) {
 }
 
 function isRetellPublic(pathname: string) {
-  return pathname.startsWith("/api/retell/webhook") || pathname === "/api/retell/llm";
+  return pathname.startsWith("/api/retell/webhook") || pathname.startsWith("/api/retell/llm");
 }
 
 function isWhatsAppPublic(pathname: string) {
