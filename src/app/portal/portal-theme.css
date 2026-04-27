@@ -10,7 +10,40 @@
   --portal-border: #e2e8f0;
   --portal-success: #059669;
   --portal-gold-gradient: linear-gradient(135deg, #c9a84c, #8b6914);
-  --portal-hero-gradient: linear-gradient(135deg, #003476 0%, #001a3d 60%, #0a0f1a 100%);
+  --portal-hero-gradient: linear-gradient(90deg, #003476 0%, #001a3d 50%, #050d1a 100%);
+}
+
+/* Greek flag–inspired stripe texture (left hero panel watermark) */
+.portal-hero-greek-watermark {
+  mix-blend-mode: soft-light;
+  opacity: 0.1;
+  background: repeating-linear-gradient(180deg, #ffffff 0 8px, rgba(13, 94, 175, 0.85) 8px 16px);
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.45) 88%, transparent 100%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.45) 88%, transparent 100%);
+}
+
+/* Subtle full-bleed wash on small screens (photo stacks above text) */
+.portal-hero-greek-watermark--mobile {
+  mix-blend-mode: soft-light;
+  opacity: 0.06;
+  background: repeating-linear-gradient(180deg, #ffffff 0 8px, rgba(13, 94, 175, 0.8) 8px 16px);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.2) 50%, rgba(0, 0, 0, 0.45) 100%);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.2) 50%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+/* Crisp title on deep blue: contrast + legibility */
+.portal-hero-title {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  text-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.45),
+    0 0 24px rgba(0, 0, 0, 0.2);
+}
+
+.portal-hero-subtitle {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 /* Particle field (CSS-only, subtle) */

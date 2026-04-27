@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { getPortalServiceOrAnon } from "@/lib/supabase/portal-service";
 import { PortalSocialSection } from "@/components/portal/portal-social-section";
@@ -30,66 +31,98 @@ export default async function PortalHomePage() {
 
   return (
     <div className="min-w-0">
-      {/* HERO */}
-      <section className="relative flex min-h-[100dvh] min-h-[100svh] flex-col justify-between overflow-hidden text-white">
+      {/* HERO — split-screen: left copy + right photo (stacked on mobile) */}
+      <section className="relative flex min-h-[100dvh] min-h-[100svh] flex-col overflow-hidden text-white">
         <div
-          className="absolute inset-0 portal-hero-particles"
+          className="absolute inset-0"
           style={{
-            background: "linear-gradient(135deg, #003476 0%, #001a3d 60%, #0a0f1a 100%)",
+            background: "linear-gradient(90deg, #003476 0%, #001a3d 52%, #050D1A 100%)",
           }}
+          aria-hidden
         />
-        <div className="portal-dots" aria-hidden />
-        <div className="relative z-[1] mx-auto flex max-w-4xl flex-1 flex-col justify-center px-4 pb-24 pt-20 text-center sm:px-6 sm:pb-32 sm:pt-24">
-          <p className="text-lg font-medium text-white/90 sm:text-xl">Γεια σας, είμαι ο</p>
-          <h1
-            className="mt-2 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl md:text-[56px] md:leading-[1.1]"
-            style={{ lineHeight: 1.1 }}
-          >
-            Κώστας Καραγκούνης
-          </h1>
-          <div
-            className="mx-auto mt-4 h-1 w-32 rounded-full"
-            style={{ background: "linear-gradient(90deg, #C9A84C, #8B6914)" }}
-            aria-hidden
-          />
-          <p className="mt-5 max-w-2xl text-base text-white/60 sm:text-lg">
-            Υφυπουργός Εργασίας &amp; Κοινωνικής Ασφάλισης | Βουλευτής Αιτωλοακαρνανίας
-          </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-            <Link
-              href="/portal/requests/new"
-              className="inline-flex w-full max-w-xs items-center justify-center rounded-xl px-8 py-4 text-base font-extrabold text-[#0f172a] shadow-lg transition hover:brightness-105 sm:w-auto"
-              style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-            >
-              Υποβολή Αιτήματος
-            </Link>
-            <Link
-              href="/portal/news"
-              className="inline-flex w-full max-w-xs items-center justify-center rounded-xl border-2 border-white/90 px-8 py-4 text-base font-bold text-white transition hover:bg-white/10 sm:w-auto"
-            >
-              Μάθετε περισσότερα
-            </Link>
+        <div className="pointer-events-none absolute inset-0 portal-hero-particles opacity-50" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 portal-dots opacity-35" aria-hidden />
+        <div className="portal-hero-greek-watermark--mobile pointer-events-none absolute inset-0 lg:hidden" aria-hidden />
+        <div
+          className="portal-hero-greek-watermark pointer-events-none absolute inset-y-0 left-0 hidden w-[55%] lg:block"
+          aria-hidden
+        />
+
+        <div className="relative z-[1] flex w-full min-h-0 flex-1 flex-col lg:min-h-[min(100dvh,100%)] lg:flex-row lg:items-stretch">
+          <div className="relative order-1 flex w-full min-h-0 flex-none items-end justify-center px-4 pt-8 sm:pt-10 lg:order-2 lg:w-[45%] lg:max-w-[45%] lg:flex-1 lg:px-0 lg:pt-0">
+            <div
+              className="pointer-events-none absolute bottom-[6%] left-1/2 h-[min(50vh,500px)] w-[min(92%,460px)] -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-amber-300/25 to-amber-600/10 blur-[64px] sm:bottom-[4%] sm:blur-[80px]"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute bottom-[20%] left-1/2 h-[30%] w-[55%] -translate-x-1/2 rounded-full bg-amber-400/10 blur-3xl"
+              aria-hidden
+            />
+            <Image
+              src="/hero-karagkounis.png"
+              alt="Κώστας Καραγκούνης"
+              width={900}
+              height={1200}
+              priority
+              sizes="(max-width: 1023px) 85vw, 40vw"
+              className="relative z-[1] h-[min(38vh,360px)] w-auto max-w-[min(88vw,400px)] object-contain object-bottom sm:h-[min(40vh,420px)] sm:max-w-[min(80vw,480px)] lg:h-[min(100dvh-120px,920px)] lg:max-h-[min(100dvh,920px)] lg:max-w-[min(100%,min(100vw*0.4,500px))] lg:w-auto"
+            />
+          </div>
+
+          <div className="order-2 flex w-full min-h-0 flex-1 flex-col justify-center px-5 pb-8 pt-4 sm:px-8 sm:pb-10 sm:pt-2 lg:order-1 lg:w-[55%] lg:max-w-[55%] lg:shrink-0 lg:px-8 lg:py-12 lg:pl-10 lg:pr-4 xl:pl-14">
+            <div className="text-center lg:max-w-xl lg:text-left">
+              <h1
+                className="portal-hero-title text-balance text-[1.9rem] font-extrabold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-[52px] lg:leading-[1.08]"
+                style={{ fontWeight: 800 }}
+              >
+                Κώστας Καραγκούνης
+              </h1>
+              <div
+                className="mx-auto mt-4 h-1 w-44 max-w-full rounded-full sm:w-48 lg:mx-0"
+                style={{ background: "linear-gradient(90deg, #C9A84C, #8B6914)" }}
+                aria-hidden
+              />
+              <p className="portal-hero-subtitle mt-5 max-w-xl text-balance text-[18px] leading-relaxed text-white/70 lg:mx-0">
+                Υφυπουργός Εργασίας &amp; Κοινωνικής Ασφάλισης | Βουλευτής Αιτωλοακαρνανίας
+              </p>
+              <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 lg:justify-start">
+                <Link
+                  href="/portal/requests/new"
+                  className="inline-flex w-full min-w-0 max-w-sm items-center justify-center rounded-xl px-8 py-3.5 text-base font-extrabold text-[#0f172a] shadow-lg transition hover:brightness-105 sm:w-auto sm:py-4"
+                  style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
+                >
+                  Υποβολή Αιτήματος
+                </Link>
+                <Link
+                  href="/portal/news"
+                  className="inline-flex w-full max-w-sm items-center justify-center rounded-xl border-2 border-white/90 px-8 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-white/10 sm:w-auto sm:py-4"
+                >
+                  Μάθετε περισσότερα
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="relative z-[1] mx-auto w-full max-w-4xl px-4 pb-8 sm:px-6">
-          <div className="grid grid-cols-3 gap-2 border-t border-white/10 py-6 text-center sm:gap-4 sm:py-8">
+
+        <div className="relative z-[1] mx-auto w-full max-w-4xl border-t border-white/10 px-4 pb-4 sm:px-6">
+          <div className="grid grid-cols-3 gap-2 py-4 text-center sm:gap-4 sm:py-6">
             {[
               { n: "15+", l: "Χρόνια" },
               { n: "50.000+", l: "Επαφές" },
               { n: "Αιτωλοακαρνανία", l: "Περιφέρεια" },
             ].map((s) => (
               <div key={s.l}>
-                <p className="text-lg font-extrabold sm:text-2xl" style={{ color: GOLD }}>
+                <p className="text-base font-extrabold sm:text-2xl" style={{ color: GOLD }}>
                   {s.n}
                 </p>
-                <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-white/60 sm:text-xs">
+                <p className="mt-1 text-[9px] font-medium uppercase leading-tight tracking-wide text-white/65 sm:text-xs">
                   {s.l}
                 </p>
               </div>
             ))}
           </div>
         </div>
-        <div className="relative z-[1] flex justify-center pb-6">
+        <div className="relative z-[1] flex justify-center pb-5 sm:pb-6">
           <a
             href="#features"
             className="portal-scroll-hint flex flex-col items-center gap-1 text-white/50"
