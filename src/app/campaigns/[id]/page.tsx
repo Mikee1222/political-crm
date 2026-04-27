@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, FileText, Minus, Phone, Play, Plus, RefreshCw, Search, UserPlus, X } from "lucide-react";
+import { ArrowLeft, FileText, Minus, Phone, Play, Plus, RefreshCw, Search, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -542,73 +542,65 @@ export default function CampaignDetailPage() {
       <CenteredModal
         open={Boolean(addOpen && id)}
         onClose={() => setAddOpen(false)}
-        overlayClassName="!z-[10050]"
-        className="flex w-full max-w-lg flex-col overflow-hidden p-0"
+        title="Προσθήκη Επαφής"
+        className="w-full max-w-lg"
         ariaLabel="Προσθήκη επαφής"
+        footer={
+          <button type="button" className={lux.btnSecondary} onClick={() => setAddOpen(false)}>
+            Άκυρο
+          </button>
+        }
       >
         {addOpen && id ? (
-          <>
-            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-              <h3 className="text-lg font-bold text-[var(--text-primary)]">Προσθήκη Επαφής</h3>
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
-                aria-label="Κλείσιμο"
-                onClick={() => setAddOpen(false)}
-              >
-                <X className="h-5 w-5" />
-              </button>
+          <div className="grid gap-4">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                className={lux.input + " !pl-10"}
+                placeholder="Αναζήτηση ονόματος ή τηλεφώνου…"
+                value={addSearch}
+                onChange={(e) => setAddSearch(e.target.value)}
+                autoFocus
+              />
             </div>
-            <div className="grid max-h-[min(90vh,720px)] gap-4 overflow-y-auto p-4">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-                <input
-                  className={lux.input + " !pl-10"}
-                  placeholder="Αναζήτηση ονόματος ή τηλεφώνου…"
-                  value={addSearch}
-                  onChange={(e) => setAddSearch(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              {addBusy && <p className="text-xs text-[var(--text-muted)]">Αναζήτηση…</p>}
-              <ul className="max-h-[min(50dvh,320px)] space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-2">
-                {addResults.map((row) => (
-                  <li key={row.id}>
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--bg-elevated)]"
-                      onClick={async () => {
-                        setErr(null);
-                        const r = await fetchWithTimeout(`/api/campaigns/${id}/contacts`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ contact_id: row.id }),
-                        });
-                        const j = (await r.json().catch(() => ({}))) as { error?: string };
-                        if (!r.ok) {
-                          const msg = j.error ?? "Σφάλμα";
-                          setErr(msg);
-                          showToast(msg, "error");
-                          return;
-                        }
-                        showToast("Η επαφή προστέθηκε στην καμπάνια.", "success");
-                        setAddOpen(false);
-                        await load();
-                      }}
-                    >
-                      <span className="font-medium text-[var(--text-primary)]">
-                        {[row.first_name, row.last_name].filter(Boolean).join(" ")}
-                      </span>
-                      <span className="shrink-0 font-mono text-xs text-[var(--text-secondary)]">{row.phone}</span>
-                    </button>
-                  </li>
-                ))}
-                {!addBusy && addSearch.trim() && addResults.length === 0 && (
-                  <li className="px-3 py-4 text-center text-sm text-[var(--text-muted)]">Δεν βρέθηκαν επαφές.</li>
-                )}
-              </ul>
-            </div>
-          </>
+            {addBusy && <p className="text-xs text-[var(--text-muted)]">Αναζήτηση…</p>}
+            <ul className="max-h-[min(50dvh,320px)] space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-2">
+              {addResults.map((row) => (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--bg-elevated)]"
+                    onClick={async () => {
+                      setErr(null);
+                      const r = await fetchWithTimeout(`/api/campaigns/${id}/contacts`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ contact_id: row.id }),
+                      });
+                      const j = (await r.json().catch(() => ({}))) as { error?: string };
+                      if (!r.ok) {
+                        const msg = j.error ?? "Σφάλμα";
+                        setErr(msg);
+                        showToast(msg, "error");
+                        return;
+                      }
+                      showToast("Η επαφή προστέθηκε στην καμπάνια.", "success");
+                      setAddOpen(false);
+                      await load();
+                    }}
+                  >
+                    <span className="font-medium text-[var(--text-primary)]">
+                      {[row.first_name, row.last_name].filter(Boolean).join(" ")}
+                    </span>
+                    <span className="shrink-0 font-mono text-xs text-[var(--text-secondary)]">{row.phone}</span>
+                  </button>
+                </li>
+              ))}
+              {!addBusy && addSearch.trim() && addResults.length === 0 && (
+                <li className="px-3 py-4 text-center text-sm text-[var(--text-muted)]">Δεν βρέθηκαν επαφές.</li>
+              )}
+            </ul>
+          </div>
         ) : null}
       </CenteredModal>
 

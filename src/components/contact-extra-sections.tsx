@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Download, FileText, Loader2, QrCode, Trash2, Wand2 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { CenteredModal } from "@/components/ui/centered-modal";
 
 type DocRow = {
   id: string;
@@ -211,18 +212,22 @@ export function ContactExtraSections({
         </ul>
       </div>
 
-      {qrOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="dialog">
-          <div className={lux.card + " max-w-sm"}>
-            <p className="mb-3 text-center text-sm">Σκανάρετε για εγγραφή portal</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={qrSrc} alt="" className="mx-auto h-48 w-48" />
-            <button type="button" className={lux.btnSecondary + " mt-3 w-full"} onClick={() => setQrOpen(false)}>
-              Κλείσιμο
-            </button>
-          </div>
-        </div>
-      )}
+      <CenteredModal
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        title="QR portal"
+        className="max-w-sm"
+        ariaLabel="QR εγγραφής portal"
+        footer={
+          <button type="button" className={lux.btnSecondary} onClick={() => setQrOpen(false)}>
+            Άκυρο
+          </button>
+        }
+      >
+        <p className="mb-3 text-center text-sm text-[var(--text-secondary)]">Σκανάρετε για εγγραφή portal</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={qrSrc} alt="" className="mx-auto h-48 w-48" />
+      </CenteredModal>
     </div>
   );
 }

@@ -1362,24 +1362,26 @@ function ContactsPage() {
       )}
 
       {deleteOpen && isAdmin && (
-        <CenteredModal open onClose={() => setDeleteOpen(false)} className="max-w-md p-6" ariaLabel="Μαζική διαγραφή">
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">Μαζική διαγραφή</h3>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+        <CenteredModal
+          open
+          onClose={() => setDeleteOpen(false)}
+          title="Μαζική διαγραφή"
+          ariaLabel="Μαζική διαγραφή"
+          className="!max-w-md"
+          footer={
+            <>
+              <button type="button" className={lux.btnSecondary} onClick={() => setDeleteOpen(false)} disabled={saving}>
+                Άκυρο
+              </button>
+              <button type="button" className={lux.btnDanger} disabled={saving} onClick={() => void postBulk("delete", "")}>
+                Διαγραφή
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-[var(--text-secondary)]">
             Να διαγραφούν οριστικά {selectedIds.length} επαφές; Αυτό δεν ανακαλείται.
           </p>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <button type="button" className={lux.btnSecondary} onClick={() => setDeleteOpen(false)} disabled={saving}>
-              Άκυρο
-            </button>
-            <button
-              type="button"
-              className={lux.btnDanger}
-              disabled={saving}
-              onClick={() => void postBulk("delete", "")}
-            >
-              Διαγραφή
-            </button>
-          </div>
         </CenteredModal>
       )}
 
@@ -1537,22 +1539,24 @@ function CreateContactModal({
 
   return (
     <>
-    <CenteredModal open onClose={onClose} className="flex max-w-[680px] flex-col overflow-hidden p-0" ariaLabel="Νέα επαφή">
-      <div className="flex max-h-[min(90vh,900px)] min-h-0 w-full flex-col">
-        <div className="mx-auto mt-2 h-1 w-11 shrink-0 rounded-full bg-[var(--border)] md:hidden" role="presentation" />
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
-          <h3 className="text-xl font-bold text-[var(--text-primary)]">Νέα Επαφή</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
-            aria-label="Κλείσιμο"
-          >
-            <span className="text-2xl leading-none">×</span>
+    <CenteredModal
+      open
+      onClose={onClose}
+      title="Νέα Επαφή"
+      ariaLabel="Νέα επαφή"
+      className="!max-w-[680px]"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={submitting}>
+            Άκυρο
           </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <FormSubmitButton type="button" loading={submitting} variant="gold" onClick={() => void save()}>
+            Αποθήκευση
+          </FormSubmitButton>
+        </>
+      }
+    >
+        <div className="mx-auto mb-2 h-1 w-11 shrink-0 rounded-full bg-[var(--border)] md:hidden" role="presentation" />
           <div className="grid gap-4 md:grid-cols-2">
             <FormField
               label="Μικρό Όνομα"
@@ -1714,43 +1718,19 @@ function CreateContactModal({
               />
             </div>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-3 border-t border-[var(--border)] bg-[var(--bg-elevated)]/50 px-6 py-4">
-          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={submitting}>
-            Ακύρωση
-          </button>
-          <FormSubmitButton type="button" loading={submitting} variant="gold" onClick={() => void save()}>
-            Αποθήκευση
-          </FormSubmitButton>
-        </div>
-      </div>
     </CenteredModal>
 
     {conflict && (
       <CenteredModal
         open
         onClose={() => setConflict(null)}
-        overlayClassName="!z-[10060]"
-        className="max-w-md space-y-4 p-6"
+        title="Πιθανή σύγκρουση"
         ariaLabel="Πιθανή σύγκρουση"
-      >
-          <h4 className="text-lg font-bold text-[var(--text-primary)]">Πιθανή σύγκρουση</h4>
-          {conflict.phoneMatch && (
-            <p className="text-sm text-[var(--text-primary)]">
-              Αυτός ο αριθμός φαίνεται να ανήκει ήδη στον{" "}
-              <span className="font-semibold">{conflict.phoneMatch.name}</span>. Διαφορετικό άτομο ή διπλότυπο;
-            </p>
-          )}
-          {conflict.nameMatch && (
-            <p className="text-sm text-[var(--text-primary)]">
-              Υπάρχει ήδη επαφή με ίδιο όνομα/επίθετο:{" "}
-              <span className="font-semibold">{conflict.nameMatch.name}</span>
-            </p>
-          )}
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-wrap sm:justify-end">
+        className="!max-w-md"
+        footer={
+          <>
             <button type="button" onClick={() => setConflict(null)} className={lux.btnSecondary + " w-full sm:w-auto"}>
-              Ακύρωση
+              Άκυρο
             </button>
             {openExistingId && (
               <button
@@ -1773,6 +1753,22 @@ function CreateContactModal({
             >
               Διαφορετικό άτομο — συνέχεια
             </FormSubmitButton>
+          </>
+        }
+      >
+          <div className="space-y-3">
+          {conflict.phoneMatch && (
+            <p className="text-sm text-[var(--text-primary)]">
+              Αυτός ο αριθμός φαίνεται να ανήκει ήδη στον{" "}
+              <span className="font-semibold">{conflict.phoneMatch.name}</span>. Διαφορετικό άτομο ή διπλότυπο;
+            </p>
+          )}
+          {conflict.nameMatch && (
+            <p className="text-sm text-[var(--text-primary)]">
+              Υπάρχει ήδη επαφή με ίδιο όνομα/επίθετο:{" "}
+              <span className="font-semibold">{conflict.nameMatch.name}</span>
+            </p>
+          )}
           </div>
       </CenteredModal>
     )}

@@ -370,54 +370,55 @@ function MuniModal({ open, v, onClose, onSave }: { open: boolean; v: Municipalit
     <CenteredModal
       open={open}
       onClose={onClose}
-      className="!max-w-md !p-5"
+      title={isAdd ? "Νέος δήμος" : "Επεξεργασία δήμου"}
       ariaLabel={isAdd ? "Νέος δήμος" : "Επεξεργασία δήμου"}
-      overlayClassName="z-[10000]"
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary + " !py-2"}>
+            Άκυρο
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              setErr(null);
+              const n = name.trim();
+              if (!n) {
+                setErr("Υποχρεωτικό όνομα");
+                showToast("Υποχρεωτικό όνομα.", "error");
+                return;
+              }
+              const ru = reg.trim() || null;
+              const bodyOut = { name: n, regional_unit: ru };
+              const url = isAdd ? "/api/admin/municipalities" : `/api/admin/municipalities/${row!.id}`;
+              const res = await fetchWithTimeout(url, {
+                method: isAdd ? "POST" : "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bodyOut),
+              });
+              if (!res.ok) {
+                const j = (await res.json().catch(() => ({}))) as { error?: string };
+                const msg = j.error ?? "Σφάλμα";
+                setErr(msg);
+                showToast(msg, "error");
+                return;
+              }
+              showToast("Αποθηκεύτηκε.", "success");
+              onSave();
+              onClose();
+            }}
+            className={lux.btnPrimary + " !py-2"}
+          >
+            Αποθήκευση
+          </button>
+        </>
+      }
     >
-      <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">{isAdd ? "Νέος δήμος" : "Επεξεργασία δήμου"}</h3>
       {err && <p className="mb-2 text-sm text-red-300">{err}</p>}
       <label className={lux.label}>Όνομα *</label>
       <input className={lux.input + " mb-3"} value={name} onChange={(e) => setName(e.target.value)} />
       <label className={lux.label}>Περιφερ. ενότητα</label>
-      <input className={lux.input + " mb-4"} value={reg} onChange={(e) => setReg(e.target.value)} />
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className={lux.btnSecondary + " !py-2"}>
-          Άκυρο
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            setErr(null);
-            const n = name.trim();
-            if (!n) {
-              setErr("Υποχρεωτικό όνομα");
-              showToast("Υποχρεωτικό όνομα.", "error");
-              return;
-            }
-            const ru = reg.trim() || null;
-            const bodyOut = { name: n, regional_unit: ru };
-            const url = isAdd ? "/api/admin/municipalities" : `/api/admin/municipalities/${row!.id}`;
-            const res = await fetchWithTimeout(url, {
-              method: isAdd ? "POST" : "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(bodyOut),
-            });
-            if (!res.ok) {
-              const j = (await res.json().catch(() => ({}))) as { error?: string };
-              const msg = j.error ?? "Σφάλμα";
-              setErr(msg);
-              showToast(msg, "error");
-              return;
-            }
-            showToast("Αποθηκεύτηκε.", "success");
-            onSave();
-            onClose();
-          }}
-          className={lux.btnPrimary + " !py-2"}
-        >
-          Αποθήκευση
-        </button>
-      </div>
+      <input className={lux.input + " mb-1"} value={reg} onChange={(e) => setReg(e.target.value)} />
     </CenteredModal>
   );
 }
@@ -457,11 +458,53 @@ function DistModal({
     <CenteredModal
       open={open}
       onClose={onClose}
-      className="!max-w-md !p-5"
+      title={isAdd ? "Νέο εκλ. διαμέρισμα" : "Επεξεργασία διαμερίσματος"}
       ariaLabel={isAdd ? "Νέο εκλογικό διαμέρισμα" : "Επεξεργασία εκλογικού διαμερίσματος"}
-      overlayClassName="z-[10000]"
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary + " !py-2"}>
+            Άκυρο
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              setErr(null);
+              const n = name.trim();
+              if (!n || !muni) {
+                setErr("Συμπληρώστε όλα τα απαιτούμενα");
+                showToast("Συμπληρώστε όλα τα απαιτούμενα πεδία.", "error");
+                return;
+              }
+              const res = isAdd
+                ? await fetchWithTimeout("/api/admin/electoral-districts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: n, municipality_id: muni }),
+                  })
+                : await fetchWithTimeout(`/api/admin/electoral-districts/${row!.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: n, municipality_id: muni }),
+                  });
+              if (!res.ok) {
+                const j = (await res.json().catch(() => ({}))) as { error?: string };
+                const msg = j.error ?? "Σφάλμα";
+                setErr(msg);
+                showToast(msg, "error");
+                return;
+              }
+              showToast("Αποθηκεύτηκε.", "success");
+              onSave();
+              onClose();
+            }}
+            className={lux.btnPrimary + " !py-2"}
+          >
+            Αποθήκευση
+          </button>
+        </>
+      }
     >
-      <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">{isAdd ? "Νέο εκλ. διαμέρισμα" : "Επεξεργασία"}</h3>
       {err && <p className="mb-2 text-sm text-red-300">{err}</p>}
       <label className={lux.label}>Δήμος *</label>
       <HqSelect className={lux.select + " mb-3"} value={muni} onChange={(e) => setMuni(e.target.value)}>
@@ -473,48 +516,7 @@ function DistModal({
         ))}
       </HqSelect>
       <label className={lux.label}>Όνομα *</label>
-      <input className={lux.input + " mb-4"} value={name} onChange={(e) => setName(e.target.value)} />
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className={lux.btnSecondary + " !py-2"}>
-          Άκυρο
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            setErr(null);
-            const n = name.trim();
-            if (!n || !muni) {
-              setErr("Συμπληρώστε όλα τα απαιτούμενα");
-              showToast("Συμπληρώστε όλα τα απαιτούμενα πεδία.", "error");
-              return;
-            }
-            const res = isAdd
-              ? await fetchWithTimeout("/api/admin/electoral-districts", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: n, municipality_id: muni }),
-                })
-              : await fetchWithTimeout(`/api/admin/electoral-districts/${row!.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: n, municipality_id: muni }),
-                });
-            if (!res.ok) {
-              const j = (await res.json().catch(() => ({}))) as { error?: string };
-              const msg = j.error ?? "Σφάλμα";
-              setErr(msg);
-              showToast(msg, "error");
-              return;
-            }
-            showToast("Αποθηκεύτηκε.", "success");
-            onSave();
-            onClose();
-          }}
-          className={lux.btnPrimary + " !py-2"}
-        >
-          Αποθήκευση
-        </button>
-      </div>
+      <input className={lux.input + " mb-1"} value={name} onChange={(e) => setName(e.target.value)} />
     </CenteredModal>
   );
 }
@@ -562,11 +564,54 @@ function TopModal({
     <CenteredModal
       open={open}
       onClose={onClose}
-      className="!max-w-md !p-5"
+      title={isAdd ? "Νέο τοπωνύμιο" : "Επεξεργασία τοπωνυμίου"}
       ariaLabel={isAdd ? "Νέο τοπωνύμιο" : "Επεξεργασία τοπωνυμίου"}
-      overlayClassName="z-[10000]"
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary + " !py-2"}>
+            Άκυρο
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              setErr(null);
+              const n = name.trim();
+              if (!n || !muni) {
+                setErr("Υποχρεωτικά: όνομα, δήμος");
+                showToast("Συμπληρώστε όνομα και δήμο.", "error");
+                return;
+              }
+              const body = { name: n, municipality_id: muni, electoral_district_id: dist || null };
+              const res = isAdd
+                ? await fetchWithTimeout("/api/admin/toponyms", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                  })
+                : await fetchWithTimeout(`/api/admin/toponyms/${row!.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                  });
+              if (!res.ok) {
+                const j = (await res.json().catch(() => ({}))) as { error?: string };
+                const msg = j.error ?? "Σφάλμα";
+                setErr(msg);
+                showToast(msg, "error");
+                return;
+              }
+              showToast("Αποθηκεύτηκε.", "success");
+              onSave();
+              onClose();
+            }}
+            className={lux.btnPrimary + " !py-2"}
+          >
+            Αποθήκευση
+          </button>
+        </>
+      }
     >
-      <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">{isAdd ? "Νέο τοπωνύμιο" : "Επεξεργασία"}</h3>
       {err && <p className="mb-2 text-sm text-red-300">{err}</p>}
       <label className={lux.label}>Δήμος *</label>
       <HqSelect
@@ -594,49 +639,7 @@ function TopModal({
         ))}
       </HqSelect>
       <label className={lux.label}>Όνομα *</label>
-      <input className={lux.input + " mb-4"} value={name} onChange={(e) => setName(e.target.value)} />
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className={lux.btnSecondary + " !py-2"}>
-          Άκυρο
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            setErr(null);
-            const n = name.trim();
-            if (!n || !muni) {
-              setErr("Υποχρεωτικά: όνομα, δήμος");
-              showToast("Συμπληρώστε όνομα και δήμο.", "error");
-              return;
-            }
-            const body = { name: n, municipality_id: muni, electoral_district_id: dist || null };
-            const res = isAdd
-              ? await fetchWithTimeout("/api/admin/toponyms", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(body),
-                })
-              : await fetchWithTimeout(`/api/admin/toponyms/${row!.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(body),
-                });
-            if (!res.ok) {
-              const j = (await res.json().catch(() => ({}))) as { error?: string };
-              const msg = j.error ?? "Σφάλμα";
-              setErr(msg);
-              showToast(msg, "error");
-              return;
-            }
-            showToast("Αποθηκεύτηκε.", "success");
-            onSave();
-            onClose();
-          }}
-          className={lux.btnPrimary + " !py-2"}
-        >
-          Αποθήκευση
-        </button>
-      </div>
+      <input className={lux.input + " mb-1"} value={name} onChange={(e) => setName(e.target.value)} />
     </CenteredModal>
   );
 }

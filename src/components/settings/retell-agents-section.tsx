@@ -21,19 +21,24 @@ function ConfirmModal({
   onConfirm: () => void;
 }) {
   return (
-    <CenteredModal open onClose={onCancel} className="!w-[min(420px,calc(100vw-2rem))] !max-w-sm p-0" ariaLabel={title}>
-      <div className="p-6">
-        <h4 className="text-lg font-bold text-[var(--text-primary)]">{title}</h4>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">{body}</p>
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+    <CenteredModal
+      open
+      onClose={onCancel}
+      title={title}
+      ariaLabel={title}
+      className="!max-w-sm"
+      footer={
+        <>
           <button type="button" onClick={onCancel} className={lux.btnSecondary}>
             Άκυρο
           </button>
           <button type="button" onClick={onConfirm} className={lux.btnDanger}>
             {confirmLabel}
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
+      <p className="text-sm text-[var(--text-secondary)]">{body}</p>
     </CenteredModal>
   );
 }
@@ -94,11 +99,24 @@ function AgentModal({
   };
 
   return (
-    <CenteredModal open onClose={onClose} className="flex !max-w-lg flex-col" ariaLabel={initial ? "Retell agent" : "Νέος agent"}>
-      <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία agent" : "Νέος Retell agent"}</h3>
-      </div>
-      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+    <CenteredModal
+      open
+      onClose={onClose}
+      title={initial ? "Επεξεργασία agent" : "Νέος Retell agent"}
+      ariaLabel={initial ? "Retell agent" : "Νέος agent"}
+      className="!max-w-lg"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div>
           <HqLabel htmlFor="ra-id" required>
             Retell agent ID
@@ -121,14 +139,6 @@ function AgentModal({
           <HqLabel htmlFor="ra-desc">Περιγραφή</HqLabel>
           <textarea id="ra-desc" className={lux.textarea} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
-      </div>
-      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-          Άκυρο
-        </button>
-        <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
-          {busy ? "…" : "Αποθήκευση"}
-        </button>
       </div>
     </CenteredModal>
   );

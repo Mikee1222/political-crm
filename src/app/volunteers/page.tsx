@@ -165,8 +165,60 @@ function VolunteersBody() {
         </button>
       </div>
 
-      <CenteredModal open={nvOpen} onClose={() => setNvOpen(false)} className="!max-w-lg !p-5" ariaLabel="Νέος εθελοντής">
-        <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">Νέος εθελοντής</h3>
+      <CenteredModal
+        open={nvOpen}
+        onClose={() => setNvOpen(false)}
+        title="Νέος εθελοντής"
+        className="!max-w-lg"
+        ariaLabel="Νέος εθελοντής"
+        footer={
+          <>
+            <button type="button" className={lux.btnSecondary} onClick={() => setNvOpen(false)}>
+              Άκυρο
+            </button>
+            <FormSubmitButton
+              type="button"
+              variant="gold"
+              loading={nvSaving}
+              onClick={async () => {
+                if (!nd.first_name.trim() || !nd.last_name.trim() || !nd.phone.trim()) {
+                  showToast("Συμπληρώστε όνομα, επίθετο και τηλέφωνο.", "error");
+                  return;
+                }
+                setNvSaving(true);
+                try {
+                  const res = await fetchWithTimeout("/api/contacts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      ...nd,
+                      call_status: "Pending",
+                      is_volunteer: true,
+                      priority: "Medium",
+                    }),
+                  });
+                  const j = (await res.json().catch(() => ({}))) as { contact?: { id: string }; error?: string };
+                  if (!res.ok || !j.contact?.id) {
+                    showToast(j.error ?? "Αποτυχία δημιουργίας.", "error");
+                    return;
+                  }
+                  showToast("Η επαφή-εθελοντής δημιουργήθηκε.", "success");
+                  setNd({ first_name: "", last_name: "", phone: "" });
+                  setNvOpen(false);
+                  void load();
+                  router.push(`/contacts/${j.contact.id}`);
+                } catch {
+                  showToast("Σφάλμα δικτύου.", "error");
+                } finally {
+                  setNvSaving(false);
+                }
+              }}
+            >
+              Αποθήκευση
+            </FormSubmitButton>
+          </>
+        }
+      >
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <input
             className={lux.input}
@@ -186,51 +238,6 @@ function VolunteersBody() {
             value={nd.phone}
             onChange={(e) => setNd((x) => ({ ...x, phone: e.target.value }))}
           />
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className={lux.btnSecondary} onClick={() => setNvOpen(false)}>
-            Άκυρο
-          </button>
-          <FormSubmitButton
-            type="button"
-            variant="gold"
-            loading={nvSaving}
-            onClick={async () => {
-              if (!nd.first_name.trim() || !nd.last_name.trim() || !nd.phone.trim()) {
-                showToast("Συμπληρώστε όνομα, επίθετο και τηλέφωνο.", "error");
-                return;
-              }
-              setNvSaving(true);
-              try {
-                const res = await fetchWithTimeout("/api/contacts", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    ...nd,
-                    call_status: "Pending",
-                    is_volunteer: true,
-                    priority: "Medium",
-                  }),
-                });
-                const j = (await res.json().catch(() => ({}))) as { contact?: { id: string }; error?: string };
-                if (!res.ok || !j.contact?.id) {
-                  showToast(j.error ?? "Αποτυχία δημιουργίας.", "error");
-                  return;
-                }
-                showToast("Η επαφή-εθελοντής δημιουργήθηκε.", "success");
-                setNd({ first_name: "", last_name: "", phone: "" });
-                setNvOpen(false);
-                void load();
-                router.push(`/contacts/${j.contact.id}`);
-              } catch {
-                showToast("Σφάλμα δικτύου.", "error");
-              } finally {
-                setNvSaving(false);
-              }
-            }}
-          >
-            Δημιουργία
-          </FormSubmitButton>
         </div>
       </CenteredModal>
 
@@ -297,19 +304,14 @@ function VolunteersBody() {
         })}
       </div>
 
-      {tOpen && sel && (
-        <CenteredModal open onClose={() => setTOpen(false)} className="!max-w-sm !p-5" ariaLabel="Νέα εργασία εθελοντή">
-          <p className="text-sm font-medium text-[var(--text-primary)]">
-            {sel.first_name} {sel.last_name}
-          </p>
-          <input
-            className={lux.input + " mt-2"}
-            placeholder="Τίτλος εργασίας"
-            value={t.title}
-            onChange={(e) => setT((x) => ({ ...x, title: e.target.value }))}
-          />
-          <input className={lux.input + " mt-1"} type="date" value={t.due} onChange={(e) => setT((x) => ({ ...x, due: e.target.value }))} />
-          <div className="mt-4 flex justify-end gap-2">
+      <CenteredModal
+        open={tOpen && !!sel}
+        onClose={() => setTOpen(false)}
+        title="Νέα εργασία εθελοντή"
+        className="!max-w-sm"
+        ariaLabel="Νέα εργασία εθελοντή"
+        footer={
+          <>
             <button type="button" className={lux.btnSecondary} onClick={() => setTOpen(false)}>
               Άκυρο
             </button>
@@ -318,7 +320,7 @@ function VolunteersBody() {
               variant="gold"
               loading={taskSaving}
               onClick={async () => {
-                if (!t.title.trim()) {
+                if (!sel || !t.title.trim()) {
                   showToast("Συμπληρώστε τίτλο εργασίας.", "error");
                   return;
                 }
@@ -345,11 +347,26 @@ function VolunteersBody() {
                 }
               }}
             >
-              OK
+              Αποθήκευση
             </FormSubmitButton>
-          </div>
-        </CenteredModal>
-      )}
+          </>
+        }
+      >
+        {sel ? (
+          <>
+            <p className="text-sm font-medium text-[var(--text-primary)]">
+              {sel.first_name} {sel.last_name}
+            </p>
+            <input
+              className={lux.input + " mt-2"}
+              placeholder="Τίτλος εργασίας"
+              value={t.title}
+              onChange={(e) => setT((x) => ({ ...x, title: e.target.value }))}
+            />
+            <input className={lux.input + " mt-1"} type="date" value={t.due} onChange={(e) => setT((x) => ({ ...x, due: e.target.value }))} />
+          </>
+        ) : null}
+      </CenteredModal>
     </div>
   );
 }

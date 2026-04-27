@@ -686,8 +686,62 @@ export default function SchedulePage() {
             setDetail(null);
             setEditing(false);
           }}
-          className="max-w-md p-6"
+          title={
+            detail && detailSurface
+              ? editing
+                ? "Επεξεργασία συμβάντος"
+                : stripHtml(detail.title ?? null) || "Συμβάν"
+              : "Συμβάν"
+          }
+          className="max-w-md"
           ariaLabel={editing ? "Επεξεργασία συμβάντος" : "Συμβάν ημερολογίου"}
+          footer={
+            detail && detailSurface ? (
+              editing && detail && !isAllDayStr(detail.start) ? (
+                <>
+                  <button type="button" className={lux.btnSecondary} onClick={() => setEditing(false)}>
+                    Άκυρο
+                  </button>
+                  <FormSubmitButton type="submit" form="schedule-edit-form" loading={saving} variant="gold">
+                    Αποθήκευση
+                  </FormSubmitButton>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={lux.btnSecondary}
+                    onClick={() => {
+                      setDetail(null);
+                      setEditing(false);
+                    }}
+                  >
+                    Άκυρο
+                  </button>
+                  {detail && !isAllDayStr(detail.start) && (
+                    <button
+                      type="button"
+                      className={lux.btnIcon + " gap-1 !h-auto !w-auto !px-3 !py-2 !text-sm"}
+                      onClick={startEdit}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Επεξεργασία
+                    </button>
+                  )}
+                  {detail && (
+                    <button
+                      type="button"
+                      className={lux.btnDanger + " !gap-1.5 !py-2 !text-sm"}
+                      onClick={() => void onDelete(detail.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Διαγραφή
+                    </button>
+                  )}
+                </>
+              )
+            ) : undefined
+          }
         >
           {detail && detailSurface ? (
             <>
@@ -699,9 +753,6 @@ export default function SchedulePage() {
                   >
                     {detail.typeLabel?.trim() || CALENDAR_EVENT_TYPES[detailSurface.resolved].label}
                   </div>
-                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                    {stripHtml(detail.title ?? null) || "—"}
-                  </h2>
                   {detail.start && !isAllDayStr(detail.start) && (
                     <p className="mt-1 text-sm text-[var(--text-secondary)]">
                       {format(new Date(detail.start), "PPPp", { locale: el })} —{" "}
@@ -725,8 +776,7 @@ export default function SchedulePage() {
                 </div>
               )}
               {editing && detail && !isAllDayStr(detail.start) && (
-                <form onSubmit={onSaveEdit} className="grid max-w-[640px] gap-4">
-                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">Επεξεργασία</h2>
+                <form id="schedule-edit-form" onSubmit={onSaveEdit} className="grid max-w-[640px] gap-4">
                   <div>
                     <label className={lux.label}>
                       Τίτλος<span className="ml-0.5 text-red-500" aria-hidden>*</span>
@@ -791,48 +841,7 @@ export default function SchedulePage() {
                       placeholder="Προαιρετικό"
                     />
                   </div>
-                  <div className="mt-2 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
-                    <button
-                      type="button"
-                      className={lux.btnSecondary}
-                      onClick={() => {
-                        setEditing(false);
-                      }}
-                    >
-                      Άκυρο
-                    </button>
-                    <FormSubmitButton type="submit" loading={saving} variant="gold">
-                      Αποθήκευση
-                    </FormSubmitButton>
-                  </div>
                 </form>
-              )}
-              {!editing && (
-                <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
-                  <button type="button" className={lux.btnSecondary} onClick={() => setDetail(null)}>
-                    Κλείσιμο
-                  </button>
-                  {detail && !isAllDayStr(detail.start) && (
-                    <button
-                      type="button"
-                      className={lux.btnIcon + " gap-1 !h-auto !w-auto !px-3 !py-2 !text-sm"}
-                      onClick={startEdit}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Επεξεργασία
-                    </button>
-                  )}
-                  {detail && (
-                    <button
-                      type="button"
-                      className={lux.btnDanger + " !gap-1.5 !py-2 !text-sm"}
-                      onClick={() => void onDelete(detail.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Διαγραφή
-                    </button>
-                  )}
-                </div>
               )}
             </>
           ) : null}
@@ -844,116 +853,116 @@ export default function SchedulePage() {
             setShowNew(false);
             setCreateError(null);
           }}
-          className="max-w-md p-6"
+          title="Νέο Event"
+          className="max-w-md"
           ariaLabel="Νέο γεγονός"
+          footer={
+            <>
+              <button
+                type="button"
+                className={lux.btnSecondary}
+                onClick={() => {
+                  setShowNew(false);
+                  setCreateError(null);
+                }}
+              >
+                Άκυρο
+              </button>
+              <FormSubmitButton type="submit" form="schedule-new-form" loading={saving} variant="gold">
+                Αποθήκευση
+              </FormSubmitButton>
+            </>
+          }
         >
-            <form onSubmit={onCreate} aria-labelledby="schedule-new-title">
-              <h2 id="schedule-new-title" className="text-lg font-semibold text-[var(--text-primary)]">
-                Νέο Event
-              </h2>
-              <p className="mb-4 text-xs text-[var(--text-muted)]">Προστίθεται στο Google Calendar (πρωτεύον)</p>
-              {createError && (
-                <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200" role="alert">
-                  {createError}
-                </p>
-              )}
-              <div className="grid max-w-[640px] gap-4">
+          <form id="schedule-new-form" onSubmit={onCreate}>
+            <p className="mb-4 text-xs text-[var(--text-muted)]">Προστίθεται στο Google Calendar (πρωτεύον)</p>
+            {createError && (
+              <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200" role="alert">
+                {createError}
+              </p>
+            )}
+            <div className="grid max-w-[640px] gap-4">
+              <div>
+                <label className={lux.label}>
+                  Τίτλος<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                </label>
+                <input
+                  className={lux.input}
+                  value={newEv.title}
+                  onChange={(e) => setNewEv({ ...newEv, title: e.target.value })}
+                  required
+                  autoFocus
+                  placeholder="Τίτλος"
+                />
+              </div>
+              <div>
+                <label className={lux.label}>
+                  Ημερ.<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                </label>
+                <input
+                  className={[lux.input, lux.dateInput].join(" ")}
+                  type="date"
+                  value={newEv.date}
+                  onChange={(e) => setNewEv({ ...newEv, date: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={lux.label}>
-                    Τίτλος<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                    Έναρξη<span className="ml-0.5 text-red-500" aria-hidden>*</span>
                   </label>
                   <input
-                    className={lux.input}
-                    value={newEv.title}
-                    onChange={(e) => setNewEv({ ...newEv, title: e.target.value })}
+                    className={[lux.input, "[color-scheme:dark]"].join(" ")}
+                    type="time"
+                    value={newEv.startTime}
+                    onChange={(e) => setNewEv({ ...newEv, startTime: e.target.value })}
                     required
-                    autoFocus
-                    placeholder="Τίτλος"
                   />
                 </div>
                 <div>
                   <label className={lux.label}>
-                    Ημερ.<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                    Λήξη<span className="ml-0.5 text-red-500" aria-hidden>*</span>
                   </label>
                   <input
-                    className={[lux.input, lux.dateInput].join(" ")}
-                    type="date"
-                    value={newEv.date}
-                    onChange={(e) => setNewEv({ ...newEv, date: e.target.value })}
+                    className={[lux.input, "[color-scheme:dark]"].join(" ")}
+                    type="time"
+                    value={newEv.endTime}
+                    onChange={(e) => setNewEv({ ...newEv, endTime: e.target.value })}
                     required
-                  />
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className={lux.label}>
-                      Έναρξη<span className="ml-0.5 text-red-500" aria-hidden>*</span>
-                    </label>
-                    <input
-                      className={[lux.input, "[color-scheme:dark]"].join(" ")}
-                      type="time"
-                      value={newEv.startTime}
-                      onChange={(e) => setNewEv({ ...newEv, startTime: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className={lux.label}>
-                      Λήξη<span className="ml-0.5 text-red-500" aria-hidden>*</span>
-                    </label>
-                    <input
-                      className={[lux.input, "[color-scheme:dark]"].join(" ")}
-                      type="time"
-                      value={newEv.endTime}
-                      onChange={(e) => setNewEv({ ...newEv, endTime: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className={lux.label}>Τύπος</label>
-                  <HqSelect value={newEv.eventType} onChange={(e) => setNewEv({ ...newEv, eventType: e.target.value as CalendarEventType })}>
-                    {CAL_EVENT_TYPE_KEYS.map((k) => (
-                      <option key={k} value={k}>
-                        {CALENDAR_EVENT_TYPES[k].label}
-                      </option>
-                    ))}
-                  </HqSelect>
-                </div>
-                <div>
-                  <label className={lux.label}>Τοποθεσία</label>
-                  <input
-                    className={lux.input}
-                    value={newEv.location}
-                    onChange={(e) => setNewEv({ ...newEv, location: e.target.value })}
-                    placeholder="Προαιρετικό"
-                  />
-                </div>
-                <div>
-                  <label className={lux.label}>Περιγραφή</label>
-                  <textarea
-                    className={lux.textarea + " !min-h-[88px]"}
-                    value={newEv.description}
-                    onChange={(e) => setNewEv({ ...newEv, description: e.target.value })}
-                    placeholder="Προαιρετικό"
                   />
                 </div>
               </div>
-              <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
-                <button
-                  type="button"
-                  className={lux.btnSecondary}
-                  onClick={() => {
-                    setShowNew(false);
-                    setCreateError(null);
-                  }}
-                >
-                  Άκυρο
-                </button>
-                <FormSubmitButton type="submit" loading={saving} variant="gold">
-                  Αποθήκευση
-                </FormSubmitButton>
+              <div>
+                <label className={lux.label}>Τύπος</label>
+                <HqSelect value={newEv.eventType} onChange={(e) => setNewEv({ ...newEv, eventType: e.target.value as CalendarEventType })}>
+                  {CAL_EVENT_TYPE_KEYS.map((k) => (
+                    <option key={k} value={k}>
+                      {CALENDAR_EVENT_TYPES[k].label}
+                    </option>
+                  ))}
+                </HqSelect>
               </div>
-            </form>
+              <div>
+                <label className={lux.label}>Τοποθεσία</label>
+                <input
+                  className={lux.input}
+                  value={newEv.location}
+                  onChange={(e) => setNewEv({ ...newEv, location: e.target.value })}
+                  placeholder="Προαιρετικό"
+                />
+              </div>
+              <div>
+                <label className={lux.label}>Περιγραφή</label>
+                <textarea
+                  className={lux.textarea + " !min-h-[88px]"}
+                  value={newEv.description}
+                  onChange={(e) => setNewEv({ ...newEv, description: e.target.value })}
+                  placeholder="Προαιρετικό"
+                />
+              </div>
+            </div>
+          </form>
         </CenteredModal>
       </div>
     </div>

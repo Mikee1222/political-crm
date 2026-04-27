@@ -143,16 +143,29 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
         reset();
         onClose();
       }}
-      className="flex !max-w-[640px] flex-col overflow-hidden p-0"
+      title="Νέο αίτημα"
+      className="!max-w-[640px]"
       ariaLabel="Νέο αίτημα"
+      footer={
+        <>
+          <button
+            type="button"
+            className={lux.btnSecondary + " w-full sm:w-auto"}
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+            disabled={saving}
+          >
+            Άκυρο
+          </button>
+          <FormSubmitButton type="submit" form="new-request-form" loading={saving} variant="gold" className="w-full sm:w-auto">
+            Αποθήκευση
+          </FormSubmitButton>
+        </>
+      }
     >
-      <form className="flex max-h-[inherit] min-h-0 flex-1 flex-col" role="document" onSubmit={(e) => void submit(e)}>
-        <div className="shrink-0 border-b border-[var(--border)] p-4 sm:px-6 sm:py-4">
-          <h2 id="new-req-title" className={lux.sectionTitle}>
-            Νέο αίτημα
-          </h2>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+      <form id="new-request-form" role="document" onSubmit={(e) => void submit(e)}>
           {err && (
             <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200" role="alert">
               {err}
@@ -326,23 +339,6 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
               rows={3}
             />
           </div>
-        </div>
-        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
-          <button
-            type="button"
-            className={lux.btnSecondary + " w-full sm:w-auto"}
-            onClick={() => {
-              reset();
-              onClose();
-            }}
-            disabled={saving}
-          >
-            Ακύρωση
-          </button>
-          <FormSubmitButton type="submit" loading={saving} variant="gold" className="w-full sm:w-auto">
-            Δημιουργία
-          </FormSubmitButton>
-        </div>
       </form>
     </CenteredModal>
   );

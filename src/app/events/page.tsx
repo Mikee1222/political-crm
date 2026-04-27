@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { Calendar as CalendarIcon, MapPin, Plus, Sparkles, Users, X, CalendarCheck } from "lucide-react";
+import { Calendar as CalendarIcon, MapPin, Plus, Sparkles, Users, CalendarCheck } from "lucide-react";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
@@ -228,21 +228,52 @@ function EventsBody() {
       <CenteredModal
         open={openCreate}
         onClose={() => setOpenCreate(false)}
-        className="max-w-md p-6"
+        title="Νέα εκδήλωση"
         ariaLabel="Νέα εκδήλωση"
+        className="!max-w-md"
+        footer={
+          <>
+            <button type="button" className={lux.btnSecondary} onClick={() => setOpenCreate(false)} disabled={createSaving}>
+              Άκυρο
+            </button>
+            <FormSubmitButton
+              type="button"
+              variant="gold"
+              loading={createSaving}
+              onClick={async () => {
+                if (!f.title.trim() || !f.date) {
+                  showToast("Συμπληρώστε τίτλο και ημερομηνία.", "error");
+                  return;
+                }
+                setCreateSaving(true);
+                try {
+                  const res = await fetchWithTimeout("/api/events", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(f),
+                  });
+                  const j = (await res.json().catch(() => ({}))) as { error?: string };
+                  if (!res.ok) {
+                    showToast(j.error ?? "Σφάλμα", "error");
+                    return;
+                  }
+                  showToast("Η εκδήλωση δημιουργήθηκε.", "success");
+                  setOpenCreate(false);
+                  setF({ title: "", date: "", location: "", type: "Εκδήλωση" });
+                  void load();
+                } catch {
+                  showToast("Σφάλμα δικτύου.", "error");
+                } finally {
+                  setCreateSaving(false);
+                }
+              }}
+            >
+              Αποθήκευση
+            </FormSubmitButton>
+          </>
+        }
       >
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Νέα εκδήλωση</h3>
-          <button
-            type="button"
-            className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]"
-            onClick={() => setOpenCreate(false)}
-            aria-label="Κλείσιμο"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="mt-3 grid gap-4">
+        <div className="grid gap-4">
           <div>
             <label className={lux.label}>Τίτλος</label>
             <input
@@ -281,48 +312,20 @@ function EventsBody() {
             </HqSelect>
           </div>
         </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className={lux.btnSecondary} onClick={() => setOpenCreate(false)} disabled={createSaving}>
-            Άκυρο
-          </button>
-          <FormSubmitButton
-            type="button"
-            variant="gold"
-            loading={createSaving}
-            onClick={async () => {
-              if (!f.title.trim() || !f.date) {
-                showToast("Συμπληρώστε τίτλο και ημερομηνία.", "error");
-                return;
-              }
-              setCreateSaving(true);
-              try {
-                const res = await fetchWithTimeout("/api/events", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(f),
-                });
-                const j = (await res.json().catch(() => ({}))) as { error?: string };
-                if (!res.ok) {
-                  showToast(j.error ?? "Σφάλμα", "error");
-                  return;
-                }
-                showToast("Η εκδήλωση δημιουργήθηκε.", "success");
-                setOpenCreate(false);
-                setF({ title: "", date: "", location: "", type: "Εκδήλωση" });
-                void load();
-              } catch {
-                showToast("Σφάλμα δικτύου.", "error");
-              } finally {
-                setCreateSaving(false);
-              }
-            }}
-          >
-            Αποθήκευση
-          </FormSubmitButton>
-        </div>
       </CenteredModal>
 
-      <CenteredModal open={!!detail} onClose={() => setDetail(null)} className="max-w-lg overflow-hidden p-0" ariaLabel="Εκδήλωση">
+      <CenteredModal
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        title={detail ? detail.title : "Εκδήλωση"}
+        ariaLabel="Εκδήλωση"
+        className="!max-w-lg !p-0"
+        footer={
+          <button type="button" className={lux.btnSecondary} onClick={() => setDetail(null)}>
+            Άκυρο
+          </button>
+        }
+      >
         {detail ? (
           <>
             <div className="relative h-40 w-full overflow-hidden border-b border-[var(--border)] bg-gradient-to-br from-[#0A1628] to-[#1e5fa8]/50">
@@ -332,14 +335,6 @@ function EventsBody() {
                 </span>
                 <span className="mt-1 text-2xl font-extrabold text-white">{dateParts(detail.date).day}</span>
               </div>
-              <button
-                type="button"
-                className="absolute right-3 top-3 rounded-lg border border-white/20 bg-black/30 p-2 text-white hover:bg-black/50"
-                onClick={() => setDetail(null)}
-                aria-label="Κλείσιμο"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
             <div className="p-5">
               {detailLoading ? (
@@ -352,7 +347,6 @@ function EventsBody() {
                     </span>
                     <span className="text-xs text-[var(--text-muted)]">{detail.status || "—"}</span>
                   </div>
-                  <h2 className="text-xl font-bold text-[var(--text-primary)]">{detail.title}</h2>
                   <p className="mt-2 flex items-start gap-2 text-sm text-[var(--text-secondary)]">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#1e5fa8]" />
                     {detail.location || "—"}

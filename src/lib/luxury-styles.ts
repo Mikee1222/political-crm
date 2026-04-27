@@ -42,7 +42,7 @@ export const lux = {
     "bg-[var(--bg-elevated)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--text-table-header)]",
   tableRow:
     "cursor-pointer border-b border-[var(--border)] text-[var(--text-table)] transition-colors duration-150 last:border-0 hover:bg-[var(--bg-elevated)]/80",
-  /** Legacy overlay — prefer `<CenteredModal />`. z-index 9999, centered panel, max-height 90vh. */
+  /** Legacy overlay — prefer `<CenteredModal />` (backdrop z-[9998], panel z-[9999], max-height 90vh). */
   modalOverlay:
     "fixed inset-0 z-[9999] flex min-h-full items-center justify-center overflow-y-auto overflow-x-hidden p-4 backdrop-blur-[8px] [background:var(--overlay-scrim)]",
   modalPanel:

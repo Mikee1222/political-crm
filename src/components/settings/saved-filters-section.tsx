@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { applySavedFilterJson, summarizeContactFilters } from "@/lib/contacts-filters";
 
@@ -44,8 +46,6 @@ function FilterModal({
       setFiltersJson('{\n  "call_status": ["Negative", "No Answer"]\n}');
     }
   }, [open, initial]);
-
-  if (!open) return null;
 
   const save = async () => {
     setErr(null);
@@ -94,47 +94,46 @@ function FilterModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
-      role="dialog"
-      aria-modal
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-xl">
-        <h3 className={lux.pageTitle + " !text-lg"}>{initial ? "Επεξεργασία φίλτρου" : "Νέο αποθηκευμένο φίλτρο"}</h3>
-        {err && <p className="mt-2 text-sm text-amber-200">{err}</p>}
-        <label className="mt-4 block">
-          <span className={lux.label}>Όνομα (μοναδικό)</span>
-          <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label className="mt-3 block">
-          <span className={lux.label}>Περιγραφή</span>
-          <input
-            className={lux.input}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Π.χ. Αρνητικός, δεν απαντά, …"
-          />
-        </label>
-        <label className="mt-3 block">
-          <span className={lux.label}>Φίλτρα (JSON)</span>
-          <textarea
-            className={lux.input + " min-h-[200px] font-mono text-xs"}
-            value={filtersJson}
-            onChange={(e) => setFiltersJson(e.target.value)}
-            spellCheck={false}
-          />
-        </label>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" className={lux.btnPrimary} disabled={saving} onClick={() => void save()}>
-            {saving ? "…" : "Αποθήκευση"}
-          </button>
-          <button type="button" className={lux.btnSecondary} onClick={onClose}>
+    <CenteredModal
+      open={open}
+      onClose={onClose}
+      title={initial ? "Επεξεργασία φίλτρου" : "Νέο αποθηκευμένο φίλτρο"}
+      className="max-w-lg"
+      footer={
+        <>
+          <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={saving}>
             Άκυρο
           </button>
-        </div>
-      </div>
-    </div>
+          <FormSubmitButton type="button" variant="gold" loading={saving} onClick={() => void save()}>
+            Αποθήκευση
+          </FormSubmitButton>
+        </>
+      }
+    >
+      {err && <p className="mb-3 text-sm text-amber-200">{err}</p>}
+      <label className="block">
+        <span className={lux.label}>Όνομα (μοναδικό)</span>
+        <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="mt-3 block">
+        <span className={lux.label}>Περιγραφή</span>
+        <input
+          className={lux.input}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Π.χ. Αρνητικός, δεν απαντά, …"
+        />
+      </label>
+      <label className="mt-3 block">
+        <span className={lux.label}>Φίλτρα (JSON)</span>
+        <textarea
+          className={lux.input + " min-h-[200px] font-mono text-xs"}
+          value={filtersJson}
+          onChange={(e) => setFiltersJson(e.target.value)}
+          spellCheck={false}
+        />
+      </label>
+    </CenteredModal>
   );
 }
 
@@ -242,13 +241,16 @@ export function SavedFiltersSection({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       {isAdmin && del && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(e) => e.target === e.currentTarget && setDel(null)}
-        >
-          <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
-            <p className="text-sm text-[var(--text-primary)]">Να διαγραφεί το &quot;{del.name}&quot;;</p>
-            <div className="mt-4 flex gap-2">
+        <CenteredModal
+          open={!!del}
+          onClose={() => setDel(null)}
+          title="Διαγραφή φίλτρου"
+          className="max-w-sm"
+          footer={
+            <>
+              <button type="button" className={lux.btnSecondary} onClick={() => setDel(null)}>
+                Άκυρο
+              </button>
               <button
                 type="button"
                 className={lux.btnDanger}
@@ -264,12 +266,11 @@ export function SavedFiltersSection({ isAdmin }: { isAdmin: boolean }) {
               >
                 Διαγραφή
               </button>
-              <button type="button" className={lux.btnSecondary} onClick={() => setDel(null)}>
-                Άκυρο
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="text-sm text-[var(--text-primary)]">Να διαγραφεί το &quot;{del.name}&quot;;</p>
+        </CenteredModal>
       )}
     </section>
   );

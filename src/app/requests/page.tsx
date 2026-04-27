@@ -379,15 +379,29 @@ function EditRequestModal({
   };
 
   return (
-    <CenteredModal open onClose={onClose} className="flex w-full max-w-xl flex-col overflow-hidden p-0" ariaLabel="Επεξεργασία αιτήματος">
-      <div className="max-h-[min(90vh,720px)] overflow-y-auto p-6 shadow-2xl">
+    <CenteredModal
+      open
+      onClose={onClose}
+      title="Επεξεργασία αιτήματος"
+      ariaLabel="Επεξεργασία αιτήματος"
+      className="!max-w-xl"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={saving}>
+            Άκυρο
+          </button>
+          <FormSubmitButton type="button" loading={saving} variant="gold" onClick={() => void save()}>
+            Αποθήκευση
+          </FormSubmitButton>
+        </>
+      }
+    >
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
             {request.request_code ?? "—"}
           </span>
         </div>
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">Επεξεργασία αιτήματος</h3>
-        <p className="mt-1 line-clamp-2 text-sm text-[var(--text-secondary)]">{request.title}</p>
+        <p className="line-clamp-2 text-sm text-[var(--text-secondary)]">{request.title}</p>
         <div className="mt-4 grid max-w-[640px] gap-4">
           <div>
             <label className={lux.label}>Τίτλος</label>
@@ -455,20 +469,11 @@ function EditRequestModal({
             />
           </div>
         </div>
-        <div className="mt-6 flex flex-col justify-between gap-3 border-t border-[var(--border)] pt-4 sm:flex-row sm:items-center">
+        <div className="mt-6 border-t border-[var(--border)] pt-4">
           <button type="button" onClick={() => void remove()} className="text-sm font-medium text-[#DC2626] hover:underline" disabled={saving}>
-            Διαγραφή
+            Διαγραφή αιτήματος
           </button>
-          <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={saving}>
-              Ακύρωση
-            </button>
-            <FormSubmitButton type="button" loading={saving} variant="gold" onClick={() => void save()}>
-              Αποθήκευση
-            </FormSubmitButton>
-          </div>
         </div>
-      </div>
     </CenteredModal>
   );
 }

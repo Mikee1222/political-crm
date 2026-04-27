@@ -489,17 +489,30 @@ export default function CampaignsPage() {
       <CenteredModal
         open={modal}
         onClose={() => setModal(false)}
-        className="flex w-full max-w-[720px] flex-col overflow-hidden p-0"
+        title="Νέα Καμπάνια"
+        className="w-full max-w-[720px]"
         ariaLabel="Νέα καμπάνια"
+        footer={
+          <>
+            <button type="button" className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:w-auto"} onClick={() => setModal(false)} disabled={saving}>
+              Άκυρο
+            </button>
+            <FormSubmitButton
+              type="submit"
+              form="campaign-create-form"
+              loading={saving}
+              variant="gold"
+              className={goldCta + " !h-12 !w-full !rounded-xl sm:!w-auto !min-w-0 sm:!px-6"}
+            >
+              Αποθήκευση
+            </FormSubmitButton>
+          </>
+        }
       >
-          <form className="flex max-h-[min(90vh,900px)] min-h-0 w-full flex-col" onSubmit={createCampaign}>
-            <div className="mx-auto mt-2 h-1 w-11 rounded-full bg-white/20 sm:hidden" aria-hidden />
-            <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-secondary)]/50 px-5 py-4">
-              <h2 className="text-xl font-bold text-[var(--text-primary)]">Νέα Καμπάνια</h2>
-              <p className="text-xs text-[var(--text-muted)]">Όνομα, περιγραφή και ποιες επαφές θα τρέχουν (φίλτρα).</p>
-            </div>
+        <form id="campaign-create-form" className="flex min-h-0 w-full flex-col" onSubmit={createCampaign}>
+            <p className="mb-4 text-xs text-[var(--text-muted)]">Όνομα, περιγραφή και ποιες επαφές θα τρέχουν (φίλτρα).</p>
 
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="space-y-4">
               {formErr && (
                 <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">{formErr}</p>
               )}
@@ -701,22 +714,6 @@ export default function CampaignsPage() {
                 <p className="shrink-0 text-2xl font-bold text-[#C9A84C] tabular-nums sm:text-3xl">
                   {previewing || previewCount == null ? "—" : previewCount}
                 </p>
-              </div>
-            </div>
-
-            <div className="shrink-0 border-t border-[var(--border)] bg-[#050D1A]/50 px-5 py-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end sm:gap-2">
-                <button type="button" className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:w-auto"} onClick={() => setModal(false)} disabled={saving}>
-                  Άκυρο
-                </button>
-                <FormSubmitButton
-                  type="submit"
-                  loading={saving}
-                  variant="gold"
-                  className={goldCta + " !h-12 !w-full !rounded-xl sm:!w-auto !min-w-0 sm:!px-6"}
-                >
-                  Δημιουργία
-                </FormSubmitButton>
               </div>
             </div>
           </form>

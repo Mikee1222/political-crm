@@ -120,12 +120,24 @@ export default function PollsPage() {
         ))}
       </ul>
 
-      <CenteredModal open={open} onClose={() => setOpen(false)} className="flex !max-w-lg max-h-[90dvh] flex-col !p-0" ariaLabel="Νέα δημοσκόπηση" overlayClassName="z-[9999]">
-        <form onSubmit={create} className="flex max-h-[90dvh] flex-col overflow-hidden">
-          <div className="border-b border-[var(--border)] px-5 py-4">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">Νέα δημοσκόπηση</h2>
-          </div>
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
+      <CenteredModal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Νέα δημοσκόπηση"
+        ariaLabel="Νέα δημοσκόπηση"
+        className="!max-w-lg"
+        footer={
+          <>
+            <button type="button" className={lux.btnSecondary} onClick={() => setOpen(false)}>
+              Άκυρο
+            </button>
+            <FormSubmitButton type="submit" form="poll-create-form" variant="gold" loading={saving}>
+              Αποθήκευση
+            </FormSubmitButton>
+          </>
+        }
+      >
+        <form id="poll-create-form" onSubmit={create} className="space-y-2">
             <input className={lux.input} placeholder="Τίτλος" value={title} onChange={(e) => setTitle(e.target.value)} required />
             <textarea className={lux.textarea} placeholder="Ερώτημα" value={question} onChange={(e) => setQuestion(e.target.value)} required />
             {opts.map((o, i) => (
@@ -153,15 +165,6 @@ export default function PollsPage() {
               ))}
             </HqSelect>
             <input type="datetime-local" className={lux.input} value={ends} onChange={(e) => setEnds(e.target.value)} />
-          </div>
-          <div className="flex gap-2 border-t border-[var(--border)] px-5 py-4">
-            <button type="button" className={lux.btnSecondary} onClick={() => setOpen(false)}>
-              Άκυρο
-            </button>
-            <FormSubmitButton type="submit" variant="gold" loading={saving}>
-              Δημιουργία
-            </FormSubmitButton>
-          </div>
         </form>
       </CenteredModal>
     </div>

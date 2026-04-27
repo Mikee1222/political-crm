@@ -681,11 +681,24 @@ function RequestCategoryModal({
     }
   };
   return (
-    <CenteredModal open onClose={onClose} className="flex !max-w-md flex-col" ariaLabel={initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}>
-      <div className="border-b border-[var(--border)] px-5 py-4">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}</h3>
-      </div>
-      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4">
+    <CenteredModal
+      open
+      onClose={onClose}
+      title={initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}
+      ariaLabel={initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" className={lux.btnPrimary} onClick={() => void save()} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div>
           <HqLabel htmlFor="rc-name" required>
             Όνομα
@@ -720,14 +733,6 @@ function RequestCategoryModal({
           />
         </div>
       </div>
-      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end">
-        <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={busy}>
-          Άκυρο
-        </button>
-        <button type="button" className={lux.btnPrimary} onClick={() => void save()} disabled={busy}>
-          {busy ? "…" : "Αποθήκευση"}
-        </button>
-      </div>
     </CenteredModal>
   );
 }
@@ -741,7 +746,10 @@ function buildDefaultEventCategories() {
 }
 
 function EventCategoriesSection() {
-  const [rows, setRows] = useState(() => buildDefaultEventCategories());
+  type CatRow = ReturnType<typeof buildDefaultEventCategories>[number];
+  const [rows, setRows] = useState<CatRow[]>(() => buildDefaultEventCategories());
+  const [draft, setDraft] = useState<CatRow[]>(() => buildDefaultEventCategories());
+  const [modalOpen, setModalOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -776,12 +784,18 @@ function EventCategoriesSection() {
     void load();
   }, [load]);
 
-  const save = async () => {
+  const openModal = () => {
     setErr(null);
-    for (const r of rows) {
+    setDraft(rows.map((r) => ({ ...r })));
+    setModalOpen(true);
+  };
+
+  const persist = async (cats: CatRow[]) => {
+    setErr(null);
+    for (const r of cats) {
       if (!r.name?.trim()) {
         setErr("Όλες οι γραμμές χρειάζονται μη κενό όνομα");
-        return;
+        return false;
       }
     }
     setBusy(true);
@@ -789,14 +803,15 @@ function EventCategoriesSection() {
       const res = await fetchWithTimeout("/api/admin/event-categories", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categories: rows.map((r) => ({ type_key: r.type_key, name: r.name.trim(), color: r.color.trim() })) }),
+        body: JSON.stringify({ categories: cats.map((r) => ({ type_key: r.type_key, name: r.name.trim(), color: r.color.trim() })) }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         setErr(j.error ?? "Σφάλμα αποθήκευσης");
-        return;
+        return false;
       }
       await load();
+      return true;
     } finally {
       setBusy(false);
     }
@@ -809,65 +824,115 @@ function EventCategoriesSection() {
           <h2 className={lux.pageTitle + " mb-1"}>Κατηγορίες Events</h2>
           <p className="text-sm text-[var(--text-secondary)]">Χρώματα και εμφανιζόμενα ονόματα τύπων στο πρόγραμμα (4 τύποι συστήματος)</p>
         </div>
-        <button type="button" onClick={() => void save()} disabled={busy || loading} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
-          {busy ? "…" : "Αποθήκευση"}
+        <button type="button" onClick={openModal} disabled={loading} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
+          Επεξεργασία στο παράθυρο
         </button>
       </div>
-      {err && (
+      {err && !modalOpen && (
         <p className="mb-3 text-sm text-amber-200" role="status">
           {err}
         </p>
       )}
       {loading && <p className="mb-3 text-sm text-[var(--text-muted)]">Φόρτωση…</p>}
-      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-        <table className="w-full min-w-[420px] text-sm">
-          <thead>
-            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th className="p-3 pl-4 text-left">Τύπος (σύστημα)</th>
-              <th className="p-3 text-left">Όνομα</th>
-              <th className="p-3 pr-4 text-left">Χρώμα</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.type_key} className="border-b border-[var(--border)] last:border-0">
-                <td className="p-3 pl-4 text-[var(--text-secondary)]">
-                  {CALENDAR_EVENT_TYPES[r.type_key as CalendarEventType].label}
-                  <span className="mt-0.5 block text-[10px] font-mono text-[var(--text-muted)]">{r.type_key}</span>
-                </td>
-                <td className="p-3">
-                  <input
-                    className={lux.input + " !h-9"}
-                    value={r.name}
-                    onChange={(e) =>
-                      setRows((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, name: e.target.value } : x)))
-                    }
-                  />
-                </td>
-                <td className="p-3 pr-4">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      className="h-9 w-12 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]"
-                      value={r.color}
-                      onChange={(e) =>
-                        setRows((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, color: e.target.value } : x)))
-                      }
-                    />
-                    <input
-                      className={lux.input + " h-9 max-w-[120px] font-mono text-xs"}
-                      value={r.color}
-                      onChange={(e) =>
-                        setRows((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, color: e.target.value } : x)))
-                      }
-                    />
-                  </div>
-                </td>
+      <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+        {rows.map((r) => (
+          <li key={r.type_key} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+            <span
+              className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
+              style={{ background: r.color }}
+              title={r.color}
+            />
+            <span className="min-w-0 flex-1 font-medium text-[var(--text-primary)]">{r.name}</span>
+            <span className="text-xs text-[var(--text-muted)]">
+              {CALENDAR_EVENT_TYPES[r.type_key as CalendarEventType].label} · <span className="font-mono">{r.type_key}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <CenteredModal
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setErr(null);
+        }}
+        title="Κατηγορίες events"
+        ariaLabel="Επεξεργασία κατηγοριών events"
+        className="!max-w-lg"
+        footer={
+          <>
+            <button
+              type="button"
+              className={lux.btnSecondary}
+              disabled={busy}
+              onClick={() => {
+                setModalOpen(false);
+                setErr(null);
+              }}
+            >
+              Άκυρο
+            </button>
+            <button type="button" className={lux.btnPrimary} disabled={busy} onClick={() => void persist(draft).then((ok) => ok && setModalOpen(false))}>
+              {busy ? "…" : "Αποθήκευση"}
+            </button>
+          </>
+        }
+      >
+        {err && (
+          <p className="mb-3 text-sm text-amber-200" role="status">
+            {err}
+          </p>
+        )}
+        <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead>
+              <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                <th className="p-3 pl-4 text-left">Τύπος (σύστημα)</th>
+                <th className="p-3 text-left">Όνομα</th>
+                <th className="p-3 pr-4 text-left">Χρώμα</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {draft.map((r) => (
+                <tr key={r.type_key} className="border-b border-[var(--border)] last:border-0">
+                  <td className="p-3 pl-4 text-[var(--text-secondary)]">
+                    {CALENDAR_EVENT_TYPES[r.type_key as CalendarEventType].label}
+                    <span className="mt-0.5 block text-[10px] font-mono text-[var(--text-muted)]">{r.type_key}</span>
+                  </td>
+                  <td className="p-3">
+                    <input
+                      className={lux.input + " !h-9"}
+                      value={r.name}
+                      onChange={(e) =>
+                        setDraft((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, name: e.target.value } : x)))
+                      }
+                    />
+                  </td>
+                  <td className="p-3 pr-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="h-9 w-12 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]"
+                        value={r.color}
+                        onChange={(e) =>
+                          setDraft((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, color: e.target.value } : x)))
+                        }
+                      />
+                      <input
+                        className={lux.input + " h-9 max-w-[120px] font-mono text-xs"}
+                        value={r.color}
+                        onChange={(e) =>
+                          setDraft((prev) => prev.map((x) => (x.type_key === r.type_key ? { ...x, color: e.target.value } : x)))
+                        }
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CenteredModal>
     </section>
   );
 }
@@ -1040,11 +1105,24 @@ function TagEditModal({
   };
 
   return (
-    <CenteredModal open onClose={onClose} className="flex !max-w-lg flex-col" ariaLabel={initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}>
-      <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}</h3>
-      </div>
-      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+    <CenteredModal
+      open
+      onClose={onClose}
+      title={initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}
+      ariaLabel={initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}
+      className="!max-w-lg"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div>
           <HqLabel htmlFor="tag-name" required>
             Όνομα
@@ -1069,14 +1147,6 @@ function TagEditModal({
             <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
           </div>
         </div>
-      </div>
-      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-          Άκυρο
-        </button>
-        <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
-          {busy ? "…" : "Αποθήκευση"}
-        </button>
       </div>
     </CenteredModal>
   );
@@ -1258,11 +1328,24 @@ function GroupEditModal({
   };
 
   return (
-    <CenteredModal open onClose={onClose} className="flex !max-w-lg flex-col" ariaLabel={initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}>
-      <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}</h3>
-      </div>
-      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+    <CenteredModal
+      open
+      onClose={onClose}
+      title={initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}
+      ariaLabel={initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}
+      className="!max-w-lg"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div>
           <HqLabel htmlFor="grp-name" required>
             Όνομα
@@ -1291,14 +1374,6 @@ function GroupEditModal({
           <HqLabel htmlFor="grp-desc">Περιγραφή (εμφανίζεται στο ? στην λίστα)</HqLabel>
           <textarea id="grp-desc" className={lux.textarea} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
-      </div>
-      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-          Άκυρο
-        </button>
-        <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
-          {busy ? "…" : "Αποθήκευση"}
-        </button>
       </div>
     </CenteredModal>
   );
@@ -1355,19 +1430,24 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   };
 
   return (
-    <CenteredModal open onClose={onClose} className="flex !max-w-md flex-col" ariaLabel="Νέος χρήστης">
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 sm:px-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">Νέος χρήστης</h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
-          aria-label="Κλείσιμο"
-        >
-          <span className="text-2xl leading-none">×</span>
-        </button>
-      </div>
-      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+    <CenteredModal
+      open
+      onClose={onClose}
+      title="Νέος χρήστης"
+      ariaLabel="Νέος χρήστης"
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <FormSubmitButton type="button" variant="gold" loading={busy} onClick={() => void submit()}>
+            Δημιουργία χρήστη
+          </FormSubmitButton>
+        </>
+      }
+    >
+      <div className="space-y-4">
         {localErr && <p className="text-sm text-red-300">{localErr}</p>}
         <div>
           <HqLabel required>Πλήρες όνομα</HqLabel>
@@ -1396,14 +1476,6 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           </HqSelect>
         </div>
       </div>
-      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-          Άκυρο
-        </button>
-        <FormSubmitButton type="button" variant="gold" loading={busy} onClick={() => void submit()}>
-          Δημιουργία χρήστη
-        </FormSubmitButton>
-      </div>
     </CenteredModal>
   );
 }
@@ -1422,19 +1494,24 @@ function ConfirmModal({
   onConfirm: () => void;
 }) {
   return (
-    <CenteredModal open onClose={onCancel} className="!w-[min(420px,calc(100vw-2rem))] !max-w-sm p-0" ariaLabel={title}>
-      <div className="p-6">
-        <h4 className="text-lg font-bold text-[var(--text-primary)]">{title}</h4>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">{body}</p>
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+    <CenteredModal
+      open
+      onClose={onCancel}
+      title={title}
+      ariaLabel={title}
+      className="!max-w-sm"
+      footer={
+        <>
           <button type="button" onClick={onCancel} className={lux.btnSecondary + " w-full sm:w-auto"}>
             Άκυρο
           </button>
           <button type="button" onClick={onConfirm} className={lux.btnDanger + " w-full sm:w-auto"}>
             {confirmLabel}
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
+      <p className="text-sm text-[var(--text-secondary)]">{body}</p>
     </CenteredModal>
   );
 }

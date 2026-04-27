@@ -17,7 +17,6 @@ import {
   Search,
   Trash2,
   UserRound,
-  X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
@@ -866,16 +865,24 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   };
 
   return (
-    <CenteredModal open onClose={onClose} className="flex w-full max-w-[640px] flex-col overflow-hidden p-0" ariaLabel="Νέα εργασία">
-      <form onSubmit={save} className="flex max-h-[min(90vh,880px)] min-h-0 w-full flex-col">
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
-        <div className="flex items-center justify-between border-b border-[var(--border)] bg-[#0A1628] px-4 py-3">
-          <h2 className="text-lg font-bold">Νέα Εργασία</h2>
-          <button type="button" className="p-1 text-[var(--text-muted)] hover:text-white" onClick={onClose} aria-label="Κλείσιμο">
-            <X className="h-5 w-5" />
+    <CenteredModal
+      open
+      onClose={onClose}
+      title="Νέα Εργασία"
+      className="w-full max-w-[640px]"
+      ariaLabel="Νέα εργασία"
+      footer={
+        <>
+          <button type="button" className={clsx(lux.btnSecondary, "!w-full !min-h-12")} onClick={onClose} disabled={saving}>
+            Άκυρο
           </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <FormSubmitButton type="submit" form="task-create-form" loading={saving} variant="gold" className="w-full !min-h-12 !justify-center !py-2">
+            Αποθήκευση
+          </FormSubmitButton>
+        </>
+      }
+    >
+      <form id="task-create-form" onSubmit={save} className="space-y-4">
           {e && <p className="text-sm text-red-200">{e}</p>}
           <div>
             <label className={lux.label}>
@@ -990,15 +997,6 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               )}
             </div>
           </div>
-        </div>
-        <div className="grid grid-cols-1 gap-2 border-t border-[var(--border)] p-3 sm:grid-cols-2 sm:px-4">
-          <button type="button" className={clsx(lux.btnSecondary, "!w-full !min-h-12")} onClick={onClose} disabled={saving}>
-            Άκυρο
-          </button>
-          <FormSubmitButton type="submit" loading={saving} variant="gold" className="w-full !min-h-12 !justify-center !py-2">
-            Προσθήκη
-          </FormSubmitButton>
-        </div>
       </form>
     </CenteredModal>
   );

@@ -529,16 +529,26 @@ export default function DataToolsPage() {
       <CenteredModal
         open={!!mergeTarget}
         onClose={() => setMergeTarget(null)}
-        className="max-w-md space-y-4 p-6"
+        title="Συγχώνευση"
+        className="max-w-md"
         ariaLabel="Συγχώνευση επαφών"
+        footer={
+          <>
+            <button type="button" className={lux.btnSecondary} onClick={() => setMergeTarget(null)} disabled={mergeBusy}>
+              Άκυρο
+            </button>
+            <FormSubmitButton type="button" variant="gold" loading={mergeBusy} onClick={() => void doMerge()}>
+              Συγχώνευση
+            </FormSubmitButton>
+          </>
+        }
       >
         {mergeTarget ? (
           <>
-            <h3 id="merge-modal-title" className="text-lg font-bold text-[var(--text-primary)]">
-              Συγχώνευση
-            </h3>
-            <p className="text-sm text-[var(--text-secondary)]">Ποια εγγραφή να κρατήσουμε; (οι κλήσεις, tasks και αιτήματα μεταφέρονται)</p>
-            <div className="grid gap-4">
+            <p className="text-sm text-[var(--text-secondary)]">
+              Ποια εγγραφή να κρατήσουμε; (οι κλήσεις, tasks και αιτήματα μεταφέρονται)
+            </p>
+            <div className="mt-4 grid gap-4">
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] p-3">
                 <input type="radio" name="k" checked={keepSide === "a"} onChange={() => setKeepSide("a")} />
                 <span>
@@ -551,14 +561,6 @@ export default function DataToolsPage() {
                   {mergeTarget.contactB.first_name} {mergeTarget.contactB.last_name}
                 </span>
               </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button type="button" className={lux.btnSecondary} onClick={() => setMergeTarget(null)} disabled={mergeBusy}>
-                Άκυρο
-              </button>
-              <FormSubmitButton type="button" variant="gold" loading={mergeBusy} onClick={() => void doMerge()}>
-                Συγχώνευση
-              </FormSubmitButton>
             </div>
           </>
         ) : null}

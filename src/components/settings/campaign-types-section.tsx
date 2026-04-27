@@ -21,19 +21,24 @@ function ConfirmModal({
   onConfirm: () => void;
 }) {
   return (
-    <CenteredModal open onClose={onCancel} className="!w-[min(420px,calc(100vw-2rem))] !max-w-sm p-0" ariaLabel={title}>
-      <div className="p-6">
-        <h4 className="text-lg font-bold text-[var(--text-primary)]">{title}</h4>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">{body}</p>
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+    <CenteredModal
+      open
+      onClose={onCancel}
+      title={title}
+      ariaLabel={title}
+      className="!max-w-sm"
+      footer={
+        <>
           <button type="button" onClick={onCancel} className={lux.btnSecondary}>
             Άκυρο
           </button>
           <button type="button" onClick={onConfirm} className={lux.btnDanger}>
             {confirmLabel}
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
+      <p className="text-sm text-[var(--text-secondary)]">{body}</p>
     </CenteredModal>
   );
 }
@@ -97,11 +102,24 @@ function TypeModal({
   };
 
   return (
-    <CenteredModal open onClose={onClose} className="flex !max-w-lg flex-col" ariaLabel={initial ? "Τύπος καμπάνιας" : "Νέος τύπος"}>
-      <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία τύπου" : "Νέος τύπος καμπάνιας"}</h3>
-      </div>
-      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+    <CenteredModal
+      open
+      onClose={onClose}
+      title={initial ? "Επεξεργασία τύπου" : "Νέος τύπος καμπάνιας"}
+      ariaLabel={initial ? "Τύπος καμπάνιας" : "Νέος τύπος"}
+      className="!max-w-lg"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div>
           <HqLabel htmlFor="ct-name" required>
             Όνομα
@@ -134,14 +152,6 @@ function TypeModal({
             <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
           </div>
         </div>
-      </div>
-      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-          Άκυρο
-        </button>
-        <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
-          {busy ? "…" : "Αποθήκευση"}
-        </button>
       </div>
     </CenteredModal>
   );
