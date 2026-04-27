@@ -53,6 +53,30 @@ function formatNameDayGreek(iso: string | null | undefined): string | null {
   return d.toLocaleDateString("el-GR", { day: "numeric", month: "short" });
 }
 
+function weekStartMondayTime(d: Date): number {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = x.getDay();
+  const toMon = dow === 0 ? -6 : 1 - dow;
+  x.setDate(x.getDate() + toMon);
+  return x.getTime();
+}
+
+/** Gold in table when the nameday (month/day) is today or falls in the current week (Mon–Sun). */
+function isNameDayTodayOrThisWeek(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const p = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!p) return false;
+  const mo = Number(p[2]) - 1;
+  const day = Number(p[3]);
+  const now = new Date();
+  const y = now.getFullYear();
+  const occ = new Date(y, mo, day);
+  if (occ.getMonth() !== mo) return false;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (occ.getTime() === today.getTime()) return true;
+  return weekStartMondayTime(occ) === weekStartMondayTime(today);
+}
+
 function priorityDotClass(pr: string | null | undefined) {
   const p = pr ?? "Medium";
   if (p === "High") return "bg-red-500";
@@ -905,60 +929,67 @@ function ContactsPage() {
         </div>
       )}
 
-      <div className="data-hq-card hq-table-shell hidden max-h-[min(70vh,900px)] md:block">
-        <table className="min-w-[910px] w-full table-fixed text-sm text-[var(--text-table)]">
+      <div className="data-hq-card hq-table-shell relative hidden w-full min-w-0 max-w-full min-h-0 overflow-x-auto md:block max-h-[min(70vh,900px)]">
+        <table className="w-full min-w-[930px] table-fixed text-sm text-[var(--text-table)]">
           <colgroup>
-            <col style={{ width: 300 }} />
-            <col style={{ width: 130 }} />
+            <col style={{ width: 40 }} />
+            <col style={{ width: 240 }} />
+            <col style={{ width: 140 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 80 }} />
-            <col style={{ width: 100 }} />
+            <col style={{ width: 90 }} />
+            <col style={{ width: 120 }} />
             <col style={{ width: 80 }} />
           </colgroup>
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th className="sticky left-0 top-0 z-30 box-border w-[300px] min-w-[300px] max-w-[300px] border-r border-[var(--border)] bg-[var(--bg-elevated)] p-0 text-left">
-                <div className="flex h-14 min-h-[3.5rem] items-center gap-2.5 border-b border-transparent px-2 pl-2">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 shrink-0 rounded border-[var(--border)]"
-                    checked={allChecked}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      if (allChecked) setSelected(new Set());
-                      else setSelected(new Set(contacts.map((x) => x.id)));
-                    }}
-                    title="Επιλογή όλων"
-                    aria-label="Επιλογή όλων"
-                  />
-                  <span>Επαφή</span>
-                </div>
+              <th
+                scope="col"
+                className="sticky left-0 top-0 z-[32] w-10 min-w-10 max-w-10 border-r border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left align-middle"
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-[var(--border)]"
+                  checked={allChecked}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    if (allChecked) setSelected(new Set());
+                    else setSelected(new Set(contacts.map((x) => x.id)));
+                  }}
+                  title="Επιλογή όλων"
+                  aria-label="Επιλογή όλων"
+                />
               </th>
-              <th className="box-border w-[130px] p-0 text-left">
-                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Τηλέφωνο</div>
+              <th
+                scope="col"
+                className="sticky left-10 top-0 z-[31] w-60 min-w-60 max-w-60 border-r border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]"
+              >
+                Επαφή
               </th>
-              <th className="box-border w-[120px] p-0 text-left">
-                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Δήμος</div>
+              <th scope="col" className="w-[140px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
+                Τηλέφωνο
               </th>
-              <th className="box-border w-[100px] p-0 text-left">
-                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Ομάδα</div>
+              <th scope="col" className="w-[120px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
+                Δήμος
               </th>
-              <th className="box-border w-[80px] p-0 text-left">
-                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Γιορτή</div>
+              <th scope="col" className="w-[100px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
+                Ομάδα
               </th>
-              <th className="box-border w-[100px] p-0 text-left">
-                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Πατρώνυμο</div>
+              <th scope="col" className="w-[90px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
+                Γιορτή
               </th>
-              <th className="box-border w-[80px] p-0 pr-1 text-right" aria-label="Ενέργειες">
-                <div className="flex h-14 min-h-[3.5rem] items-center justify-end"> </div>
+              <th scope="col" className="w-[120px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
+                Πατρώνυμο
               </th>
+              <th scope="col" className="w-20 px-4 py-3 text-right align-middle" aria-label="Ενέργειες" />
             </tr>
           </thead>
           <tbody>
             {contacts.map((c, rowIdx) => {
               const rowBg = rowIdx % 2 === 0 ? "bg-[var(--bg-card)]" : "bg-[var(--bg-elevated)]/35";
               const nameDay = formatNameDayGreek(c.name_day);
+              const nameDayGold = isNameDayTodayOrThisWeek(c.name_day);
+              const cellHover = `${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`;
               return (
                 <tr
                   key={c.id}
@@ -969,133 +1000,142 @@ function ContactsPage() {
                   onClick={() => router.push(`/contacts/${c.id}`)}
                 >
                   <td
-                    className={`sticky left-0 z-20 box-border w-[300px] min-w-[300px] max-w-[300px] border-r border-[var(--border)] p-0 ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`sticky left-0 z-[22] w-10 min-w-10 max-w-10 border-r border-[var(--border)] px-4 py-3 align-middle ${cellHover}`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="box-border flex h-14 min-h-[3.5rem] max-w-full items-center gap-2 overflow-hidden border-b border-transparent py-0 pl-2 pr-1">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 shrink-0 rounded border-[var(--border)]"
-                        checked={selected.has(c.id)}
-                        onChange={() =>
-                          setSelected((prev) => {
-                            const n = new Set(prev);
-                            if (n.has(c.id)) n.delete(c.id);
-                            else n.add(c.id);
-                            return n;
-                          })
-                        }
-                        aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
-                      />
-                      <button
-                        type="button"
-                        className="flex min-w-0 min-h-0 flex-1 items-center gap-2 overflow-hidden text-left"
-                        onClick={() => router.push(`/contacts/${c.id}`)}
-                      >
-                        <div className="relative h-9 w-9 shrink-0">
-                          <div
-                            className={
-                              avatarContact +
-                              " !flex !h-9 !w-9 !min-h-[36px] !min-w-[36px] !items-center !justify-center !text-xs !leading-none"
-                            }
-                          >
-                            {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
-                          </div>
-                          <span
-                            className={`absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
-                            title={callStatusLabel(c.call_status)}
-                            aria-hidden
-                          />
-                        </div>
-                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden py-0.5">
-                          <p className="flex min-w-0 items-baseline gap-1.5">
-                            <span
-                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
-                              title={
-                                c.priority === "High"
-                                  ? "Υψηλή"
-                                  : c.priority === "Low"
-                                    ? "Χαμηλή"
-                                    : "Μεσαία"
-                              }
-                            />
-                            <span className="min-w-0 truncate font-bold leading-tight text-[var(--text-table)]">
-                              {c.first_name} {c.last_name}
-                            </span>
-                          </p>
-                          {c.contact_code ? (
-                            <span className="mt-0.5 inline-block max-w-full truncate rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1 py-px font-mono text-[9px] leading-tight text-[var(--text-muted)]">
-                              {c.contact_code}
-                            </span>
-                          ) : null}
-                        </div>
-                      </button>
-                    </div>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-[var(--border)]"
+                      checked={selected.has(c.id)}
+                      onChange={() =>
+                        setSelected((prev) => {
+                          const n = new Set(prev);
+                          if (n.has(c.id)) n.delete(c.id);
+                          else n.add(c.id);
+                          return n;
+                        })
+                      }
+                      aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
+                    />
                   </td>
                   <td
-                    className={`box-border w-[130px] max-w-[130px] overflow-hidden p-0 align-top font-mono text-[12px] leading-tight text-[var(--text-secondary)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`sticky left-10 z-[21] w-60 min-w-60 max-w-60 border-r border-[var(--border)] px-4 py-3 align-middle ${cellHover}`}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="box-border flex h-14 min-h-[3.5rem] flex-col justify-center overflow-hidden border-b border-transparent py-0 pl-1 pr-1">
-                      <div className="line-clamp-2 break-words [overflow-wrap:anywhere]">{c.phone || "—"}</div>
+                    <button
+                      type="button"
+                      className="flex w-full min-w-0 max-w-full items-center gap-2.5 text-left"
+                      onClick={() => router.push(`/contacts/${c.id}`)}
+                    >
+                      <div className="relative h-9 w-9 shrink-0 [flex-shrink:0]">
+                        <div
+                          className={
+                            avatarContact +
+                            " !flex !h-9 !w-9 !min-h-[36px] !min-w-[36px] !shrink-0 !items-center !justify-center !text-[13px] !font-semibold !leading-none"
+                          }
+                        >
+                          {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
+                        </div>
+                        <span
+                          className={`absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
+                          title={callStatusLabel(c.call_status)}
+                          aria-hidden
+                        />
+                      </div>
+                      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                        <p className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+                            title={
+                              c.priority === "High"
+                                ? "Υψηλή"
+                                : c.priority === "Low"
+                                  ? "Χαμηλή"
+                                  : "Μεσαία"
+                            }
+                          />
+                          <span className="min-w-0 truncate font-semibold leading-tight text-[var(--text-table)]">
+                            {c.first_name} {c.last_name}
+                          </span>
+                        </p>
+                        {c.contact_code ? (
+                          <span className="mt-1 inline-block max-w-full truncate rounded border border-[var(--border)]/70 bg-[var(--bg-elevated)]/90 px-1.5 py-0.5 font-mono text-[11px] leading-tight text-[var(--text-muted)]">
+                            {c.contact_code}
+                          </span>
+                        ) : null}
+                      </div>
+                    </button>
+                  </td>
+                  <td
+                    className={`w-[140px] max-w-[140px] overflow-hidden px-4 py-3 align-middle font-mono text-xs leading-tight text-[var(--text-secondary)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                  >
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <div className="min-w-0 max-w-full whitespace-nowrap" title={c.phone ?? undefined}>
+                        {c.phone || "—"}
+                      </div>
                       {c.phone2?.trim() ? (
-                        <div className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-[var(--text-muted)] [overflow-wrap:anywhere]">
+                        <div
+                          className="min-w-0 max-w-full text-[10px] leading-tight text-[var(--text-muted)] [overflow-wrap:normal] whitespace-nowrap"
+                          title={c.phone2}
+                        >
                           {c.phone2}
                         </div>
                       ) : null}
                     </div>
                   </td>
                   <td
-                    className={`box-border w-[120px] max-w-[120px] overflow-hidden p-0 align-top text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`w-[120px] max-w-[120px] overflow-hidden px-4 py-3 align-middle text-xs leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    <div className="box-border flex h-14 min-h-[3.5rem] flex-col justify-center overflow-hidden border-b border-transparent py-0 pl-1 pr-0.5">
-                      <div className="line-clamp-1 font-medium" title={c.municipality ?? ""}>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium" title={c.municipality ?? ""}>
                         {c.municipality?.trim() || "—"}
                       </div>
-                      <div className="line-clamp-1 text-[10px] text-[var(--text-muted)]" title={c.area ?? ""}>
+                      <div className="truncate text-[10px] text-[var(--text-muted)]" title={c.area ?? ""}>
                         {c.area?.trim() || "—"}
                       </div>
                     </div>
                   </td>
                   <td
-                    className={`box-border w-[100px] max-w-[100px] overflow-hidden p-0 align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`w-[100px] max-w-[100px] overflow-hidden px-4 py-3 align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    <div className="box-border flex h-14 min-h-[3.5rem] items-center border-b border-transparent pl-0.5 pr-0.5">
-                      {c.contact_groups ? (
-                        <div className="min-w-0 max-w-full overflow-hidden">
-                          <GroupPillWithHint g={c.contact_groups} />
-                        </div>
-                      ) : (
-                        <span className="text-[12px] text-[var(--text-muted)]">—</span>
-                      )}
-                    </div>
+                    {c.contact_groups ? (
+                      <div className="min-w-0 max-w-full overflow-hidden">
+                        <GroupPillWithHint g={c.contact_groups} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-[var(--text-muted)]">—</span>
+                    )}
                   </td>
                   <td
-                    className={`box-border w-[80px] max-w-[80px] overflow-hidden p-0 text-[12px] font-medium ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`w-[90px] max-w-[90px] overflow-hidden px-4 py-3 align-middle text-xs ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    <div className="box-border flex h-14 min-h-[3.5rem] items-center border-b border-transparent pl-0.5 pr-0.5">
-                      {nameDay ? <span className="text-[#C9A84C]">{nameDay}</span> : (
-                        <span className="text-[var(--text-muted)]">—</span>
-                      )}
-                    </div>
+                    {nameDay ? (
+                      <span
+                        className={nameDayGold ? "font-medium text-[#C9A84C]" : "text-[var(--text-secondary)]"}
+                        title={nameDayGold ? "Σήμερα ή αυτή την εβδομάδα" : undefined}
+                      >
+                        {nameDay}
+                      </span>
+                    ) : (
+                      <span className="text-[var(--text-muted)]">—</span>
+                    )}
                   </td>
                   <td
-                    className={`box-border w-[100px] max-w-[100px] overflow-hidden p-0 text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`w-[120px] max-w-[120px] overflow-hidden px-4 py-3 align-middle text-xs leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    <div className="box-border flex h-14 min-h-[3.5rem] items-center border-b border-transparent pl-0.5 pr-0.5">
-                      {c.father_name?.trim() ? (
-                        <span className="line-clamp-1 min-w-0" title={c.father_name}>
-                          {c.father_name}
-                        </span>
-                      ) : (
-                        <span className="text-[var(--text-muted)]">—</span>
-                      )}
-                    </div>
+                    {c.father_name?.trim() ? (
+                      <span className="line-clamp-1 min-w-0" title={c.father_name}>
+                        {c.father_name}
+                      </span>
+                    ) : (
+                      <span className="text-[var(--text-muted)]">—</span>
+                    )}
                   </td>
                   <td
-                    className={`box-border w-[80px] max-w-[80px] p-0 text-right align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`w-20 min-w-20 max-w-20 overflow-hidden px-4 py-3 text-right align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="box-border flex h-14 min-h-[3.5rem] w-full items-center justify-end gap-0.5 pr-0.5 pl-0">
+                    <div className="flex w-full min-w-0 items-center justify-end gap-0.5">
                       <button
                         type="button"
                         className={lux.btnIcon + " !h-7 !w-7 !min-h-0 !min-w-0"}
