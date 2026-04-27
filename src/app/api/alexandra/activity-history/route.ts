@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { activityGreekLine, firstNameFromFull, formatTimeAgo } from "@/lib/activity-descriptions";
@@ -23,8 +24,9 @@ function hrefFor(r: { entity_type: string; entity_id: string | null }): string |
 }
 
 export async function GET(request: NextRequest) {
-  const { user, profile } = await getSessionWithProfile();
-  if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { profile } = crm;
   if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
   const action = request.nextUrl.searchParams.get("action");

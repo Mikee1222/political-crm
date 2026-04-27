@@ -1,6 +1,7 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { API_RACE_MS, runWithTimeCap } from "@/lib/api-resilience";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { fetchBriefingTodayData } from "@/lib/briefing-data";
 export const dynamic = "force-dynamic";
@@ -21,8 +22,9 @@ const emptyBriefing = {
 
 export async function GET() {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
     return await runWithTimeCap(

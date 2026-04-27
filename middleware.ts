@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
+import { isPortalOnlyUser } from "@/lib/portal-user-status";
 
 const CALLER_BLOCKED_PREFIXES = [
   "/dashboard",
@@ -136,13 +137,23 @@ export async function middleware(request: NextRequest) {
   let isPortalUser = false;
   let role: string = "caller";
   if (isLoggedIn && authUser) {
+    let portalFromService = false;
+    let serviceResolved = false;
+    try {
+      portalFromService = await isPortalOnlyUser(authUser.id);
+      serviceResolved = true;
+    } catch (e) {
+      console.error("[middleware] isPortalOnlyUser (service role) failed; falling back to RLS profile", e);
+    }
     const { data: pRow } = await supabase
       .from("profiles")
       .select("is_portal, role")
       .eq("id", authUser.id)
       .maybeSingle();
-    isPortalUser = Boolean((pRow as { is_portal?: boolean } | null)?.is_portal);
     role = (pRow?.role as string) ?? "caller";
+    isPortalUser = serviceResolved
+      ? portalFromService
+      : Boolean((pRow as { is_portal?: boolean } | null)?.is_portal);
   }
 
   if (isLoggedIn && authUser) {
@@ -164,7 +175,7 @@ export async function middleware(request: NextRequest) {
         return sessionResponse;
       }
       if (isPortalUser) {
-        if (pathname.startsWith("/api/portal/") || pathname === "/api/profile" || pathname.startsWith("/api/profile/")) {
+        if (pathname.startsWith("/api/portal") || pathname.startsWith("/api/public")) {
           return sessionResponse;
         }
         return jsonWithSession(request, "Η πρόσβαση στο CRM δεν επιτρέπεται", 403, sessionResponse);

@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { actionPayloadSchema, type ActionPayload } from "@/lib/ai-assistant-actions";
 export const dynamic = 'force-dynamic';
@@ -17,10 +18,9 @@ function buildContactsSearchParams(
 }
 
 export async function POST(request: NextRequest) {
-  const { user, profile, supabase } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { profile, supabase } = crm;
 
   let action: ActionPayload;
   try {

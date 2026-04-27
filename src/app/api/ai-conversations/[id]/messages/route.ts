@@ -1,6 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 export const dynamic = 'force-dynamic';
 
 const voicePostSchema = z.object({
@@ -17,10 +17,9 @@ const voicePostSchema = z.object({
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const { id: conversationId } = params;
-  const { user, supabase } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { user, supabase } = crm;
 
   const { data: conv, error: cErr } = await supabase
     .from("ai_conversations")
@@ -52,10 +51,9 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 /** Persists a voice session transcript (ordered user/assistant turns) after the ElevenLabs call ends. */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const { id: conversationId } = params;
-  const { user, supabase } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { user, supabase } = crm;
 
   let body: z.infer<typeof voicePostSchema>;
   try {

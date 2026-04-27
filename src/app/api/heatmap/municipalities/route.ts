@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { MUNI_CENTROIDS, findCanonicalMuni, KNOWN_MUNICIPALITY_NAMES } from "@/lib/aitoloakarnania-map-centroids";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
@@ -52,10 +53,9 @@ function pasokParty(p: string) {
 
 export async function GET(request: NextRequest) {
   try {
-  const { user, profile, supabase } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { profile, supabase } = crm;
   if (!hasMinRole(profile?.role, "manager")) {
     return forbidden();
   }

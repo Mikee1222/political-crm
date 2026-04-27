@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
@@ -7,10 +8,9 @@ export const dynamic = "force-dynamic";
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "admin")) {
       return forbidden();
     }
@@ -52,10 +52,9 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 export async function DELETE(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "admin")) {
       return forbidden();
     }

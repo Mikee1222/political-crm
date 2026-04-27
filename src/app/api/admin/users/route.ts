@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { UserProfile } from "@/lib/auth-helpers";
 export const dynamic = 'force-dynamic';
@@ -15,8 +16,9 @@ type Row = {
 };
 
 export async function GET() {
-  const { user, profile } = await getSessionWithProfile();
-  if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { profile } = crm;
   if (profile?.role !== "admin") return forbidden();
 
   try {

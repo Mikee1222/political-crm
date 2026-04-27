@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { buildPredictiveCallList, type PredictiveRow } from "@/lib/predictive-call-list";
 import { todayYmdAthens } from "@/lib/athens-ranges";
@@ -17,8 +18,9 @@ function scoresToJson(rows: PredictiveRow[]) {
 
 export async function GET() {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
     const ymd = todayYmdAthens();
@@ -93,8 +95,9 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
     const ymd = todayYmdAthens();

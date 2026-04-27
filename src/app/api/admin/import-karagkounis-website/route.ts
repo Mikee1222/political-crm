@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
-import { getSessionWithProfile, isCrmUser, forbidden } from "@/lib/auth-helpers";
+import { isCrmUser, forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
 
@@ -92,10 +93,9 @@ const PARL_ROWS: { title: string; ministry: string; status: string; submitted_da
  */
 export async function GET() {
   try {
-    const { user, profile } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, profile } = crm;
     if (!isCrmUser(profile) || profile?.role !== "admin") {
       return forbidden();
     }

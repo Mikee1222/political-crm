@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 /*
+ * CRM session + portal blocking: root `middleware.ts` (`export const config.matcher`) runs on all non-static routes.
+ *
  * frame-src: TikTok embed iframes (https://www.tiktok.com/embed/v2/{id}) and Facebook.
  * frame-ancestors: who may embed *this* site; keeps clickjacking protection.
  */

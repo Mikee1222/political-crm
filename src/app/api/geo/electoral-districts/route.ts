@@ -1,5 +1,5 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +13,9 @@ export type ElectoralDistrictRow = {
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { supabase } = crm;
     const muniId = request.nextUrl.searchParams.get("municipality_id")?.trim();
     if (!muniId) {
       return NextResponse.json({ error: "Υποχρεωτικό municipality_id" }, { status: 400 });

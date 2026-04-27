@@ -8,6 +8,7 @@ import { CAL_EVENT_TYPE_KEYS } from "@/lib/calendar-event-types";
 import { hasMinRole, type Role } from "@/lib/roles";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
+import { forbidCrmForPortalUserIfSignedIn } from "@/lib/crm-api-access";
 
 const LOG = "[api/schedule/events]";
 
@@ -122,6 +123,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const portalBlock = await forbidCrmForPortalUserIfSignedIn();
+    if (portalBlock) return portalBlock;
     const { user, profile } = await getUserAndManagerProfile();
     if (!user) {
       console.warn(`${LOG} POST 401: no user from getUser()`);

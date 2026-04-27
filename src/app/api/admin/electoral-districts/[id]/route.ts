@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { ElectoralDistrictRow } from "@/app/api/geo/electoral-districts/route";
 
@@ -7,10 +8,9 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (profile?.role !== "admin") {
       return forbidden();
     }
@@ -51,10 +51,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (profile?.role !== "admin") {
       return forbidden();
     }

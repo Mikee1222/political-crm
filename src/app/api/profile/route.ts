@@ -1,13 +1,14 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { mergePreferences, type UserPreferences } from "@/lib/user-preferences";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, profile, supabase } = crm;
     const { data: row } = await supabase
       .from("profiles")
       .select("full_name, role, avatar_url, preferences, is_portal, theme")
@@ -37,10 +38,9 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { user, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, supabase } = crm;
     const body = (await request.json()) as {
       full_name?: string | null;
       avatar_url?: string | null;

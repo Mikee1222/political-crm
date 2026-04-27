@@ -1,14 +1,14 @@
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { NextResponse } from "next/server";
+import { checkCRMAccess } from "@/lib/crm-api-access";
 
 export async function requireManagerEmail() {
-  const s = await getSessionWithProfile();
-  if (!s.user) {
-    return { error: NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 }) };
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) {
+    return { error: crm.response };
   }
-  if (!hasMinRole(s.profile?.role, "manager")) {
+  if (!hasMinRole(crm.profile?.role, "manager")) {
     return { error: forbidden() };
   }
-  return s;
+  return { user: crm.user, profile: crm.profile, supabase: crm.supabase };
 }

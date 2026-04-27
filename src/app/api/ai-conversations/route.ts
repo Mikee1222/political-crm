@@ -1,18 +1,16 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { API_RACE_MS, withTimeoutQuery } from "@/lib/api-resilience";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 export const dynamic = 'force-dynamic';
-
 
 type ConvRow = { id: string; title: string | null; updated_at: string | null };
 type LastMsg = { content: string; created_at: string } | null;
 
 export async function GET() {
   try {
-    const { user, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, supabase } = crm;
 
     const q = supabase
       .from("ai_conversations")
@@ -90,10 +88,9 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const { user, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, supabase } = crm;
 
     const q = supabase
       .from("ai_conversations")

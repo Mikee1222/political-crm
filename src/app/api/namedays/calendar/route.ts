@@ -1,8 +1,7 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 export const dynamic = 'force-dynamic';
-
 
 export type NameDayRow = { month: number; day: number; names: string[] };
 
@@ -11,10 +10,9 @@ export type NameDayRow = { month: number; day: number; names: string[] };
  */
 export async function GET() {
   try {
-    const { user, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { supabase } = crm;
 
     const { data, error } = await supabase
       .from("name_days")

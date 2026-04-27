@@ -1,5 +1,5 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +15,8 @@ const ELEVEN_GET_SIGNED = "https://api.elevenlabs.io/v1/convai/conversation/get-
  */
 export async function POST() {
   try {
-  const { user } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
 
   const key = process.env.ELEVENLABS_API_KEY;
   const agentId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID;

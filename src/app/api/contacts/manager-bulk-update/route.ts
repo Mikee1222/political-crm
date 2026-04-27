@@ -1,6 +1,7 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
@@ -47,10 +48,9 @@ const ALLOW = new Set([
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }

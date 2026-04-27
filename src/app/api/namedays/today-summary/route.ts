@@ -1,9 +1,8 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 export const dynamic = 'force-dynamic';
-
 
 function dateLabelGreek(d: Date) {
   return d.toLocaleDateString("el-GR", {
@@ -15,10 +14,9 @@ function dateLabelGreek(d: Date) {
 
 export async function GET() {
   try {
-    const { user, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { supabase } = crm;
 
     const now = new Date();
     const month = now.getMonth() + 1;

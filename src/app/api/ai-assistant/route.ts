@@ -1,7 +1,8 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
-import { getSessionWithProfile, type UserProfile } from "@/lib/auth-helpers";
+import { type UserProfile } from "@/lib/auth-helpers";
 import {
   ALEX_TOOLS,
   buildSystemPrompt,
@@ -71,7 +72,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { user, profile, supabase } = await getSessionWithProfile();
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { user, profile, supabase } = crm;
   if (!user || !profile) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   }

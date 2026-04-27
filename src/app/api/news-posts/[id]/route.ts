@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, isCrmUser, forbidden } from "@/lib/auth-helpers";
+import { isCrmUser, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { slugifyNews } from "@/lib/portal";
@@ -7,10 +8,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!isCrmUser(profile) || !hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }
@@ -27,10 +27,9 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!isCrmUser(profile) || !hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }
@@ -89,10 +88,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!isCrmUser(profile) || !hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }

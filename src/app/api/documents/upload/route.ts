@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -10,8 +11,9 @@ const MAX_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, profile } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, profile } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
     const form = await request.formData();

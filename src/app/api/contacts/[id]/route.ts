@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/activity-log";
@@ -24,10 +25,9 @@ function enrichContact(
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
-  const { user, profile, supabase } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { profile, supabase } = crm;
   const role = profile?.role ?? "caller";
 
   const { data: contact, error } = await supabase
@@ -83,10 +83,9 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-  const { user, profile, supabase } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { user, profile, supabase } = crm;
   const body = (await request.json()) as Record<string, unknown>;
   const role = profile?.role ?? "caller";
 
@@ -183,10 +182,9 @@ export const PUT = PATCH;
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
   try {
-  const { user, profile } = await getSessionWithProfile();
-  if (!user) {
-    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-  }
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { profile } = crm;
   if (profile?.role !== "admin") {
     return forbidden();
   }

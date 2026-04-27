@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { getCalendarClientForUser, type CalendarEventType } from "@/lib/google-calendar";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -10,8 +11,9 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ) {
   try {
-  const { user, profile } = await getSessionWithProfile();
-  if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { user, profile } = crm;
   if (!hasMinRole(profile?.role, "manager")) return forbidden();
   const cal = await getCalendarClientForUser(user.id);
   if (!cal) {
@@ -62,8 +64,9 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ) {
   try {
-  const { user, profile } = await getSessionWithProfile();
-  if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  const crm = await checkCRMAccess();
+  if (!crm.allowed) return crm.response;
+  const { user, profile } = crm;
   if (!hasMinRole(profile?.role, "manager")) return forbidden();
   const cal = await getCalendarClientForUser(user.id);
   if (!cal) {

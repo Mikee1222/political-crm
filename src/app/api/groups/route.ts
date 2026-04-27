@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 export const dynamic = 'force-dynamic';
@@ -8,10 +9,9 @@ export type { ContactGroupRow } from "@/lib/contact-groups";
 
 export async function GET() {
   try {
-    const { user, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { supabase } = crm;
     const { data, error } = await supabase
       .from("contact_groups")
       .select("id, name, color, year, description, created_at")
@@ -29,10 +29,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (profile?.role !== "admin") {
       return forbidden();
     }

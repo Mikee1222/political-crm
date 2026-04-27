@@ -1,14 +1,14 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, isCrmUser, forbidden } from "@/lib/auth-helpers";
+import { isCrmUser, forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!isCrmUser(profile) || profile?.role !== "admin") {
       return forbidden();
     }
@@ -29,10 +29,9 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!isCrmUser(profile) || profile?.role !== "admin") {
       return forbidden();
     }

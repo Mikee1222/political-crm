@@ -1,11 +1,13 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, supabase } = await getSessionWithProfile();
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { user, supabase } = crm;
     if (!user?.email) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
     const body = (await request.json()) as { currentPassword?: string; newPassword?: string; confirm?: string };
     const cur = body.currentPassword ?? "";

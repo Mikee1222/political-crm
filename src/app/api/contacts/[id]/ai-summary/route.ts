@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { anthropicComplete } from "@/lib/anthropic-once";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -12,8 +13,9 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params;
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
     const { data: c, error } = await supabase
@@ -44,8 +46,9 @@ export async function POST(
 ) {
   try {
     const { id } = await context.params;
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
     const { data: contact, error: ce } = await supabase.from("contacts").select("*").eq("id", id).maybeSingle();

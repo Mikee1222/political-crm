@@ -1,6 +1,7 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { sendWhatsAppMessage, isWhatsAppConfigured } from "@/lib/whatsapp";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -14,8 +15,9 @@ const bodySchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
     if (!isWhatsAppConfigured()) {
       return NextResponse.json({ error: "Το WhatsApp δεν έχει ρυθμιστεί" }, { status: 503 });

@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import { CAL_EVENT_TYPE_KEYS, type CalendarEventType } from "@/lib/calendar-event-types";
 import type { EventCategoryRow } from "@/lib/event-categories";
@@ -13,10 +14,9 @@ function isTypeKey(s: string): s is CalendarEventType {
 
 export async function GET() {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (profile?.role !== "admin") {
       return forbidden();
     }
@@ -37,10 +37,9 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
-    }
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (profile?.role !== "admin") {
       return forbidden();
     }

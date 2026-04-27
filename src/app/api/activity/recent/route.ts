@@ -1,17 +1,18 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { API_RACE_MS, runWithTimeCap } from "@/lib/api-resilience";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { activityGreekLine, firstNameFromFull, formatTimeAgo } from "@/lib/activity-descriptions";
 import type { ActivityAction } from "@/lib/activity-log";
 export const dynamic = 'force-dynamic';
 
-
 export async function GET() {
   try {
-    const { user, profile } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
     return await runWithTimeCap(

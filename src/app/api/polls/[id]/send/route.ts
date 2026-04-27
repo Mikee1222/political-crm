@@ -1,5 +1,6 @@
+import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
+import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { getPublicBaseUrl } from "@/lib/email";
 import { sendResendEmail } from "@/lib/email";
@@ -15,8 +16,9 @@ export async function POST(
 ) {
   try {
     const { id: pollId } = await context.params;
-    const { user, profile, supabase } = await getSessionWithProfile();
-    if (!user) return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    const crm = await checkCRMAccess();
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
     const { data: poll, error } = await supabase
       .from("polls")
