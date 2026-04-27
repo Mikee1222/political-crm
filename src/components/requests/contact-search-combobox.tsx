@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -12,6 +13,8 @@ type Props = {
   onChange: (id: string, displayName?: string) => void;
   required?: boolean;
   placeholder?: string;
+  error?: string | null;
+  onBlurValidate?: () => void;
 };
 
 const DEBOUNCE_MS = 280;
@@ -30,6 +33,8 @@ export function ContactSearchCombobox({
   onChange,
   required,
   placeholder = "Αναζήτηση ονόματος ή τηλεφώνου…",
+  error,
+  onBlurValidate,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -114,7 +119,12 @@ export function ContactSearchCombobox({
       </label>
       {valueId ? (
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
-          <p className="min-h-[42px] w-full flex-1 rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-[var(--text-input)]">
+          <p
+            className={clsx(
+              "min-h-[42px] w-full flex-1 rounded-lg border bg-[var(--input-bg)] px-3 py-2.5 text-sm text-[var(--text-input)]",
+              error ? "border-[var(--danger)]" : "border-[var(--border)]",
+            )}
+          >
             <span className="font-medium">{selectedLabel || "Φόρτωση…"}</span>
           </p>
           <button
@@ -133,7 +143,7 @@ export function ContactSearchCombobox({
         <>
           <input
             id={listId + "in"}
-            className={lux.input}
+            className={clsx(lux.input, error && lux.inputError)}
             placeholder={placeholder}
             value={q}
             onChange={(e) => {
@@ -141,10 +151,12 @@ export function ContactSearchCombobox({
               if (!open) setOpen(true);
             }}
             onFocus={() => setOpen(true)}
+            onBlur={() => onBlurValidate?.()}
             autoComplete="off"
             role="combobox"
             aria-expanded={open}
             aria-controls={listId + "list"}
+            aria-invalid={error ? true : undefined}
           />
           {open && (
             <ul
@@ -185,6 +197,11 @@ export function ContactSearchCombobox({
           )}
         </>
       )}
+      {error ? (
+        <p className={lux.fieldError} role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

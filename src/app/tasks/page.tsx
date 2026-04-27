@@ -24,6 +24,10 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux, priorityPill } from "@/lib/luxury-styles";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { ymdToNextMonth, ymdToPrevMonth } from "@/lib/task-filters";
 import type { TaskTabFilter } from "@/lib/task-filters";
 import { PageHeader } from "@/components/ui/page-header";
@@ -651,7 +655,7 @@ function TaskCard({
             <div>
               <label className={clsx(lux.label)}>Λήξη</label>
               <input
-                className={clsx(lux.input, "!min-h-11 w-full !text-base")}
+                className={clsx(lux.input, lux.dateInput, "!min-h-11 w-full !text-base")}
                 type="date"
                 value={edit.due_date ? edit.due_date.slice(0, 10) : ""}
                 onChange={(e) => setEdit((x) => ({ ...x, due_date: e.target.value }))}
@@ -659,29 +663,25 @@ function TaskCard({
             </div>
             <div>
               <label className={clsx(lux.label)}>Προτεραιότητα</label>
-              <select
-                className={clsx(lux.select, "!min-h-11 w-full !text-base")}
+              <HqSelect
+                className="!min-h-11 w-full !text-base"
                 value={edit.priority}
                 onChange={(e) => setEdit((x) => ({ ...x, priority: e.target.value as typeof edit.priority }))}
               >
                 <option value="High">Υψηλή</option>
                 <option value="Medium">Μεσαία</option>
                 <option value="Low">Χαμηλή</option>
-              </select>
+              </HqSelect>
             </div>
             <div>
               <label className={clsx(lux.label)}>Κατηγορία</label>
-              <select
-                className={clsx(lux.select, "!min-h-11 w-full !text-base")}
-                value={edit.category}
-                onChange={(e) => setEdit((x) => ({ ...x, category: e.target.value }))}
-              >
+              <HqSelect className="!min-h-11 w-full !text-base" value={edit.category} onChange={(e) => setEdit((x) => ({ ...x, category: e.target.value }))}>
                 {CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
-              </select>
+              </HqSelect>
             </div>
             <div>
               <label className={clsx(lux.label)}>Ώρα επαφής (αναζήτηση)</label>
@@ -785,6 +785,9 @@ function TaskCard({
 function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void | Promise<void> }) {
   const [saving, setSaving] = useState(false);
   const [e, setE] = useState<string | null>(null);
+  const [titleErr, setTitleErr] = useState<string | null>(null);
+  const [contactErr, setContactErr] = useState<string | null>(null);
+  const { showToast } = useFormToast();
   const [f, setF] = useState({
     title: "",
     description: "",
@@ -813,8 +816,20 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const save = async (ev: FormEvent) => {
     ev.preventDefault();
     setE(null);
-    if (!f.contact_id || !f.title.trim()) {
+    setTitleErr(null);
+    setContactErr(null);
+    let invalid = false;
+    if (!f.title.trim()) {
+      setTitleErr("Υποχρεωτικός τίτλος");
+      invalid = true;
+    }
+    if (!f.contact_id) {
+      setContactErr("Επιλέξτε επαφή από τη λίστα.");
+      invalid = true;
+    }
+    if (invalid) {
       setE("Υποχρεωτική επαφή και τίτλος");
+      showToast("Συμπληρώστε τίτλο και επαφή.", "error");
       return;
     }
     setSaving(true);
@@ -833,23 +848,26 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       });
       const d = (await r.json().catch(() => ({}))) as { error?: string };
       if (!r.ok) {
-        setE(d.error ?? "Σφάλμα");
+        const msg = d.error ?? "Σφάλμα";
+        setE(msg);
+        showToast(msg, "error");
         return;
       }
+      showToast("Η εργασία δημιουργήθηκε επιτυχώς.", "success");
       await Promise.resolve(onCreated());
       onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Σφάλμα δικτύου";
+      setE(msg);
+      showToast(msg, "error");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className={clsx(lux.modalOverlay, "!z-50 !p-0 sm:!items-center sm:!p-4")} onClick={onClose} role="presentation">
-      <form
-        onClick={(ev) => ev.stopPropagation()}
-        onSubmit={save}
-        className={clsx(lux.modalPanel, "flex w-full !max-w-[600px] flex-1 !flex-col overflow-hidden !rounded-none sm:max-h-[min(100dvh,90vh)] sm:!rounded-2xl")}
-      >
+    <CenteredModal open onClose={onClose} className="flex w-full max-w-[640px] flex-col overflow-hidden p-0" ariaLabel="Νέα εργασία">
+      <form onSubmit={save} className="flex max-h-[min(90vh,880px)] min-h-0 w-full flex-col">
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-center justify-between border-b border-[var(--border)] bg-[#0A1628] px-4 py-3">
           <h2 className="text-lg font-bold">Νέα Εργασία</h2>
@@ -857,21 +875,46 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {e && <p className="text-sm text-red-200">{e}</p>}
           <div>
-            <label className={lux.label}>Τίτλος *</label>
-            <input className={clsx(lux.input, "w-full !min-h-11 !text-base")} required value={f.title} onChange={(ev) => setF((x) => ({ ...x, title: ev.target.value }))} />
+            <label className={lux.label}>
+              Τίτλος<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+            </label>
+            <input
+              className={clsx(lux.input, "w-full !min-h-11 !text-base", titleErr && lux.inputError)}
+              required
+              value={f.title}
+              placeholder="Σύντομος τίτλος εργασίας…"
+              aria-invalid={titleErr ? true : undefined}
+              onChange={(ev) => {
+                setF((x) => ({ ...x, title: ev.target.value }));
+                if (titleErr) setTitleErr(null);
+              }}
+              onBlur={() => {
+                if (!f.title.trim()) setTitleErr("Υποχρεωτικός τίτλος");
+              }}
+            />
+            {titleErr && (
+              <p className={lux.fieldError} role="alert">
+                {titleErr}
+              </p>
+            )}
           </div>
           <div>
             <label className={lux.label}>Περιγραφή</label>
-            <textarea className={clsx(lux.textarea, "!min-h-24 w-full !text-base")} value={f.description} onChange={(ev) => setF((x) => ({ ...x, description: ev.target.value }))} />
+            <textarea
+              className={clsx(lux.textarea, "!min-h-24 w-full !text-base")}
+              value={f.description}
+              onChange={(ev) => setF((x) => ({ ...x, description: ev.target.value }))}
+              placeholder="Σημειώσεις (προαιρετικό)…"
+            />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={lux.label}>Ημερομηνία λήξης</label>
               <input
-                className={clsx(lux.input, "w-full !min-h-11 !text-base")}
+                className={clsx(lux.input, lux.dateInput, "w-full !min-h-11 !text-base")}
                 type="date"
                 value={f.due_date}
                 onChange={(ev) => setF((x) => ({ ...x, due_date: ev.target.value }))}
@@ -879,48 +922,47 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             </div>
             <div>
               <label className={lux.label}>Προτεραιότητα</label>
-              <select
-                className={clsx(lux.select, "w-full !min-h-11 !text-base")}
-                value={f.priority}
-                onChange={(ev) => setF((x) => ({ ...x, priority: ev.target.value as "High" | "Medium" | "Low" }))}
-              >
+              <HqSelect className="w-full !min-h-11 !text-base" value={f.priority} onChange={(ev) => setF((x) => ({ ...x, priority: ev.target.value as "High" | "Medium" | "Low" }))}>
                 <option value="High">Υψηλή</option>
                 <option value="Medium">Μεσαία</option>
                 <option value="Low">Χαμηλή</option>
-              </select>
+              </HqSelect>
             </div>
             <div>
               <label className={lux.label}>Κατηγορία</label>
-              <select
-                className={clsx(lux.select, "w-full !min-h-11 !text-base")}
-                value={f.category}
-                onChange={(ev) => setF((x) => ({ ...x, category: ev.target.value }))}
-              >
+              <HqSelect className="w-full !min-h-11 !text-base" value={f.category} onChange={(ev) => setF((x) => ({ ...x, category: ev.target.value }))}>
                 {CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
-              </select>
+              </HqSelect>
             </div>
             <div className="sm:col-span-2">
-              <label className={lux.label}>Σύνδεση με επαφή * (αναζητήστε)</label>
+              <label className={lux.label}>
+                Σύνδεση με επαφή<span className="ml-0.5 text-red-500" aria-hidden>*</span> (αναζητήστε)
+              </label>
               <div className="relative">
                 <input
-                  className={clsx(lux.input, "w-full !min-h-11 !pl-9 !text-base")}
+                  className={clsx(lux.input, "w-full !min-h-11 !pl-9 !text-base", contactErr && lux.inputError)}
                   value={cLabel}
+                  aria-invalid={contactErr ? true : undefined}
                   onChange={(ev) => {
                     setCLabel(ev.target.value);
                     setQ(ev.target.value);
                     if (f.contact_id) {
                       setF((x) => ({ ...x, contact_id: "" }));
                     }
+                    if (contactErr) setContactErr(null);
+                  }}
+                  onBlur={() => {
+                    if (!f.contact_id) setContactErr("Επιλέξτε επαφή από τη λίστα.");
                   }}
                   placeholder="Όνομα, τηλέφωνο…"
                 />
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
                 {hits.length > 0 && (
-                  <ul className="absolute z-30 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0 shadow-2xl">
+                  <ul className="absolute z-[10020] mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0 shadow-2xl">
                     {hits.map((h) => (
                       <li key={h.id}>
                         <button
@@ -931,6 +973,7 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                             setCLabel([h.first_name, h.last_name, h.phone].filter(Boolean).join(" · "));
                             setHits([]);
                             setQ("");
+                            setContactErr(null);
                           }}
                         >
                           {h.first_name} {h.last_name} · {h.phone}
@@ -940,6 +983,11 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                   </ul>
                 )}
               </div>
+              {contactErr && (
+                <p className={lux.fieldError} role="alert">
+                  {contactErr}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -947,12 +995,12 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <button type="button" className={clsx(lux.btnSecondary, "!w-full !min-h-12")} onClick={onClose} disabled={saving}>
             Άκυρο
           </button>
-          <button type="submit" className={clsx(lux.btnPrimary, "w-full !min-h-12 !justify-center !py-2")} disabled={saving || !f.contact_id}>
-            {saving ? "—" : "Προσθήκη"}
-          </button>
+          <FormSubmitButton type="submit" loading={saving} variant="gold" className="w-full !min-h-12 !justify-center !py-2">
+            Προσθήκη
+          </FormSubmitButton>
         </div>
       </form>
-    </div>
+    </CenteredModal>
   );
 }
 

@@ -22,6 +22,9 @@ import { avatarContact, callStatusLabel, lux } from "@/lib/luxury-styles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type Contact = {
   id: string;
@@ -1365,27 +1368,25 @@ function ContactsPage() {
       )}
 
       {deleteOpen && isAdmin && (
-        <div className={lux.modalOverlay}>
-          <div className="mx-4 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 sm:mx-0 sm:self-center">
-            <h3 className="text-lg font-bold text-[var(--text-primary)]">Μαζική διαγραφή</h3>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Να διαγραφούν οριστικά {selectedIds.length} επαφές; Αυτό δεν ανακαλείται.
-            </p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <button type="button" className={lux.btnSecondary} onClick={() => setDeleteOpen(false)} disabled={saving}>
-                Άκυρο
-              </button>
-              <button
-                type="button"
-                className={lux.btnDanger}
-                disabled={saving}
-                onClick={() => void postBulk("delete", "")}
-              >
-                Διαγραφή
-              </button>
-            </div>
+        <CenteredModal open onClose={() => setDeleteOpen(false)} className="max-w-md p-6" ariaLabel="Μαζική διαγραφή">
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Μαζική διαγραφή</h3>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Να διαγραφούν οριστικά {selectedIds.length} επαφές; Αυτό δεν ανακαλείται.
+          </p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button type="button" className={lux.btnSecondary} onClick={() => setDeleteOpen(false)} disabled={saving}>
+              Άκυρο
+            </button>
+            <button
+              type="button"
+              className={lux.btnDanger}
+              disabled={saving}
+              onClick={() => void postBulk("delete", "")}
+            >
+              Διαγραφή
+            </button>
           </div>
-        </div>
+        </CenteredModal>
       )}
 
       {openCreate && <CreateContactModal groups={groups} onClose={() => setOpenCreate(false)} onSaved={load} />}
@@ -1437,6 +1438,7 @@ function CreateContactModal({
     phoneMatch: { id: string; name: string } | null;
     nameMatch: { id: string; name: string } | null;
   } | null>(null);
+  const { showToast } = useFormToast();
 
   const buildPayload = () => ({
     ...form,
@@ -1473,6 +1475,7 @@ function CreateContactModal({
     }
     setConflict(null);
     await onSaved();
+    showToast("Η επαφή αποθηκεύτηκε επιτυχώς.", "success");
     onClose();
   };
 
@@ -1485,6 +1488,7 @@ function CreateContactModal({
     if (!form.municipality.trim()) err.municipality = "Υποχρεωτικό";
     if (Object.keys(err).length) {
       setFieldErrors(err);
+      showToast("Συμπληρώστε τα υποχρεωτικά πεδία.", "error");
       return;
     }
     const qs = new URLSearchParams({
@@ -1504,6 +1508,8 @@ function CreateContactModal({
         return;
       }
       await postCreate();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Σφάλμα αποθήκευσης", "error");
     } finally {
       setSubmitting(false);
     }
@@ -1514,6 +1520,8 @@ function CreateContactModal({
     setConflict(null);
     try {
       await postCreate();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Σφάλμα αποθήκευσης", "error");
     } finally {
       setSubmitting(false);
     }
@@ -1523,10 +1531,20 @@ function CreateContactModal({
     ? conflict.phoneMatch?.id ?? conflict.nameMatch?.id
     : null;
 
+  const onBlurRequired = (field: "first_name" | "last_name" | "phone" | "municipality") => () => {
+    const v = String(form[field]).trim();
+    setFieldErrors((p) => {
+      const next = { ...p };
+      if (!v) next[field] = "Υποχρεωτικό";
+      else delete next[field];
+      return next;
+    });
+  };
+
   return (
     <>
-    <div className={lux.modalOverlay}>
-      <div className={lux.modalPanel + " flex max-h-[100dvh] max-w-full flex-col sm:max-h-[90vh] sm:max-w-[680px]"}>
+    <CenteredModal open onClose={onClose} className="flex max-w-[680px] flex-col overflow-hidden p-0" ariaLabel="Νέα επαφή">
+      <div className="flex max-h-[min(90vh,900px)] min-h-0 w-full flex-col">
         <div className="mx-auto mt-2 h-1 w-11 shrink-0 rounded-full bg-[var(--border)] md:hidden" role="presentation" />
         <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
           <h3 className="text-xl font-bold text-[var(--text-primary)]">Νέα Επαφή</h3>
@@ -1549,6 +1567,7 @@ function CreateContactModal({
               value={form.first_name}
               placeholder="Εισάγετε μικρό όνομα"
               onChange={(v) => setForm({ ...form, first_name: v })}
+              onBlur={onBlurRequired("first_name")}
             />
             <FormField
               label="Επίθετο"
@@ -1557,6 +1576,7 @@ function CreateContactModal({
               value={form.last_name}
               placeholder="Εισάγετε επίθετο"
               onChange={(v) => setForm({ ...form, last_name: v })}
+              onBlur={onBlurRequired("last_name")}
             />
             <FormField
               label="Πατρώνυμο"
@@ -1577,6 +1597,7 @@ function CreateContactModal({
               value={form.phone}
               placeholder="π.χ. 6912345678"
               onChange={(v) => setForm({ ...form, phone: v })}
+              onBlur={onBlurRequired("phone")}
             />
             <FormField
               label="Κινητό 2"
@@ -1590,7 +1611,14 @@ function CreateContactModal({
               placeholder="π.χ. 2101234567"
               onChange={(v) => setForm({ ...form, landline: v })}
             />
-            <div className="md:col-span-2">
+            <div
+              className="md:col-span-2"
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  onBlurRequired("municipality")();
+                }
+              }}
+            >
               <AitoloakarnaniaLocationFields
                 values={{
                   municipality: form.municipality,
@@ -1710,16 +1738,21 @@ function CreateContactModal({
           <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={submitting}>
             Ακύρωση
           </button>
-          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={submitting}>
-            {submitting ? "Αποθήκευση…" : "Αποθήκευση"}
-          </button>
+          <FormSubmitButton type="button" loading={submitting} variant="gold" onClick={() => void save()}>
+            Αποθήκευση
+          </FormSubmitButton>
         </div>
       </div>
-    </div>
+    </CenteredModal>
 
     {conflict && (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-[8px] [background:var(--overlay-scrim)]">
-        <div className="hq-modal-panel w-full max-w-md space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl">
+      <CenteredModal
+        open
+        onClose={() => setConflict(null)}
+        overlayClassName="!z-[10060]"
+        className="max-w-md space-y-4 p-6"
+        ariaLabel="Πιθανή σύγκρουση"
+      >
           <h4 className="text-lg font-bold text-[var(--text-primary)]">Πιθανή σύγκρουση</h4>
           {conflict.phoneMatch && (
             <p className="text-sm text-[var(--text-primary)]">
@@ -1749,17 +1782,17 @@ function CreateContactModal({
                 Άνοιγμα υπάρχουσας επαφής
               </button>
             )}
-            <button
+            <FormSubmitButton
               type="button"
+              loading={submitting}
+              variant="gold"
+              className="w-full sm:w-auto"
               onClick={() => void onContinueAfterConflict()}
-              className={lux.btnPrimary + " w-full sm:w-auto"}
-              disabled={submitting}
             >
               Διαφορετικό άτομο — συνέχεια
-            </button>
+            </FormSubmitButton>
           </div>
-        </div>
-      </div>
+      </CenteredModal>
     )}
     </>
   );
@@ -1787,6 +1820,7 @@ function FormField({
   type,
   error,
   placeholder,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -1795,12 +1829,13 @@ function FormField({
   type?: string;
   error?: string;
   placeholder?: string;
+  onBlur?: () => void;
 }) {
   return (
-    <div>
+    <div className="space-y-0">
       <label className={lux.label}>
         {label}
-        {required && <span className="ml-0.5 text-[var(--danger)]">*</span>}
+        {required && <span className="ml-0.5 text-red-500" aria-hidden>*</span>}
       </label>
       <input
         className={[lux.input, error ? lux.inputError : ""].join(" ")}
@@ -1808,9 +1843,16 @@ function FormField({
         type={type ?? "text"}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         autoComplete="off"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${label}-err` : undefined}
       />
-      {error && <p className="mt-1 text-xs text-[var(--danger)]">{error}</p>}
+      {error && (
+        <p id={`${label}-err`} className="mt-1 text-xs text-red-400" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

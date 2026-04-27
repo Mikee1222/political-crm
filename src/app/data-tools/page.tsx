@@ -5,6 +5,9 @@ import { useCallback, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { useProfile } from "@/contexts/profile-context";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { hasMinRole } from "@/lib/roles";
 
 type C = {
@@ -58,6 +61,8 @@ export default function DataToolsPage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<DupPair | null>(null);
   const [keepSide, setKeepSide] = useState<"a" | "b">("a");
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const { showToast } = useFormToast();
   const [scoring, setScoring] = useState(false);
   const [scoreMsg, setScoreMsg] = useState<string | null>(null);
 
@@ -144,21 +149,34 @@ export default function DataToolsPage() {
     const { contactA, contactB } = mergeTarget;
     const keepId = keepSide === "a" ? contactA.id : contactB.id;
     const mergeId = keepSide === "a" ? contactB.id : contactA.id;
-    await fetchWithTimeout("/api/data-tools/duplicates/merge", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keepId, mergeId }),
-    });
-    setMergeTarget(null);
-    setDups((list) =>
-      (list ?? []).filter(
-        (p) =>
-          !(
-            (p.contactA.id === contactA.id && p.contactB.id === contactB.id) ||
-            (p.contactA.id === contactB.id && p.contactB.id === contactA.id)
-          ),
-      ),
-    );
+    setMergeBusy(true);
+    try {
+      const res = await fetchWithTimeout("/api/data-tools/duplicates/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keepId, mergeId }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία συγχώνευσης", "error");
+        return;
+      }
+      showToast("Η συγχώνευση ολοκληρώθηκε.", "success");
+      setMergeTarget(null);
+      setDups((list) =>
+        (list ?? []).filter(
+          (p) =>
+            !(
+              (p.contactA.id === contactA.id && p.contactB.id === contactB.id) ||
+              (p.contactA.id === contactB.id && p.contactB.id === contactA.id)
+            ),
+        ),
+      );
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setMergeBusy(false);
+    }
   };
 
   if (!can) {
@@ -508,32 +526,26 @@ export default function DataToolsPage() {
         </div>
       )}
 
-      {mergeTarget && (
-        <div
-          className={lux.modalOverlay}
-          onClick={() => setMergeTarget(null)}
-          onKeyDown={(e) => e.key === "Escape" && setMergeTarget(null)}
-          role="presentation"
-        >
-          <div
-            className={lux.modalPanel + " max-w-md space-y-4 p-6"}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal
-            aria-labelledby="merge-modal-title"
-          >
+      <CenteredModal
+        open={!!mergeTarget}
+        onClose={() => setMergeTarget(null)}
+        className="max-w-md space-y-4 p-6"
+        ariaLabel="Συγχώνευση επαφών"
+      >
+        {mergeTarget ? (
+          <>
             <h3 id="merge-modal-title" className="text-lg font-bold text-[var(--text-primary)]">
               Συγχώνευση
             </h3>
             <p className="text-sm text-[var(--text-secondary)]">Ποια εγγραφή να κρατήσουμε; (οι κλήσεις, tasks και αιτήματα μεταφέρονται)</p>
-            <div className="space-y-2">
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border p-2">
+            <div className="grid gap-4">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] p-3">
                 <input type="radio" name="k" checked={keepSide === "a"} onChange={() => setKeepSide("a")} />
                 <span>
                   {mergeTarget.contactA.first_name} {mergeTarget.contactA.last_name}
                 </span>
               </label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border p-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] p-3">
                 <input type="radio" name="k" checked={keepSide === "b"} onChange={() => setKeepSide("b")} />
                 <span>
                   {mergeTarget.contactB.first_name} {mergeTarget.contactB.last_name}
@@ -541,16 +553,16 @@ export default function DataToolsPage() {
               </label>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" className={lux.btnSecondary} onClick={() => setMergeTarget(null)}>
+              <button type="button" className={lux.btnSecondary} onClick={() => setMergeTarget(null)} disabled={mergeBusy}>
                 Άκυρο
               </button>
-              <button type="button" className={lux.btnPrimary} onClick={() => void doMerge()}>
+              <FormSubmitButton type="button" variant="gold" loading={mergeBusy} onClick={() => void doMerge()}>
                 Συγχώνευση
-              </button>
+              </FormSubmitButton>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </CenteredModal>
     </div>
   );
 }

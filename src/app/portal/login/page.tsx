@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { mapAuthErrorToGreek, validateEmail } from "@/lib/form-validation";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const ND = "#003476";
 
@@ -30,6 +32,7 @@ function PortalLoginInner() {
   const [err, setErr] = useState("");
   const [fieldErr, setFieldErr] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
+  const { showToast } = useFormToast();
 
   const nextRaw = sp.get("next");
   const destination = portalPostLoginDest(nextRaw);
@@ -74,10 +77,12 @@ function PortalLoginInner() {
               const em = validateEmail(email);
               if (em) {
                 setFieldErr({ email: em });
+                showToast(em, "error");
                 return;
               }
               if (!password) {
                 setFieldErr({ password: "Υποχρεωτικός κωδικός" });
+                showToast("Συμπληρώστε τον κωδικό.", "error");
                 return;
               }
               setLoading(true);
@@ -85,19 +90,26 @@ function PortalLoginInner() {
                 const supabase = createClient();
                 const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
                 if (error) {
-                  setErr(mapAuthErrorToGreek(error.message));
+                  const msg = mapAuthErrorToGreek(error.message);
+                  setErr(msg);
+                  showToast(msg, "error");
                   return;
                 }
                 const res = await fetchWithTimeout("/api/portal/me", { credentials: "same-origin" });
                 if (!res.ok) {
                   await supabase.auth.signOut();
-                  setErr("Λάθος τύπος λογαριασμού. Χρησιμοποιήστε /login για το προσωπικό CRM.");
+                  const msg = "Λάθος τύπος λογαριασμού. Χρησιμοποιήστε /login για το προσωπικό CRM.";
+                  setErr(msg);
+                  showToast(msg, "error");
                   return;
                 }
+                showToast("Συνδεθήκατε επιτυχώς.", "success");
                 router.push(destination);
                 router.refresh();
               } catch {
-                setErr("Σφάλμα δικτύου. Δοκιμάστε ξανά.");
+                const msg = "Σφάλμα δικτύου. Δοκιμάστε ξανά.";
+                setErr(msg);
+                showToast(msg, "error");
               } finally {
                 setLoading(false);
               }
@@ -120,8 +132,14 @@ function PortalLoginInner() {
                     setEmail(e.target.value);
                     if (fieldErr.email) setFieldErr((f) => ({ ...f, email: undefined }));
                   }}
+                  onBlur={() => {
+                    const em = validateEmail(email);
+                    if (em) setFieldErr((f) => ({ ...f, email: em }));
+                    else setFieldErr((f) => ({ ...f, email: undefined }));
+                  }}
                   type="email"
                   autoComplete="email"
+                  placeholder="email@παράδειγμα.gr"
                 />
               </div>
               <HqFieldError>{fieldErr.email}</HqFieldError>
@@ -145,18 +163,19 @@ function PortalLoginInner() {
                   }}
                   type="password"
                   autoComplete="current-password"
+                  placeholder="••••••••"
                 />
               </div>
               <HqFieldError>{fieldErr.password}</HqFieldError>
             </div>
-            <button
+            <FormSubmitButton
               type="submit"
-              className="w-full rounded-xl py-3.5 text-sm font-extrabold text-white shadow-md transition hover:brightness-110"
-              style={{ background: ND }}
-              disabled={loading}
+              variant="gold"
+              loading={loading}
+              className="w-full !rounded-xl !py-3.5 !text-sm !font-extrabold shadow-md"
             >
-              {loading ? "…" : "Είσοδος"}
-            </button>
+              Είσοδος
+            </FormSubmitButton>
           </form>
           <p className="mt-2 text-center text-sm text-[#64748B]">
             Δεν έχετε λογαριασμό;{" "}

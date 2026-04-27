@@ -6,6 +6,9 @@ import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { slugifyNews } from "@/lib/slugify";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { requiredText } from "@/lib/form-validation";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), { ssr: false });
@@ -49,6 +52,7 @@ export function PortalNewsSection() {
   const [preview, setPreview] = useState(false);
   const [slugAutogen, setSlugAutogen] = useState(true);
   const formCardRef = useRef<HTMLDivElement>(null);
+  const { showToast } = useFormToast();
 
   const load = useCallback(async () => {
     const res = await fetchWithTimeout("/api/news-posts");
@@ -239,6 +243,16 @@ export function PortalNewsSection() {
                     className={[lux.input, fieldErrors.title ? lux.inputError : ""].join(" ")}
                     value={editor.title}
                     onChange={(e) => onTitleChange(e.target.value)}
+                    onBlur={() => {
+                      const t = requiredText(editor.title, "τίτλος");
+                      setFieldErrors((fe) => {
+                        const next = { ...fe };
+                        if (t) next.title = t;
+                        else delete next.title;
+                        return next;
+                      });
+                    }}
+                    placeholder="Τίτλος άρθρου"
                     aria-invalid={!!fieldErrors.title}
                     aria-describedby={fieldErrors.title ? "pn-err-title" : undefined}
                   />
@@ -256,18 +270,13 @@ export function PortalNewsSection() {
                 </div>
                 <div>
                   <HqLabel htmlFor="pn-cat">Κατηγορία</HqLabel>
-                  <select
-                    id="pn-cat"
-                    className={lux.select}
-                    value={editor.category}
-                    onChange={(e) => setEditor({ ...editor, category: e.target.value })}
-                  >
+                  <HqSelect id="pn-cat" value={editor.category} onChange={(e) => setEditor({ ...editor, category: e.target.value })}>
                     {NEWS_CATEGORIES.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>
                     ))}
-                  </select>
+                  </HqSelect>
                 </div>
                 <div className="sm:col-span-2">
                   <HqLabel htmlFor="pn-ex">Περίληψη</HqLabel>
@@ -323,6 +332,7 @@ export function PortalNewsSection() {
                   className={[lux.textarea, "min-h-[280px] font-mono", fieldErrors.content ? lux.inputError : ""].join(" ")}
                   value={editor.content ?? ""}
                   onChange={(e) => setEditor({ ...editor, content: e.target.value })}
+                  placeholder="Γράψτε το κείμενο σε Markdown…"
                 />
               )}
               <HqFieldError>{fieldErrors.content}</HqFieldError>
@@ -349,13 +359,17 @@ export function PortalNewsSection() {
           )}
 
           <div className="mt-6 flex flex-col gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
-            <button
+            <FormSubmitButton
               type="button"
-              className={lux.btnPrimary + " w-full sm:ml-auto sm:min-w-[200px]"}
-              disabled={saving}
+              variant="gold"
+              loading={saving}
+              className="w-full sm:ml-auto sm:min-w-[200px]"
               onClick={async () => {
                 if (!editor) return;
-                if (!validateForm()) return;
+                if (!validateForm()) {
+                  showToast("Ελέγξτε τα πεδία της φόρμας.", "error");
+                  return;
+                }
                 setErr("");
                 setSaving(true);
                 try {
@@ -375,10 +389,13 @@ export function PortalNewsSection() {
                       body: JSON.stringify(body),
                     });
                     if (!res.ok) {
-                      const e = (await res.json().catch(() => ({}))) as { error?: string };
-                      setErr(e.error ?? "Σφάλμα");
+                      const er = (await res.json().catch(() => ({}))) as { error?: string };
+                      const msg = er.error ?? "Σφάλμα";
+                      setErr(msg);
+                      showToast(msg, "error");
                       return;
                     }
+                    showToast("Η δημοσίευση δημιουργήθηκε.", "success");
                   } else {
                     const res = await fetchWithTimeout(`/api/news-posts/${editor.id}`, {
                       method: "PUT",
@@ -386,20 +403,27 @@ export function PortalNewsSection() {
                       body: JSON.stringify(body),
                     });
                     if (!res.ok) {
-                      const e = (await res.json().catch(() => ({}))) as { error?: string };
-                      setErr(e.error ?? "Σφάλμα");
+                      const er = (await res.json().catch(() => ({}))) as { error?: string };
+                      const msg = er.error ?? "Σφάλμα";
+                      setErr(msg);
+                      showToast(msg, "error");
                       return;
                     }
+                    showToast("Οι αλλαγές αποθηκεύτηκαν.", "success");
                   }
                   closeEditor();
                   void load();
+                } catch {
+                  const msg = "Σφάλμα δικτύου";
+                  setErr(msg);
+                  showToast(msg, "error");
                 } finally {
                   setSaving(false);
                 }
               }}
             >
-              {saving ? "…" : "Αποθήκευση"}
-            </button>
+              Αποθήκευση
+            </FormSubmitButton>
           </div>
         </div>
       )}

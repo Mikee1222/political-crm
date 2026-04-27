@@ -9,13 +9,15 @@ type Props = {
   children: React.ReactNode;
   className?: string;
   ariaLabel?: string;
+  /** Extra classes on the fixed overlay (e.g. nested dialog z-index). */
+  overlayClassName?: string;
 };
 
 /**
  * Viewport-centered dialog: panel uses fixed + translate(-50%,-50%) so it stays
  * centered regardless of page scroll. Panel scrolls internally if content is tall.
  */
-export function CenteredModal({ open, onClose, children, className, ariaLabel }: Props) {
+export function CenteredModal({ open, onClose, children, className, ariaLabel, overlayClassName }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -29,7 +31,10 @@ export function CenteredModal({ open, onClose, children, className, ariaLabel }:
 
   return (
     <div
-      className="fixed inset-0 z-[200] overflow-y-auto overflow-x-hidden [background:var(--overlay-scrim)] backdrop-blur-[8px]"
+      className={clsx(
+        "fixed inset-0 z-[9999] overflow-y-auto overflow-x-hidden [background:var(--overlay-scrim)] backdrop-blur-[8px]",
+        overlayClassName,
+      )}
       role="dialog"
       aria-modal
       aria-label={ariaLabel}
@@ -37,7 +42,7 @@ export function CenteredModal({ open, onClose, children, className, ariaLabel }:
     >
       <div
         className={clsx(
-          "max-h-[min(90dvh,900px)] w-[min(680px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl",
+          "w-[min(680px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl",
           className,
         )}
         style={{
@@ -45,7 +50,8 @@ export function CenteredModal({ open, onClose, children, className, ariaLabel }:
           left: "50%",
           top: "50%",
           transform: "translate(-50%, -50%)",
-          maxHeight: "min(90dvh, 900px)",
+          zIndex: 10000,
+          maxHeight: "90vh",
         }}
         onClick={(e) => e.stopPropagation()}
       >

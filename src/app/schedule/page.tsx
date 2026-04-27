@@ -26,6 +26,10 @@ import {
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { stripHtml } from "@/lib/strip-html";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type CalEvent = {
   id: string;
@@ -167,6 +171,7 @@ export default function SchedulePage() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [saving, setSaving] = useState(false);
+  const { showToast } = useFormToast();
 
   const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1 }), [weekStart]);
   const displayDays = useMemo(
@@ -231,16 +236,23 @@ export default function SchedulePage() {
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEv.title.trim() || !newEv.date) return;
+    if (!newEv.title.trim() || !newEv.date) {
+      showToast("Συμπληρώστε τίτλο και ημερομηνία.", "error");
+      return;
+    }
     setCreateError(null);
     const startIso = toIsoFromDateAndTime(newEv.date, newEv.startTime);
     const endIso = toIsoFromDateAndTime(newEv.date, newEv.endTime);
     if (!startIso || !endIso) {
-      setCreateError("Μη έγκυρη ημ/νία ή ώρα.");
+      const msg = "Μη έγκυρη ημ/νία ή ώρα.";
+      setCreateError(msg);
+      showToast(msg, "error");
       return;
     }
     if (new Date(endIso) <= new Date(startIso)) {
-      setCreateError("Η λήξη πρέπει να είναι μετά την έναρξη.");
+      const msg = "Η λήξη πρέπει να είναι μετά την έναρξη.";
+      setCreateError(msg);
+      showToast(msg, "error");
       return;
     }
     setSaving(true);
@@ -259,14 +271,19 @@ export default function SchedulePage() {
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        setCreateError(body.error ?? `Σφάλμα ${res.status}`);
+        const msg = body.error ?? `Σφάλμα ${res.status}`;
+        setCreateError(msg);
+        showToast(msg, "error");
         return;
       }
+      showToast("Το γεγονός δημιουργήθηκε επιτυχώς.", "success");
       setShowNew(false);
       setNewEv(newEventDefaults());
       await load();
     } catch {
-      setCreateError("Αποτυχία δικτύου. Δοκιμάστε ξανά.");
+      const msg = "Αποτυχία δικτύου. Δοκιμάστε ξανά.";
+      setCreateError(msg);
+      showToast(msg, "error");
     } finally {
       setSaving(false);
     }
@@ -276,27 +293,49 @@ export default function SchedulePage() {
     e.preventDefault();
     if (!detail?.id || isAllDayStr(detail.start) || !editForm.title.trim() || !editForm.start || !editForm.end) return;
     setSaving(true);
-    await fetchWithTimeout(`/api/schedule/events/${detail.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: editForm.title,
-        start: toIsoFromLocalInput(editForm.start),
-        end: toIsoFromLocalInput(editForm.end),
-        location: editForm.location,
-        description: editForm.description,
-        eventType: editForm.eventType,
-      }),
-    });
-    setSaving(false);
-    setEditing(false);
-    setDetail(null);
-    await load();
+    try {
+      const res = await fetchWithTimeout(`/api/schedule/events/${detail.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editForm.title,
+          start: toIsoFromLocalInput(editForm.start),
+          end: toIsoFromLocalInput(editForm.end),
+          location: editForm.location,
+          description: editForm.description,
+          eventType: editForm.eventType,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(body.error ?? `Σφάλμα ${res.status}`, "error");
+        return;
+      }
+      showToast("Οι αλλαγές αποθηκεύτηκαν.", "success");
+      setEditing(false);
+      setDetail(null);
+      await load();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onDelete = async (id: string) => {
     if (!confirm("Διαγραφή γεγονότος;")) return;
-    await fetchWithTimeout(`/api/schedule/events/${id}`, { method: "DELETE" });
+    try {
+      const res = await fetchWithTimeout(`/api/schedule/events/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        showToast(j.error ?? "Αποτυχία διαγραφής", "error");
+        return;
+      }
+      showToast("Το γεγονός διαγράφηκε.", "success");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+      return;
+    }
     setDetail(null);
     setEditing(false);
     await load();
@@ -641,21 +680,17 @@ export default function SchedulePage() {
 
         {loading && <p className="mt-3 text-center text-xs text-[var(--text-muted)]">Φόρτωση…</p>}
 
-        {detail && detailSurface && (
-          <div
-            className={lux.modalOverlay}
-            onClick={() => {
-              setDetail(null);
-              setEditing(false);
-            }}
-            role="presentation"
-          >
-            <div
-              className="mx-4 w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-            >
+        <CenteredModal
+          open={Boolean(detail && detailSurface)}
+          onClose={() => {
+            setDetail(null);
+            setEditing(false);
+          }}
+          className="max-w-md p-6"
+          ariaLabel={editing ? "Επεξεργασία συμβάντος" : "Συμβάν ημερολογίου"}
+        >
+          {detail && detailSurface ? (
+            <>
               {!editing && detail && (
                 <div>
                   <div
@@ -690,29 +725,34 @@ export default function SchedulePage() {
                 </div>
               )}
               {editing && detail && !isAllDayStr(detail.start) && (
-                <form onSubmit={onSaveEdit} className="space-y-3">
+                <form onSubmit={onSaveEdit} className="grid max-w-[640px] gap-4">
                   <h2 className="text-lg font-semibold text-[var(--text-primary)]">Επεξεργασία</h2>
                   <div>
-                    <label className={lux.label}>Τίτλος</label>
+                    <label className={lux.label}>
+                      Τίτλος<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                    </label>
                     <input
                       className={lux.input}
                       value={editForm.title}
                       onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                      placeholder="Τίτλος γεγονότος"
                       required
                     />
                   </div>
                   <div>
-                    <label className={lux.label}>Έναρξη / Λήξη</label>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <label className={lux.label}>
+                      Έναρξη / Λήξη<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                    </label>
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <input
-                        className={lux.input}
+                        className={[lux.input, "[color-scheme:dark]"].join(" ")}
                         type="datetime-local"
                         value={editForm.start}
                         onChange={(e) => setEditForm({ ...editForm, start: e.target.value })}
                         required
                       />
                       <input
-                        className={lux.input}
+                        className={[lux.input, "[color-scheme:dark]"].join(" ")}
                         type="datetime-local"
                         value={editForm.end}
                         onChange={(e) => setEditForm({ ...editForm, end: e.target.value })}
@@ -722,8 +762,7 @@ export default function SchedulePage() {
                   </div>
                   <div>
                     <label className={lux.label}>Τύπος</label>
-                    <select
-                      className={lux.select}
+                    <HqSelect
                       value={editForm.eventType}
                       onChange={(e) => setEditForm({ ...editForm, eventType: e.target.value as CalendarEventType })}
                     >
@@ -732,7 +771,7 @@ export default function SchedulePage() {
                           {CALENDAR_EVENT_TYPES[k].label}
                         </option>
                       ))}
-                    </select>
+                    </HqSelect>
                   </div>
                   <div>
                     <label className={lux.label}>Τοποθεσία</label>
@@ -740,6 +779,7 @@ export default function SchedulePage() {
                       className={lux.input}
                       value={editForm.location}
                       onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                      placeholder="Προαιρετικό"
                     />
                   </div>
                   <div>
@@ -748,6 +788,7 @@ export default function SchedulePage() {
                       className={lux.textarea + " !min-h-[80px]"}
                       value={editForm.description}
                       onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      placeholder="Προαιρετικό"
                     />
                   </div>
                   <div className="mt-2 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
@@ -760,9 +801,9 @@ export default function SchedulePage() {
                     >
                       Άκυρο
                     </button>
-                    <button type="submit" disabled={saving} className={lux.btnPrimary}>
-                      {saving ? "—" : "Αποθήκευση"}
-                    </button>
+                    <FormSubmitButton type="submit" loading={saving} variant="gold">
+                      Αποθήκευση
+                    </FormSubmitButton>
                   </div>
                 </form>
               )}
@@ -793,27 +834,20 @@ export default function SchedulePage() {
                   )}
                 </div>
               )}
-            </div>
-          </div>
-        )}
+            </>
+          ) : null}
+        </CenteredModal>
 
-        {showNew && (
-          <div
-            className={lux.modalOverlay}
-            onClick={() => {
-              setShowNew(false);
-              setCreateError(null);
-            }}
-            role="presentation"
-          >
-            <form
-              onClick={(e) => e.stopPropagation()}
-              onSubmit={onCreate}
-              className="mx-4 w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="schedule-new-title"
-            >
+        <CenteredModal
+          open={showNew}
+          onClose={() => {
+            setShowNew(false);
+            setCreateError(null);
+          }}
+          className="max-w-md p-6"
+          ariaLabel="Νέο γεγονός"
+        >
+            <form onSubmit={onCreate} aria-labelledby="schedule-new-title">
               <h2 id="schedule-new-title" className="text-lg font-semibold text-[var(--text-primary)]">
                 Νέο Event
               </h2>
@@ -823,9 +857,11 @@ export default function SchedulePage() {
                   {createError}
                 </p>
               )}
-              <div className="space-y-3">
+              <div className="grid max-w-[640px] gap-4">
                 <div>
-                  <label className={lux.label}>Τίτλος *</label>
+                  <label className={lux.label}>
+                    Τίτλος<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                  </label>
                   <input
                     className={lux.input}
                     value={newEv.title}
@@ -836,20 +872,24 @@ export default function SchedulePage() {
                   />
                 </div>
                 <div>
-                  <label className={lux.label}>Ημερ. *</label>
+                  <label className={lux.label}>
+                    Ημερ.<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                  </label>
                   <input
-                    className={lux.input}
+                    className={[lux.input, lux.dateInput].join(" ")}
                     type="date"
                     value={newEv.date}
                     onChange={(e) => setNewEv({ ...newEv, date: e.target.value })}
                     required
                   />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className={lux.label}>Έναρξη *</label>
+                    <label className={lux.label}>
+                      Έναρξη<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                    </label>
                     <input
-                      className={lux.input}
+                      className={[lux.input, "[color-scheme:dark]"].join(" ")}
                       type="time"
                       value={newEv.startTime}
                       onChange={(e) => setNewEv({ ...newEv, startTime: e.target.value })}
@@ -857,9 +897,11 @@ export default function SchedulePage() {
                     />
                   </div>
                   <div>
-                    <label className={lux.label}>Λήξη *</label>
+                    <label className={lux.label}>
+                      Λήξη<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                    </label>
                     <input
-                      className={lux.input}
+                      className={[lux.input, "[color-scheme:dark]"].join(" ")}
                       type="time"
                       value={newEv.endTime}
                       onChange={(e) => setNewEv({ ...newEv, endTime: e.target.value })}
@@ -869,17 +911,13 @@ export default function SchedulePage() {
                 </div>
                 <div>
                   <label className={lux.label}>Τύπος</label>
-                  <select
-                    className={lux.select}
-                    value={newEv.eventType}
-                    onChange={(e) => setNewEv({ ...newEv, eventType: e.target.value as CalendarEventType })}
-                  >
+                  <HqSelect value={newEv.eventType} onChange={(e) => setNewEv({ ...newEv, eventType: e.target.value as CalendarEventType })}>
                     {CAL_EVENT_TYPE_KEYS.map((k) => (
                       <option key={k} value={k}>
                         {CALENDAR_EVENT_TYPES[k].label}
                       </option>
                     ))}
-                  </select>
+                  </HqSelect>
                 </div>
                 <div>
                   <label className={lux.label}>Τοποθεσία</label>
@@ -911,13 +949,12 @@ export default function SchedulePage() {
                 >
                   Άκυρο
                 </button>
-                <button type="submit" disabled={saving} className={lux.btnGold}>
-                  {saving ? "…" : "Αποθήκευση"}
-                </button>
+                <FormSubmitButton type="submit" loading={saving} variant="gold">
+                  Αποθήκευση
+                </FormSubmitButton>
               </div>
             </form>
-          </div>
-        )}
+        </CenteredModal>
       </div>
     </div>
   );

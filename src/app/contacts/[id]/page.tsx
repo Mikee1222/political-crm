@@ -13,7 +13,9 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { ContactExtraSections } from "@/components/contact-extra-sections";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
+import { HqSelect } from "@/components/ui/hq-select";
 import type { ContactGroupRow } from "@/lib/contact-groups";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const card =
   "contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm";
@@ -298,6 +300,7 @@ function ContactDetailPage() {
   const { profile } = useProfile();
   const isCaller = profile?.role === "caller";
   const canManage = hasMinRole(profile?.role, "manager");
+  const { showToast } = useFormToast();
   const [contact, setContact] = useState<Contact | null>(null);
   const [buf, setBuf] = useState<Contact | null>(null);
   const [editing, setEditing] = useState<Section>(null);
@@ -580,8 +583,15 @@ function ContactDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("patch");
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία αποθήκευσης", "error");
+        return;
+      }
+      showToast("Αποθηκεύτηκε.", "success");
       await load();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
     } finally {
       setSaving(false);
     }
@@ -627,32 +637,56 @@ function ContactDetailPage() {
   };
 
   const addRequest = async () => {
-    if (!c || !newRequest.title.trim()) return;
-    await fetchWithTimeout("/api/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newRequest, contact_id: c.id }),
-    });
-    setNewRequest({ title: "", description: "", category: "Άλλο", status: "Νέο", assigned_to: "" });
-    setOpenReq(false);
-    await load();
+    if (!c || !newRequest.title.trim()) {
+      showToast("Συμπληρώστε τίτλο αιτήματος.", "error");
+      return;
+    }
+    try {
+      const res = await fetchWithTimeout("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newRequest, contact_id: c.id }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Σφάλμα", "error");
+        return;
+      }
+      showToast("Το αίτημα προστέθηκε.", "success");
+      setNewRequest({ title: "", description: "", category: "Άλλο", status: "Νέο", assigned_to: "" });
+      setOpenReq(false);
+      await load();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    }
   };
 
   const addTask = async () => {
-    if (!c || !newTask.title.trim()) return;
-    const res = await fetchWithTimeout("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contact_id: c.id,
-        title: newTask.title.trim(),
-        due_date: newTask.due_date || null,
-      }),
-    });
-    if (res.ok) {
+    if (!c || !newTask.title.trim()) {
+      showToast("Συμπληρώστε τίτλο εργασίας.", "error");
+      return;
+    }
+    try {
+      const res = await fetchWithTimeout("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: c.id,
+          title: newTask.title.trim(),
+          due_date: newTask.due_date || null,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Σφάλμα", "error");
+        return;
+      }
+      showToast("Η εργασία προστέθηκε.", "success");
       setNewTask({ title: "", due_date: "" });
       setOpenTask(false);
       await load();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
     }
   };
 
@@ -679,12 +713,20 @@ function ContactDetailPage() {
     if (!c) return;
     setSaving(true);
     try {
-      await fetchWithTimeout(`/api/contacts/${id}`, {
+      const res = await fetchWithTimeout(`/api/contacts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_status: c.call_status }),
       });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία", "error");
+        return;
+      }
+      showToast("Η κατάσταση κλήσης ενημερώθηκε.", "success");
       await load();
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
     } finally {
       setSaving(false);
     }
@@ -813,9 +855,10 @@ function ContactDetailPage() {
                 >
                   {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
                 </span>
-                <select
+                <HqSelect
                   aria-label="Κατάσταση κλήσης"
-                  className={inputSm + " w-auto min-w-[140px] max-w-full"}
+                  wrapperClassName="inline-block w-auto max-w-full"
+                  className={inputSm + " !pr-9 w-auto min-w-[140px] max-w-full"}
                   value={c.call_status ?? "Pending"}
                   onChange={(e) => setContact({ ...c, call_status: e.target.value })}
                 >
@@ -824,7 +867,7 @@ function ContactDetailPage() {
                       {o.label}
                     </option>
                   ))}
-                </select>
+                </HqSelect>
                 <button
                   type="button"
                   disabled={saving}
@@ -1092,8 +1135,8 @@ function ContactDetailPage() {
                 {canManage && editing === "electoral" && w ? (
                   <div className="fieldGap sm:col-span-2">
                     <span className={lbl}>Ομάδα</span>
-                    <select
-                      className={inputSm}
+                    <HqSelect
+                      className={inputSm + " !pr-9"}
                       value={w.group_id ?? ""}
                       onChange={(e) =>
                         setBuf({
@@ -1109,7 +1152,7 @@ function ContactDetailPage() {
                           {g.year != null ? ` (${g.year})` : ""}
                         </option>
                       ))}
-                    </select>
+                    </HqSelect>
                   </div>
                 ) : null}
                 {!(canManage && editing === "electoral" && w) ? (
@@ -1181,15 +1224,11 @@ function ContactDetailPage() {
                 <div className={fieldGap}>
                   <span className={lbl}>Προτεραιότητα</span>
                   {canManage && editing === "electoral" && w ? (
-                    <select
-                      className={inputSm}
-                      value={w.priority ?? "Medium"}
-                      onChange={(e) => setBuf({ ...w, priority: e.target.value })}
-                    >
+                    <HqSelect className={inputSm + " !pr-9"} value={w.priority ?? "Medium"} onChange={(e) => setBuf({ ...w, priority: e.target.value })}>
                       <option value="High">Υψηλή</option>
                       <option value="Medium">Μεσαία</option>
                       <option value="Low">Χαμηλή</option>
-                    </select>
+                    </HqSelect>
                   ) : (
                     <p className={val}>{pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}</p>
                   )}
@@ -1197,17 +1236,13 @@ function ContactDetailPage() {
                 <div className={fieldGap}>
                   <span className={lbl}>Κατάσταση κλήσης</span>
                   {canManage && editing === "electoral" && w ? (
-                    <select
-                      className={inputSm}
-                      value={w.call_status ?? "Pending"}
-                      onChange={(e) => setBuf({ ...w, call_status: e.target.value })}
-                    >
+                    <HqSelect className={inputSm + " !pr-9"} value={w.call_status ?? "Pending"} onChange={(e) => setBuf({ ...w, call_status: e.target.value })}>
                       {CALL_OPTS.map((o) => (
                         <option key={o.value} value={o.value}>
                           {o.label}
                         </option>
                       ))}
-                    </select>
+                    </HqSelect>
                   ) : (
                     <p className={val}>{callStatusLabel(c.call_status)}</p>
                   )}
@@ -1462,18 +1497,14 @@ function ContactDetailPage() {
                     </li>
                   ))}
                 </ul>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <select
-                    className={inputSm}
-                    value={newSup.support_type}
-                    onChange={(e) => setNewSup((x) => ({ ...x, support_type: e.target.value }))}
-                  >
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <HqSelect className={inputSm + " !pr-9"} value={newSup.support_type} onChange={(e) => setNewSup((x) => ({ ...x, support_type: e.target.value }))}>
                     {["Οικονομική", "Εθελοντισμός", "Προπαγάνδα", "Άλλο"].map((o) => (
                       <option key={o} value={o}>
                         {o}
                       </option>
                     ))}
-                  </select>
+                  </HqSelect>
                   <input
                     className={inputSm}
                     type="number"
@@ -1658,28 +1689,20 @@ function ContactDetailPage() {
                       value={newRequest.title}
                       onChange={(e) => setNewRequest({ ...newRequest, title: e.target.value })}
                     />
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <select
-                        className={inputSm}
-                        value={newRequest.category}
-                        onChange={(e) => setNewRequest({ ...newRequest, category: e.target.value })}
-                      >
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <HqSelect className={inputSm + " !pr-9"} value={newRequest.category} onChange={(e) => setNewRequest({ ...newRequest, category: e.target.value })}>
                         <option>Υγεία</option>
                         <option>Εκπαίδευση</option>
                         <option>Εργασία</option>
                         <option>Υποδομές</option>
                         <option>Άλλο</option>
-                      </select>
-                      <select
-                        className={inputSm}
-                        value={newRequest.status}
-                        onChange={(e) => setNewRequest({ ...newRequest, status: e.target.value })}
-                      >
+                      </HqSelect>
+                      <HqSelect className={inputSm + " !pr-9"} value={newRequest.status} onChange={(e) => setNewRequest({ ...newRequest, status: e.target.value })}>
                         <option>Νέο</option>
                         <option>Σε εξέλιξη</option>
                         <option>Ολοκληρώθηκε</option>
                         <option>Απορρίφθηκε</option>
-                      </select>
+                      </HqSelect>
                     </div>
                     <input
                       className={inputSm}

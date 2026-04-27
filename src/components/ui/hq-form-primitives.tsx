@@ -8,7 +8,7 @@ export function HqLabel({ children, htmlFor, required, className }: { children: 
     <label
       htmlFor={htmlFor}
       className={clsx(
-        "mb-1.5 block text-[12px] font-medium uppercase tracking-[0.08em] text-[var(--text-label)]",
+        "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] [data-theme='light']:text-slate-600",
         className,
       )}
     >

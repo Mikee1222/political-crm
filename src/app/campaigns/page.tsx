@@ -11,6 +11,10 @@ import {
   CONCURRENT_LINES_MAX,
   CONCURRENT_LINES_MIN,
 } from "@/lib/campaign-concurrent-lines";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -75,6 +79,8 @@ export default function CampaignsPage() {
   const [dialingId, setDialingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [nameFieldErr, setNameFieldErr] = useState<string | null>(null);
+  const { showToast } = useFormToast();
 
   const load = useCallback(async () => {
     const res = await fetchWithTimeout("/api/campaigns");
@@ -126,6 +132,12 @@ export default function CampaignsPage() {
   const createCampaign = async (e: FormEvent) => {
     e.preventDefault();
     setFormErr(null);
+    setNameFieldErr(null);
+    if (!name.trim()) {
+      setNameFieldErr("Υποχρεωτικό όνομα");
+      showToast("Συμπληρώστε το όνομα της καμπάνιας.", "error");
+      return;
+    }
     setSaving(true);
     try {
       const f = {
@@ -149,9 +161,12 @@ export default function CampaignsPage() {
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; assigned_contacts?: number };
       if (!res.ok) {
-        setFormErr(d.error ?? "Σφάλμα");
+        const msg = d.error ?? "Σφάλμα";
+        setFormErr(msg);
+        showToast(msg, "error");
         return;
       }
+      showToast("Η καμπάνια δημιουργήθηκε επιτυχώς.", "success");
       setModal(false);
       setName("");
       setDescription("");
@@ -160,6 +175,10 @@ export default function CampaignsPage() {
       setConcurrentLines(3);
       setFilter({ call_status: "", area: "", municipality: "", priority: "", tag: "" });
       await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Σφάλμα δικτύου";
+      setFormErr(msg);
+      showToast(msg, "error");
     } finally {
       setSaving(false);
     }
@@ -467,13 +486,13 @@ export default function CampaignsPage() {
         </p>
       )}
 
-      {modal && (
-        <div className={lux.modalOverlay + " !z-50 !items-stretch !p-0 sm:!items-center sm:!p-4"} onClick={() => setModal(false)}>
-          <form
-            className={lux.modalPanel + " flex w-full !max-w-[720px] flex-1 !flex-col overflow-hidden sm:!max-h-[min(100dvh,90vh)]"}
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={createCampaign}
-          >
+      <CenteredModal
+        open={modal}
+        onClose={() => setModal(false)}
+        className="flex w-full max-w-[720px] flex-col overflow-hidden p-0"
+        ariaLabel="Νέα καμπάνια"
+      >
+          <form className="flex max-h-[min(90vh,900px)] min-h-0 w-full flex-col" onSubmit={createCampaign}>
             <div className="mx-auto mt-2 h-1 w-11 rounded-full bg-white/20 sm:hidden" aria-hidden />
             <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-secondary)]/50 px-5 py-4">
               <h2 className="text-xl font-bold text-[var(--text-primary)]">Νέα Καμπάνια</h2>
@@ -486,15 +505,29 @@ export default function CampaignsPage() {
               )}
 
               <div>
-                <label className={lux.label} htmlFor="c-name">Όνομα</label>
+                <label className={lux.label} htmlFor="c-name">
+                  Όνομα<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                </label>
                 <input
                   id="c-name"
-                  className={lux.input + " !text-base"}
+                  className={[lux.input, "!text-base", nameFieldErr ? lux.inputError : ""].filter(Boolean).join(" ")}
                   required
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (nameFieldErr) setNameFieldErr(null);
+                  }}
+                  onBlur={() => {
+                    if (!name.trim()) setNameFieldErr("Υποχρεωτικό όνομα");
+                  }}
                   placeholder="π.χ. Θερινή εξόρμηση 2025"
+                  aria-invalid={nameFieldErr ? true : undefined}
                 />
+                {nameFieldErr && (
+                  <p className="mt-1 text-xs text-red-400" role="alert">
+                    {nameFieldErr}
+                  </p>
+                )}
               </div>
               <div>
                 <label className={lux.label} htmlFor="c-desc">Περιγραφή (προαιρετική)</label>
@@ -504,14 +537,15 @@ export default function CampaignsPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
+                  placeholder="Σύντομη περιγραφή στόχων…"
                 />
               </div>
 
               <div>
                 <label className={lux.label} htmlFor="c-ctype">Τύπος καμπάνιας (AI / Retell)</label>
-                <select
+                <HqSelect
                   id="c-ctype"
-                  className={lux.select + " !min-h-11 !text-base"}
+                  className="!min-h-11 !text-base"
                   value={campaignTypeId}
                   onChange={(e) => setCampaignTypeId(e.target.value)}
                 >
@@ -521,7 +555,7 @@ export default function CampaignsPage() {
                       {t.name}
                     </option>
                   ))}
-                </select>
+                </HqSelect>
                 <p className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">
                   {campaignTypeId
                     ? (() => {
@@ -536,15 +570,15 @@ export default function CampaignsPage() {
 
               <div>
                 <label className={lux.label} htmlFor="c-ch">Κανάλι</label>
-                <select
+                <HqSelect
                   id="c-ch"
-                  className={lux.select + " !min-h-11 !text-base"}
+                  className="!min-h-11 !text-base"
                   value={campaignChannel}
                   onChange={(e) => setCampaignChannel(e.target.value as "call" | "whatsapp")}
                 >
                   <option value="call">Κλήσεις (Retell)</option>
                   <option value="whatsapp">WhatsApp</option>
-                </select>
+                </HqSelect>
                 <p className="mt-1 text-[11px] text-[var(--text-muted)]">
                   Το κανάλι αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
                 </p>
@@ -574,12 +608,12 @@ export default function CampaignsPage() {
               <p className="text-xs font-medium uppercase tracking-wider text-[#C9A84C]">Φιλτράρισμα επαφών</p>
               <p className="text-[11px] text-[var(--text-muted)]">Χρειάζεται τουλάχιστον ένα κριτήριο.</p>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={lux.label} htmlFor="c-st">Κατάσταση κλήσης</label>
-                  <select
+                  <HqSelect
                     id="c-st"
-                    className={lux.select + " !min-h-11 !text-base"}
+                    className="!min-h-11 !text-base"
                     value={filter.call_status}
                     onChange={(e) => setFilter((f) => ({ ...f, call_status: e.target.value }))}
                   >
@@ -588,13 +622,13 @@ export default function CampaignsPage() {
                     <option value="Positive">Θετική</option>
                     <option value="Negative">Αρνητική</option>
                     <option value="No Answer">Δεν απάντησε</option>
-                  </select>
+                  </HqSelect>
                 </div>
                 <div>
                   <label className={lux.label} htmlFor="c-pri">Προτεραιότητα</label>
-                  <select
+                  <HqSelect
                     id="c-pri"
-                    className={lux.select + " !min-h-11 !text-base"}
+                    className="!min-h-11 !text-base"
                     value={filter.priority}
                     onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value }))}
                   >
@@ -602,13 +636,13 @@ export default function CampaignsPage() {
                     <option value="High">Υψηλή</option>
                     <option value="Medium">Μεσαία</option>
                     <option value="Low">Χαμηλή</option>
-                  </select>
+                  </HqSelect>
                 </div>
                 <div>
                   <label className={lux.label} htmlFor="c-area">Περιοχή</label>
-                  <select
+                  <HqSelect
                     id="c-area"
-                    className={lux.select + " !min-h-11 !text-base"}
+                    className="!min-h-11 !text-base"
                     value={filter.area}
                     onChange={(e) => setFilter((f) => ({ ...f, area: e.target.value }))}
                   >
@@ -618,13 +652,13 @@ export default function CampaignsPage() {
                         {a}
                       </option>
                     ))}
-                  </select>
+                  </HqSelect>
                 </div>
                 <div>
                   <label className={lux.label} htmlFor="c-mun">Δήμος (περίπου)</label>
-                  <select
+                  <HqSelect
                     id="c-mun"
-                    className={lux.select + " !min-h-11 !text-base"}
+                    className="!min-h-11 !text-base"
                     value={filter.municipality}
                     onChange={(e) => setFilter((f) => ({ ...f, municipality: e.target.value }))}
                   >
@@ -634,7 +668,7 @@ export default function CampaignsPage() {
                         {m}
                       </option>
                     ))}
-                  </select>
+                  </HqSelect>
                 </div>
                 <div className="sm:col-span-2">
                   <label className={lux.label} htmlFor="c-tag">Ετικέτα (ακριβές tag)</label>
@@ -675,18 +709,18 @@ export default function CampaignsPage() {
                 <button type="button" className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:w-auto"} onClick={() => setModal(false)} disabled={saving}>
                   Άκυρο
                 </button>
-                <button
+                <FormSubmitButton
                   type="submit"
+                  loading={saving}
+                  variant="gold"
                   className={goldCta + " !h-12 !w-full !rounded-xl sm:!w-auto !min-w-0 sm:!px-6"}
-                  disabled={saving}
                 >
-                  {saving ? "…" : "Δημιουργία"}
-                </button>
+                  Δημιουργία
+                </FormSubmitButton>
               </div>
             </div>
           </form>
-        </div>
-      )}
+      </CenteredModal>
     </div>
   );
 }

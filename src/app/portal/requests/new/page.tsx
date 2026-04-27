@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { portalDisplayFirstName } from "@/lib/portal-display";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { minLength, requiredText } from "@/lib/form-validation";
 
 const ND = "#003476";
@@ -32,6 +34,7 @@ export default function NewPortalRequestPage() {
   const [err, setErr] = useState("");
   const [sending, setSending] = useState(false);
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
+  const { showToast } = useFormToast();
 
   useEffect(() => {
     const supabase = createClient();
@@ -64,12 +67,14 @@ export default function NewPortalRequestPage() {
     if (t || c) {
       setFieldErr({ ...(t && { title: t }), ...(c && { category: c }) });
       setErr("Ελέγξτε τα πεδία");
+      showToast("Ελέγξτε τα πεδία του βήματος 1.", "error");
       return;
     }
     const d = minLength(description, 3, "Η περιγραφή πρέπει να έχει τουλάχιστον 3 χαρακτήρες");
     if (d) {
       setFieldErr({ description: d });
       setErr(d);
+      showToast(d, "error");
       return;
     }
     setErr("");
@@ -83,30 +88,37 @@ export default function NewPortalRequestPage() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; request?: { id: string } };
       if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+        const msg = j.error ?? "Σφάλμα";
+        setErr(msg);
+        showToast(msg, "error");
         return;
       }
+      showToast("Το αίτημα υποβλήθηκε επιτυχώς.", "success");
       if (j.request?.id) {
         router.push(`/portal/requests/${j.request.id}`);
       } else {
         router.push("/portal/requests");
       }
     } catch {
-      setErr("Δικτυακό σφάλμα");
+      const msg = "Δικτυακό σφάλμα";
+      setErr(msg);
+      showToast(msg, "error");
     } finally {
       setSending(false);
     }
-  }, [title, description, category, router]);
+  }, [title, description, category, router, showToast]);
 
   const goNext0 = () => {
     setFieldErr({});
     const t = requiredText(title, "τίτλος");
     if (t) {
       setFieldErr({ title: t });
+      showToast(t, "error");
       return;
     }
     if (!category) {
       setFieldErr({ category: "Επιλέξτε κατηγορία" });
+      showToast("Επιλέξτε κατηγορία.", "error");
       return;
     }
     setStep(1);
@@ -117,6 +129,7 @@ export default function NewPortalRequestPage() {
     const d = minLength(description, 3, "Τουλάχιστον 3 χαρακτήρες");
     if (d) {
       setFieldErr({ description: d });
+      showToast(d, "error");
       return;
     }
     setStep(2);
@@ -191,6 +204,11 @@ export default function NewPortalRequestPage() {
                 setTitle(e.target.value);
                 if (fieldErr.title) setFieldErr((f) => ({ ...f, title: "" }));
               }}
+              onBlur={() => {
+                const t = requiredText(title, "τίτλος");
+                if (t) setFieldErr((f) => ({ ...f, title: t }));
+              }}
+              placeholder="Σύντομος τίτλος αιτήματος"
               aria-invalid={!!fieldErr.title}
             />
             <HqFieldError>{fieldErr.title}</HqFieldError>
@@ -296,15 +314,15 @@ export default function NewPortalRequestPage() {
               <ChevronLeft className="h-4 w-4" />
               Πίσω
             </button>
-            <button
+            <FormSubmitButton
               type="button"
-              className="flex flex-1 items-center justify-center rounded-xl py-3.5 text-sm font-extrabold text-[#0f172a] transition hover:brightness-110 disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
+              variant="gold"
+              loading={sending}
+              className="flex-1 !rounded-xl !py-3.5 !text-sm !font-extrabold"
               onClick={() => void onSubmit()}
-              disabled={sending}
             >
-              {sending ? "Υποβολή…" : "Υποβολή αιτήματος"}
-            </button>
+              Υποβολή αιτήματος
+            </FormSubmitButton>
           </div>
         </div>
       )}

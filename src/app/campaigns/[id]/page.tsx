@@ -6,6 +6,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { HqSelect } from "@/components/ui/hq-select";
+import { useFormToast } from "@/contexts/form-toast-context";
 import {
   clampConcurrentLines,
   CONCURRENT_LINES_DEFAULT,
@@ -99,6 +102,7 @@ export default function CampaignDetailPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [linesDraft, setLinesDraft] = useState("");
   const [linesSaving, setLinesSaving] = useState(false);
+  const { showToast } = useFormToast();
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -535,19 +539,15 @@ export default function CampaignDetailPage() {
         </p>
       )}
 
-      {addOpen && id && (
-        <div
-          className={lux.modalOverlay + " !z-[60] !items-stretch !p-0 sm:!items-center sm:!p-4"}
-          onClick={() => setAddOpen(false)}
-          role="presentation"
-        >
-          <div
-            className={lux.modalPanel + " flex w-full !max-w-lg flex-1 !flex-col overflow-hidden sm:!max-h-[min(100dvh,90vh)]"}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal
-            aria-label="Προσθήκη επαφής"
-          >
+      <CenteredModal
+        open={Boolean(addOpen && id)}
+        onClose={() => setAddOpen(false)}
+        overlayClassName="!z-[10050]"
+        className="flex w-full max-w-lg flex-col overflow-hidden p-0"
+        ariaLabel="Προσθήκη επαφής"
+      >
+        {addOpen && id ? (
+          <>
             <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
               <h3 className="text-lg font-bold text-[var(--text-primary)]">Προσθήκη Επαφής</h3>
               <button
@@ -559,7 +559,7 @@ export default function CampaignDetailPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-3 p-4">
+            <div className="grid max-h-[min(90vh,720px)] gap-4 overflow-y-auto p-4">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
                 <input
@@ -586,9 +586,12 @@ export default function CampaignDetailPage() {
                         });
                         const j = (await r.json().catch(() => ({}))) as { error?: string };
                         if (!r.ok) {
-                          setErr(j.error ?? "Σφάλμα");
+                          const msg = j.error ?? "Σφάλμα";
+                          setErr(msg);
+                          showToast(msg, "error");
                           return;
                         }
+                        showToast("Η επαφή προστέθηκε στην καμπάνια.", "success");
                         setAddOpen(false);
                         await load();
                       }}
@@ -605,9 +608,9 @@ export default function CampaignDetailPage() {
                 )}
               </ul>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </CenteredModal>
 
       <div className={lux.card + " !p-0 !overflow-hidden"}>
         <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
@@ -618,9 +621,9 @@ export default function CampaignDetailPage() {
           <div className="flex w-full min-w-0 max-w-sm flex-col gap-2 sm:flex-row sm:items-center">
             <div className="min-w-0">
               <label className="sr-only" htmlFor="out-camp">Αποτέλεσμα</label>
-              <select
+              <HqSelect
                 id="out-camp"
-                className={lux.select + " w-full !text-base !min-h-11 max-md:!text-base"}
+                className="w-full !text-base !min-h-11 max-md:!text-base"
                 value={outcome}
                 onChange={(e) => setOutcome(e.target.value)}
               >
@@ -628,7 +631,7 @@ export default function CampaignDetailPage() {
                 <option value="Positive">Θετικό</option>
                 <option value="Negative">Αρνητικό</option>
                 <option value="No Answer">Δεν απάντησε</option>
-              </select>
+              </HqSelect>
             </div>
             <button
               type="button"

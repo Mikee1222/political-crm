@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { mapAuthErrorToGreek, minLength, requiredText, validateEmail, validatePhone10 } from "@/lib/form-validation";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { useFormToast } from "@/contexts/form-toast-context";
 
 const ND = "#003476";
 
@@ -28,6 +30,7 @@ function RegisterForm() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [fe, setFe] = useState<Record<string, string>>({});
+  const { showToast } = useFormToast();
 
   const canSubmit = password.length >= 6 && password === password2 && gdpr;
 
@@ -98,18 +101,24 @@ function RegisterForm() {
               const w1 = minLength(password, 6, "Τουλάχιστον 6 χαρακτήρες");
               if (w1) {
                 setFe({ pw1: w1 });
+                showToast(w1, "error");
                 return;
               }
               if (password !== password2) {
                 setFe({ pw2: "Οι κωδικοί δεν ταιριάζουν" });
+                showToast("Οι κωδικοί δεν ταιριάζουν.", "error");
                 return;
               }
               if (!gdpr) {
-                setErr("Απαιτείται αποδοχή επεξεργασίας δεδομένων (GDPR).");
+                const msg = "Απαιτείται αποδοχή επεξεργασίας δεδομένων (GDPR).";
+                setErr(msg);
+                showToast(msg, "error");
                 return;
               }
               if (!canSubmit) {
-                setErr("Ελέγξτε κωδικό και συμφωνία GDPR.");
+                const msg = "Ελέγξτε κωδικό και συμφωνία GDPR.";
+                setErr(msg);
+                showToast(msg, "error");
                 return;
               }
               setLoading(true);
@@ -128,19 +137,26 @@ function RegisterForm() {
                 });
                 const j = (await res.json()) as { error?: string };
                 if (!res.ok) {
-                  setErr(j.error ?? "Η εγγραφή απέτυχε. Ελέγξτε τα στοιχεία.");
+                  const msg = j.error ?? "Η εγγραφή απέτυχε. Ελέγξτε τα στοιχεία.";
+                  setErr(msg);
+                  showToast(msg, "error");
                   return;
                 }
                 const supabase = createClient();
                 const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
                 if (error) {
-                  setErr("Η εγγραφή πέτυχε, αλλά απέτυχε η αυτόματη σύνδεση. " + mapAuthErrorToGreek(error.message));
+                  const msg = "Η εγγραφή πέτυχε, αλλά απέτυχε η αυτόματη σύνδεση. " + mapAuthErrorToGreek(error.message);
+                  setErr(msg);
+                  showToast(msg, "error");
                   return;
                 }
+                showToast("Η εγγραφή ολοκληρώθηκε επιτυχώς.", "success");
                 router.push("/portal/dashboard");
                 router.refresh();
               } catch {
-                setErr("Σφάλμα δικτύου. Δοκιμάστε ξανά.");
+                const msg = "Σφάλμα δικτύου. Δοκιμάστε ξανά.";
+                setErr(msg);
+                showToast(msg, "error");
               } finally {
                 setLoading(false);
               }
@@ -326,14 +342,9 @@ function RegisterForm() {
                   >
                     Πίσω
                   </button>
-                  <button
-                    type="submit"
-                    className="flex-1 rounded-xl py-3.5 text-sm font-extrabold text-white"
-                    style={{ background: ND }}
-                    disabled={loading}
-                  >
-                    {loading ? "…" : "Εγγραφή"}
-                  </button>
+                  <FormSubmitButton type="submit" variant="gold" loading={loading} className="flex-1 !rounded-xl !py-3.5 !text-sm !font-extrabold">
+                    Εγγραφή
+                  </FormSubmitButton>
                 </div>
               </>
             )}
