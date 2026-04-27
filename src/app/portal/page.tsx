@@ -134,6 +134,54 @@ export default async function PortalHomePage() {
         </div>
       </section>
 
+      {/* Mini bio — link to full biography */}
+      <section
+        className="border-b border-[#E2E8F0] bg-gradient-to-b from-[#F8FAFC] to-white py-8 sm:py-10"
+        aria-labelledby="portal-mini-bio-heading"
+      >
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div
+            className="flex flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm transition hover:shadow-md sm:flex-row sm:items-stretch sm:gap-6 sm:p-5"
+            style={{ boxShadow: "0 4px 24px rgba(0, 52, 118, 0.06)" }}
+          >
+            <div
+              className="relative mx-auto h-24 w-24 shrink-0 overflow-hidden rounded-xl border-2 sm:mx-0 sm:h-28 sm:w-28"
+              style={{ borderColor: GOLD }}
+            >
+              <Image
+                src="/hero-karagkounis.png"
+                alt=""
+                width={120}
+                height={120}
+                className="h-full w-full object-cover object-top"
+                sizes="112px"
+              />
+            </div>
+            <div className="min-w-0 flex-1 pt-2 sm:pt-0">
+              <h2 id="portal-mini-bio-heading" className="sr-only">
+                Σύντομο βιογραφικό
+              </h2>
+              <div className="space-y-2 text-sm leading-relaxed text-[#475569] sm:text-base">
+                <p>Ο Κώστας Καραγκούνης υπηρετεί ως Υφυπουργός Εργασίας &amp; Κοινωνικής Ασφάλισης και Βουλευτής Αιτωλοακαρνανίας.</p>
+                <p>
+                  Νομικές σπουδές στο ΕΚΠΑ, μεταπτυχιακό UEL (Λονδίνο) και ακαδημαϊκή εμπειρία στο εξωτερικό· μακρά
+                  πολιτική διαδρομή στη Νέα Δημοκρατία, με ευθύνες σε κυβέρνηση και Βουλή.
+                </p>
+                <p>Γεννήθηκε το 1975, εργάζεται ως δικηγόρος, και συνεχίζει με αφοσίωση στους πολίτες του νομού.</p>
+              </div>
+              <Link
+                href="/portal/about"
+                className="group mt-4 inline-flex items-center gap-1.5 text-sm font-extrabold sm:text-base"
+                style={{ color: ND }}
+              >
+                Διαβάστε περισσότερα
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FEATURES */}
       <section id="features" className="scroll-mt-20 bg-white py-16 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">

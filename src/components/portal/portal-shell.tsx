@@ -29,6 +29,7 @@ function PortalHeader({
 
   const nav = [
     { href: "/portal", label: "Αρχική" },
+    { href: "/portal/about", label: "Βιογραφικό" },
     { href: "/portal/requests", label: "Αιτήματα" },
     { href: "/portal/news", label: "Νέα" },
     { href: "/portal#portal-footer-contact", label: "Επικοινωνία" },
@@ -213,6 +214,7 @@ function PortalFooter() {
             <ul className="mt-3 space-y-2 text-sm">
               {[
                 { href: "/portal", t: "Αρχική" },
+                { href: "/portal/about", t: "Βιογραφικό" },
                 { href: "/portal/requests", t: "Αιτήματα" },
                 { href: "/portal/news", t: "Νέα" },
                 { href: "/portal#portal-footer-contact", t: "Επικοινωνία" },
@@ -254,14 +256,36 @@ function PortalFooter() {
               </a>
             </ul>
           </div>
-          <div>
+          <div className="min-w-0 sm:max-lg:col-span-2">
             <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#C9A84C]">Επαφή</h3>
-            <p className="mt-3 text-sm text-slate-400">
-              Γραφείο βουλευτή, Αιτωλοακαρνανία
-            </p>
-            <a href="tel:+3026410" className="mt-2 block text-sm font-medium text-[#C9A84C]">
-              +30 2641 0 — Γραμματεία
-            </a>
+            <div className="mt-4 space-y-6 text-sm text-slate-300">
+              <div>
+                <p className="font-semibold text-white">Πολιτικό Γραφείο Αγρίνιο</p>
+                <p className="mt-1.5 leading-relaxed text-slate-400">
+                  Χαριλάου Τρικούπη 7, 301 00 Αγρίνιο
+                </p>
+                <p className="mt-1.5 text-slate-300">
+                  Τηλ.:{" "}
+                  <a href="tel:+302641046603" className="font-medium text-[#C9A84C] hover:underline">
+                    26410-46603
+                  </a>
+                </p>
+                <p className="text-slate-400">Fax: 26410-46605</p>
+              </div>
+              <div>
+                <p className="font-semibold text-white">Πολιτικό Γραφείο Αθήνα</p>
+                <p className="mt-1.5 leading-relaxed text-slate-400">
+                  Σέκερη 1, 106 71 Αθήνα
+                </p>
+                <p className="mt-1.5 text-slate-300">
+                  Τηλ.:{" "}
+                  <a href="tel:+302108820388" className="font-medium text-[#C9A84C] hover:underline">
+                    210-8820388
+                  </a>
+                </p>
+                <p className="text-slate-400">Fax: 210-3675646</p>
+              </div>
+            </div>
           </div>
         </div>
         <p className="border-t border-slate-800 pt-6 text-center text-xs text-slate-500">

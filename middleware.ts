@@ -26,6 +26,7 @@ function isPortalPublicPath(pathname: string) {
   if (pathname === "/portal" || pathname === "/portal/") return true;
   if (pathname === "/portal/login" || pathname === "/portal/register") return true;
   if (pathname === "/portal/news" || pathname.startsWith("/portal/news/")) return true;
+  if (pathname === "/portal/about" || pathname.startsWith("/portal/about/")) return true;
   if (pathname === "/portal/appointment" || pathname.startsWith("/portal/appointment/")) return true;
   return false;
 }
