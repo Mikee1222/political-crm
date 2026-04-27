@@ -3,7 +3,7 @@
  * @see https://docs.retellai.com/api-references/llm-websocket
  *
  * Set agent **Custom LLM WebSocket URL** to `wss://<your-host>/api/retell/llm` (Retell appends `/<call_id>`).
- * Note: Vercel serverless does not support this WebSocket; use a Node host or ngrok for dev.
+ * Run: `npm run dev:retell-llm-ws` (not `npm run dev`). Vercel serverless does not support this; use the HTTP route or Retell LLM in-dashboard.
  */
 import { createServer } from "http";
 import { parse } from "url";
