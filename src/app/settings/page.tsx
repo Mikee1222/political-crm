@@ -18,6 +18,8 @@ import { SocialMediaSettingsSection } from "@/components/settings/social-media-s
 import { TelegramSettingsSection } from "@/components/settings/telegram-settings-section";
 import { EmailSettingsSection } from "@/components/settings/email-settings-section";
 import { WhatsappSettingsSection } from "@/components/settings/whatsapp-settings-section";
+import { CampaignTypesSettingsSection } from "@/components/settings/campaign-types-section";
+import { RetellAgentsSettingsSection } from "@/components/settings/retell-agents-section";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { EventCategoryRow } from "@/lib/event-categories";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
@@ -314,6 +316,10 @@ export default function SettingsPage() {
           )}
         </section>
       )}
+
+      {isAdmin && <CampaignTypesSettingsSection />}
+
+      {isAdmin && <RetellAgentsSettingsSection />}
 
       {isAdmin && <NamedaySyncSection />}
 

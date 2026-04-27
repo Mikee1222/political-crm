@@ -5,6 +5,7 @@ import { BarChart3, CheckCircle2, FileText, LayoutGrid, Megaphone, Play, Search,
 import { FormEvent, useCallback, useEffect, useState, type ComponentType } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import type { CampaignTypeRow } from "@/lib/campaign-types";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -52,6 +53,8 @@ export default function CampaignsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [campaignChannel, setCampaignChannel] = useState<"call" | "whatsapp">("call");
+  const [campaignTypes, setCampaignTypes] = useState<CampaignTypeRow[]>([]);
+  const [campaignTypeId, setCampaignTypeId] = useState("");
   const [filter, setFilter] = useState<NewFilter>({
     call_status: "",
     area: "",
@@ -84,6 +87,10 @@ export default function CampaignsPage() {
       .then((r) => r.json())
       .then((d: FieldOptions) => setOptions({ areas: d.areas ?? [], municipalities: d.municipalities ?? [] }))
       .catch(() => setOptions({ areas: [], municipalities: [] }));
+    fetchWithTimeout("/api/campaign-types")
+      .then((r) => r.json())
+      .then((d: { types?: CampaignTypeRow[] }) => setCampaignTypes(d.types ?? []))
+      .catch(() => setCampaignTypes([]));
   }, [modal]);
 
   useEffect(() => {
@@ -124,7 +131,13 @@ export default function CampaignsPage() {
       const res = await fetchWithTimeout("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: description || null, filter: f, channel: campaignChannel }),
+        body: JSON.stringify({
+          name,
+          description: description || null,
+          filter: f,
+          channel: campaignChannel,
+          campaign_type_id: campaignTypeId || null,
+        }),
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; assigned_contacts?: number };
       if (!res.ok) {
@@ -135,6 +148,7 @@ export default function CampaignsPage() {
       setName("");
       setDescription("");
       setCampaignChannel("call");
+      setCampaignTypeId("");
       setFilter({ call_status: "", area: "", municipality: "", priority: "", tag: "" });
       await load();
     } finally {
@@ -326,35 +340,26 @@ export default function CampaignsPage() {
                     const maxPerRun = 25;
                     let started = 0;
                     try {
-                      for (let i = 0; i < maxPerRun; i += 1) {
-                        const n = await fetchWithTimeout(`/api/campaigns/${c.id}/next-uncalled-contact`);
-                        const jn = (await n.json().catch(() => ({}))) as {
-                          contact_id?: string | null;
-                          done?: boolean;
+                      const maxBatches = Math.ceil(maxPerRun / 3);
+                      for (let i = 0; i < maxBatches; i += 1) {
+                        const r = await fetchWithTimeout(`/api/campaigns/${c.id}/dial-next`, { method: "POST" });
+                        const j = (await r.json().catch(() => ({}))) as {
                           error?: string;
+                          results?: Array<{ ok: boolean }>;
                         };
-                        if (!n.ok) {
-                          setFormErr(jn.error ?? "Σφάλμα");
-                          return;
-                        }
-                        if (!jn.contact_id) {
-                          if (started === 0) {
-                            setFormErr("Όλες οι επαφές έχουν ήδη κληθεί.");
-                          }
-                          break;
-                        }
-                        const r = await fetchWithTimeout("/api/retell/call", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ contact_id: jn.contact_id, campaign_id: c.id }),
-                        });
-                        const jr = (await r.json().catch(() => ({}))) as { error?: string };
                         if (!r.ok) {
-                          setFormErr(jr.error ?? "Αποτυχία Retell");
+                          const msg = j.error ?? "Σφάλμα";
+                          if (r.status === 400 && msg.includes("όλες")) {
+                            if (started === 0) setFormErr("Όλες οι επαφές έχουν ήδη κληθεί.");
+                            break;
+                          }
+                          setFormErr(msg);
                           return;
                         }
-                        started += 1;
-                        await new Promise((res) => setTimeout(res, 1500));
+                        const n = (j.results ?? []).filter((x) => x.ok).length;
+                        if (n === 0) break;
+                        started += n;
+                        if (started >= maxPerRun) break;
                       }
                       if (started > 0) void load();
                     } finally {
@@ -492,7 +497,34 @@ export default function CampaignsPage() {
               </div>
 
               <div>
-                <label className={lux.label} htmlFor="c-ch">Τύπος καμπάνιας</label>
+                <label className={lux.label} htmlFor="c-ctype">Τύπος καμπάνιας (AI / Retell)</label>
+                <select
+                  id="c-ctype"
+                  className={lux.select + " !min-h-11 !text-base"}
+                  value={campaignTypeId}
+                  onChange={(e) => setCampaignTypeId(e.target.value)}
+                >
+                  <option value="">— Επιλέξτε —</option>
+                  {campaignTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">
+                  {campaignTypeId
+                    ? (() => {
+                        const t = campaignTypes.find((x) => x.id === campaignTypeId);
+                        return t?.retell_agent_id
+                          ? `Retell agent: ${t.retell_agent_id}`
+                          : "Χωρίς agent στον τύπο — θα χρησιμοποιηθεί RETELL_AGENT_ID.";
+                      })()
+                    : "Προαιρετικό· ορίζει τον Retell agent για κλήσεις."}
+                </p>
+              </div>
+
+              <div>
+                <label className={lux.label} htmlFor="c-ch">Κανάλι</label>
                 <select
                   id="c-ch"
                   className={lux.select + " !min-h-11 !text-base"}
@@ -503,7 +535,7 @@ export default function CampaignsPage() {
                   <option value="whatsapp">WhatsApp</option>
                 </select>
                 <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                  Ο τύπος αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
+                  Το κανάλι αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
                 </p>
               </div>
 

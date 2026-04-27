@@ -20,7 +20,9 @@ export async function GET() {
 
   const { data: campaignRows, error } = await supabase
     .from("campaigns")
-    .select("id, name, started_at, created_at, description, status, sentiment_data, channel")
+    .select(
+      "id, name, started_at, created_at, description, status, sentiment_data, channel, campaign_type_id, retell_agent_id",
+    )
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   const campaigns = (campaignRows ?? []) as Array<{
@@ -85,6 +87,7 @@ export async function POST(request: NextRequest) {
     filter?: ContactFilter;
     contact_ids?: string[];
     channel?: string;
+    campaign_type_id?: string | null;
   };
   const name = String(body.name ?? "").trim();
   if (!name) {
@@ -124,6 +127,23 @@ export async function POST(request: NextRequest) {
   }
 
   const channel = body.channel === "whatsapp" ? "whatsapp" : "call";
+  let campaign_type_id: string | null = null;
+  let retell_agent_id: string | null = null;
+  const ctRaw = body.campaign_type_id != null ? String(body.campaign_type_id).trim() : "";
+  if (ctRaw) {
+    const { data: ctRow, error: ctErr } = await supabase
+      .from("campaign_types")
+      .select("id, retell_agent_id")
+      .eq("id", ctRaw)
+      .maybeSingle();
+    if (ctErr || !ctRow) {
+      return NextResponse.json({ error: "Άκυρος τύπος καμπάνιας" }, { status: 400 });
+    }
+    campaign_type_id = (ctRow as { id: string }).id;
+    const ra = String((ctRow as { retell_agent_id?: string | null }).retell_agent_id ?? "").trim();
+    retell_agent_id = ra || null;
+  }
+
   const { data, error } = await supabase
     .from("campaigns")
     .insert({
@@ -132,6 +152,8 @@ export async function POST(request: NextRequest) {
       started_at: new Date().toISOString(),
       status: "active",
       channel,
+      campaign_type_id,
+      retell_agent_id,
     })
     .select("*")
     .single();

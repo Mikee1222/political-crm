@@ -5,6 +5,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { insertPendingCampaignCall } from "@/lib/campaign-pending-call";
 import { executeRetellCreatePhoneCall } from "@/lib/retell-execute-outbound";
+import { getRetellAgentIdForCampaign } from "@/lib/campaign-retell-agent";
 export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
@@ -52,7 +53,10 @@ export async function POST(request: NextRequest) {
     );
   }
   const row = contact as { id: string; first_name: string | null; last_name: string | null; phone: string | null };
-  const retell = await executeRetellCreatePhoneCall(row, campaign_id ?? null);
+  const overrideAgent = campaign_id
+    ? await getRetellAgentIdForCampaign(supabase, campaign_id)
+    : null;
+  const retell = await executeRetellCreatePhoneCall(row, campaign_id ?? null, overrideAgent);
   if (!retell.ok) {
     return NextResponse.json(
       { error: retell.error, ...(retell.detail != null ? { detail: retell.detail } : {}) },

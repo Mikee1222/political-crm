@@ -1322,3 +1322,44 @@ create policy "generated_social_posts all" on public.generated_social_posts
   to authenticated
   using (true)
   with check (true);
+
+-- Τύποι καμπάνιας (Retell agent ανά τύπο) + κατάλογος Retell agents (ρυθμίσεις)
+create table if not exists public.campaign_types (
+  id uuid primary key default gen_random_uuid (),
+  name text not null,
+  description text,
+  retell_agent_id text,
+  color text not null default '#003476',
+  created_at timestamptz not null default now ()
+);
+
+create table if not exists public.retell_agents (
+  id uuid primary key default gen_random_uuid (),
+  agent_id text not null unique,
+  name text not null,
+  description text,
+  created_at timestamptz not null default now ()
+);
+
+alter table public.campaigns
+  add column if not exists campaign_type_id uuid references public.campaign_types (id) on delete set null,
+  add column if not exists retell_agent_id text;
+
+create index if not exists idx_campaigns_campaign_type_id on public.campaigns (campaign_type_id);
+
+alter table public.campaign_types enable row level security;
+alter table public.retell_agents enable row level security;
+
+drop policy if exists "campaign_types all" on public.campaign_types;
+create policy "campaign_types all" on public.campaign_types
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "retell_agents all" on public.retell_agents;
+create policy "retell_agents all" on public.retell_agents
+  for all
+  to authenticated
+  using (true)
+  with check (true);

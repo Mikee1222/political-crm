@@ -15,6 +15,7 @@ const phoneDigits = (s: string) => s.replace(/\D/g, "");
 export async function executeRetellCreatePhoneCall(
   contact: RetellContactRow,
   campaignId: string | null,
+  overrideAgentId?: string | null,
 ): Promise<
   | { ok: true; call_id: string | null; retell: Record<string, unknown> }
   | { ok: false; status: number; error: string; detail?: unknown }
@@ -30,7 +31,7 @@ export async function executeRetellCreatePhoneCall(
   const last = String(contact.last_name || "").trim();
   let callBody: Record<string, unknown>;
   try {
-    callBody = buildCreatePhoneCallBody(phone, first, last, contact.id, campaignId);
+    callBody = buildCreatePhoneCallBody(phone, first, last, contact.id, campaignId, overrideAgentId);
   } catch (e) {
     return {
       ok: false,

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, FileText, Phone, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, FileText, Phone, Play, RefreshCw, Search, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -19,13 +19,39 @@ type CallRow = {
   contacts: { first_name: string; last_name: string; phone: string } | null;
 };
 
+type AssignedRow = {
+  contact_id: string;
+  added_at: string;
+  contact: { id: string; first_name: string; last_name: string; phone: string } | null;
+};
+
+type CampaignHead = {
+  id: string;
+  name: string;
+  created_at: string | null;
+  started_at: string | null;
+  description: string | null;
+  status: string;
+  channel?: string;
+  campaign_type_id?: string | null;
+  retell_agent_id?: string | null;
+  campaign_type?: { id: string; name: string; color: string; retell_agent_id?: string | null } | null;
+};
+
 type HeadData = {
-  campaign: { id: string; name: string; created_at: string | null; started_at: string | null; description: string | null; status: string };
+  campaign: CampaignHead;
   stats: OutcomeStats;
   progress: number;
   callsMade: number;
   contactTotal: number;
+  assigned_contacts: AssignedRow[];
   calls: CallRow[];
+};
+
+type LiveSnapshot = {
+  ongoing_count: number;
+  called_today: number | null;
+  success_rate_today_pct: number | null;
 };
 
 function formatDuration(s: number | null | undefined): string {
@@ -56,6 +82,13 @@ export default function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [dialing, setDialing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [live, setLive] = useState<LiveSnapshot | null>(null);
+  const [liveErr, setLiveErr] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+  const [addResults, setAddResults] = useState<Array<{ id: string; first_name: string; last_name: string; phone: string }>>([]);
+  const [addBusy, setAddBusy] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -77,6 +110,7 @@ export default function CampaignDetailPage() {
         progress: j.progress,
         callsMade: j.callsMade,
         contactTotal: j.contactTotal,
+        assigned_contacts: (j.assigned_contacts ?? []) as AssignedRow[],
         calls: (j.calls ?? []) as CallRow[],
       });
     } finally {
@@ -87,6 +121,63 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const campStatus = data?.campaign?.status;
+  useEffect(() => {
+    if (!id || campStatus !== "active") {
+      setLive(null);
+      setLiveErr(null);
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      const res = await fetchWithTimeout(`/api/retell/active-calls?campaign_id=${encodeURIComponent(id)}`);
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        ongoing_count?: number;
+        called_today?: number | null;
+        success_rate_today_pct?: number | null;
+      };
+      if (cancelled) return;
+      if (!res.ok) {
+        setLiveErr(j.error ?? "Σφάλμα live");
+        return;
+      }
+      setLiveErr(null);
+      setLive({
+        ongoing_count: typeof j.ongoing_count === "number" ? j.ongoing_count : 0,
+        called_today: j.called_today ?? null,
+        success_rate_today_pct: j.success_rate_today_pct ?? null,
+      });
+    };
+    void tick();
+    const t = setInterval(() => void tick(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [id, campStatus]);
+
+  useEffect(() => {
+    if (!addOpen || !addSearch.trim()) {
+      setAddResults([]);
+      return;
+    }
+    const h = setTimeout(() => {
+      setAddBusy(true);
+      const q = new URLSearchParams();
+      q.set("search", addSearch.trim());
+      q.set("page_size", "20");
+      void fetchWithTimeout(`/api/contacts?${q.toString()}`)
+        .then((r) => r.json())
+        .then((d: { contacts?: Array<{ id: string; first_name: string; last_name: string; phone: string }> }) => {
+          setAddResults(d.contacts ?? []);
+        })
+        .catch(() => setAddResults([]))
+        .finally(() => setAddBusy(false));
+    }, 300);
+    return () => clearTimeout(h);
+  }, [addOpen, addSearch]);
 
   const c = data?.campaign;
   const s = data?.stats;
@@ -131,35 +222,26 @@ export default function CampaignDetailPage() {
             const maxPerRun = 25;
             let started = 0;
             try {
-              for (let i = 0; i < maxPerRun; i += 1) {
-                const n = await fetchWithTimeout(`/api/campaigns/${id}/next-uncalled-contact`);
-                const jn = (await n.json().catch(() => ({}))) as {
-                  contact_id?: string | null;
-                  done?: boolean;
+              const maxBatches = Math.ceil(maxPerRun / 3);
+              for (let i = 0; i < maxBatches; i += 1) {
+                const r = await fetchWithTimeout(`/api/campaigns/${id}/dial-next`, { method: "POST" });
+                const j = (await r.json().catch(() => ({}))) as {
                   error?: string;
+                  results?: Array<{ ok: boolean }>;
                 };
-                if (!n.ok) {
-                  setErr(jn.error ?? "Σφάλμα");
-                  return;
-                }
-                if (!jn.contact_id) {
-                  if (started === 0) {
-                    setErr("Όλες οι επαφές της καμπάνιας έχουν ήδη κληθεί.");
-                  }
-                  break;
-                }
-                const r = await fetchWithTimeout("/api/retell/call", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ contact_id: jn.contact_id, campaign_id: id }),
-                });
-                const jr = (await r.json().catch(() => ({}))) as { error?: string };
                 if (!r.ok) {
-                  setErr(jr.error ?? "Αποτυχία Retell");
+                  const msg = j.error ?? "Σφάλμα";
+                  if (r.status === 400 && msg.includes("όλες")) {
+                    if (started === 0) setErr("Όλες οι επαφές της καμπάνιας έχουν ήδη κληθεί.");
+                    break;
+                  }
+                  setErr(msg);
                   return;
                 }
-                started += 1;
-                await new Promise((res) => setTimeout(res, 1500));
+                const n = (j.results ?? []).filter((x) => x.ok).length;
+                if (n === 0) break;
+                started += n;
+                if (started >= maxPerRun) break;
               }
             } finally {
               setDialing(false);
@@ -179,6 +261,40 @@ export default function CampaignDetailPage() {
       </div>
 
       {err && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">{err}</p>}
+
+      {c?.status === "active" && (c.channel === "call" || c.channel == null) && (
+        <section
+          className="rounded-2xl border border-[#1e5fa8]/35 bg-gradient-to-r from-[#0a1628] to-[#0F1E35] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.35)] sm:p-5"
+          aria-live="polite"
+        >
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-[#C9A84C]">Ζωντανό ταμπλό κλήσεων</h2>
+            <span className="text-[10px] text-[var(--text-muted)]">Ανανέωση κάθε 5 δευτ.</span>
+          </div>
+          {liveErr && <p className="mb-2 text-xs text-amber-200">{liveErr}</p>}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-emerald-500/25 bg-[#050D1A]/50 p-3">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">Ενεργές τώρα</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-300">{live?.ongoing_count ?? "—"}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Retell ongoing</p>
+            </div>
+            <div className="rounded-xl border border-[#C9A84C]/25 bg-[#050D1A]/50 p-3">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">Κλήσεις σήμερα</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+                {live?.called_today != null ? live.called_today : "—"}
+              </p>
+              <p className="text-[10px] text-[var(--text-muted)]">Ευρώπη/Αθήνα</p>
+            </div>
+            <div className="rounded-xl border border-sky-500/25 bg-[#050D1A]/50 p-3">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">Ποσοστό επιτυχίας (σήμερα)</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-sky-200">
+                {live?.success_rate_today_pct != null ? `${live.success_rate_today_pct}%` : "—"}
+              </p>
+              <p className="text-[10px] text-[var(--text-muted)]">Θετικό / (θετ+αρν+δεν απ.)</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {c && s && data && (
         <section
@@ -209,11 +325,175 @@ export default function CampaignDetailPage() {
         </section>
       )}
 
+      {data && c && (
+        <div className={lux.card + " !p-0 !overflow-hidden"}>
+          <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+            <div>
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">Ανατεθειμένες επαφές</h2>
+              <p className="text-[10px] text-[var(--text-secondary)]">Διαχείριση λίστας καμπάνιας.</p>
+            </div>
+            <button
+              type="button"
+              className={lux.btnPrimary + " !min-h-10 w-full gap-2 !py-2 sm:w-auto"}
+              disabled={c.status !== "active"}
+              title={c.status !== "active" ? "Η καμπάνια δεν είναι ενεργή" : undefined}
+              onClick={() => {
+                setAddOpen(true);
+                setAddSearch("");
+                setAddResults([]);
+              }}
+            >
+              <UserPlus className="h-4 w-4" />
+              Προσθήκη Επαφής
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
+              <thead>
+                <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                  <th className={`p-2 pl-3 sm:p-3 ${tableTh} sm:pl-4`}>Επαφή</th>
+                  <th className={`p-2 sm:p-3 ${tableTh}`}>Τηλέφωνο</th>
+                  <th className={`p-2 pr-3 text-right sm:p-3 sm:pr-4 ${tableTh}`}>Ενέργεια</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.assigned_contacts ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="p-6 text-center text-[var(--text-secondary)]">
+                      Καμία επαφή στην καμπάνια.
+                    </td>
+                  </tr>
+                ) : (
+                  (data.assigned_contacts ?? []).map((row) => {
+                    const n = row.contact;
+                    return (
+                      <tr key={row.contact_id} className="border-b border-[var(--border)]/80 last:border-0">
+                        <td className="p-2 pl-3 sm:p-3 sm:pl-4">
+                          <div className="font-medium text-[var(--text-primary)]">
+                            {n ? [n.first_name, n.last_name].filter(Boolean).join(" ") : "—"}
+                          </div>
+                          <Link className="text-[10px] text-[#1e5fa8] hover:underline" href={`/contacts/${row.contact_id}`}>
+                            Προφίλ
+                          </Link>
+                        </td>
+                        <td className="p-2 font-mono text-xs text-[var(--text-secondary)] sm:p-3">{n?.phone ?? "—"}</td>
+                        <td className="p-2 pr-3 text-right sm:p-3 sm:pr-4">
+                          <button
+                            type="button"
+                            className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
+                            disabled={removingId === row.contact_id || c.status !== "active"}
+                            onClick={async () => {
+                              if (!id) return;
+                              setRemovingId(row.contact_id);
+                              setErr(null);
+                              try {
+                                const r = await fetchWithTimeout(
+                                  `/api/campaigns/${id}/contacts?contact_id=${encodeURIComponent(row.contact_id)}`,
+                                  { method: "DELETE" },
+                                );
+                                const j = (await r.json().catch(() => ({}))) as { error?: string };
+                                if (!r.ok) {
+                                  setErr(j.error ?? "Σφάλμα");
+                                  return;
+                                }
+                                await load();
+                              } finally {
+                                setRemovingId(null);
+                              }
+                            }}
+                          >
+                            {removingId === row.contact_id ? "…" : "Αφαίρεση"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {c && (
         <p className="text-xs text-[var(--text-muted)]">
           Δημιουργήθηκε: {c.created_at ? new Date(c.created_at).toLocaleString("el-GR") : "—"}{" "}
           {c.started_at ? `· Έναρξη: ${new Date(c.started_at).toLocaleString("el-GR")}` : ""}
         </p>
+      )}
+
+      {addOpen && id && (
+        <div
+          className={lux.modalOverlay + " !z-[60] !items-stretch !p-0 sm:!items-center sm:!p-4"}
+          onClick={() => setAddOpen(false)}
+          role="presentation"
+        >
+          <div
+            className={lux.modalPanel + " flex w-full !max-w-lg flex-1 !flex-col overflow-hidden sm:!max-h-[min(100dvh,90vh)]"}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal
+            aria-label="Προσθήκη επαφής"
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+              <h3 className="text-lg font-bold text-[var(--text-primary)]">Προσθήκη Επαφής</h3>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                aria-label="Κλείσιμο"
+                onClick={() => setAddOpen(false)}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                <input
+                  className={lux.input + " !pl-10"}
+                  placeholder="Αναζήτηση ονόματος ή τηλεφώνου…"
+                  value={addSearch}
+                  onChange={(e) => setAddSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              {addBusy && <p className="text-xs text-[var(--text-muted)]">Αναζήτηση…</p>}
+              <ul className="max-h-[min(50dvh,320px)] space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-2">
+                {addResults.map((row) => (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--bg-elevated)]"
+                      onClick={async () => {
+                        setErr(null);
+                        const r = await fetchWithTimeout(`/api/campaigns/${id}/contacts`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ contact_id: row.id }),
+                        });
+                        const j = (await r.json().catch(() => ({}))) as { error?: string };
+                        if (!r.ok) {
+                          setErr(j.error ?? "Σφάλμα");
+                          return;
+                        }
+                        setAddOpen(false);
+                        await load();
+                      }}
+                    >
+                      <span className="font-medium text-[var(--text-primary)]">
+                        {[row.first_name, row.last_name].filter(Boolean).join(" ")}
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-[var(--text-secondary)]">{row.phone}</span>
+                    </button>
+                  </li>
+                ))}
+                {!addBusy && addSearch.trim() && addResults.length === 0 && (
+                  <li className="px-3 py-4 text-center text-sm text-[var(--text-muted)]">Δεν βρέθηκαν επαφές.</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className={lux.card + " !p-0 !overflow-hidden"}>

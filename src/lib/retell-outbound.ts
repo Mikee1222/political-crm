@@ -8,15 +8,22 @@ export function buildCreatePhoneCallBody(
   lastName: string,
   contactId: string,
   campaignId: string | null,
+  overrideAgentId?: string | null,
 ): Record<string, unknown> {
-  if (!process.env.RETELL_FROM_NUMBER || !process.env.RETELL_AGENT_ID) {
-    throw new Error("Ρύθμιση Retell: λείπουν RETELL_FROM_NUMBER ή RETELL_AGENT_ID");
+  if (!process.env.RETELL_FROM_NUMBER) {
+    throw new Error("Ρύθμιση Retell: λείπει RETELL_FROM_NUMBER");
+  }
+  const agent =
+    (overrideAgentId != null && String(overrideAgentId).trim()) ||
+    (process.env.RETELL_AGENT_ID ?? "").trim();
+  if (!agent) {
+    throw new Error("Ρύθμιση Retell: λείπει agent (τύπος καμπάνιας ή RETELL_AGENT_ID)");
   }
   const last = lastName.trim();
   return {
     from_number: process.env.RETELL_FROM_NUMBER,
     to_number: toNumber,
-    override_agent_id: process.env.RETELL_AGENT_ID,
+    override_agent_id: agent,
     metadata: {
       first_name: firstName,
       last_name: last,

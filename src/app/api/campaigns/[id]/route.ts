@@ -17,12 +17,37 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
   const { data: camp, error: campErr } = await supabase
     .from("campaigns")
-    .select("id, name, created_at, started_at, description, status")
+    .select(
+      "id, name, created_at, started_at, description, status, channel, campaign_type_id, retell_agent_id, campaign_types ( id, name, color, retell_agent_id )",
+    )
     .eq("id", params.id)
     .single();
   if (campErr || !camp) {
     return NextResponse.json({ error: "Καμπάνια δεν βρέθηκε" }, { status: 404 });
   }
+
+  const { data: assignedRows, error: assErr } = await supabase
+    .from("campaign_contacts")
+    .select("contact_id, added_at, contacts ( id, first_name, last_name, phone )")
+    .eq("campaign_id", params.id)
+    .order("added_at", { ascending: true });
+  if (assErr) {
+    return NextResponse.json({ error: assErr.message }, { status: 400 });
+  }
+  const assigned_contacts = (assignedRows ?? []).map((row: unknown) => {
+    const r = row as {
+      contact_id: string;
+      added_at: string;
+      contacts: { id: string; first_name: string; last_name: string; phone: string } | null;
+    };
+    const c = Array.isArray(r.contacts) ? r.contacts[0] : r.contacts;
+    return {
+      contact_id: r.contact_id,
+      added_at: r.added_at,
+      contact: c ?? null,
+    };
+  });
+
   const rollup = await getCampaignRollup(supabase, params.id);
   const outcome = request.nextUrl.searchParams.get("outcome");
   let query = supabase
@@ -38,12 +63,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const contact = Array.isArray(cont) ? cont[0] : cont;
     return { ...(row as object), contacts: contact ?? null };
   });
+  const campRow = { ...(camp as Record<string, unknown>) };
+  const nestedType = campRow.campaign_types;
+  const typeFlat = Array.isArray(nestedType) ? nestedType[0] : nestedType;
+  delete campRow.campaign_types;
+
   return NextResponse.json({
-    campaign: { ...camp, status: (camp as { status?: string }).status ?? "active" },
+    campaign: {
+      ...(campRow as object),
+      status: (camp as { status?: string }).status ?? "active",
+      campaign_type: typeFlat ?? null,
+    },
     stats: rollup.stats,
     progress: Math.round(rollup.progress * 10) / 10,
     callsMade: rollup.callsMade,
     contactTotal: rollup.assignedCount,
+    assigned_contacts,
     calls,
   });
   } catch (e) {
