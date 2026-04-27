@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -7,7 +8,22 @@ import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
 import type { ForMapRow, MapColorVariant, MapMode } from "@/components/heatmap/municipal-map";
-import { MunicipalMap } from "@/components/heatmap/municipal-map";
+
+const MunicipalMap = dynamic(
+  () => import("@/components/heatmap/municipal-map").then((m) => m.MunicipalMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="flex h-[60vh] min-h-[400px] w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a] text-sm text-[var(--text-secondary)]"
+        role="status"
+        aria-live="polite"
+      >
+        Φόρτωση Leaflet…
+      </div>
+    ),
+  },
+);
 
 type MuniRow = {
   muni: string;
@@ -175,7 +191,7 @@ export function HeatmapClient() {
       )}
 
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row">
-        <div className="relative min-h-[min(60vh,560px)] flex-1">
+        <div className="relative h-[60vh] min-h-[420px] w-full flex-1 overflow-hidden rounded-2xl">
           {data && (
             <MunicipalMap
               forMap={data.forMap}

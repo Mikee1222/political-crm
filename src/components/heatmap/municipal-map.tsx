@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { PathOptions } from "leaflet";
 import { MapContainer, TileLayer, Circle, Tooltip } from "react-leaflet";
 import { MAP_REGION } from "@/lib/aitoloakarnania-map-centroids";
-import "leaflet/dist/leaflet.css";
 
 function useMapColorMode(): "light" | "dark" {
   const [m, setM] = useState<"light" | "dark">("light");
@@ -175,7 +174,7 @@ export function MunicipalMap({ forMap, onSelect, colorVariant = "gold", tooltipM
   );
   return (
     <MapContainer
-      className="heatmap-leaflet z-0 h-full min-h-[320px] w-full overflow-hidden rounded-2xl border border-[var(--border)]"
+      className="heatmap-leaflet z-0 h-full min-h-[400px] w-full overflow-hidden rounded-2xl border border-[var(--border)]"
       center={MAP_REGION.center}
       zoom={MAP_REGION.zoom}
       minZoom={8}
@@ -183,7 +182,7 @@ export function MunicipalMap({ forMap, onSelect, colorVariant = "gold", tooltipM
       maxBounds={bounds}
       maxBoundsViscosity={0.65}
       scrollWheelZoom
-      style={{ width: "100%" }}
+      style={{ width: "100%", height: "100%", minHeight: 400 }}
     >
       <TileLayer
         key={colorMode}

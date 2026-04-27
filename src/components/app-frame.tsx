@@ -822,28 +822,28 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         >
           <div className="box-border flex h-[52px] w-full min-w-0 max-w-full items-center justify-between gap-2 px-3 sm:px-6 md:h-[60px] md:px-8">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              {showBackMobile && (
+              <div className="flex shrink-0 items-center gap-0.5 lg:hidden">
+                {showBackMobile && (
+                  <button
+                    type="button"
+                    className="flex h-10 min-h-10 w-10 min-w-10 items-center justify-center rounded-lg text-[var(--text-primary)] active:bg-[var(--bg-elevated)]"
+                    onClick={() => router.back()}
+                    aria-label="Πίσω"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="flex h-10 min-h-10 w-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-primary)] active:bg-[var(--bg-elevated)] md:hidden"
-                  onClick={() => router.back()}
-                  aria-label="Πίσω"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-              )}
-              {!showBackMobile && (
-                <button
-                  type="button"
-                  className="flex h-10 min-h-10 w-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-primary)] active:bg-[var(--bg-elevated)] lg:hidden"
+                  className="flex h-10 min-h-10 w-10 min-w-10 items-center justify-center rounded-lg text-[var(--text-primary)] active:bg-[var(--bg-elevated)]"
                   onClick={() => {
                     setMobileNavOpen((o) => !o);
                   }}
-                  aria-label="Μενού"
+                  aria-label={mobileNavOpen ? "Κλείσιμο μενού" : "Μενού"}
                 >
-                  <Menu className="h-5 w-5" />
+                  {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </button>
-              )}
+              </div>
               <div className="hidden min-w-0 flex-1 overflow-hidden md:block">
                 <h1 className="hq-breadcrumb line-clamp-1 text-left text-base md:text-[18px]">{breadcrumbFor(pathname)}</h1>
               </div>

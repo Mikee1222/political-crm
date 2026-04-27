@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, Building2, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
@@ -334,6 +334,13 @@ export default function ContactDetailPage() {
   >([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const alexPage = useOptionalAlexandraPageContact();
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -341,22 +348,29 @@ export default function ContactDetailPage() {
       fetchWithTimeout(`/api/contacts/${id}`),
       fetchWithTimeout(`/api/contacts/${id}/notes`),
     ]);
+    if (!aliveRef.current) {
+      return;
+    }
     const data = await res.json();
     if (data.error) {
+      if (!aliveRef.current) return;
       setContact(null);
       setContactNotes([]);
       return;
     }
     if (notesRes.ok) {
       const njson = (await notesRes.json()) as { notes?: ContactNoteItem[] };
+      if (!aliveRef.current) return;
       setContactNotes(njson.notes ?? []);
     } else {
+      if (!aliveRef.current) return;
       setContactNotes([]);
     }
     const raw = data.contact as Contact | null;
     if (raw) {
       const g = raw.contact_groups;
       const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+      if (!aliveRef.current) return;
       setContact({
         ...raw,
         contact_groups,
@@ -365,8 +379,10 @@ export default function ContactDetailPage() {
         landline: raw.landline ?? null,
       });
     } else {
+      if (!aliveRef.current) return;
       setContact(null);
     }
+    if (!aliveRef.current) return;
     setBuf(null);
     setEditing(null);
     setCalls((data.calls ?? []) as Call[]);
@@ -374,10 +390,15 @@ export default function ContactDetailPage() {
     setRequests((data.requests ?? []) as RequestItem[]);
     if (hasMinRole(profile?.role, "manager")) {
       const sr = await fetchWithTimeout(`/api/contacts/${id}/supporters`);
+      if (!aliveRef.current) {
+        return;
+      }
       if (sr.ok) {
         const sj = (await sr.json()) as { items?: SupporterRow[] };
+        if (!aliveRef.current) return;
         setSupporters(sj.items ?? []);
       } else {
+        if (!aliveRef.current) return;
         setSupporters([]);
       }
     }
@@ -399,10 +420,23 @@ export default function ContactDetailPage() {
   }, [alexPage, contact]);
 
   useEffect(() => {
-    fetchWithTimeout("/api/groups")
-      .then((r) => r.json())
-      .then((d: { groups?: ContactGroupRow[] }) => setGroupOptions(d.groups ?? []))
-      .catch(() => setGroupOptions([]));
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetchWithTimeout("/api/groups");
+        const d = (await r.json()) as { groups?: ContactGroupRow[] };
+        if (!cancelled) {
+          setGroupOptions(d.groups ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setGroupOptions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

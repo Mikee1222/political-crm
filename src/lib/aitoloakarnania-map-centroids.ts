@@ -17,7 +17,7 @@ export const MUNI_CENTROIDS: Record<string, { lat: number; lng: number; r: numbe
 
 /** Center: Αιτωλοακαρνανία (ευρύτερη περιοχή) */
 export const MAP_REGION: { center: [number, number]; zoom: number; maxBounds: [[number, number], [number, number]] } = {
-  center: [38.7, 21.5],
+  center: [38.7, 21.4],
   zoom: 9,
   maxBounds: [
     [38.0, 20.55],

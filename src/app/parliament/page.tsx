@@ -6,7 +6,8 @@ import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { PageHeader } from "@/components/ui/page-header";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { Building2, Search } from "lucide-react";
+import { Building2, Loader2, RefreshCw, Search } from "lucide-react";
+import { MP_BIO } from "@/lib/parliament-mp-bio";
 
 type Q = {
   id: string;
@@ -75,6 +76,14 @@ function ParliamentBody() {
   const [openQ, setOpenQ] = useState(false);
   const [detail, setDetail] = useState<Q | null>(null);
   const [nQ, setNQ] = useState({ title: "", ministry: "", description: "" });
+  const [syncing, setSyncing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const loadQ = useCallback(async () => {
     const p = new URLSearchParams();
@@ -129,15 +138,105 @@ function ParliamentBody() {
 
   return (
     <div className="w-full min-w-0 max-w-6xl space-y-4">
+      {toast ? (
+        <div
+          className="fixed bottom-4 right-4 z-[100] max-w-sm rounded-lg border border-emerald-500/40 bg-[var(--bg-card)] px-4 py-3 text-sm text-[var(--text-primary)] shadow-lg"
+          role="status"
+        >
+          {toast}
+        </div>
+      ) : null}
       <PageHeader
         title="Βουλευτική δραστηριότητα"
         subtitle="Ερωτήσεις, νομοθετικό ιστορικό και παρακολούθηση ΜΜΕ — με πορεία κατάστασης ερωτήσεων."
         actions={
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--accent-gold)]">
-            <Building2 className="h-5 w-5" />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={lux.btnPrimary + " flex items-center gap-2 !py-2 !text-sm"}
+              disabled={syncing}
+              onClick={async () => {
+                setSyncing(true);
+                setToast(null);
+                try {
+                  const r = await fetchWithTimeout("/api/parliament/sync", { method: "POST", timeoutMs: 120_000 });
+                  const j = (await r.json()) as { error?: string; imported?: number; skipped?: number };
+                  if (!r.ok) {
+                    setToast(j.error || "Σφάλμα συγχρονισμού");
+                    return;
+                  }
+                  setToast(
+                    `Συγχρονισμός: εισήχθησαν ${j.imported ?? 0} εγγραφές — παράλειψη ${j.skipped ?? 0} (υπάρχουσα τίτλος).`,
+                  );
+                  void loadQ();
+                  void loadLeg();
+                } catch (e) {
+                  setToast(e instanceof Error ? e.message : "Σφάλμα");
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+            >
+              {syncing ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <RefreshCw className="h-4 w-4 shrink-0" />}
+              Συγχρονισμός Vouliwatch
+            </button>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--accent-gold)]">
+              <Building2 className="h-5 w-5" />
+            </div>
           </div>
         }
       />
+      <section
+        className={
+          lux.card + " !p-4 flex flex-col gap-3 sm:flex-row sm:items-start"
+        }
+        aria-label="Βιογραφικό"
+      >
+        {MP_BIO.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- external Hellenic Parliament static URL
+          <img
+            src={MP_BIO.imageUrl}
+            alt={MP_BIO.name}
+            className="h-28 w-[5.5rem] shrink-0 rounded-lg border border-[var(--border)] object-cover"
+            width={88}
+            height={112}
+          />
+        ) : null}
+        <div className="min-w-0 flex-1 text-sm text-[var(--text-secondary)]">
+          <h2 className="text-base font-extrabold text-[var(--text-primary)]">{MP_BIO.name}</h2>
+          <p className="text-xs font-semibold text-[#003476]">{MP_BIO.role}</p>
+          <p className="text-xs text-[var(--text-muted)]">{MP_BIO.district}</p>
+          <p className="mt-2 leading-relaxed">{MP_BIO.intro}</p>
+          <p className="mt-2 leading-relaxed">{MP_BIO.studies}</p>
+          <p className="mt-2 leading-relaxed">{MP_BIO.activity}</p>
+          <p className="mt-2 flex flex-wrap gap-3 text-xs">
+            <a
+              className="font-medium text-[var(--accent-gold)] hover:underline"
+              href={MP_BIO.siteUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              karagkounis.gr
+            </a>
+            <a
+              className="font-medium text-[#003476] hover:underline"
+              href="https://www.hellenicparliament.gr/vouleftes/viografika-stoicheia/?MPId=897f098b-6295-48f2-85a2-b3625386a319"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Βιογραφικά (Βουλή)
+            </a>
+            <a
+              className="font-medium text-sky-200 hover:underline"
+              href={MP_BIO.vouliwatchUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Vouliwatch
+            </a>
+          </p>
+        </div>
+      </section>
       <div
         className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/40 px-3 py-2 text-[11px] text-[var(--text-muted)]"
         aria-hidden
