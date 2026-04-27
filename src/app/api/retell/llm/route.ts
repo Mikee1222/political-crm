@@ -3,12 +3,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import {
   applyRetellHeuristics,
-  buildNamedaySystemPrompt,
+  buildGreekPoliticalOfficeSystemPrompt,
+  getContactId,
   getFirstName,
   mergeCallMetadata,
   RETELL_SONNET_MODEL,
   transcriptToMessages,
 } from "@/lib/retell-llm";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
 
 export const maxDuration = 60;
@@ -88,7 +90,23 @@ export async function POST(request: Request) {
   }
 
   if (isCallInit(it)) {
-    const opening = `Καλημέρα ${first}! Καλώ από το πολιτικό γραφείο του Κώστα Καραγκούνη και θέλαμε να σας ευχηθούμε χρόνια πολλά για την ονομαστική σας εορτή!`;
+    let nameForGreet = first;
+    const cId = getContactId(meta);
+    if (cId) {
+      try {
+        const admin = createServiceClient();
+        const { data: row } = await admin
+          .from("contacts")
+          .select("first_name")
+          .eq("id", cId)
+          .maybeSingle();
+        const fn = (row as { first_name?: string } | null)?.first_name;
+        if (fn && String(fn).trim()) nameForGreet = String(fn).trim();
+      } catch (e) {
+        console.error("[api/retell/llm] call_init contact fetch", e);
+      }
+    }
+    const opening = `Καλημέρα ${nameForGreet}! Καλώ από το πολιτικό γραφείο του Κώστα Καραγκούνη.`;
     return NextResponse.json(respond(rid, opening, false, false));
   }
 
@@ -108,7 +126,7 @@ export async function POST(request: Request) {
         respond(rid, "Χρόνια πολλά! Να είστε καλά, και μη διστάσετε να επικοινωνήσετε με το γραφείο μας.", true, false),
       );
     }
-    const system = buildNamedaySystemPrompt(first);
+    const system = buildGreekPoliticalOfficeSystemPrompt(first);
     const client = new Anthropic({ apiKey: key });
     const claudeRes = await client.messages.create({
       model: RETELL_SONNET_MODEL,

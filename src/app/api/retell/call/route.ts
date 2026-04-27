@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { buildCreatePhoneCallBody } from "@/lib/retell-outbound";
+import { insertPendingCampaignCall } from "@/lib/campaign-pending-call";
+import { executeRetellCreatePhoneCall } from "@/lib/retell-execute-outbound";
 export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
@@ -37,7 +38,6 @@ export async function POST(request: NextRequest) {
     );
   }
   const { contact_id, campaign_id } = parsed.data;
-  const phoneDigits = (s: string) => s.replace(/\D/g, "");
 
   const { data: contact, error: contactError } = await supabase
     .from("contacts")
@@ -51,40 +51,15 @@ export async function POST(request: NextRequest) {
       { status: 404 },
     );
   }
-  const phone = (contact as { phone: string | null }).phone?.toString().trim() ?? "";
-  if (!phone || phoneDigits(phone).length < 8) {
+  const row = contact as { id: string; first_name: string | null; last_name: string | null; phone: string | null };
+  const retell = await executeRetellCreatePhoneCall(row, campaign_id ?? null);
+  if (!retell.ok) {
     return NextResponse.json(
-      { error: "Η επαφή δεν έχει έγκυρο αριθμό τηλεφώνου" },
-      { status: 400 },
+      { error: retell.error, ...(retell.detail != null ? { detail: retell.detail } : {}) },
+      { status: retell.status },
     );
   }
-  const first = String((contact as { first_name: string }).first_name || "").trim() || "Φίλε";
-
-  let callBody: Record<string, unknown>;
-  try {
-    callBody = buildCreatePhoneCallBody(phone, first, contact_id, campaign_id ?? null);
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Ρύθμιση Retell" },
-      { status: 503 },
-    );
-  }
-  const retellRes = await fetch("https://api.retellai.com/v2/create-phone-call", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.RETELL_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(callBody),
-  });
-
-  const payload = (await retellRes.json().catch(() => ({}))) as { call_id?: string; [k: string]: unknown };
-  if (!retellRes.ok) {
-    return NextResponse.json(
-      { error: "Η Retell απέρριψε την κλήση", detail: payload },
-      { status: 400 },
-    );
-  }
+  const payload = retell.retell;
 
   const { error: updError } = await supabase
     .from("contacts")
@@ -96,9 +71,18 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+  if (campaign_id) {
+    const { error: pendErr } = await insertPendingCampaignCall(supabase, contact_id, campaign_id);
+    if (pendErr) {
+      return NextResponse.json(
+        { error: `Καταγραφή κλήσης καμπάνιας: ${pendErr.message}` },
+        { status: 500 },
+      );
+    }
+  }
   return NextResponse.json({
     success: true,
-    call_id: typeof payload.call_id === "string" ? payload.call_id : null,
+    call_id: retell.call_id,
     retell: payload,
   });
 }

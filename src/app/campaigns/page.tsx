@@ -323,13 +323,40 @@ export default function CampaignsPage() {
                   onClick={async () => {
                     setDialingId(c.id);
                     setFormErr(null);
+                    const maxPerRun = 25;
+                    let started = 0;
                     try {
-                      const r = await fetchWithTimeout(`/api/campaigns/${c.id}/dial-next`, { method: "POST" });
-                      const d = (await r.json().catch(() => ({}))) as { error?: string; contact_id?: string };
-                      if (!r.ok) {
-                        setFormErr(d.error ?? "Αποτυχία");
-                        return;
+                      for (let i = 0; i < maxPerRun; i += 1) {
+                        const n = await fetchWithTimeout(`/api/campaigns/${c.id}/next-uncalled-contact`);
+                        const jn = (await n.json().catch(() => ({}))) as {
+                          contact_id?: string | null;
+                          done?: boolean;
+                          error?: string;
+                        };
+                        if (!n.ok) {
+                          setFormErr(jn.error ?? "Σφάλμα");
+                          return;
+                        }
+                        if (!jn.contact_id) {
+                          if (started === 0) {
+                            setFormErr("Όλες οι επαφές έχουν ήδη κληθεί.");
+                          }
+                          break;
+                        }
+                        const r = await fetchWithTimeout("/api/retell/call", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ contact_id: jn.contact_id, campaign_id: c.id }),
+                        });
+                        const jr = (await r.json().catch(() => ({}))) as { error?: string };
+                        if (!r.ok) {
+                          setFormErr(jr.error ?? "Αποτυχία Retell");
+                          return;
+                        }
+                        started += 1;
+                        await new Promise((res) => setTimeout(res, 1500));
                       }
+                      if (started > 0) void load();
                     } finally {
                       setDialingId(null);
                     }

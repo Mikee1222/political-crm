@@ -124,10 +124,12 @@ function ContactSwipeCard({
   c,
   onCall,
   onOpenDetail,
+  canCall,
 }: {
   c: Contact;
   onCall: () => void;
   onOpenDetail: () => void;
+  canCall: boolean;
 }) {
   const pr = c.priority ?? "Medium";
   const skipNav = useRef(false);
@@ -150,7 +152,7 @@ function ContactSwipeCard({
         const d = e.changedTouches[0].clientX - t0.x;
         if (t0.moved && d > 48) {
           skipNav.current = true;
-          onCall();
+          if (canCall) onCall();
           return;
         }
         if (t0.moved && d < -48) {
@@ -426,6 +428,7 @@ function ContactsPage() {
   const [bulkCampaign, setBulkCampaign] = useState("");
   const [campaigns, setCampaigns] = useState<Camp[]>([]);
   const [bulkErr, setBulkErr] = useState<string | null>(null);
+  const [retellCallMsg, setRetellCallMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bulkWaMessage, setBulkWaMessage] = useState("");
@@ -555,19 +558,37 @@ function ContactsPage() {
 
   const triggerCall = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await fetchWithTimeout("/api/retell/call", {
+    if (!canManage) return;
+    setRetellCallMsg(null);
+    const res = await fetchWithTimeout("/api/retell/call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contact_id: id }),
     });
+    const j = (await res.json().catch(() => ({}))) as { error?: string; success?: boolean };
+    if (!res.ok) {
+      setRetellCallMsg({ type: "err", text: j.error ?? "Η κλήση απέτυχε" });
+      return;
+    }
+    setRetellCallMsg({ type: "ok", text: "Η κλήση ξεκίνησε (Retell)." });
+    await load();
   };
 
   const triggerCallById = async (id: string) => {
-    await fetchWithTimeout("/api/retell/call", {
+    if (!canManage) return;
+    setRetellCallMsg(null);
+    const res = await fetchWithTimeout("/api/retell/call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contact_id: id }),
     });
+    const j = (await res.json().catch(() => ({}))) as { error?: string; success?: boolean };
+    if (!res.ok) {
+      setRetellCallMsg({ type: "err", text: j.error ?? "Η κλήση απέτυχε" });
+      return;
+    }
+    setRetellCallMsg({ type: "ok", text: "Η κλήση ξεκίνησε (Retell)." });
+    await load();
   };
 
   const postBulk = async (
@@ -615,6 +636,18 @@ function ContactsPage() {
             Εμφάνιση όλων
           </button>
         </div>
+      )}
+      {retellCallMsg && (
+        <p
+          role="status"
+          className={
+            retellCallMsg.type === "ok"
+              ? "rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100"
+              : "rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+          }
+        >
+          {retellCallMsg.text}
+        </p>
       )}
       <PageHeader
         title="Επαφές"
@@ -920,6 +953,7 @@ function ContactsPage() {
               <li key={c.id}>
                 <ContactSwipeCard
                   c={c}
+                  canCall={canManage}
                   onCall={() => void triggerCallById(c.id)}
                   onOpenDetail={() => router.push(`/contacts/${c.id}`)}
                 />
@@ -1144,8 +1178,9 @@ function ContactsPage() {
                     <div className="flex w-full min-w-0 items-center justify-end gap-0.5">
                       <button
                         type="button"
-                        className={lux.btnIcon + " !h-7 !w-7 !min-h-0 !min-w-0"}
-                        title="Κλήση"
+                        className={lux.btnIcon + " !h-7 !w-7 !min-h-0 !min-w-0" + (canManage ? "" : " opacity-40 pointer-events-none")}
+                        title={canManage ? "Κλήση (Retell)" : "Μόνο managers"}
+                        disabled={!canManage}
                         onClick={(e) => void triggerCall(e, c.id)}
                       >
                         <Phone className="h-3.5 w-3.5" />

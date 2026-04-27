@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/activity-log";
 import { mergeCallMetadata, getContactId } from "@/lib/retell-llm";
 import { nextJsonError } from "@/lib/api-resilience";
+import { verifyRetellWebhookSignature } from "@/lib/retell-webhook-verify";
 
 export const dynamic = 'force-dynamic';
 
@@ -81,15 +82,22 @@ function resolveOutcome(
 
 export async function POST(request: NextRequest) {
   try {
+  const rawBody = await request.text();
   const signature = request.headers.get("x-retell-signature");
-  if (!signature) {
-    return NextResponse.json({ error: "Λείπει η κεφαλίδα x-retell-signature" }, { status: 400 });
+  if (!verifyRetellWebhookSignature(rawBody, process.env.RETELL_API_KEY, signature)) {
+    return NextResponse.json({ error: "Μη έγκυρη υπογραφή webhook" }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    call?: Record<string, unknown> | null;
-    event?: string;
-  };
+  let body: { call?: Record<string, unknown> | null; event?: string };
+  try {
+    body = JSON.parse(rawBody) as { call?: Record<string, unknown> | null; event?: string };
+  } catch {
+    return NextResponse.json({ error: "Άκυρο JSON" }, { status: 400 });
+  }
+  const ev = body.event;
+  if (ev && ev !== "call_ended") {
+    return NextResponse.json({ ok: true, skipped: ev });
+  }
   const call = (body.call ?? (body as unknown as Record<string, unknown> & { id?: string })) as Record<string, unknown> | null;
   if (!call || typeof call !== "object") {
     return NextResponse.json({ ok: true, skipped: "χωρίς call" });
@@ -161,20 +169,53 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-  const { error: insErr } = await admin.from("calls").insert({
-    contact_id: contactIdFinal,
-    campaign_id: campaignId,
+  const payload = {
     called_at: calledAt,
     duration_seconds: durationSec > 0 ? durationSec : null,
     outcome,
     transferred_to_politician: Boolean(transferred),
     notes,
-  });
-  if (insErr) {
-    return NextResponse.json(
-      { error: `Σφάλμα εγγραφής κλήσης: ${insErr.message}` } satisfies { error: string },
-      { status: 500 },
-    );
+  } as const;
+
+  let updatedPending = false;
+  if (campaignId) {
+    const { data: pend } = await admin
+      .from("calls")
+      .select("id")
+      .eq("contact_id", contactIdFinal)
+      .eq("campaign_id", campaignId)
+      .eq("outcome", "Pending")
+      .order("called_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const pendId = (pend as { id?: string } | null)?.id;
+    if (pendId) {
+      const { error: upErr } = await admin.from("calls").update(payload).eq("id", pendId);
+      if (upErr) {
+        return NextResponse.json(
+          { error: `Σφάλμα ενημέρωσης κλήσης: ${upErr.message}` } satisfies { error: string },
+          { status: 500 },
+        );
+      }
+      updatedPending = true;
+    }
+  }
+  if (!updatedPending) {
+    const { error: insErr } = await admin.from("calls").insert({
+      contact_id: contactIdFinal,
+      campaign_id: campaignId,
+      called_at: payload.called_at,
+      duration_seconds: payload.duration_seconds,
+      outcome: payload.outcome,
+      transferred_to_politician: payload.transferred_to_politician,
+      notes: payload.notes,
+    });
+    if (insErr) {
+      return NextResponse.json(
+        { error: `Σφάλμα εγγραφής κλήσης: ${insErr.message}` } satisfies { error: string },
+        { status: 500 },
+      );
+    }
   }
   await logActivity({
     userId: null,

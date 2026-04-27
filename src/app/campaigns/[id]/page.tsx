@@ -128,16 +128,42 @@ export default function CampaignDetailPage() {
             if (!id) return;
             setDialing(true);
             setErr(null);
+            const maxPerRun = 25;
+            let started = 0;
             try {
-              const r = await fetchWithTimeout(`/api/campaigns/${id}/dial-next`, { method: "POST" });
-              const j = (await r.json().catch(() => ({}))) as { error?: string };
-              if (!r.ok) {
-                setErr(j.error ?? "Σφάλμα");
-                return;
+              for (let i = 0; i < maxPerRun; i += 1) {
+                const n = await fetchWithTimeout(`/api/campaigns/${id}/next-uncalled-contact`);
+                const jn = (await n.json().catch(() => ({}))) as {
+                  contact_id?: string | null;
+                  done?: boolean;
+                  error?: string;
+                };
+                if (!n.ok) {
+                  setErr(jn.error ?? "Σφάλμα");
+                  return;
+                }
+                if (!jn.contact_id) {
+                  if (started === 0) {
+                    setErr("Όλες οι επαφές της καμπάνιας έχουν ήδη κληθεί.");
+                  }
+                  break;
+                }
+                const r = await fetchWithTimeout("/api/retell/call", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ contact_id: jn.contact_id, campaign_id: id }),
+                });
+                const jr = (await r.json().catch(() => ({}))) as { error?: string };
+                if (!r.ok) {
+                  setErr(jr.error ?? "Αποτυχία Retell");
+                  return;
+                }
+                started += 1;
+                await new Promise((res) => setTimeout(res, 1500));
               }
-              void load();
             } finally {
               setDialing(false);
+              void load();
             }
           }}
         >
