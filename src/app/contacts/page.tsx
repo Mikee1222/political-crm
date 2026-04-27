@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Download, Eye, Pencil, Phone, Plus, Search } from "lucide-react";
+import { ChevronDown, Download, Pencil, Phone, Plus, Search, User } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
@@ -18,7 +18,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { hasMinRole } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { avatarContact, callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
+import { avatarContact, callStatusLabel, lux } from "@/lib/luxury-styles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -37,47 +37,33 @@ type Contact = {
   contact_code?: string | null;
   group_id?: string | null;
   predicted_score?: number | null;
+  father_name?: string | null;
+  name_day?: string | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
 };
 
-function ContactScoreBar({ score }: { score: number | null | undefined }) {
-  const s = score == null || !Number.isFinite(score) ? null : Math.max(0, Math.min(100, Math.round(score)));
-  const fill =
-    s == null ? "var(--text-muted)" : s <= 33 ? "#b91c1c" : s <= 66 ? "#d97706" : "#15803d";
-  const w = s == null ? 0 : s;
-  return (
-    <div className="flex min-w-[4rem] max-w-[6rem] flex-col gap-0.5" title={s == null ? "Χωρίς σκορ" : `Σκορ: ${s}`}>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)]">
-        <div className="h-full rounded-full transition-all" style={{ width: `${w}%`, background: fill }} />
-      </div>
-      {s != null && <span className="text-[10px] font-medium text-[var(--text-muted)]">{s}</span>}
-    </div>
-  );
+/** e.g. "23 Απρ" for recurring name_day (YYYY-MM-DD) */
+function formatNameDayGreek(iso: string | null | undefined): string | null {
+  if (!iso || !String(iso).trim()) return null;
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("el-GR", { day: "numeric", month: "short" });
 }
 
-function PhoneListExtras({ phone2, landline }: { phone2?: string | null; landline?: string | null }) {
-  if (!String(phone2 ?? "").trim() && !String(landline ?? "").trim()) return null;
-  return (
-    <span
-      className="ml-0.5 inline-flex shrink-0 items-center gap-0.5 text-[8px] font-bold leading-none text-[var(--text-muted)]"
-      aria-label={
-        [String(phone2 ?? "").trim() ? "Έχει 2ο κινητό" : null, String(landline ?? "").trim() ? "Έχει σταθερό" : null]
-          .filter(Boolean)
-          .join(", ") || undefined
-      }
-    >
-      {String(phone2 ?? "").trim() ? (
-        <span className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-0.5 py-px" title="2ο κινητό">
-          2
-        </span>
-      ) : null}
-      {String(landline ?? "").trim() ? (
-        <span className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-0.5 py-px" title="Σταθερό">
-          Σ
-        </span>
-      ) : null}
-    </span>
-  );
+function priorityDotClass(pr: string | null | undefined) {
+  const p = pr ?? "Medium";
+  if (p === "High") return "bg-red-500";
+  if (p === "Low") return "bg-zinc-400";
+  return "bg-amber-500";
+}
+
+function callStatusAvatarRingClass(st: string | null | undefined) {
+  const s = st ?? "Pending";
+  if (s === "Positive") return "bg-emerald-500";
+  if (s === "Negative") return "bg-red-500";
+  return "bg-zinc-400";
 }
 
 function GroupPillWithHint({ g }: { g: NonNullable<Contact["contact_groups"]> }) {
@@ -118,7 +104,6 @@ function ContactSwipeCard({
   onCall: () => void;
   onOpenDetail: () => void;
 }) {
-  const st = c.call_status ?? "Pending";
   const pr = c.priority ?? "Medium";
   const skipNav = useRef(false);
   const touch0 = useRef<{ x: number; moved: boolean } | null>(null);
@@ -169,41 +154,47 @@ function ContactSwipeCard({
         </div>
       </div>
       <div className="relative z-[1] flex min-h-[4.5rem] min-w-0 items-center gap-3 p-3 pl-2 pr-2">
-        <div className={avatarContact + " !h-12 !w-12 shrink-0 text-sm"}>
-          {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
+        <div className="relative shrink-0">
+          <div className={avatarContact + " !h-12 !w-12 text-sm"}>
+            {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
+          </div>
+          <span
+            className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
+            title={callStatusLabel(c.call_status)}
+            aria-hidden
+          />
         </div>
         <div className="min-w-0 flex-1 pr-1">
-          <p className="flex flex-wrap items-center gap-2 font-semibold text-[var(--text-primary)]">
-            {c.first_name} {c.last_name}
+          <p className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+              title={pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+            />
+            <span className="min-w-0 font-semibold text-[var(--text-primary)]">
+              {c.first_name} {c.last_name}
+            </span>
             {c.contact_code ? (
               <span className="shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] font-normal text-[var(--text-muted)]">
                 {c.contact_code}
               </span>
             ) : null}
-            {c.contact_groups ? <GroupPillWithHint g={c.contact_groups} /> : null}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-baseline gap-x-0.5 font-mono text-[13px] text-[var(--text-secondary)]">
-            <span>{c.phone || "—"}</span>
-            <PhoneListExtras phone2={c.phone2} landline={c.landline} />
+          <p className="mt-0.5 font-mono text-[13px] text-[var(--text-secondary)]">
+            <span className="block">{c.phone || "—"}</span>
+            {c.phone2?.trim() ? <span className="block text-[11px] text-[var(--text-muted)]">{c.phone2}</span> : null}
+            {c.landline?.trim() ? (
+              <span className="mt-0.5 block text-[10px] text-[var(--text-muted)]" title="Σταθερό">
+                {c.landline}
+              </span>
+            ) : null}
           </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span
-              className={
-                "inline-flex min-h-6 min-w-0 max-w-full items-center rounded-full px-2.5 py-0.5 text-xs font-medium " +
-                (callStatusPill[st] ?? callStatusPill.Pending)
-              }
-            >
-              {callStatusLabel(c.call_status)}
-            </span>
-            <span
-              className={
-                "inline-flex min-h-6 items-center rounded-full px-2.5 py-0.5 text-xs font-medium " + (priorityPill[pr] ?? priorityPill.Medium)
-              }
-            >
-              {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
-            </span>
-            <ContactScoreBar score={c.predicted_score} />
-          </div>
+          <p className="mt-0.5 line-clamp-1 text-[11px] text-[var(--text-muted)]">
+            {[c.municipality, c.area].filter(Boolean).join(" · ") || "—"}
+            {c.contact_groups ? <span className="ml-1.5 font-medium text-[var(--text-secondary)]">· {c.contact_groups.name}</span> : null}
+            {formatNameDayGreek(c.name_day) ? (
+              <span className="ml-1.5 font-medium text-[#C9A84C]">· {formatNameDayGreek(c.name_day)}</span>
+            ) : null}
+          </p>
         </div>
       </div>
     </div>
@@ -903,121 +894,175 @@ function ContactsPage() {
         <table className="hq-table-sortable min-w-full text-sm text-[var(--text-table)]">
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th className="sticky left-0 z-20 w-11 min-w-11 max-w-11 border-r border-[var(--border)] bg-[var(--bg-elevated)] p-2 pl-3 text-center sm:w-12">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-[var(--border)]"
-                  checked={allChecked}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    if (allChecked) setSelected(new Set());
-                    else setSelected(new Set(contacts.map((x) => x.id)));
-                  }}
-                  title="Επιλογή όλων"
-                  aria-label="Επιλογή όλων"
-                />
+              <th className="sticky left-0 z-20 min-w-[240px] max-w-[min(40vw,320px)] border-r border-[var(--border)] bg-[var(--bg-elevated)] p-2 pl-2 text-left">
+                <div className="flex h-[52px] min-h-[52px] items-center gap-2.5 pl-0.5">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 rounded border-[var(--border)]"
+                    checked={allChecked}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      if (allChecked) setSelected(new Set());
+                      else setSelected(new Set(contacts.map((x) => x.id)));
+                    }}
+                    title="Επιλογή όλων"
+                    aria-label="Επιλογή όλων"
+                  />
+                  <span>Επαφή</span>
+                </div>
               </th>
-              <th className="sticky left-11 z-20 min-w-[200px] border-r border-[var(--border)] bg-[var(--bg-elevated)] p-3 pl-2 sm:left-12">
-                Όνομα
-              </th>
-              <th className="p-3">Τηλέφωνο</th>
-              <th className="p-3">Περιοχή</th>
-              <th className="p-3">Δήμος</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Priority</th>
-              <th className="p-3 w-24">Σκορ</th>
-              <th className="p-3 pr-4 text-right">Ενέργειες</th>
+              <th className="min-w-[7rem] p-2 pl-1 text-left">Τηλέφωνο</th>
+              <th className="min-w-[6.5rem] p-2 pl-1 text-left">Τοποθεσία</th>
+              <th className="min-w-[5.5rem] p-2 pl-1 text-left">Ομάδα</th>
+              <th className="min-w-[4rem] p-2 pl-1 text-left">Γιορτή</th>
+              <th className="min-w-[5.5rem] p-2 pl-1 text-left">Πατρώνυμο</th>
+              <th className="w-20 min-w-20 p-2 pr-3 text-right" aria-label="Ενέργειες" />
             </tr>
           </thead>
           <tbody>
-            {contacts.map((c) => {
-              const st = c.call_status ?? "Pending";
-              const pr = c.priority ?? "Medium";
+            {contacts.map((c, rowIdx) => {
+              const rowBg = rowIdx % 2 === 0 ? "bg-[var(--bg-card)]" : "bg-[var(--bg-elevated)]/35";
+              const nameDay = formatNameDayGreek(c.name_day);
               return (
                 <tr
                   key={c.id}
-                  className={lux.tableRow}
+                  className={
+                    "group/contact-row border-b border-l-2 border-l-transparent border-b-[var(--border)] text-[var(--text-table)] transition-[border-color,background-color] duration-200 last:border-0 hover:border-l-[#C9A84C] " +
+                    rowBg
+                  }
                   onClick={() => router.push(`/contacts/${c.id}`)}
                 >
                   <td
-                    className="sticky left-0 z-20 w-11 min-w-11 max-w-11 border-r border-[var(--border)] bg-[var(--bg-card)] p-2 pl-3 text-center sm:w-12"
+                    className={`sticky left-0 z-20 max-w-[min(40vw,320px)] border-r border-[var(--border)] p-1.5 pl-2 ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-[var(--border)]"
-                      checked={selected.has(c.id)}
-                      onChange={() =>
-                        setSelected((prev) => {
-                          const n = new Set(prev);
-                          if (n.has(c.id)) n.delete(c.id);
-                          else n.add(c.id);
-                          return n;
-                        })
-                      }
-                      aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
-                    />
+                    <div className="flex h-[52px] min-h-[52px] items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-[var(--border)]"
+                        checked={selected.has(c.id)}
+                        onChange={() =>
+                          setSelected((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(c.id)) n.delete(c.id);
+                            else n.add(c.id);
+                            return n;
+                          })
+                        }
+                        aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
+                      />
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        onClick={() => router.push(`/contacts/${c.id}`)}
+                      >
+                        <div className="relative shrink-0">
+                          <div
+                            className={avatarContact + " !h-8 !w-8 text-[10px] leading-none sm:!h-9 sm:!w-9 sm:text-xs"}
+                          >
+                            {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
+                          </div>
+                          <span
+                            className={`absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
+                            title={callStatusLabel(c.call_status)}
+                            aria-hidden
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1 py-0.5">
+                          <p className="flex min-w-0 items-baseline gap-1.5">
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+                              title={
+                                c.priority === "High"
+                                  ? "Υψηλή"
+                                  : c.priority === "Low"
+                                    ? "Χαμηλή"
+                                    : "Μεσαία"
+                              }
+                            />
+                            <span className="truncate font-bold leading-tight text-[var(--text-table)]">
+                              {c.first_name} {c.last_name}
+                            </span>
+                          </p>
+                          {c.contact_code ? (
+                            <span className="mt-0.5 inline-block max-w-full truncate rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1 py-px font-mono text-[9px] leading-tight text-[var(--text-muted)]">
+                              {c.contact_code}
+                            </span>
+                          ) : null}
+                        </div>
+                      </button>
+                    </div>
                   </td>
                   <td
-                    className="sticky left-11 z-10 min-w-[200px] border-r border-[var(--border)] bg-[var(--bg-card)] p-3 pl-2 sm:left-12"
+                    className={`max-w-[10rem] p-1.5 pl-1 align-middle font-mono text-[12px] leading-tight text-[var(--text-secondary)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                  >
+                    <div className="break-all leading-tight">{c.phone || "—"}</div>
+                    {c.phone2?.trim() ? (
+                      <div className="mt-0.5 break-all text-[10px] leading-tight text-[var(--text-muted)]">
+                        {c.phone2}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td
+                    className={`min-w-0 p-1.5 pl-1 align-middle text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                  >
+                    <div className="truncate font-medium" title={c.municipality ?? ""}>
+                      {c.municipality?.trim() || "—"}
+                    </div>
+                    <div
+                      className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-[var(--text-muted)]"
+                      title={c.area ?? ""}
+                    >
+                      {c.area?.trim() || "—"}
+                    </div>
+                  </td>
+                  <td
+                    className={`min-w-0 p-1.5 pl-1 align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                  >
+                    {c.contact_groups ? (
+                      <GroupPillWithHint g={c.contact_groups} />
+                    ) : (
+                      <span className="text-[12px] text-[var(--text-muted)]">—</span>
+                    )}
+                  </td>
+                  <td
+                    className={`p-1.5 pl-1 align-middle text-[12px] font-medium ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                  >
+                    {nameDay ? <span className="text-[#C9A84C]">{nameDay}</span> : (
+                      <span className="text-[var(--text-muted)]">—</span>
+                    )}
+                  </td>
+                  <td
+                    className={`max-w-[8rem] p-1.5 pl-1 align-middle text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                  >
+                    {c.father_name?.trim() ? (
+                      <span className="line-clamp-1" title={c.father_name}>
+                        {c.father_name}
+                      </span>
+                    ) : (
+                      <span className="text-[var(--text-muted)]">—</span>
+                    )}
+                  </td>
+                  <td
+                    className={`w-20 min-w-20 p-1.5 pr-2 text-right align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <button
-                      type="button"
-                      className="flex w-full min-w-0 items-center gap-2 text-left sm:gap-3"
-                      onClick={() => router.push(`/contacts/${c.id}`)}
-                    >
-                      <div className={avatarContact + " !h-8 !w-8 text-[10px] sm:!h-9 sm:!w-9 sm:text-xs"}>
-                        {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
-                      </div>
-                      <span className="flex min-w-0 flex-wrap items-center gap-1.5 truncate font-medium text-[var(--text-table)]">
-                        {c.first_name} {c.last_name}
-                        {c.contact_code ? (
-                          <span className="shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
-                            {c.contact_code}
-                          </span>
-                        ) : null}
-                        {c.contact_groups ? <GroupPillWithHint g={c.contact_groups} /> : null}
-                      </span>
-                    </button>
-                  </td>
-                  <td className="p-3 font-mono text-[13px] text-[var(--text-secondary)]">
-                    <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-0.5 break-all">
-                      <span>{c.phone}</span>
-                      <PhoneListExtras phone2={c.phone2} landline={c.landline} />
-                    </span>
-                  </td>
-                  <td className="p-3 text-[var(--text-table)]">{c.area ?? "—"}</td>
-                  <td className="p-3 text-[var(--text-table)]">{c.municipality ?? "—"}</td>
-                  <td className="p-3">
-                    <span
-                      className={
-                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium " +
-                        (callStatusPill[st] ?? callStatusPill.Pending)
-                      }
-                    >
-                      {callStatusLabel(c.call_status)}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <span
-                      className={
-                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium " + (priorityPill[pr] ?? priorityPill.Medium)
-                      }
-                    >
-                      {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <ContactScoreBar score={c.predicted_score} />
-                  </td>
-                  <td className="p-3 pr-4">
-                    <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className={lux.btnIcon} title="Προβολή" onClick={() => router.push(`/contacts/${c.id}`)}>
-                        <Eye className="h-4 w-4" />
+                    <div className="flex h-[52px] min-h-[52px] items-center justify-end gap-0.5">
+                      <button
+                        type="button"
+                        className={lux.btnIcon + " !h-8 !w-8 !min-h-0 !min-w-0"}
+                        title="Κλήση"
+                        onClick={(e) => void triggerCall(e, c.id)}
+                      >
+                        <Phone className="h-3.5 w-3.5" />
                       </button>
-                      <button type="button" className={lux.btnIcon} title="Κλήση" onClick={(e) => void triggerCall(e, c.id)}>
-                        <Phone className="h-4 w-4" />
+                      <button
+                        type="button"
+                        className={lux.btnIcon + " !h-8 !w-8 !min-h-0 !min-w-0"}
+                        title="Άνοιγμα επαφής"
+                        onClick={() => router.push(`/contacts/${c.id}`)}
+                      >
+                        <User className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </td>
@@ -1086,13 +1131,13 @@ function ContactsPage() {
       )}
 
       {selectedIds.length > 0 && (
-        <div className="hq-bulk-bar fixed inset-x-0 bottom-0 z-50 max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border)] bg-[var(--surface-bulk)] p-3 shadow-[var(--card-shadow)] backdrop-blur-md md:bottom-4 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:-translate-x-1/2 md:rounded-2xl md:border md:px-4">
-          {bulkErr && <p className="mb-2 text-center text-xs text-[var(--status-negative-text)]">{bulkErr}</p>}
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            <p className="text-center text-sm font-medium text-[var(--text-primary)] sm:text-left">
+        <div className="hq-bulk-bar fixed inset-x-0 bottom-0 z-50 max-w-[100vw] overflow-x-hidden max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border)] bg-[var(--surface-bulk)] p-2 shadow-[var(--card-shadow)] backdrop-blur-md sm:p-3 md:bottom-4 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:max-w-[calc(100vw-1rem)] md:-translate-x-1/2 md:rounded-2xl md:border md:px-3">
+          {bulkErr && <p className="mb-2 break-words text-center text-xs text-[var(--status-negative-text)]">{bulkErr}</p>}
+          <div className="flex w-full min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2 sm:justify-between">
+            <p className="w-full min-w-0 shrink-0 text-center text-sm font-medium text-[var(--text-primary)] sm:w-auto sm:max-w-[12rem] sm:text-left">
               {selectedIds.length} επαφές επιλεγμένες
             </p>
-            <div className="flex flex-1 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-2">
+            <div className="flex w-full min-w-0 max-w-full flex-1 flex-col items-stretch gap-2 [min-width:0] sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
               {canManage && (
                 <>
                   <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:items-center">

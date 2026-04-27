@@ -13,7 +13,7 @@ import { applyContactListFiltersToBuilder } from "@/lib/contacts-query";
 export const dynamic = "force-dynamic";
 
 const SELECT_LIST =
-  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, contact_groups ( id, name, color, description, year )";
+  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, contact_groups ( id, name, color, description, year )";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QueryBuilder = any;
