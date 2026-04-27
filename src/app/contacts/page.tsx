@@ -929,7 +929,13 @@ function ContactsPage() {
         </div>
       )}
 
-      <div className="data-hq-card hq-table-shell relative hidden w-full min-w-0 max-w-full min-h-0 overflow-x-auto md:block max-h-[min(70vh,900px)]">
+      <div
+        className="data-hq-card hq-table-shell hq-table-contacts relative hidden w-full min-w-0 max-w-full min-h-0 overflow-x-auto md:block max-h-[min(70vh,900px)]"
+      >
+        {/*
+          Exactly 8 columns: (1) checkbox (2) avatar+name+code (3) phone (4) municipality
+          (5) group (6) nameday (7) patronymic (8) actions — same count in thead and every tbody tr.
+        */}
         <table className="w-full min-w-[930px] table-fixed text-sm text-[var(--text-table)]">
           <colgroup>
             <col style={{ width: 40 }} />

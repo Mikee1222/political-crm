@@ -913,6 +913,22 @@ textarea::placeholder {
 .hq-table-shell tbody tr:hover::before {
   width: 3px;
 }
+
+/* tr::before is not part of a stable table column model; WebKit/Blink can treat it as a first cell and shift
+   all columns. Disable for wide fixed-layout CRM tables; rows still use border-l for hover. */
+.hq-table-contacts.hq-table-shell tbody tr::before,
+.hq-table-contacts.hq-table-shell tbody tr:hover::before {
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: none !important;
+  position: static;
+}
+
 .hq-table-sortable th {
   cursor: pointer;
   user-select: none;
