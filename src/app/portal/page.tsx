@@ -56,30 +56,7 @@ export default async function PortalHomePage() {
         />
 
         <div className="relative z-[1] flex w-full min-h-0 flex-1 flex-col lg:min-h-0 lg:flex-row lg:items-stretch">
-          <div className="relative order-1 flex w-full min-h-0 flex-1 flex-col items-center justify-end bg-transparent px-4 pt-8 sm:pt-10 lg:order-2 lg:max-w-[45%] lg:w-[45%] lg:px-0 lg:pt-0">
-            <div
-              className="pointer-events-none absolute bottom-[6%] left-1/2 h-[min(50vh,500px)] w-[min(92%,460px)] -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-amber-300/25 to-amber-600/10 blur-[64px] sm:bottom-[4%] sm:blur-[80px]"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute bottom-[20%] left-1/2 h-[30%] w-[55%] -translate-x-1/2 rounded-full bg-amber-400/10 blur-3xl"
-              aria-hidden
-            />
-            <div className="relative z-[1] h-[min(38vh,360px)] w-full max-w-[min(88vw,400px)] bg-transparent sm:h-[min(40vh,420px)] lg:h-full lg:max-h-none lg:min-h-0 lg:max-w-[min(100%,min(100vw*0.42,520px))]">
-              <Image
-                src="/hero-karagkounis.png"
-                alt="Κώστας Καραγκούνης"
-                fill
-                priority
-                unoptimized
-                sizes="(max-width: 1023px) 90vw, 40vw"
-                className="object-contain object-bottom"
-                style={{ background: "transparent" }}
-              />
-            </div>
-          </div>
-
-          <div className="order-2 flex w-full min-h-0 flex-1 flex-col justify-center px-5 pb-8 pt-4 sm:px-8 sm:pb-10 sm:pt-2 lg:order-1 lg:w-[55%] lg:max-w-[55%] lg:shrink-0 lg:px-8 lg:py-12 lg:pl-10 lg:pr-4 xl:pl-14">
+          <div className="order-2 flex w-full min-h-0 flex-1 flex-col justify-center px-5 pb-8 pt-4 sm:px-8 sm:pb-10 sm:pt-2 lg:order-1 lg:max-w-[55%] lg:w-[55%] lg:shrink-0 lg:px-8 lg:py-12 lg:pl-10 lg:pr-2 xl:pl-14">
             <div className="text-center lg:max-w-xl lg:text-left">
               <h1
                 className="portal-hero-title text-balance text-[1.9rem] font-extrabold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-[52px] lg:leading-[1.08]"
@@ -110,6 +87,34 @@ export default async function PortalHomePage() {
                   Εγγραφή
                 </Link>
               </div>
+            </div>
+          </div>
+
+          <div className="pointer-events-none absolute inset-0 -z-0 sm:hidden" aria-hidden>
+            <div className="absolute bottom-[6%] left-1/2 h-[min(50vh,500px)] w-[min(92%,460px)] -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-amber-300/25 to-amber-600/10 blur-[64px]" />
+          </div>
+
+          <div className="relative order-1 -mt-1 min-h-[min(40vh,380px)] w-full shrink-0 sm:min-h-0 sm:pt-0 lg:order-2 lg:ml-auto lg:min-h-0 lg:max-w-[50%] lg:flex-1 lg:pt-0">
+            <div
+              className="pointer-events-none absolute bottom-[8%] right-0 z-0 hidden h-[min(45vh,520px)] w-[min(90vw,440px)] max-w-full rounded-[50%] bg-gradient-to-b from-amber-300/20 to-amber-600/10 blur-[64px] lg:bottom-0 lg:right-0 lg:block"
+              aria-hidden
+            />
+            <div className="relative z-[1] h-[min(40vh,400px)] w-full max-w-[min(92vw,480px)] sm:max-w-full lg:absolute lg:bottom-0 lg:right-0 lg:left-auto lg:top-0 lg:h-full lg:min-h-[50vh] lg:max-w-[min(100%,min(48vw,560px))]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/hero-karagkounis.png"
+                alt="Κώστας Καραγκούνης"
+                className="pointer-events-none select-none"
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  right: 0,
+                  height: "100%",
+                  width: "auto",
+                  objectFit: "contain",
+                  background: "transparent",
+                }}
+              />
             </div>
           </div>
         </div>
@@ -178,7 +183,7 @@ export default async function PortalHomePage() {
                 <p>Ο Κώστας Καραγκούνης υπηρετεί ως Υφυπουργός Εργασίας &amp; Κοινωνικής Ασφάλισης και Βουλευτής Αιτωλοακαρνανίας.</p>
                 <p>
                   Νομικές σπουδές στο ΕΚΠΑ, μεταπτυχιακό UEL (Λονδίνο) και ακαδημαϊκή εμπειρία στο εξωτερικό· μακρά
-                  πολιτική διαδρομή στη Νέα Δημοκρατία, με ευθύνες σε κυβέρνηση και Βουλή.
+                  πολιτική διαδρομή στη Νέα Δημοκρατία, με ευθύνες σε κυβέρνηση και στο κοινοβούλιο.
                 </p>
                 <p>Γεννήθηκε το 1975, εργάζεται ως δικηγόρος, και συνεχίζει με αφοσίωση στους πολίτες του νομού.</p>
               </div>
@@ -252,7 +257,7 @@ export default async function PortalHomePage() {
                   {
                     title: "Επικοινωνία",
                     d: "Γραφεία, τηλέφωνα και χάρτης",
-                    href: "/portal#portal-footer-contact",
+                    href: "/portal/contact",
                     Icon: MapPin,
                   },
                 ]
@@ -363,15 +368,22 @@ export default async function PortalHomePage() {
           {isLoggedIn ? (
             <>
               <p className="text-2xl font-extrabold text-white sm:text-3xl">
-                Υποβάλετε αίτημα — παρακολουθήστε την εξέλιξη από την πύλη
+                Υποβάλετε και παρακολουθήστε αιτήματα από το μενού «Αιτήματα».
               </p>
-              <Link
-                href="/portal/requests/new"
-                className="mt-8 inline-flex rounded-xl px-10 py-4 text-base font-extrabold text-[#0f172a] shadow-lg"
-                style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-              >
-                Υποβολή αιτήματος
-              </Link>
+              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <Link
+                  href="/portal/requests"
+                  className="inline-flex rounded-xl border-2 border-white/50 px-8 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                >
+                  Τα αιτήματά μου
+                </Link>
+                <Link
+                  href="/portal/news"
+                  className="text-sm font-semibold text-white/80 underline decoration-white/30 underline-offset-4 hover:text-white"
+                >
+                  Τελευταία νέα
+                </Link>
+              </div>
             </>
           ) : (
             <>

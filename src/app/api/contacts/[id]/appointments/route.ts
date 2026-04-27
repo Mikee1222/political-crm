@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionWithProfile, forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +19,12 @@ export async function GET(
       .eq("contact_id", id)
       .order("starts_at", { ascending: true });
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.warn("[api/contacts/appointments]", error.message);
+      return NextResponse.json({ appointments: [] });
     }
     return NextResponse.json({ appointments: data ?? [] });
   } catch (e) {
     console.error("[api/contacts/appointments]", e);
-    return nextJsonError();
+    return NextResponse.json({ appointments: [] });
   }
 }

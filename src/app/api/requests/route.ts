@@ -20,29 +20,42 @@ export async function GET(request: NextRequest) {
     return forbidden();
   }
 
-  const status = request.nextUrl.searchParams.get("status");
-  const category = request.nextUrl.searchParams.get("category");
+  const status = request.nextUrl.searchParams.get("status")?.trim();
+  const category = request.nextUrl.searchParams.get("category")?.trim();
 
-  let query = supabase
-    .from("requests")
-    .select(
-      "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, contacts(first_name,last_name,phone)",
-    )
-    .order("created_at", { ascending: false });
+  const baseSelect =
+    "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, contacts!contact_id(first_name,last_name,phone)";
+
+  let query = supabase.from("requests").select(baseSelect).order("created_at", { ascending: false });
 
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("category", category);
 
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  let { data, error } = await query;
+  if (error) {
+    console.warn("[api/requests GET] embed failed, falling back without contacts:", error.message);
+    let q2 = supabase
+      .from("requests")
+      .select(
+        "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status",
+      )
+      .order("created_at", { ascending: false });
+    if (status) q2 = q2.eq("status", status);
+    if (category) q2 = q2.eq("category", category);
+    const second = await q2;
+    data = second.data as typeof data;
+    error = second.error;
+  }
+  if (error) {
+    console.error("[api/requests GET]", error);
+    return NextResponse.json({ requests: [] });
+  }
 
   const requests = (data ?? []).map((row) => {
-    const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
-    const r = row as {
-      sla_due_date?: string | null;
-      status?: string | null;
-    };
-    const slaUi = computeSlaStatus(r.sla_due_date ?? null, r.status ?? null);
+    const r0 = row as { contacts?: unknown; sla_due_date?: string | null; status?: string | null };
+    const c = r0.contacts;
+    const contact = Array.isArray(c) ? c[0] : c;
+    const slaUi = computeSlaStatus(r0.sla_due_date ?? null, r0.status ?? null);
     return { ...row, contacts: contact ?? null, slaUi };
   });
   return NextResponse.json({ requests });

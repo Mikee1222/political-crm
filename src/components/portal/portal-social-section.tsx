@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Play, X } from "lucide-react";
+import { PORTAL_SOCIAL } from "@/lib/portal-social-urls";
 
 const ND = "#003476";
 
@@ -22,6 +25,10 @@ type TiktokItem = {
   id: string;
   url: string;
   videoId: string | null;
+  thumbnailUrl?: string | null;
+  resolvedUrl?: string | null;
+  oembedTitle?: string | null;
+  oembedAuthor?: string | null;
 };
 
 type TiktokApi = { items: TiktokItem[] };
@@ -58,40 +65,121 @@ function InstagramGlyph({ className }: { className?: string }) {
   );
 }
 
-function TiktokIframeCard({ item }: { item: TiktokItem }) {
+function TiktokPlayCard({ item }: { item: TiktokItem }) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const id = item.videoId?.trim();
-  if (!id) {
-    return (
-      <div
-        className="flex min-h-[200px] w-full min-w-0 max-w-full items-center justify-center overflow-hidden bg-[#000] p-4 text-center"
-        style={{ borderRadius: 16 }}
+  const title = (item.oembedTitle ?? "").trim() || "TikTok video";
+  const author = (item.oembedAuthor ?? "").trim();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  return (
+    <div className="flex w-full max-w-sm flex-col items-stretch sm:max-w-none">
+      <button
+        type="button"
+        onClick={() => id && setOpen(true)}
+        disabled={!id}
+        className="group w-full min-w-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A84C] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        aria-label={id ? `Αναπαραγωγή: ${title}` : "Άνοιγμα συνδέσμου στο TikTok"}
       >
+        <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-black shadow-xl ring-1 ring-white/5">
+          <div className="relative aspect-[9/12] w-full sm:aspect-[4/5]">
+            {item.thumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.thumbnailUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-full w-full min-h-[200px] items-center justify-center bg-zinc-900">
+                <TiktokGlyph className="h-16 w-16 text-zinc-600" />
+              </div>
+            )}
+            <div
+              className="pointer-events-none absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/50 text-white backdrop-blur-sm"
+              aria-hidden
+            >
+              <TiktokGlyph className="h-4 w-4" />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/50 via-black/20 to-black/10 transition group-hover:from-black/40">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-white/15 text-white shadow-lg backdrop-blur-sm">
+                <Play className="h-7 w-7 fill-current" aria-hidden />
+              </span>
+            </div>
+            {!id ? (
+              <span className="absolute bottom-2 left-2 right-2 text-center text-[11px] text-amber-200/80">
+                Έγκυρο URL βίντεο από το δημόσιο CRM
+              </span>
+            ) : null}
+          </div>
+          <div className="border-t border-zinc-800/80 p-3 sm:p-4">
+            {author ? (
+              <p className="line-clamp-1 text-xs font-medium text-cyan-400/90">{author}</p>
+            ) : null}
+            <p className="line-clamp-3 text-left text-sm font-medium leading-snug text-zinc-100/95">{title}</p>
+          </div>
+        </div>
+      </button>
+      {mounted && open && id
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[200] flex flex-col bg-black"
+              role="dialog"
+              aria-modal="true"
+              aria-label="TikTok"
+            >
+              <div className="flex flex-shrink-0 items-center justify-end gap-2 border-b border-white/10 bg-black/90 px-2 py-1.5">
+                <button
+                  type="button"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-white transition hover:bg-white/10"
+                  onClick={() => setOpen(false)}
+                  aria-label="Κλείσιμο"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              <div className="relative min-h-0 flex-1 w-full">
+                <iframe
+                  title="TikTok"
+                  src={`https://www.tiktok.com/embed/v2/${encodeURIComponent(id)}`}
+                  className="absolute inset-0 h-full w-full border-0"
+                  allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+      {!id ? (
         <a
           href={item.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-zinc-400 underline decoration-zinc-500 hover:text-white"
+          className="mt-3 block text-center text-sm text-slate-600 underline"
         >
-          Άνοιγμα βίντεο στο TikTok
+          Άνοιγμα συνδέσμου στο TikTok
         </a>
-      </div>
-    );
-  }
-  return (
-    <div
-      className="w-full min-w-0 max-w-full overflow-hidden bg-[#000] shadow-lg"
-      style={{ borderRadius: 16 }}
-    >
-      <iframe
-        title="TikTok"
-        src={`https://www.tiktok.com/embed/v2/${encodeURIComponent(id)}`}
-        className="m-0 block w-full max-w-full border-0 p-0"
-        style={{ width: "100%", height: 700 }}
-        height={700}
-        allow="autoplay; encrypted-media; fullscreen"
-        allowFullScreen
-        loading="lazy"
-      />
+      ) : null}
     </div>
   );
 }
@@ -229,6 +317,38 @@ export function PortalSocialSection() {
           style={{ background: "linear-gradient(90deg, #C9A84C, #8B6914)" }}
           aria-hidden
         />
+        <p className="mt-4 text-center text-sm text-slate-600">
+          <a
+            href={PORTAL_SOCIAL.facebook}
+            className="font-semibold text-[#1877F2] hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Facebook
+          </a>
+          <span className="mx-2 text-slate-300" aria-hidden>
+            ·
+          </span>
+          <a
+            href={PORTAL_SOCIAL.instagram}
+            className="font-semibold text-fuchsia-700 hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Instagram
+          </a>
+          <span className="mx-2 text-slate-300" aria-hidden>
+            ·
+          </span>
+          <a
+            href={PORTAL_SOCIAL.tiktok}
+            className="font-semibold text-zinc-800 hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            TikTok
+          </a>
+        </p>
         <div
           className="mt-8 flex flex-wrap justify-center gap-2"
           role="tablist"
@@ -286,9 +406,9 @@ export function PortalSocialSection() {
             {data.tiktok.length === 0 ? (
               <p className="text-center text-slate-600">Σύντομα βίντεο — επιστρέξτε αργότερα.</p>
             ) : (
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="grid grid-cols-1 justify-items-center gap-6 lg:grid-cols-3 lg:justify-items-stretch">
                 {data.tiktok.map((t) => (
-                  <TiktokIframeCard key={t.id} item={t} />
+                  <TiktokPlayCard key={t.id} item={t} />
                 ))}
               </div>
             )}
@@ -331,7 +451,7 @@ export function PortalSocialSection() {
                   <p className="mt-1 text-sm text-white/80">{s.instagram_follower_label}</p>
                 ) : null}
                 <a
-                  href="https://www.instagram.com/karagounisk"
+                  href={PORTAL_SOCIAL.instagram}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-8 inline-flex w-full max-w-xs items-center justify-center rounded-xl py-3.5 text-base font-extrabold text-[#0f172a] shadow-lg transition hover:brightness-105"

@@ -4,7 +4,6 @@ import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
 const CALLER_BLOCKED_PREFIXES = [
   "/dashboard",
   "/campaigns",
-  "/parliament",
   "/events",
   "/volunteers",
   "/tasks",
@@ -12,7 +11,6 @@ const CALLER_BLOCKED_PREFIXES = [
   "/schedule",
   "/api/schedule",
   "/api/data-tools",
-  "/api/parliament",
   "/api/events",
   "/api/volunteers",
   "/api/media",

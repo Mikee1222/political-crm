@@ -590,19 +590,6 @@ export const ALEX_TOOLS: Tool[] = [
     },
   },
   {
-    name: "add_parliamentary_question",
-    description: "Καταχώριση ερώτησης βουλής (POST /api/parliament/questions).",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        title: { type: "string" as const },
-        ministry: { type: "string" as const },
-        description: { type: "string" as const },
-      },
-      required: ["title"],
-    },
-  },
-  {
     name: "search_media",
     description: "Αναζήτηση ειδήσεων (GET /api/media/search).",
     input_schema: {
@@ -2245,30 +2232,6 @@ export async function runAlexTool(
     return { content: JSON.stringify({ ok: true, translated: out.text }), executedToolName: "translate_text" };
   }
 
-  if (name === "add_parliamentary_question") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
-    }
-    const title = String(raw.title ?? "").trim();
-    if (!title) {
-      return { content: JSON.stringify({ error: "Χρειάζεται title" }) };
-    }
-    const r = await ctx.forward("/api/parliament/questions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        ministry: raw.ministry != null ? String(raw.ministry) : null,
-        description: raw.description != null ? String(raw.description) : null,
-      }),
-    });
-    const j = (await r.json().catch(() => ({}))) as { error?: string; id?: string };
-    if (!r.ok) {
-      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
-    }
-    return { content: JSON.stringify({ ok: true, id: j.id }), executedToolName: "add_parliamentary_question" };
-  }
-
   if (name === "search_media") {
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
@@ -2401,8 +2364,8 @@ export function buildSystemPrompt({
 - Ημερολόγιο Google: πρόσθεση/ανάγνωση events (manager)
 - SLA αιτημάτων: sla_due_date, ένδειξη on_track / at_risk / overdue
 - predicted_score: ακέραιο 0–100 (πειθω/πειθωτικότητα) — χαμηλό 0–33, μέτριο 34–66, υψηλό 67–100. Υπολογισμός από Εργαλεία δεδομένων ή εργαλείο calculate_scores.
-- Σελίδες: /documents, /content, /analytics, /parliament (βουλή, ερωτήσεις, νομοθεσία, media), /events (εκδηλώσεις, RSVP), /volunteers (εθελοντές), /contacts (γλώσσα επαφής language, εθελοντικά πεδία).
-- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, add_parliamentary_question, search_media, add_event_rsvp, get_volunteer_list, get_contact_summary, get_todays_call_list
+- Σελίδες: /documents, /content, /analytics, /events (εκδηλώσεις, RSVP), /volunteers (εθελοντές), /contacts (γλώσσα επαφής language, εθελοντικά πεδία).
+- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, search_media, add_event_rsvp, get_volunteer_list, get_contact_summary, get_todays_call_list
 
 ΚΑΝΟΝΕΣ TOOLS:
 - Χρησιμοποίησε tools ΑΜΕΣΩΣ χωρίς να ρωτάς άδεια για απλές ενέργειες

@@ -12,6 +12,7 @@ import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { ContactExtraSections } from "@/components/contact-extra-sections";
+import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 
 const card =
@@ -290,7 +291,7 @@ function QuickCopyRow({ label, value, mono, copyLabel }: { label: string; value:
   );
 }
 
-export default function ContactDetailPage() {
+function ContactDetailPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { profile } = useProfile();
@@ -344,63 +345,88 @@ export default function ContactDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [res, notesRes] = await Promise.all([
-      fetchWithTimeout(`/api/contacts/${id}`),
-      fetchWithTimeout(`/api/contacts/${id}/notes`),
-    ]);
-    if (!aliveRef.current) {
-      return;
-    }
-    const data = await res.json();
-    if (data.error) {
-      if (!aliveRef.current) return;
-      setContact(null);
-      setContactNotes([]);
-      return;
-    }
-    if (notesRes.ok) {
-      const njson = (await notesRes.json()) as { notes?: ContactNoteItem[] };
-      if (!aliveRef.current) return;
-      setContactNotes(njson.notes ?? []);
-    } else {
-      if (!aliveRef.current) return;
-      setContactNotes([]);
-    }
-    const raw = data.contact as Contact | null;
-    if (raw) {
-      const g = raw.contact_groups;
-      const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
-      if (!aliveRef.current) return;
-      setContact({
-        ...raw,
-        contact_groups,
-        group_id: raw.group_id ?? null,
-        phone2: raw.phone2 ?? null,
-        landline: raw.landline ?? null,
-      });
-    } else {
-      if (!aliveRef.current) return;
-      setContact(null);
-    }
-    if (!aliveRef.current) return;
-    setBuf(null);
-    setEditing(null);
-    setCalls((data.calls ?? []) as Call[]);
-    setTasks((data.tasks ?? []) as Task[]);
-    setRequests((data.requests ?? []) as RequestItem[]);
-    if (hasMinRole(profile?.role, "manager")) {
-      const sr = await fetchWithTimeout(`/api/contacts/${id}/supporters`);
+    try {
+      const [res, notesRes] = await Promise.all([
+        fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}`),
+        fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/notes`),
+      ]);
       if (!aliveRef.current) {
         return;
       }
-      if (sr.ok) {
-        const sj = (await sr.json()) as { items?: SupporterRow[] };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; contact?: Contact | null; calls?: Call[]; tasks?: Task[]; requests?: RequestItem[] };
+      if (data.error) {
         if (!aliveRef.current) return;
-        setSupporters(sj.items ?? []);
+        setContact(null);
+        setContactNotes([]);
+        return;
+      }
+      if (notesRes.ok) {
+        try {
+          const njson = (await notesRes.json()) as { notes?: ContactNoteItem[] };
+          if (!aliveRef.current) return;
+          setContactNotes(njson.notes ?? []);
+        } catch {
+          if (!aliveRef.current) return;
+          setContactNotes([]);
+        }
       } else {
         if (!aliveRef.current) return;
-        setSupporters([]);
+        setContactNotes([]);
       }
+      const raw = data.contact as Contact | null;
+      if (raw) {
+        const g = raw.contact_groups;
+        const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+        if (!aliveRef.current) return;
+        setContact({
+          ...raw,
+          contact_groups,
+          group_id: raw.group_id ?? null,
+          phone2: raw.phone2 ?? null,
+          landline: raw.landline ?? null,
+        });
+      } else {
+        if (!aliveRef.current) return;
+        setContact(null);
+      }
+      if (!aliveRef.current) return;
+      setBuf(null);
+      setEditing(null);
+      setCalls((data.calls ?? []) as Call[]);
+      setTasks((data.tasks ?? []) as Task[]);
+      setRequests((data.requests ?? []) as RequestItem[]);
+      if (hasMinRole(profile?.role, "manager")) {
+        try {
+          const sr = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/supporters`);
+          if (!aliveRef.current) {
+            return;
+          }
+          if (sr.ok) {
+            try {
+              const sj = (await sr.json()) as { items?: SupporterRow[] };
+              if (!aliveRef.current) return;
+              setSupporters(sj.items ?? []);
+            } catch {
+              if (!aliveRef.current) return;
+              setSupporters([]);
+            }
+          } else {
+            if (!aliveRef.current) return;
+            setSupporters([]);
+          }
+        } catch {
+          if (!aliveRef.current) return;
+          setSupporters([]);
+        }
+      }
+    } catch {
+      if (!aliveRef.current) return;
+      setContact(null);
+      setContactNotes([]);
+      setSupporters([]);
+      setCalls([]);
+      setTasks([]);
+      setRequests([]);
     }
   }, [id, profile?.role]);
 
@@ -1756,5 +1782,13 @@ export default function ContactDetailPage() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function ContactDetailPageWithBoundary() {
+  return (
+    <CrmErrorBoundary title="Δεν φορτώθηκε η επαφή.">
+      <ContactDetailPage />
+    </CrmErrorBoundary>
   );
 }

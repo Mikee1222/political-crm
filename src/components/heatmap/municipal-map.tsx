@@ -1,9 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import "leaflet/dist/leaflet.css";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PathOptions } from "leaflet";
-import { MapContainer, TileLayer, Circle, Tooltip } from "react-leaflet";
+import { MapContainer, TileLayer, Circle, Tooltip, useMap } from "react-leaflet";
 import { MAP_REGION } from "@/lib/aitoloakarnania-map-centroids";
+
+/** Next/Leaflet: map often mounts with 0 height until paint — invalidate so tiles/canvas show. */
+function MapInvalidate() {
+  const map = useMap();
+  const resize = useCallback(() => {
+    try {
+      map.invalidateSize();
+    } catch {
+      /* ignore */
+    }
+  }, [map]);
+  useEffect(() => {
+    resize();
+    const id = window.setTimeout(resize, 0);
+    const id2 = window.setTimeout(resize, 200);
+    window.addEventListener("resize", resize);
+    return () => {
+      window.clearTimeout(id);
+      window.clearTimeout(id2);
+      window.removeEventListener("resize", resize);
+    };
+  }, [resize]);
+  return null;
+}
 
 function useMapColorMode(): "light" | "dark" {
   const [m, setM] = useState<"light" | "dark">("light");
@@ -174,16 +199,17 @@ export function MunicipalMap({ forMap, onSelect, colorVariant = "gold", tooltipM
   );
   return (
     <MapContainer
-      className="heatmap-leaflet z-0 h-full min-h-[400px] w-full overflow-hidden rounded-2xl border border-[var(--border)]"
-      center={MAP_REGION.center}
+      className="heatmap-leaflet z-0 h-full w-full min-h-[500px] overflow-hidden rounded-2xl border border-[var(--border)]"
+      center={MAP_REGION.center as [number, number]}
       zoom={MAP_REGION.zoom}
       minZoom={8}
       maxZoom={12}
       maxBounds={bounds}
       maxBoundsViscosity={0.65}
       scrollWheelZoom
-      style={{ width: "100%", height: "100%", minHeight: 400 }}
+      style={{ width: "100%", height: "100%", minHeight: 500 }}
     >
+      <MapInvalidate />
       <TileLayer
         key={colorMode}
         url={TILES[colorMode]}

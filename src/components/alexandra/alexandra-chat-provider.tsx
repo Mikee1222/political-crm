@@ -137,6 +137,36 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     void loadList();
   }, [isAlexandraPage, miniWindowOpen, loadList]);
 
+  const contentFocusSeedRef = useRef(false);
+  useEffect(() => {
+    if (!isAlexandraPage) {
+      contentFocusSeedRef.current = false;
+      return;
+    }
+    if (contentFocusSeedRef.current) {
+      return;
+    }
+    try {
+      const k = sessionStorage.getItem("alexandraContentFocus");
+      if (!k) {
+        return;
+      }
+      sessionStorage.removeItem("alexandraContentFocus");
+      contentFocusSeedRef.current = true;
+      const hints: Record<string, string> = {
+        letters: "Βοήθησέ με να συντάξω μιαν επίσημη επιστολή. Παραλήπτης: · Θέμα: · ",
+        press: "Βοήθησέ με να γράψω μια ανακοίνωση τύπου με θέμα: · ",
+        social: "Βοήθησέ με με ένα post για social media (π.χ. Facebook/Instagram) με θέμα: · ",
+      };
+      const line = hints[k];
+      if (line) {
+        setInput((prev) => (String(prev).trim() ? prev : line));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [isAlexandraPage, pathname]);
+
   const pageContextForApi = useMemo(
     () =>
       pageContact?.contact

@@ -21,8 +21,12 @@ export async function GET(
       .select("id, ai_summary, ai_summary_updated_at")
       .eq("id", id)
       .maybeSingle();
-    if (error || !c) {
-      return NextResponse.json({ error: "Άγνωστη επαφή" }, { status: 404 });
+    if (error) {
+      console.warn("[ai-summary GET]", error.message);
+      return NextResponse.json({ summary: null, updated_at: null });
+    }
+    if (!c) {
+      return NextResponse.json({ summary: null, updated_at: null });
     }
     return NextResponse.json({
       summary: (c as { ai_summary?: string | null }).ai_summary ?? null,
@@ -30,7 +34,7 @@ export async function GET(
     });
   } catch (e) {
     console.error("[ai-summary GET]", e);
-    return nextJsonError();
+    return NextResponse.json({ summary: null, updated_at: null });
   }
 }
 

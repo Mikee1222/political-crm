@@ -43,22 +43,44 @@ export function ContactExtraSections({
 
   const load = useCallback(async () => {
     if (!canManage) return;
-    const [dr, ar, ai] = await Promise.all([
-      fetchWithTimeout(`/api/documents?contact_id=${contactId}`),
-      fetchWithTimeout(`/api/contacts/${contactId}/appointments`),
-      fetchWithTimeout(`/api/contacts/${contactId}/ai-summary`),
-    ]);
-    if (dr.ok) {
-      const j = (await dr.json()) as { documents?: DocRow[] };
-      setDocs(j.documents ?? []);
-    }
-    if (ar.ok) {
-      const j = (await ar.json()) as { appointments?: ApptRow[] };
-      setAppts(j.appointments ?? []);
-    }
-    if (ai.ok) {
-      const j = (await ai.json()) as { summary?: string | null };
-      setAiSummary(j.summary ?? null);
+    try {
+      const [dr, ar, ai] = await Promise.all([
+        fetchWithTimeout(`/api/documents?contact_id=${encodeURIComponent(contactId)}`),
+        fetchWithTimeout(`/api/contacts/${encodeURIComponent(contactId)}/appointments`),
+        fetchWithTimeout(`/api/contacts/${encodeURIComponent(contactId)}/ai-summary`),
+      ]);
+      if (dr.ok) {
+        try {
+          const j = (await dr.json()) as { documents?: DocRow[] };
+          setDocs(j.documents ?? []);
+        } catch {
+          setDocs([]);
+        }
+      }
+      if (ar.ok) {
+        try {
+          const j = (await ar.json()) as { appointments?: ApptRow[] };
+          setAppts(j.appointments ?? []);
+        } catch {
+          setAppts([]);
+        }
+      } else {
+        setAppts([]);
+      }
+      if (ai.ok) {
+        try {
+          const j = (await ai.json()) as { summary?: string | null };
+          setAiSummary(j.summary ?? null);
+        } catch {
+          setAiSummary(null);
+        }
+      } else {
+        setAiSummary(null);
+      }
+    } catch {
+      setDocs([]);
+      setAppts([]);
+      setAiSummary(null);
     }
   }, [canManage, contactId]);
 

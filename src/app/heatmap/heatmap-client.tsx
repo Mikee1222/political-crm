@@ -9,15 +9,17 @@ import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
 import type { ForMapRow, MapColorVariant, MapMode } from "@/components/heatmap/municipal-map";
 
+/** Leaflet + react-leaflet: must be client-only (no SSR). */
 const MunicipalMap = dynamic(
   () => import("@/components/heatmap/municipal-map").then((m) => m.MunicipalMap),
   {
     ssr: false,
     loading: () => (
       <div
-        className="flex h-[60vh] min-h-[400px] w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a] text-sm text-[var(--text-secondary)]"
+        className="flex h-[min(60vh,720px)] min-h-[500px] w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a] text-sm text-[var(--text-secondary)]"
         role="status"
         aria-live="polite"
+        style={{ minHeight: 500 }}
       >
         Φόρτωση Leaflet…
       </div>
@@ -191,7 +193,10 @@ export function HeatmapClient() {
       )}
 
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row">
-        <div className="relative h-[60vh] min-h-[420px] w-full flex-1 overflow-hidden rounded-2xl">
+        <div
+          className="relative w-full min-h-[500px] flex-1 overflow-hidden rounded-2xl"
+          style={{ minHeight: 500, height: "min(60vh, 720px)" }}
+        >
           {data && (
             <MunicipalMap
               forMap={data.forMap}
@@ -199,6 +204,14 @@ export function HeatmapClient() {
               colorVariant={data.mapColorVariant ?? "gold"}
               tooltipMode={view}
             />
+          )}
+          {!data && !err && (
+            <div
+              className="absolute inset-0 z-0 flex items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a]/50 text-sm text-[var(--text-secondary)]"
+              style={{ minHeight: 500 }}
+            >
+              Φόρτωση δεδομένων χάρτη…
+            </div>
           )}
           <div
             className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[min(100%,220px)] rounded-xl border border-[var(--border)] bg-[var(--bg-card)]/95 px-3 py-2.5 text-[10px] text-[var(--text-secondary)] shadow-md backdrop-blur-md"

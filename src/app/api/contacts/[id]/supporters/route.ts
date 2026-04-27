@@ -4,7 +4,10 @@ import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _: NextRequest,
+  context: { params: { id: string } | Promise<{ id: string }> },
+) {
   try {
     const { user, profile, supabase } = await getSessionWithProfile();
     if (!user) {
@@ -12,23 +15,31 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     }
     if (!hasMinRole(profile?.role, "manager")) {
       return forbidden();
+    }
+    const { id: contactId } = await Promise.resolve(context.params);
+    if (!contactId?.trim()) {
+      return NextResponse.json({ items: [] });
     }
     const { data, error } = await supabase
       .from("supporters")
       .select("id, support_type, amount, date, notes, created_at")
-      .eq("contact_id", params.id)
+      .eq("contact_id", contactId)
       .order("date", { ascending: false, nullsFirst: false });
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.warn("[supporters GET]", error.message);
+      return NextResponse.json({ items: [] });
     }
     return NextResponse.json({ items: data ?? [] });
   } catch (e) {
     console.error("[supporters GET]", e);
-    return nextJsonError();
+    return NextResponse.json({ items: [] });
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  context: { params: { id: string } | Promise<{ id: string }> },
+) {
   try {
     const { user, profile, supabase } = await getSessionWithProfile();
     if (!user) {
@@ -36,6 +47,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     if (!hasMinRole(profile?.role, "manager")) {
       return forbidden();
+    }
+    const { id: contactId } = await Promise.resolve(context.params);
+    if (!contactId?.trim()) {
+      return NextResponse.json({ error: "Άκυρο id" }, { status: 400 });
     }
     const b = (await request.json()) as {
       support_type?: string;
@@ -46,7 +61,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data, error } = await supabase
       .from("supporters")
       .insert({
-        contact_id: params.id,
+        contact_id: contactId,
         support_type: b.support_type ?? null,
         amount: b.amount != null && b.amount !== "" ? Number(b.amount) : null,
         date: b.date != null ? String(b.date) : null,
@@ -64,7 +79,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: { id: string } | Promise<{ id: string }> },
+) {
   try {
     const { user, profile, supabase } = await getSessionWithProfile();
     if (!user) {
@@ -73,6 +91,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     if (!hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }
+    const { id: contactId } = await Promise.resolve(context.params);
     const sid = request.nextUrl.searchParams.get("id");
     if (!sid) {
       return NextResponse.json({ error: "id" }, { status: 400 });
@@ -81,7 +100,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .from("supporters")
       .delete()
       .eq("id", sid)
-      .eq("contact_id", params.id);
+      .eq("contact_id", contactId);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }

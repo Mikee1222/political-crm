@@ -21,6 +21,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { avatarContact, callStatusLabel, lux } from "@/lib/luxury-styles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
+import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 
 type Contact = {
   id: string;
@@ -404,6 +405,7 @@ function ContactsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bulkWaMessage, setBulkWaMessage] = useState("");
+  const filtersUrlKeyRef = useRef<string | null>(null);
 
   const groupNameToId = useMemo(() => {
     const m = new Map<string, string>();
@@ -428,9 +430,12 @@ function ContactsPage() {
     [router],
   );
 
+  const searchKey = useMemo(() => searchParams.toString(), [searchParams]);
   useLayoutEffect(() => {
-    setF(searchParamsToFilters(new URLSearchParams(searchParams.toString()), getDefaultContactFilters()));
-  }, [searchParams]);
+    if (filtersUrlKeyRef.current === searchKey) return;
+    filtersUrlKeyRef.current = searchKey;
+    setF(searchParamsToFilters(new URLSearchParams(searchKey), getDefaultContactFilters()));
+  }, [searchKey]);
 
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
@@ -446,15 +451,25 @@ function ContactsPage() {
     const params = contactFiltersToSearchParams(q);
     params.set("page", q.page || "1");
     params.set("page_size", String(pageSize));
-    const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
-    const data = (await res.json()) as { contacts?: Contact[]; total?: number };
-    const list = (data.contacts ?? []).map((c) => {
-      const g = c.contact_groups;
-      const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
-      return { ...c, contact_groups } as Contact;
-    });
-    setContacts(list);
-    setListTotal(typeof data.total === "number" ? data.total : list.length);
+    try {
+      const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
+      const data = (await res.json().catch(() => ({}))) as { contacts?: Contact[]; total?: number };
+      if (!res.ok) {
+        setContacts([]);
+        setListTotal(0);
+        return;
+      }
+      const list = (data.contacts ?? []).map((c) => {
+        const g = c.contact_groups;
+        const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+        return { ...c, contact_groups } as Contact;
+      });
+      setContacts(list);
+      setListTotal(typeof data.total === "number" ? data.total : list.length);
+    } catch {
+      setContacts([]);
+      setListTotal(0);
+    }
   }, [f, pageSize]);
 
   useEffect(() => {
@@ -891,11 +906,20 @@ function ContactsPage() {
       )}
 
       <div className="data-hq-card hq-table-shell hidden max-h-[min(70vh,900px)] md:block">
-        <table className="hq-table-sortable min-w-full text-sm text-[var(--text-table)]">
+        <table className="min-w-[910px] w-full table-fixed text-sm text-[var(--text-table)]">
+          <colgroup>
+            <col style={{ width: 300 }} />
+            <col style={{ width: 130 }} />
+            <col style={{ width: 120 }} />
+            <col style={{ width: 100 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 100 }} />
+            <col style={{ width: 80 }} />
+          </colgroup>
           <thead>
             <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th className="sticky left-0 z-20 min-w-[240px] max-w-[min(40vw,320px)] border-r border-[var(--border)] bg-[var(--bg-elevated)] p-2 pl-2 text-left">
-                <div className="flex h-[52px] min-h-[52px] items-center gap-2.5 pl-0.5">
+              <th className="sticky left-0 top-0 z-30 box-border w-[300px] min-w-[300px] max-w-[300px] border-r border-[var(--border)] bg-[var(--bg-elevated)] p-0 text-left">
+                <div className="flex h-14 min-h-[3.5rem] items-center gap-2.5 border-b border-transparent px-2 pl-2">
                   <input
                     type="checkbox"
                     className="h-4 w-4 shrink-0 rounded border-[var(--border)]"
@@ -911,12 +935,24 @@ function ContactsPage() {
                   <span>Επαφή</span>
                 </div>
               </th>
-              <th className="min-w-[7rem] p-2 pl-1 text-left">Τηλέφωνο</th>
-              <th className="min-w-[6.5rem] p-2 pl-1 text-left">Τοποθεσία</th>
-              <th className="min-w-[5.5rem] p-2 pl-1 text-left">Ομάδα</th>
-              <th className="min-w-[4rem] p-2 pl-1 text-left">Γιορτή</th>
-              <th className="min-w-[5.5rem] p-2 pl-1 text-left">Πατρώνυμο</th>
-              <th className="w-20 min-w-20 p-2 pr-3 text-right" aria-label="Ενέργειες" />
+              <th className="box-border w-[130px] p-0 text-left">
+                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Τηλέφωνο</div>
+              </th>
+              <th className="box-border w-[120px] p-0 text-left">
+                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Δήμος</div>
+              </th>
+              <th className="box-border w-[100px] p-0 text-left">
+                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Ομάδα</div>
+              </th>
+              <th className="box-border w-[80px] p-0 text-left">
+                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Γιορτή</div>
+              </th>
+              <th className="box-border w-[100px] p-0 text-left">
+                <div className="flex h-14 min-h-[3.5rem] items-center border-b border-transparent px-2 pl-1">Πατρώνυμο</div>
+              </th>
+              <th className="box-border w-[80px] p-0 pr-1 text-right" aria-label="Ενέργειες">
+                <div className="flex h-14 min-h-[3.5rem] items-center justify-end"> </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -933,10 +969,10 @@ function ContactsPage() {
                   onClick={() => router.push(`/contacts/${c.id}`)}
                 >
                   <td
-                    className={`sticky left-0 z-20 max-w-[min(40vw,320px)] border-r border-[var(--border)] p-1.5 pl-2 ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`sticky left-0 z-20 box-border w-[300px] min-w-[300px] max-w-[300px] border-r border-[var(--border)] p-0 ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex h-[52px] min-h-[52px] items-center gap-2">
+                    <div className="box-border flex h-14 min-h-[3.5rem] max-w-full items-center gap-2 overflow-hidden border-b border-transparent py-0 pl-2 pr-1">
                       <input
                         type="checkbox"
                         className="h-4 w-4 shrink-0 rounded border-[var(--border)]"
@@ -953,12 +989,15 @@ function ContactsPage() {
                       />
                       <button
                         type="button"
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        className="flex min-w-0 min-h-0 flex-1 items-center gap-2 overflow-hidden text-left"
                         onClick={() => router.push(`/contacts/${c.id}`)}
                       >
-                        <div className="relative shrink-0">
+                        <div className="relative h-9 w-9 shrink-0">
                           <div
-                            className={avatarContact + " !h-8 !w-8 text-[10px] leading-none sm:!h-9 sm:!w-9 sm:text-xs"}
+                            className={
+                              avatarContact +
+                              " !flex !h-9 !w-9 !min-h-[36px] !min-w-[36px] !items-center !justify-center !text-xs !leading-none"
+                            }
                           >
                             {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
                           </div>
@@ -968,7 +1007,7 @@ function ContactsPage() {
                             aria-hidden
                           />
                         </div>
-                        <div className="min-w-0 flex-1 py-0.5">
+                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden py-0.5">
                           <p className="flex min-w-0 items-baseline gap-1.5">
                             <span
                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
@@ -980,7 +1019,7 @@ function ContactsPage() {
                                     : "Μεσαία"
                               }
                             />
-                            <span className="truncate font-bold leading-tight text-[var(--text-table)]">
+                            <span className="min-w-0 truncate font-bold leading-tight text-[var(--text-table)]">
                               {c.first_name} {c.last_name}
                             </span>
                           </p>
@@ -994,63 +1033,72 @@ function ContactsPage() {
                     </div>
                   </td>
                   <td
-                    className={`max-w-[10rem] p-1.5 pl-1 align-middle font-mono text-[12px] leading-tight text-[var(--text-secondary)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`box-border w-[130px] max-w-[130px] overflow-hidden p-0 align-top font-mono text-[12px] leading-tight text-[var(--text-secondary)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    <div className="break-all leading-tight">{c.phone || "—"}</div>
-                    {c.phone2?.trim() ? (
-                      <div className="mt-0.5 break-all text-[10px] leading-tight text-[var(--text-muted)]">
-                        {c.phone2}
+                    <div className="box-border flex h-14 min-h-[3.5rem] flex-col justify-center overflow-hidden border-b border-transparent py-0 pl-1 pr-1">
+                      <div className="line-clamp-2 break-words [overflow-wrap:anywhere]">{c.phone || "—"}</div>
+                      {c.phone2?.trim() ? (
+                        <div className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-[var(--text-muted)] [overflow-wrap:anywhere]">
+                          {c.phone2}
+                        </div>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td
+                    className={`box-border w-[120px] max-w-[120px] overflow-hidden p-0 align-top text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                  >
+                    <div className="box-border flex h-14 min-h-[3.5rem] flex-col justify-center overflow-hidden border-b border-transparent py-0 pl-1 pr-0.5">
+                      <div className="line-clamp-1 font-medium" title={c.municipality ?? ""}>
+                        {c.municipality?.trim() || "—"}
                       </div>
-                    ) : null}
-                  </td>
-                  <td
-                    className={`min-w-0 p-1.5 pl-1 align-middle text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
-                  >
-                    <div className="truncate font-medium" title={c.municipality ?? ""}>
-                      {c.municipality?.trim() || "—"}
-                    </div>
-                    <div
-                      className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-[var(--text-muted)]"
-                      title={c.area ?? ""}
-                    >
-                      {c.area?.trim() || "—"}
+                      <div className="line-clamp-1 text-[10px] text-[var(--text-muted)]" title={c.area ?? ""}>
+                        {c.area?.trim() || "—"}
+                      </div>
                     </div>
                   </td>
                   <td
-                    className={`min-w-0 p-1.5 pl-1 align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`box-border w-[100px] max-w-[100px] overflow-hidden p-0 align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    {c.contact_groups ? (
-                      <GroupPillWithHint g={c.contact_groups} />
-                    ) : (
-                      <span className="text-[12px] text-[var(--text-muted)]">—</span>
-                    )}
+                    <div className="box-border flex h-14 min-h-[3.5rem] items-center border-b border-transparent pl-0.5 pr-0.5">
+                      {c.contact_groups ? (
+                        <div className="min-w-0 max-w-full overflow-hidden">
+                          <GroupPillWithHint g={c.contact_groups} />
+                        </div>
+                      ) : (
+                        <span className="text-[12px] text-[var(--text-muted)]">—</span>
+                      )}
+                    </div>
                   </td>
                   <td
-                    className={`p-1.5 pl-1 align-middle text-[12px] font-medium ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`box-border w-[80px] max-w-[80px] overflow-hidden p-0 text-[12px] font-medium ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    {nameDay ? <span className="text-[#C9A84C]">{nameDay}</span> : (
-                      <span className="text-[var(--text-muted)]">—</span>
-                    )}
+                    <div className="box-border flex h-14 min-h-[3.5rem] items-center border-b border-transparent pl-0.5 pr-0.5">
+                      {nameDay ? <span className="text-[#C9A84C]">{nameDay}</span> : (
+                        <span className="text-[var(--text-muted)]">—</span>
+                      )}
+                    </div>
                   </td>
                   <td
-                    className={`max-w-[8rem] p-1.5 pl-1 align-middle text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`box-border w-[100px] max-w-[100px] overflow-hidden p-0 text-[12px] leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                   >
-                    {c.father_name?.trim() ? (
-                      <span className="line-clamp-1" title={c.father_name}>
-                        {c.father_name}
-                      </span>
-                    ) : (
-                      <span className="text-[var(--text-muted)]">—</span>
-                    )}
+                    <div className="box-border flex h-14 min-h-[3.5rem] items-center border-b border-transparent pl-0.5 pr-0.5">
+                      {c.father_name?.trim() ? (
+                        <span className="line-clamp-1 min-w-0" title={c.father_name}>
+                          {c.father_name}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--text-muted)]">—</span>
+                      )}
+                    </div>
                   </td>
                   <td
-                    className={`w-20 min-w-20 p-1.5 pr-2 text-right align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
+                    className={`box-border w-[80px] max-w-[80px] p-0 text-right align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex h-[52px] min-h-[52px] items-center justify-end gap-0.5">
+                    <div className="box-border flex h-14 min-h-[3.5rem] w-full items-center justify-end gap-0.5 pr-0.5 pl-0">
                       <button
                         type="button"
-                        className={lux.btnIcon + " !h-8 !w-8 !min-h-0 !min-w-0"}
+                        className={lux.btnIcon + " !h-7 !w-7 !min-h-0 !min-w-0"}
                         title="Κλήση"
                         onClick={(e) => void triggerCall(e, c.id)}
                       >
@@ -1058,7 +1106,7 @@ function ContactsPage() {
                       </button>
                       <button
                         type="button"
-                        className={lux.btnIcon + " !h-8 !w-8 !min-h-0 !min-w-0"}
+                        className={lux.btnIcon + " !h-7 !w-7 !min-h-0 !min-w-0"}
                         title="Άνοιγμα επαφής"
                         onClick={() => router.push(`/contacts/${c.id}`)}
                       >
@@ -1643,7 +1691,9 @@ export default function ContactsPageWithSuspense() {
         <div className="flex min-h-[40vh] items-center justify-center p-6 text-sm text-[var(--text-muted)]">Φόρτωση…</div>
       }
     >
-      <ContactsPage />
+      <CrmErrorBoundary title="Δεν φορτώθηκε η λίστα επαφών.">
+        <ContactsPage />
+      </CrmErrorBoundary>
     </Suspense>
   );
 }

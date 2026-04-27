@@ -22,7 +22,6 @@ import {
   Wrench,
   BarChart3,
   QrCode,
-  Building2,
   CalendarCheck,
   ChevronsDown,
   ChevronsLeft,
@@ -57,7 +56,6 @@ const NAV_CONFIG: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: ChartColumnBig, minRole: "manager" },
   { href: "/contacts", label: "Επαφές", icon: Users, minRole: "caller" },
   { href: "/heatmap", label: "Χάρτης", icon: MapIcon, minRole: "manager" },
-  { href: "/parliament", label: "Βουλή", icon: Building2, minRole: "manager" },
   { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager", badge: "requests" },
   { href: "/campaigns", label: "Καμπάνιες", icon: Megaphone, minRole: "manager" },
   { href: "/events", label: "Εκδηλώσεις", icon: CalendarCheck, minRole: "manager" },
@@ -76,7 +74,7 @@ const NAV_CONFIG: NavItem[] = [
 
 const groupDefs: { id: string; label: string; hrefs: string[] }[] = [
   { id: "kyria", label: "ΚΥΡΙΑ", hrefs: ["/dashboard", "/contacts", "/heatmap"] },
-  { id: "politika", label: "ΠΟΛΙΤΙΚΑ", hrefs: ["/parliament", "/requests", "/campaigns", "/events"] },
+  { id: "politika", label: "ΠΟΛΙΤΙΚΑ", hrefs: ["/requests", "/campaigns", "/events"] },
   { id: "organosi", label: "ΟΡΓΑΝΩΣΗ", hrefs: ["/tasks", "/volunteers", "/analytics", "/namedays"] },
   { id: "ergaleia", label: "ΕΡΓΑΛΕΙΑ", hrefs: ["/schedule", "/data-tools", "/qrcode", "/polls", "/documents", "/content"] },
 ];
@@ -102,7 +100,6 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/heatmap")) return "Χάρτης";
   if (pathname.startsWith("/namedays")) return "Εορτολόγιο";
   if (pathname.startsWith("/campaigns")) return "Καμπάνιες";
-  if (pathname.startsWith("/parliament")) return "Βουλή";
   if (pathname.startsWith("/events")) return "Εκδηλώσεις";
   if (pathname.startsWith("/volunteers")) return "Εθελοντές";
   if (pathname.startsWith("/analytics")) return "Αναλυτικά";

@@ -7,8 +7,18 @@ import { Facebook, Instagram, Menu, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { portalDisplayFirstName } from "@/lib/portal-display";
+import { PORTAL_SOCIAL } from "@/lib/portal-social-urls";
+import { PortalOfficeMapsSection } from "@/components/portal/portal-office-maps-section";
 
 const ND = "#003476";
+
+function TiktokIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+    </svg>
+  );
+}
 
 function isAuthPage(path: string) {
   return path === "/portal/login" || path === "/portal/register";
@@ -32,7 +42,7 @@ function PortalHeader({
     { href: "/portal/about", label: "Βιογραφικό" },
     ...(signedIn ? [{ href: "/portal/requests", label: "Αιτήματα" }] : []),
     { href: "/portal/news", label: "Νέα" },
-    { href: "/portal#portal-footer-contact", label: "Επικοινωνία" },
+    { href: "/portal/contact", label: "Επικοινωνία" },
   ];
 
   const isActive = (href: string) => {
@@ -182,7 +192,7 @@ function PortalFooter({ signedIn }: { signedIn: boolean }) {
     { href: "/portal/about", t: "Βιογραφικό" },
     ...(signedIn ? [{ href: "/portal/requests", t: "Αιτήματα" }] : []),
     { href: "/portal/news", t: "Νέα" },
-    { href: "/portal#portal-footer-contact", t: "Επικοινωνία" },
+    { href: "/portal/contact", t: "Επικοινωνία" },
   ];
   return (
     <footer
@@ -223,7 +233,7 @@ function PortalFooter({ signedIn }: { signedIn: boolean }) {
             <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#C9A84C]">Κοινωνικά</h3>
             <ul className="mt-3 flex flex-wrap gap-3">
               <a
-                href="https://www.facebook.com"
+                href={PORTAL_SOCIAL.facebook}
                 className="inline-flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
                 target="_blank"
                 rel="noreferrer"
@@ -231,7 +241,7 @@ function PortalFooter({ signedIn }: { signedIn: boolean }) {
                 <Facebook className="h-4 w-4" /> Facebook
               </a>
               <a
-                href="https://www.instagram.com"
+                href={PORTAL_SOCIAL.instagram}
                 className="inline-flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
                 target="_blank"
                 rel="noreferrer"
@@ -239,12 +249,12 @@ function PortalFooter({ signedIn }: { signedIn: boolean }) {
                 <Instagram className="h-4 w-4" /> Instagram
               </a>
               <a
-                href="https://x.com"
+                href={PORTAL_SOCIAL.tiktok}
                 className="inline-flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
                 target="_blank"
                 rel="noreferrer"
               >
-                <span className="font-bold">𝕏</span> (Twitter)
+                <TiktokIcon className="h-4 w-4" /> TikTok
               </a>
             </ul>
           </div>
@@ -279,6 +289,9 @@ function PortalFooter({ signedIn }: { signedIn: boolean }) {
               </div>
             </div>
           </div>
+        </div>
+        <div className="border-t border-slate-800 pt-10">
+          <PortalOfficeMapsSection variant="dark" heading="Πολιτικά γραφεία" />
         </div>
         <p className="border-t border-slate-800 pt-6 text-center text-xs text-slate-500">
           © {new Date().getFullYear()} Κώστας Καραγκούνης. Όλα τα δικαιώματα.

@@ -4,6 +4,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { nextJsonError } from "@/lib/api-resilience";
 import { checkPortalChatRateLimit, getClientIp } from "@/lib/portal-chat-rate-limit";
 import { PORTAL_SYSTEM_PROMPT } from "@/lib/portal-alexandra-prompt";
+import { buildPortalChatNewsContext } from "@/lib/portal-chat-context";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -68,12 +69,14 @@ export async function POST(request: NextRequest) {
         content: String((h as Hist).content).slice(0, 20_000),
       }));
     const messages = buildMessages(clean, userMessage);
+    const newsContext = await buildPortalChatNewsContext(userMessage);
+    const system = PORTAL_SYSTEM_PROMPT + newsContext;
 
     const client = new Anthropic({ apiKey: key });
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: PORTAL_SYSTEM_PROMPT,
+      system: system,
       messages,
     });
     const block = msg.content[0];

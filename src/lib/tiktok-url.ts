@@ -18,3 +18,20 @@ export function getTiktokVideoIdFromUrl(url: string): string | null {
   }
   return null;
 }
+
+/** True if the URL may need a redirect to resolve the numeric video id. */
+export function isTiktokUrlLikelyShort(url: string): boolean {
+  const s = url.trim();
+  if (!s) return false;
+  if (getTiktokVideoIdFromUrl(s)) return false;
+  try {
+    const u = new URL(s);
+    const h = u.hostname.toLowerCase();
+    if (h === "vm.tiktok.com" || h === "vt.tiktok.com" || h === "m.tiktok.com") return true;
+    if (h === "t.tiktok.com") return true;
+    if ((h === "www.tiktok.com" || h === "tiktok.com") && /^\/t\//.test(u.pathname)) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
