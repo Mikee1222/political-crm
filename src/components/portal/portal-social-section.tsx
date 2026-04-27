@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Play, Volume2, VolumeX } from "lucide-react";
+import { loadTikTokEmbedScript } from "@/lib/tiktok-embed";
 
 const ND = "#003476";
 
@@ -22,9 +22,7 @@ type SocialCore = {
 type TiktokItem = {
   id: string;
   url: string;
-  thumbnailUrl: string | null;
-  title: string | null;
-  authorName: string | null;
+  videoId: string | null;
 };
 
 type TiktokApi = { items: TiktokItem[] };
@@ -61,88 +59,59 @@ function InstagramGlyph({ className }: { className?: string }) {
   );
 }
 
-function TiktokCard({ item }: { item: TiktokItem }) {
-  const { url, thumbnailUrl, title, authorName } = item;
-  const [muted, setMuted] = useState(true);
-  const openTiktok = useCallback(() => {
-    window.open(url, "_blank", "noopener,noreferrer");
-  }, [url]);
+function TiktokBlockquote({ item, visible }: { item: TiktokItem; visible: boolean }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    const root = rootRef.current;
+    if (!root) return;
+    let cancelled = false;
+    const timers: number[] = [];
+    const parse = () => {
+      const w = window as unknown as {
+        tiktok?: { embed?: { lib?: (el?: Element | null) => void; load?: (el?: Element | null) => void } };
+        tiktokEmbed?: { version?: { load: (el?: Element | null) => void } };
+      };
+      try {
+        w.tiktok?.embed?.lib?.(root);
+        w.tiktok?.embed?.load?.(root);
+        w.tiktokEmbed?.version?.load?.(root);
+      } catch {
+        /* non-fatal */
+      }
+    };
+    void (async () => {
+      try {
+        await loadTikTokEmbedScript();
+        if (cancelled) return;
+        parse();
+        timers.push(window.setTimeout(parse, 200));
+        timers.push(window.setTimeout(parse, 900));
+        timers.push(window.setTimeout(parse, 2200));
+      } catch {
+        /* */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      for (const id of timers) window.clearTimeout(id);
+    };
+  }, [visible, item.id, item.url, item.videoId]);
+
   return (
     <div
-      className="group flex h-full min-h-[320px] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-black shadow-xl transition hover:ring-2 hover:ring-zinc-600"
+      ref={rootRef}
+      className="min-h-[420px] w-full max-w-full overflow-x-auto overflow-y-hidden rounded-2xl border border-zinc-200 bg-zinc-50/80 p-2 shadow-inner sm:min-h-[500px]"
     >
-      <div
-        role="link"
-        tabIndex={0}
-        className="relative flex flex-1 cursor-pointer flex-col"
-        onClick={openTiktok}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            openTiktok();
-          }
-        }}
-        aria-label={`Άνοιγμα βίντεο στο TikTok${title ? `: ${title}` : ""}`}
+      <blockquote
+        className="tiktok-embed mx-auto"
+        cite={item.url}
+        data-video-id={item.videoId ?? undefined}
+        style={{ maxWidth: 605, minWidth: 280, margin: "0 auto" }}
       >
-        <div className="relative flex aspect-[9/16] max-h-[min(70vh,520px)] w-full min-h-[220px] items-stretch justify-center overflow-hidden bg-zinc-950 sm:aspect-[10/16] sm:min-h-[280px]">
-          {thumbnailUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={thumbnailUrl}
-              alt=""
-              className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-[1.02]"
-              loading="lazy"
-            />
-          ) : (
-            <div
-              className="flex h-full w-full items-center justify-center bg-gradient-to-b from-zinc-800 to-black"
-              aria-hidden
-            >
-              <TiktokGlyph className="h-16 w-16 text-zinc-600" />
-            </div>
-          )}
-          <div className="pointer-events-none absolute left-0 right-0 top-0 z-[1] flex items-start justify-between p-3">
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/60 px-2.5 py-1.5 text-white backdrop-blur-sm">
-              <TiktokGlyph className="h-4 w-4" />
-              <span className="text-xs font-bold">TikTok</span>
-            </span>
-          </div>
-          <div
-            className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-black/0 transition group-hover:bg-black/10"
-            aria-hidden
-          >
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20 shadow-lg backdrop-blur-sm">
-              <Play className="h-8 w-8 text-white" fill="currentColor" />
-            </div>
-          </div>
-          <button
-            type="button"
-            className="absolute bottom-2 right-2 z-[2] rounded-full border border-white/20 bg-black/55 p-2 text-white transition hover:bg-black/70"
-            title="Ήχος στο βίντεο (στο TikTok)"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMuted((m) => !m);
-            }}
-            aria-pressed={muted}
-          >
-            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </button>
-          <div className="absolute inset-x-0 bottom-0 z-[1] bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-12 text-left text-white">
-            {authorName ? <p className="text-xs font-semibold text-white/90">@{authorName.replace(/^@/, "")}</p> : null}
-            {title ? <p className="mt-1 line-clamp-3 text-sm font-medium leading-snug text-white/95">{title}</p> : null}
-          </div>
-        </div>
-      </div>
-      <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-3">
-        <button
-          type="button"
-          onClick={openTiktok}
-          className="inline-flex w-full items-center justify-center rounded-lg py-2.5 text-sm font-extrabold"
-          style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)", color: "#0f172a" }}
-        >
-          Δείτε στο TikTok
-        </button>
-      </div>
+        <section />
+      </blockquote>
     </div>
   );
 }
@@ -337,9 +306,9 @@ export function PortalSocialSection() {
             {data.tiktok.length === 0 ? (
               <p className="text-center text-slate-600">Σύντομα βίντεο — επιστρέξτε αργότερα.</p>
             ) : (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-8 sm:grid-cols-1 lg:grid-cols-2">
                 {data.tiktok.map((t) => (
-                  <TiktokCard key={t.id} item={t} />
+                  <TiktokBlockquote key={t.id} item={t} visible={active === "tiktok"} />
                 ))}
               </div>
             )}

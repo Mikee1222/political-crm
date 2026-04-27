@@ -8,6 +8,15 @@ const csp = [
 ].join("; ");
 
 const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "www.karagkounis.gr",
+        pathname: "/**",
+      },
+    ],
+  },
   async headers() {
     return [
       {

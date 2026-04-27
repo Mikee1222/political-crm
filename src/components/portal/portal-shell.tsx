@@ -30,7 +30,7 @@ function PortalHeader({
   const nav = [
     { href: "/portal", label: "Αρχική" },
     { href: "/portal/about", label: "Βιογραφικό" },
-    { href: "/portal/requests", label: "Αιτήματα" },
+    ...(signedIn ? [{ href: "/portal/requests", label: "Αιτήματα" }] : []),
     { href: "/portal/news", label: "Νέα" },
     { href: "/portal#portal-footer-contact", label: "Επικοινωνία" },
   ];
@@ -49,24 +49,15 @@ function PortalHeader({
       <div className="mx-auto flex h-[72px] min-h-[72px] max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         <Link
           href="/portal"
-          className="flex min-w-0 shrink-0 items-center gap-2.5 sm:gap-3"
+          className="flex min-w-0 shrink-0 items-center"
           onClick={() => setMobileOpen(false)}
+          aria-label="Αρχική — πύλη"
         >
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold text-[#0f172a]"
             style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
           >
             ΚΚ
-          </span>
-          <span className="min-w-0 text-left">
-            <span className="block text-[16px] font-bold leading-tight" style={{ color: ND }}>
-              Κώστας Καραγκούνης
-            </span>
-            <span
-              className="mt-0.5 block text-[12px] font-medium uppercase tracking-[0.06em] text-[#64748B]"
-            >
-              Βουλευτής Αιτωλοακαρνανίας
-            </span>
           </span>
         </Link>
 
@@ -185,7 +176,14 @@ function SignOutButton() {
   );
 }
 
-function PortalFooter() {
+function PortalFooter({ signedIn }: { signedIn: boolean }) {
+  const footerNav = [
+    { href: "/portal", t: "Αρχική" },
+    { href: "/portal/about", t: "Βιογραφικό" },
+    ...(signedIn ? [{ href: "/portal/requests", t: "Αιτήματα" }] : []),
+    { href: "/portal/news", t: "Νέα" },
+    { href: "/portal#portal-footer-contact", t: "Επικοινωνία" },
+  ];
   return (
     <footer
       className="mt-auto border-t border-[#1e293b] bg-[#0A0F1A] text-slate-300"
@@ -212,13 +210,7 @@ function PortalFooter() {
           <div>
             <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#C9A84C]">Πλοήγηση</h3>
             <ul className="mt-3 space-y-2 text-sm">
-              {[
-                { href: "/portal", t: "Αρχική" },
-                { href: "/portal/about", t: "Βιογραφικό" },
-                { href: "/portal/requests", t: "Αιτήματα" },
-                { href: "/portal/news", t: "Νέα" },
-                { href: "/portal#portal-footer-contact", t: "Επικοινωνία" },
-              ].map((l) => (
+              {footerNav.map((l) => (
                 <li key={l.href}>
                   <Link href={l.href} className="text-slate-300 transition hover:text-white">
                     {l.t}
@@ -348,7 +340,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         setMobileOpen={setMobileOpen}
       />
       <div className="min-h-0 min-w-0 flex-1 bg-[#FAFBFC]">{children}</div>
-      <PortalFooter />
+      <PortalFooter signedIn={Boolean(me)} />
     </div>
   );
 }

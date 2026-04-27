@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getPortalServiceOrAnon } from "@/lib/supabase/portal-service";
+import { createClient } from "@/lib/supabase/server";
 import { PortalSocialSection } from "@/components/portal/portal-social-section";
-import { ArrowDown, ArrowRight, ClipboardList, LineChart, Newspaper } from "lucide-react";
+import { ArrowDown, ArrowRight, ClipboardList, LineChart, MapPin, Newspaper, User } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,12 @@ const ND = "#003476";
 const GOLD = "#C9A84C";
 
 export default async function PortalHomePage() {
+  const auth = await createClient();
+  const {
+    data: { user },
+  } = await auth.auth.getUser();
+  const isLoggedIn = Boolean(user);
+
   const supabase = getPortalServiceOrAnon();
   const { data: posts } = await supabase
     .from("news_posts")
@@ -64,6 +71,7 @@ export default async function PortalHomePage() {
               width={900}
               height={1200}
               priority
+              unoptimized
               sizes="(max-width: 1023px) 85vw, 40vw"
               className="relative z-[1] h-[min(38vh,360px)] w-auto max-w-[min(88vw,400px)] object-contain object-bottom sm:h-[min(40vh,420px)] sm:max-w-[min(80vw,480px)] lg:h-[min(100dvh-120px,920px)] lg:max-h-[min(100dvh,920px)] lg:max-w-[min(100%,min(100vw*0.4,500px))] lg:w-auto"
             />
@@ -87,17 +95,17 @@ export default async function PortalHomePage() {
               </p>
               <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 lg:justify-start">
                 <Link
-                  href="/portal/requests/new"
+                  href="/portal/about"
                   className="inline-flex w-full min-w-0 max-w-sm items-center justify-center rounded-xl px-8 py-3.5 text-base font-extrabold text-[#0f172a] shadow-lg transition hover:brightness-105 sm:w-auto sm:py-4"
                   style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
                 >
-                  Υποβολή Αιτήματος
+                  Μάθετε περισσότερα
                 </Link>
                 <Link
-                  href="/portal/news"
+                  href="/portal/register"
                   className="inline-flex w-full max-w-sm items-center justify-center rounded-xl border-2 border-white/90 px-8 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-white/10 sm:w-auto sm:py-4"
                 >
-                  Μάθετε περισσότερα
+                  Εγγραφή
                 </Link>
               </div>
             </div>
@@ -108,7 +116,7 @@ export default async function PortalHomePage() {
           <div className="grid grid-cols-3 gap-2 py-4 text-center sm:gap-4 sm:py-6">
             {[
               { n: "15+", l: "Χρόνια" },
-              { n: "50.000+", l: "Επαφές" },
+              { n: "8+", l: "Χρόνια Υπουργός" },
               { n: "Αιτωλοακαρνανία", l: "Περιφέρεια" },
             ].map((s) => (
               <div key={s.l}>
@@ -153,6 +161,7 @@ export default async function PortalHomePage() {
                 alt=""
                 width={120}
                 height={120}
+                unoptimized
                 className="h-full w-full object-cover object-top"
                 sizes="112px"
               />
@@ -197,29 +206,53 @@ export default async function PortalHomePage() {
             aria-hidden
           />
           <p className="mx-auto mt-4 max-w-2xl text-center text-base text-[#64748B]">
-            Υπηρεσίες γραφείου με διαφάνεια και άμεση παρακολούθηση.
+            {isLoggedIn
+              ? "Υπηρεσίες γραφείου με διαφάνεια και άμεση παρακολούθηση."
+              : "Βιογραφικό, νέα και επαφή με το γραφείο — εγγραφείτε για πλήρη πρόσβαση."}
           </p>
           <div className="mt-12 grid gap-6 sm:grid-cols-3">
-            {[
-              {
-                title: "Υποβάλετε Αίτημα",
-                d: "Καταγράψτε το πρόβλημά σας και παρακολουθήστε την εξέλιξή του",
-                href: "/portal/requests/new",
-                Icon: ClipboardList,
-              },
-              {
-                title: "Παρακολουθήστε την Πορεία",
-                d: "Δείτε σε πραγματικό χρόνο την κατάσταση του αιτήματός σας",
-                href: "/portal/requests",
-                Icon: LineChart,
-              },
-              {
-                title: "Ενημερωθείτε",
-                d: "Νέα και ανακοινώσεις από τον βουλευτή και το γραφείο",
-                href: "/portal/news",
-                Icon: Newspaper,
-              },
-            ].map(({ title, d, href, Icon }) => (
+            {(isLoggedIn
+              ? [
+                  {
+                    title: "Υποβάλετε Αίτημα",
+                    d: "Καταγράψτε το πρόβλημά σας και παρακολουθήστε την εξέλιξή του",
+                    href: "/portal/requests/new",
+                    Icon: ClipboardList,
+                  },
+                  {
+                    title: "Παρακολουθήστε την Πορεία",
+                    d: "Δείτε σε πραγματικό χρόνο την κατάσταση του αιτήματός σας",
+                    href: "/portal/requests",
+                    Icon: LineChart,
+                  },
+                  {
+                    title: "Ενημερωθείτε",
+                    d: "Νέα και ανακοινώσεις από τον βουλευτή και το γραφείο",
+                    href: "/portal/news",
+                    Icon: Newspaper,
+                  },
+                ]
+              : [
+                  {
+                    title: "Βιογραφικό",
+                    d: "Η πορεία, οι αρμοδιότητες και η πολιτική διαδρομή",
+                    href: "/portal/about",
+                    Icon: User,
+                  },
+                  {
+                    title: "Νέα",
+                    d: "Ανακοινώσεις και άρθρα από το γραφείο",
+                    href: "/portal/news",
+                    Icon: Newspaper,
+                  },
+                  {
+                    title: "Επικοινωνία",
+                    d: "Γραφεία, τηλέφωνα και χάρτης",
+                    href: "/portal#portal-footer-contact",
+                    Icon: MapPin,
+                  },
+                ]
+            ).map(({ title, d, href, Icon }) => (
               <Link
                 key={title}
                 href={href}
@@ -323,16 +356,33 @@ export default async function PortalHomePage() {
         }}
       >
         <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-          <p className="text-2xl font-extrabold text-white sm:text-3xl">
-            Εγγραφείτε και υποβάλετε το αίτημά σας σήμερα
-          </p>
-          <Link
-            href="/portal/register"
-            className="mt-8 inline-flex rounded-xl px-10 py-4 text-base font-extrabold text-[#0f172a] shadow-lg"
-            style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-          >
-            Εγγραφή τώρα
-          </Link>
+          {isLoggedIn ? (
+            <>
+              <p className="text-2xl font-extrabold text-white sm:text-3xl">
+                Υποβάλετε αίτημα — παρακολουθήστε την εξέλιξη από την πύλη
+              </p>
+              <Link
+                href="/portal/requests/new"
+                className="mt-8 inline-flex rounded-xl px-10 py-4 text-base font-extrabold text-[#0f172a] shadow-lg"
+                style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
+              >
+                Υποβολή αιτήματος
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-extrabold text-white sm:text-3xl">
+                Δημιουργήστε λογαριασμό για πλήρη πρόσβαση στην πύλη
+              </p>
+              <Link
+                href="/portal/register"
+                className="mt-8 inline-flex rounded-xl px-10 py-4 text-base font-extrabold text-[#0f172a] shadow-lg"
+                style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
+              >
+                Εγγραφή τώρα
+              </Link>
+            </>
+          )}
         </div>
       </section>
     </div>
