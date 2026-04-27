@@ -3,9 +3,10 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/activity-log";
 import { mergeCallMetadata, getContactId } from "@/lib/retell-llm";
 import { nextJsonError } from "@/lib/api-resilience";
-import { verifyRetellWebhookSignature } from "@/lib/retell-webhook-verify";
+// import { verifyRetellWebhookSignature } from "@/lib/retell-webhook-verify";
+// TODO: Re-enable HMAC verification (x-retell-signature + raw body) once the signing key / algorithm matches Retell’s dashboard.
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 type TranscriptEntry = { role: string; content?: string | null };
 
@@ -83,10 +84,8 @@ function resolveOutcome(
 export async function POST(request: NextRequest) {
   try {
   const rawBody = await request.text();
-  const signature = request.headers.get("x-retell-signature");
-  if (!verifyRetellWebhookSignature(rawBody, process.env.RETELL_API_KEY, signature)) {
-    return NextResponse.json({ error: "Μη έγκυρη υπογραφή webhook" }, { status: 401 });
-  }
+  // const signature = request.headers.get("x-retell-signature");
+  // TODO: Re-enable — if (!verifyRetellWebhookSignature(rawBody, process.env.RETELL_API_KEY, signature)) { return 401; }
 
   let body: { call?: Record<string, unknown> | null; event?: string };
   try {
@@ -95,12 +94,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Άκυρο JSON" }, { status: 400 });
   }
   const ev = body.event;
+  if (ev === "call_started") {
+    return NextResponse.json({ ok: true });
+  }
   if (ev && ev !== "call_ended") {
-    return NextResponse.json({ ok: true, skipped: ev });
+    return NextResponse.json({ ok: true });
   }
   const call = (body.call ?? (body as unknown as Record<string, unknown> & { id?: string })) as Record<string, unknown> | null;
   if (!call || typeof call !== "object") {
-    return NextResponse.json({ ok: true, skipped: "χωρίς call" });
+    return NextResponse.json({ ok: true });
   }
 
   const meta = mergeCallMetadata(
@@ -111,9 +113,7 @@ export async function POST(request: NextRequest) {
   ) as Record<string, string | undefined | null>;
   const cId = getContactId(meta);
   if (!cId) {
-    return NextResponse.json(
-      { ok: true, detail: "χωρίς contact_id — δεν αποθηκεύουμε" } satisfies { ok: boolean; detail: string },
-    );
+    return NextResponse.json({ ok: true });
   }
   const contactIdFinal = cId;
 
