@@ -55,8 +55,8 @@ export default async function PortalHomePage() {
           aria-hidden
         />
 
-        <div className="relative z-[1] flex w-full min-h-0 flex-1 flex-col lg:min-h-[min(100dvh,100%)] lg:flex-row lg:items-stretch">
-          <div className="relative order-1 flex w-full min-h-0 flex-none items-end justify-center px-4 pt-8 sm:pt-10 lg:order-2 lg:w-[45%] lg:max-w-[45%] lg:flex-1 lg:px-0 lg:pt-0">
+        <div className="relative z-[1] flex w-full min-h-0 flex-1 flex-col lg:min-h-0 lg:flex-row lg:items-stretch">
+          <div className="relative order-1 flex w-full min-h-0 flex-1 flex-col items-center justify-end bg-transparent px-4 pt-8 sm:pt-10 lg:order-2 lg:max-w-[45%] lg:w-[45%] lg:px-0 lg:pt-0">
             <div
               className="pointer-events-none absolute bottom-[6%] left-1/2 h-[min(50vh,500px)] w-[min(92%,460px)] -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-amber-300/25 to-amber-600/10 blur-[64px] sm:bottom-[4%] sm:blur-[80px]"
               aria-hidden
@@ -65,16 +65,18 @@ export default async function PortalHomePage() {
               className="pointer-events-none absolute bottom-[20%] left-1/2 h-[30%] w-[55%] -translate-x-1/2 rounded-full bg-amber-400/10 blur-3xl"
               aria-hidden
             />
-            <Image
-              src="/hero-karagkounis.png"
-              alt="Κώστας Καραγκούνης"
-              width={900}
-              height={1200}
-              priority
-              unoptimized
-              sizes="(max-width: 1023px) 85vw, 40vw"
-              className="relative z-[1] h-[min(38vh,360px)] w-auto max-w-[min(88vw,400px)] object-contain object-bottom sm:h-[min(40vh,420px)] sm:max-w-[min(80vw,480px)] lg:h-[min(100dvh-120px,920px)] lg:max-h-[min(100dvh,920px)] lg:max-w-[min(100%,min(100vw*0.4,500px))] lg:w-auto"
-            />
+            <div className="relative z-[1] h-[min(38vh,360px)] w-full max-w-[min(88vw,400px)] bg-transparent sm:h-[min(40vh,420px)] lg:h-full lg:max-h-none lg:min-h-0 lg:max-w-[min(100%,min(100vw*0.42,520px))]">
+              <Image
+                src="/hero-karagkounis.png"
+                alt="Κώστας Καραγκούνης"
+                fill
+                priority
+                unoptimized
+                sizes="(max-width: 1023px) 90vw, 40vw"
+                className="object-contain object-bottom"
+                style={{ background: "transparent" }}
+              />
+            </div>
           </div>
 
           <div className="order-2 flex w-full min-h-0 flex-1 flex-col justify-center px-5 pb-8 pt-4 sm:px-8 sm:pb-10 sm:pt-2 lg:order-1 lg:w-[55%] lg:max-w-[55%] lg:shrink-0 lg:px-8 lg:py-12 lg:pl-10 lg:pr-4 xl:pl-14">
@@ -112,7 +114,7 @@ export default async function PortalHomePage() {
           </div>
         </div>
 
-        <div className="relative z-[1] mx-auto w-full max-w-4xl border-t border-white/10 px-4 pb-4 sm:px-6">
+        <div className="relative z-[1] mx-auto w-full max-w-4xl px-4 pb-4 sm:px-6">
           <div className="grid grid-cols-3 gap-2 py-4 text-center sm:gap-4 sm:py-6">
             {[
               { n: "15+", l: "Χρόνια" },
@@ -153,18 +155,20 @@ export default async function PortalHomePage() {
             style={{ boxShadow: "0 4px 24px rgba(0, 52, 118, 0.06)" }}
           >
             <div
-              className="relative mx-auto h-24 w-24 shrink-0 overflow-hidden rounded-xl border-2 sm:mx-0 sm:h-28 sm:w-28"
+              className="relative mx-auto h-24 w-24 shrink-0 border-2 bg-transparent sm:mx-0 sm:h-28 sm:w-28"
               style={{ borderColor: GOLD }}
             >
-              <Image
-                src="/hero-karagkounis.png"
-                alt=""
-                width={120}
-                height={120}
-                unoptimized
-                className="h-full w-full object-cover object-top"
-                sizes="112px"
-              />
+              <div className="relative h-full w-full bg-transparent">
+                <Image
+                  src="/hero-karagkounis.png"
+                  alt=""
+                  fill
+                  unoptimized
+                  className="object-contain object-bottom"
+                  style={{ background: "transparent" }}
+                  sizes="112px"
+                />
+              </div>
             </div>
             <div className="min-w-0 flex-1 pt-2 sm:pt-0">
               <h2 id="portal-mini-bio-heading" className="sr-only">
