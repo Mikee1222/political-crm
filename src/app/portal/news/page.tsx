@@ -29,17 +29,22 @@ function PortalNewsListInner() {
       fetchWithTimeout("/api/portal/news?limit=200"),
       c ? fetchWithTimeout(`/api/portal/news?category=${encodeURIComponent(c)}&limit=50`) : null,
     ]);
-    if (uAll.ok) {
-      const a = (await uAll.json()) as { posts: Post[] };
-      setCats([...new Set((a.posts ?? []).map((p) => p.category))].sort());
-      if (uFil) {
-        if (uFil.ok) {
-          const f = (await uFil.json()) as { posts: Post[] };
-          setPosts(f.posts ?? []);
-        }
+    if (!uAll.ok) {
+      setPosts([]);
+      return;
+    }
+    const a = (await uAll.json()) as { posts: Post[] };
+    const allPosts = a.posts ?? [];
+    setCats([...new Set(allPosts.map((p) => p.category))].sort());
+    if (uFil) {
+      if (uFil.ok) {
+        const f = (await uFil.json()) as { posts: Post[] };
+        setPosts(f.posts ?? []);
       } else {
-        setPosts(a.posts ?? []);
+        setPosts([]);
       }
+    } else {
+      setPosts(allPosts);
     }
   }, []);
 

@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAnon } from "@/lib/supabase/anon";
+import { getPortalServiceOrAnon } from "@/lib/supabase/portal-service";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getPortalServiceOrAnon();
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category")?.trim();
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit")) || 20));
-    let q = supabaseAnon
+    let q = supabase
       .from("news_posts")
-      .select("id, title, slug, excerpt, cover_image, category, published_at, created_at, tags")
+      .select("*")
       .eq("published", true)
       .order("published_at", { ascending: false, nullsFirst: false });
     if (category) {

@@ -1261,10 +1261,11 @@ create policy "portal_social_settings public read"
   using (true);
 
 drop policy if exists "social_posts public read" on public.social_posts;
-create policy "social_posts public read"
+drop policy if exists "social_posts_public_read" on public.social_posts;
+create policy "social_posts_public_read"
   on public.social_posts for select
   to anon, authenticated
-  using (active = true);
+  using (true);
 
 drop policy if exists "portal_social_settings crm write" on public.portal_social_settings;
 create policy "portal_social_settings crm write"

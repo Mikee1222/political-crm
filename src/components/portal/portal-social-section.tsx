@@ -16,10 +16,15 @@ type Settings = {
 
 type TabId = "tiktok" | "facebook" | "instagram";
 
-type SocialPayload = {
+type SocialCore = {
   settings: Settings;
-  tiktok: { id: string; url: string; blockquoteHtml: string | null }[];
   facebook: { id: string; url: string; iframeSrc: string }[];
+};
+
+type TiktokApi = { items: { id: string; url: string; blockquoteHtml: string | null }[] };
+
+type SocialPayload = SocialCore & {
+  tiktok: { id: string; url: string; blockquoteHtml: string | null }[];
 };
 
 function TiktokGlyph({ className }: { className?: string }) {
@@ -132,13 +137,21 @@ export function PortalSocialSection() {
 
   const load = useCallback(async () => {
     setErr(null);
-    const res = await fetch("/api/portal/social", { cache: "no-store" });
-    if (!res.ok) {
+    const [rSocial, rTt] = await Promise.all([
+      fetch("/api/portal/social", { cache: "no-store" }),
+      fetch("/api/portal/social/tiktok", { cache: "no-store" }),
+    ]);
+    if (!rSocial.ok) {
       setErr("Προσωρινό σφάλμα φόρτωσης.");
       return;
     }
-    const j = (await res.json()) as SocialPayload;
-    setData(j);
+    const core = (await rSocial.json()) as SocialCore;
+    let tiktok: SocialPayload["tiktok"] = [];
+    if (rTt.ok) {
+      const tt = (await rTt.json()) as TiktokApi;
+      tiktok = tt.items ?? [];
+    }
+    setData({ ...core, tiktok });
   }, []);
 
   useEffect(() => {

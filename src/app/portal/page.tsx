@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { supabaseAnon } from "@/lib/supabase/anon";
+import { getPortalServiceOrAnon } from "@/lib/supabase/portal-service";
 import { PortalSocialSection } from "@/components/portal/portal-social-section";
 import { ArrowDown, ArrowRight, ClipboardList, LineChart, Newspaper } from "lucide-react";
 
@@ -9,7 +9,8 @@ const ND = "#003476";
 const GOLD = "#C9A84C";
 
 export default async function PortalHomePage() {
-  const { data: posts } = await supabaseAnon
+  const supabase = getPortalServiceOrAnon();
+  const { data: posts } = await supabase
     .from("news_posts")
     .select("id, title, slug, excerpt, cover_image, category, published_at, created_at")
     .eq("published", true)
