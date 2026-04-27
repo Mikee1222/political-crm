@@ -7,6 +7,7 @@ import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { getCampaignRollup } from "@/lib/campaign-stats";
 import { listContactIdsMatching, type ContactFilter } from "@/lib/contacts-filter-query";
 import { nextJsonError } from "@/lib/api-resilience";
+import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
@@ -21,7 +22,7 @@ export async function GET() {
   const { data: campaignRows, error } = await supabase
     .from("campaigns")
     .select(
-      "id, name, started_at, created_at, description, status, sentiment_data, channel, campaign_type_id, retell_agent_id",
+      "id, name, started_at, created_at, description, status, sentiment_data, channel, campaign_type_id, retell_agent_id, concurrent_lines",
     )
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
     contact_ids?: string[];
     channel?: string;
     campaign_type_id?: string | null;
+    concurrent_lines?: number;
   };
   const name = String(body.name ?? "").trim();
   if (!name) {
@@ -144,6 +146,8 @@ export async function POST(request: NextRequest) {
     retell_agent_id = ra || null;
   }
 
+  const concurrent_lines = clampConcurrentLines(body.concurrent_lines);
+
   const { data, error } = await supabase
     .from("campaigns")
     .insert({
@@ -154,6 +158,7 @@ export async function POST(request: NextRequest) {
       channel,
       campaign_type_id,
       retell_agent_id,
+      concurrent_lines,
     })
     .select("*")
     .single();

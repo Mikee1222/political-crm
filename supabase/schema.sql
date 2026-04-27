@@ -1345,6 +1345,9 @@ alter table public.campaigns
   add column if not exists campaign_type_id uuid references public.campaign_types (id) on delete set null,
   add column if not exists retell_agent_id text;
 
+alter table public.campaigns
+  add column if not exists concurrent_lines integer not null default 3;
+
 create index if not exists idx_campaigns_campaign_type_id on public.campaigns (campaign_type_id);
 
 alter table public.campaign_types enable row level security;

@@ -5,6 +5,7 @@ import { hasMinRole } from "@/lib/roles";
 import { getRetellAgentIdForCampaign } from "@/lib/campaign-retell-agent";
 import { isSameEuropeAthensCalendarDay } from "@/lib/campaign-athens-day";
 import { nextJsonError } from "@/lib/api-resilience";
+import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
 export const dynamic = "force-dynamic";
 
 type RetellListCall = Record<string, unknown>;
@@ -65,8 +66,18 @@ export async function GET(request: NextRequest) {
 
     let called_today: number | null = null;
     let success_rate_today_pct: number | null = null;
+    let concurrent_lines = 3;
 
     if (campaignId) {
+      const { data: campMeta } = await crm.supabase
+        .from("campaigns")
+        .select("concurrent_lines")
+        .eq("id", campaignId)
+        .maybeSingle();
+      concurrent_lines = clampConcurrentLines(
+        (campMeta as { concurrent_lines?: unknown } | null)?.concurrent_lines,
+      );
+
       const { data: callRows, error: cErr } = await crm.supabase
         .from("calls")
         .select("called_at, outcome")
@@ -91,6 +102,7 @@ export async function GET(request: NextRequest) {
       ongoing_calls: list,
       called_today,
       success_rate_today_pct,
+      concurrent_lines: campaignId ? concurrent_lines : undefined,
     });
   } catch (e) {
     console.error("[api/retell/active-calls GET]", e);

@@ -6,10 +6,10 @@ import { getNextUncalledContactIds } from "@/lib/campaign-dial-queue";
 import { insertPendingCampaignCall } from "@/lib/campaign-pending-call";
 import { executeRetellCreatePhoneCall } from "@/lib/retell-execute-outbound";
 import { getRetellAgentIdForCampaign } from "@/lib/campaign-retell-agent";
+import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
 
 export const dynamic = "force-dynamic";
 
-const BATCH = 3;
 const GAP_MS = 500;
 
 type DialResult =
@@ -17,7 +17,7 @@ type DialResult =
   | { contact_id: string; ok: false; error: string; detail?: unknown };
 
 /**
- * Εκκινεί έως 3 παράλληλες Retell κλήσεις (500ms καθυστέρηση μεταξύ εκκινήσεων).
+ * Εκκινεί έως `concurrent_lines` παράλληλες Retell κλήσεις (500ms καθυστέρηση μεταξύ εκκινήσεων).
  */
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   const crm = await checkCRMAccess();
@@ -35,7 +35,20 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
   }
 
   const campaignId = params.id;
-  const { contactIds, error: queueErr } = await getNextUncalledContactIds(supabase, campaignId, BATCH);
+  const { data: campDial, error: campDialErr } = await supabase
+    .from("campaigns")
+    .select("concurrent_lines")
+    .eq("id", campaignId)
+    .maybeSingle();
+  if (campDialErr) {
+    return NextResponse.json({ error: campDialErr.message }, { status: 400 });
+  }
+  if (!campDial) {
+    return NextResponse.json({ error: "Καμπάνια δεν βρέθηκε" }, { status: 404 });
+  }
+  const batch = clampConcurrentLines((campDial as { concurrent_lines?: unknown }).concurrent_lines);
+
+  const { contactIds, error: queueErr } = await getNextUncalledContactIds(supabase, campaignId, batch);
   if (queueErr) {
     return NextResponse.json({ error: queueErr }, { status: 400 });
   }

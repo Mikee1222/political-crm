@@ -1,11 +1,17 @@
 "use client";
 
-import { ArrowLeft, FileText, Phone, Play, RefreshCw, Search, UserPlus, X } from "lucide-react";
+import { ArrowLeft, FileText, Minus, Phone, Play, Plus, RefreshCw, Search, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import {
+  clampConcurrentLines,
+  CONCURRENT_LINES_DEFAULT,
+  CONCURRENT_LINES_MAX,
+  CONCURRENT_LINES_MIN,
+} from "@/lib/campaign-concurrent-lines";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -36,6 +42,7 @@ type CampaignHead = {
   campaign_type_id?: string | null;
   retell_agent_id?: string | null;
   campaign_type?: { id: string; name: string; color: string; retell_agent_id?: string | null } | null;
+  concurrent_lines?: number | null;
 };
 
 type HeadData = {
@@ -52,6 +59,7 @@ type LiveSnapshot = {
   ongoing_count: number;
   called_today: number | null;
   success_rate_today_pct: number | null;
+  concurrent_lines: number;
 };
 
 function formatDuration(s: number | null | undefined): string {
@@ -89,6 +97,8 @@ export default function CampaignDetailPage() {
   const [addResults, setAddResults] = useState<Array<{ id: string; first_name: string; last_name: string; phone: string }>>([]);
   const [addBusy, setAddBusy] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [linesDraft, setLinesDraft] = useState("");
+  const [linesSaving, setLinesSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -118,9 +128,43 @@ export default function CampaignDetailPage() {
     }
   }, [id, outcome]);
 
+  const patchConcurrentLines = useCallback(async (next: number) => {
+    if (!id) return false;
+    const v = clampConcurrentLines(next);
+    setLinesSaving(true);
+    setErr(null);
+    try {
+      const r = await fetchWithTimeout(`/api/campaigns/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concurrent_lines: v }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) {
+        setErr(j.error ?? "Σφάλμα αποθήκευσης");
+        return false;
+      }
+      setData((prev) => {
+        if (!prev) return prev;
+        return { ...prev, campaign: { ...prev.campaign, concurrent_lines: v } };
+      });
+      setLinesDraft(String(v));
+      return true;
+    } finally {
+      setLinesSaving(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  const concurrentLinesStored = data?.campaign?.concurrent_lines;
+  const campaignIdForLines = data?.campaign?.id;
+  useEffect(() => {
+    if (!campaignIdForLines) return;
+    setLinesDraft(String(clampConcurrentLines(concurrentLinesStored)));
+  }, [campaignIdForLines, concurrentLinesStored]);
 
   const campStatus = data?.campaign?.status;
   useEffect(() => {
@@ -137,6 +181,7 @@ export default function CampaignDetailPage() {
         ongoing_count?: number;
         called_today?: number | null;
         success_rate_today_pct?: number | null;
+        concurrent_lines?: number;
       };
       if (cancelled) return;
       if (!res.ok) {
@@ -148,6 +193,9 @@ export default function CampaignDetailPage() {
         ongoing_count: typeof j.ongoing_count === "number" ? j.ongoing_count : 0,
         called_today: j.called_today ?? null,
         success_rate_today_pct: j.success_rate_today_pct ?? null,
+        concurrent_lines: clampConcurrentLines(
+          typeof j.concurrent_lines === "number" ? j.concurrent_lines : CONCURRENT_LINES_DEFAULT,
+        ),
       });
     };
     void tick();
@@ -222,7 +270,8 @@ export default function CampaignDetailPage() {
             const maxPerRun = 25;
             let started = 0;
             try {
-              const maxBatches = Math.ceil(maxPerRun / 3);
+              const lines = clampConcurrentLines(c?.concurrent_lines);
+              const maxBatches = Math.ceil(maxPerRun / Math.max(1, lines));
               for (let i = 0; i < maxBatches; i += 1) {
                 const r = await fetchWithTimeout(`/api/campaigns/${id}/dial-next`, { method: "POST" });
                 const j = (await r.json().catch(() => ({}))) as {
@@ -263,6 +312,40 @@ export default function CampaignDetailPage() {
       {err && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">{err}</p>}
 
       {c?.status === "active" && (c.channel === "call" || c.channel == null) && (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)]/80 p-4 sm:p-5">
+          <h2 className="text-sm font-bold text-[var(--text-primary)]">Παράλληλες γραμμές</h2>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            Πόσες ταυτόχρονες κλήσεις να κάνει ο agent (1–10).
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div className="min-w-0">
+              <label className={lux.label + " !text-xs"} htmlFor="conc-lines">
+                Αριθμός
+              </label>
+              <input
+                id="conc-lines"
+                type="number"
+                min={CONCURRENT_LINES_MIN}
+                max={CONCURRENT_LINES_MAX}
+                className={lux.input + " !mt-1 w-24 !text-base tabular-nums"}
+                value={linesDraft}
+                disabled={linesSaving}
+                onChange={(e) => setLinesDraft(e.target.value)}
+                onBlur={() => {
+                  const n = parseInt(linesDraft, 10);
+                  if (!Number.isFinite(n)) {
+                    setLinesDraft(String(clampConcurrentLines(c.concurrent_lines)));
+                    return;
+                  }
+                  void patchConcurrentLines(n);
+                }}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {c?.status === "active" && (c.channel === "call" || c.channel == null) && (
         <section
           className="rounded-2xl border border-[#1e5fa8]/35 bg-gradient-to-r from-[#0a1628] to-[#0F1E35] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.35)] sm:p-5"
           aria-live="polite"
@@ -272,11 +355,41 @@ export default function CampaignDetailPage() {
             <span className="text-[10px] text-[var(--text-muted)]">Ανανέωση κάθε 5 δευτ.</span>
           </div>
           {liveErr && <p className="mb-2 text-xs text-amber-200">{liveErr}</p>}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-[#050D1A]/40 px-3 py-3 sm:px-4">
+            <p className="text-base font-semibold tabular-nums text-emerald-200 sm:text-lg">
+              {live != null ? live.ongoing_count : "—"}/{clampConcurrentLines(c.concurrent_lines)}
+              <span className="ml-2 text-sm font-normal text-[var(--text-secondary)]">γραμμές ενεργές</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={lux.btnSecondary + " !h-9 !min-w-9 !px-0"}
+                disabled={linesSaving || clampConcurrentLines(c.concurrent_lines) <= CONCURRENT_LINES_MIN}
+                aria-label="Μείωση παράλληλων γραμμών"
+                onClick={() =>
+                  void patchConcurrentLines(clampConcurrentLines(c.concurrent_lines) - 1)
+                }
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className={lux.btnSecondary + " !h-9 !min-w-9 !px-0"}
+                disabled={linesSaving || clampConcurrentLines(c.concurrent_lines) >= CONCURRENT_LINES_MAX}
+                aria-label="Αύξηση παράλληλων γραμμών"
+                onClick={() =>
+                  void patchConcurrentLines(clampConcurrentLines(c.concurrent_lines) + 1)
+                }
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-emerald-500/25 bg-[#050D1A]/50 p-3">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">Ενεργές τώρα</p>
+              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">Ενεργές κλήσεις (Retell)</p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-300">{live?.ongoing_count ?? "—"}</p>
-              <p className="text-[10px] text-[var(--text-muted)]">Retell ongoing</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Ongoing στον agent</p>
             </div>
             <div className="rounded-xl border border-[#C9A84C]/25 bg-[#050D1A]/50 p-3">
               <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">Κλήσεις σήμερα</p>

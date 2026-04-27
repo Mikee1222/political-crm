@@ -6,6 +6,11 @@ import { FormEvent, useCallback, useEffect, useState, type ComponentType } from 
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import type { CampaignTypeRow } from "@/lib/campaign-types";
+import {
+  clampConcurrentLines,
+  CONCURRENT_LINES_MAX,
+  CONCURRENT_LINES_MIN,
+} from "@/lib/campaign-concurrent-lines";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -17,6 +22,7 @@ type Campaign = {
   description: string | null;
   status: string;
   channel?: string;
+  concurrent_lines?: number | null;
   stats: OutcomeStats;
   progress: number;
   callsMade: number;
@@ -55,6 +61,7 @@ export default function CampaignsPage() {
   const [campaignChannel, setCampaignChannel] = useState<"call" | "whatsapp">("call");
   const [campaignTypes, setCampaignTypes] = useState<CampaignTypeRow[]>([]);
   const [campaignTypeId, setCampaignTypeId] = useState("");
+  const [concurrentLines, setConcurrentLines] = useState(3);
   const [filter, setFilter] = useState<NewFilter>({
     call_status: "",
     area: "",
@@ -137,6 +144,7 @@ export default function CampaignsPage() {
           filter: f,
           channel: campaignChannel,
           campaign_type_id: campaignTypeId || null,
+          concurrent_lines: clampConcurrentLines(concurrentLines),
         }),
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; assigned_contacts?: number };
@@ -149,6 +157,7 @@ export default function CampaignsPage() {
       setDescription("");
       setCampaignChannel("call");
       setCampaignTypeId("");
+      setConcurrentLines(3);
       setFilter({ call_status: "", area: "", municipality: "", priority: "", tag: "" });
       await load();
     } finally {
@@ -177,6 +186,7 @@ export default function CampaignsPage() {
               className={goldCta + " w-full min-w-0 sm:w-auto sm:self-center"}
               onClick={() => {
                 setFormErr(null);
+                setConcurrentLines(3);
                 setModal(true);
               }}
             >
@@ -340,7 +350,8 @@ export default function CampaignsPage() {
                     const maxPerRun = 25;
                     let started = 0;
                     try {
-                      const maxBatches = Math.ceil(maxPerRun / 3);
+                      const lines = clampConcurrentLines(c.concurrent_lines);
+                      const maxBatches = Math.ceil(maxPerRun / Math.max(1, lines));
                       for (let i = 0; i < maxBatches; i += 1) {
                         const r = await fetchWithTimeout(`/api/campaigns/${c.id}/dial-next`, { method: "POST" });
                         const j = (await r.json().catch(() => ({}))) as {
@@ -536,6 +547,27 @@ export default function CampaignsPage() {
                 </select>
                 <p className="mt-1 text-[11px] text-[var(--text-muted)]">
                   Το κανάλι αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
+                </p>
+              </div>
+
+              <div>
+                <label className={lux.label} htmlFor="c-conc">
+                  Παράλληλες γραμμές κλήσης
+                </label>
+                <input
+                  id="c-conc"
+                  type="number"
+                  min={CONCURRENT_LINES_MIN}
+                  max={CONCURRENT_LINES_MAX}
+                  className={lux.input + " !min-h-11 !text-base tabular-nums"}
+                  value={concurrentLines}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value, 10);
+                    setConcurrentLines(Number.isFinite(n) ? n : CONCURRENT_LINES_MIN);
+                  }}
+                />
+                <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                  Πόσες ταυτόχρονες κλήσεις να κάνει ο agent ({CONCURRENT_LINES_MIN}–{CONCURRENT_LINES_MAX}). Προεπιλογή: 3.
                 </p>
               </div>
 

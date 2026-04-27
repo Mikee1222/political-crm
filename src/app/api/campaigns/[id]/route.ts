@@ -4,6 +4,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { getCampaignRollup } from "@/lib/campaign-stats";
 import { nextJsonError } from "@/lib/api-resilience";
+import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const { data: camp, error: campErr } = await supabase
     .from("campaigns")
     .select(
-      "id, name, created_at, started_at, description, status, channel, campaign_type_id, retell_agent_id, campaign_types ( id, name, color, retell_agent_id )",
+      "id, name, created_at, started_at, description, status, channel, campaign_type_id, retell_agent_id, concurrent_lines, campaign_types ( id, name, color, retell_agent_id )",
     )
     .eq("id", params.id)
     .single();
@@ -95,13 +96,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (!hasMinRole(profile?.role, "manager")) {
     return forbidden();
   }
-  const body = (await request.json().catch(() => ({}))) as { status?: string; name?: string; description?: string | null };
-  const patch: Record<string, string | null> = {};
+  const body = (await request.json().catch(() => ({}))) as {
+    status?: string;
+    name?: string;
+    description?: string | null;
+    concurrent_lines?: number;
+  };
+  const patch: Record<string, string | number | null> = {};
   if (body.status === "active" || body.status === "completed") {
     patch.status = body.status;
   }
   if (body.name != null) patch.name = String(body.name).trim();
   if (body.description !== undefined) patch.description = body.description;
+  if (body.concurrent_lines !== undefined) {
+    patch.concurrent_lines = clampConcurrentLines(body.concurrent_lines);
+  }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Άκυρα δεδομένα" }, { status: 400 });
   }
