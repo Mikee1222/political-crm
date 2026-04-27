@@ -1,0 +1,72 @@
+/* Citizen portal — light, premium (ND blue + gold). Loaded only under /portal. */
+:root[data-portal="1"] {
+  --portal-blue: #003476;
+  --portal-gold: #c9a84c;
+  --portal-gold-dark: #8b6914;
+  --portal-bg: #fafbfc;
+  --portal-white: #ffffff;
+  --portal-text: #1a1a2e;
+  --portal-muted: #64748b;
+  --portal-border: #e2e8f0;
+  --portal-success: #059669;
+  --portal-gold-gradient: linear-gradient(135deg, #c9a84c, #8b6914);
+  --portal-hero-gradient: linear-gradient(135deg, #003476 0%, #001a3d 60%, #0a0f1a 100%);
+}
+
+/* Particle field (CSS-only, subtle) */
+.portal-hero-particles {
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.06) 0, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(201, 168, 76, 0.08) 0, transparent 35%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.03) 0, transparent 50%);
+  animation: portal-shimmer 12s ease-in-out infinite alternate;
+}
+
+@keyframes portal-shimmer {
+  0% {
+    opacity: 0.85;
+    filter: brightness(1);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1.05);
+  }
+}
+
+.portal-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(180deg, black, transparent 85%);
+  pointer-events: none;
+}
+
+@keyframes portal-bounce-arrow {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 1;
+  }
+}
+
+.portal-scroll-hint {
+  animation: portal-bounce-arrow 2s ease-in-out infinite;
+}
+
+.portal-prose {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--portal-text);
+}
+
+.portal-prose h1,
+.portal-prose h2,
+.portal-prose h3 {
+  color: var(--portal-text);
+  font-weight: 700;
+}

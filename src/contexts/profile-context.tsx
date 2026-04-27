@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import type { Role } from "@/lib/roles";
 import type { UserPreferences } from "@/lib/user-preferences";
@@ -19,17 +21,31 @@ export type Profile = {
 
 type Ctx = {
   profile: Profile | null;
+  /** True while /api/profile is in flight (after session is known for CRM). */
   loading: boolean;
+  /** False until first Supabase getUser() completes for CRM routes (initial session check). */
+  sessionResolved: boolean;
   refresh: () => Promise<void>;
 };
 
 const ProfileContext = createContext<Ctx | null>(null);
 
+function isPortalPath(path: string) {
+  return path === "/portal" || path.startsWith("/portal/");
+}
+
+function isCrmAppPath(path: string) {
+  return path !== "/login" && !isPortalPath(path);
+}
+
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() || "";
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionResolved, setSessionResolved] = useState(() => !isCrmAppPath(pathname));
+  const crmSessionReadyRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetchWithTimeout("/api/profile", { timeoutMs: CLIENT_FETCH_TIMEOUT_MS, credentials: "same-origin" });
@@ -46,26 +62,56 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    const path = typeof window !== "undefined" ? window.location.pathname : "";
-    if (path === "/login") {
-      setLoading(false);
-      return;
-    }
-    if (
-      path === "/portal" ||
-      path.startsWith("/portal/login") ||
-      path.startsWith("/portal/register") ||
-      path === "/portal/news" ||
-      path.startsWith("/portal/news/")
-    ) {
-      setLoading(false);
-      return;
-    }
-    void refresh();
-  }, [refresh]);
+  const refresh = useCallback(async () => {
+    await loadProfile();
+  }, [loadProfile]);
 
-  return <ProfileContext.Provider value={{ profile, loading, refresh }}>{children}</ProfileContext.Provider>;
+  useLayoutEffect(() => {
+    if (pathname === "/login") {
+      crmSessionReadyRef.current = false;
+      setSessionResolved(true);
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    if (isPortalPath(pathname)) {
+      setSessionResolved(true);
+      setLoading(false);
+      return;
+    }
+    if (!isCrmAppPath(pathname)) {
+      return;
+    }
+
+    if (crmSessionReadyRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      setSessionResolved(false);
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) {
+        return;
+      }
+      crmSessionReadyRef.current = true;
+      setSessionResolved(true);
+      if (!user) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+      await loadProfile();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, loadProfile]);
+
+  return (
+    <ProfileContext.Provider value={{ profile, loading, sessionResolved, refresh }}>{children}</ProfileContext.Provider>
+  );
 }
 
 export function useProfile() {

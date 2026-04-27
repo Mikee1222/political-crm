@@ -30,12 +30,6 @@ function isPortalPublicPath(pathname: string) {
   return false;
 }
 
-function isPortalProtectedPath(pathname: string) {
-  if (pathname === "/portal/dashboard" || pathname.startsWith("/portal/dashboard/")) return true;
-  if (pathname === "/portal/requests" || pathname.startsWith("/portal/requests/")) return true;
-  return false;
-}
-
 function isAlwaysPublicApi(pathname: string) {
   return pathname.startsWith("/api/public/");
 }
@@ -87,6 +81,11 @@ function isNextStaticOrAsset(pathname: string) {
     /^\/icon(-\d+)?\.(png|svg)$/.test(pathname) ||
     pathname === "/icon.svg"
   );
+}
+
+/** Browser routes under the portal app (excludes e.g. /api/portal/… which is the API namespace). */
+function isPortalAppPath(pathname: string) {
+  return pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/");
 }
 
 export async function middleware(request: NextRequest) {
@@ -156,6 +155,9 @@ export async function middleware(request: NextRequest) {
     if (!isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
       return redirectWithSession(request, "/dashboard", sessionResponse);
     }
+    if (!isPortalUser && (pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/"))) {
+      return redirectWithSession(request, "/dashboard", sessionResponse);
+    }
 
     if (pathname.startsWith("/api/")) {
       if (isAlwaysPublicApi(pathname) || isRetellPublic(pathname) || isApiPortalPublic(pathname)) {
@@ -173,7 +175,8 @@ export async function middleware(request: NextRequest) {
     }
 
     if (isPortalUser) {
-      if (pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/")) {
+      // Block all non-portal app routes (/dashboard, /, /contacts, etc.); /api/CRM 403 above.
+      if (isPortalAppPath(pathname)) {
         // ok
       } else if (isNextStaticOrAsset(pathname)) {
         // ok
@@ -182,8 +185,6 @@ export async function middleware(request: NextRequest) {
       } else {
         return redirectWithSession(request, "/portal/dashboard", sessionResponse);
       }
-    } else if (isPortalProtectedPath(pathname)) {
-      return redirectWithSession(request, "/dashboard", sessionResponse);
     }
   }
 

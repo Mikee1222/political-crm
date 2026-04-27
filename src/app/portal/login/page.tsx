@@ -3,10 +3,22 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { Lock, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 
 const ND = "#003476";
+
+function portalPostLoginDest(next: string | null | undefined): string {
+  const n = (next ?? "").trim();
+  if (!n.startsWith("/portal")) {
+    return "/portal/dashboard";
+  }
+  if (n === "/portal" || n === "/portal/") {
+    return "/portal/dashboard";
+  }
+  return n;
+}
 
 function PortalLoginInner() {
   const router = useRouter();
@@ -16,24 +28,42 @@ function PortalLoginInner() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const next = sp.get("next") || "/portal/dashboard";
+  const nextRaw = sp.get("next");
+  const destination = portalPostLoginDest(nextRaw);
 
   return (
-    <div className="min-h-[-webkit-fill-available] min-h-dvh flex flex-col bg-slate-50">
-      <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-        <Link href="/portal" className="text-sm font-semibold" style={{ color: ND }}>
-          ← Αρχική
-        </Link>
+    <div className="flex min-h-[-webkit-fill-available] min-h-dvh flex-col bg-[#FAFBFC]">
+      <div className="border-b border-[#E2E8F0] bg-white px-4 py-3 shadow-sm sm:px-6">
+        <div className="mx-auto flex max-w-lg items-center justify-between">
+          <Link href="/portal" className="text-sm font-bold" style={{ color: ND }}>
+            ← Αρχική
+          </Link>
+          <Link href="/portal/register" className="text-sm font-semibold text-[#64748B] hover:underline">
+            Εγγραφή
+          </Link>
+        </div>
       </div>
-      <div className="flex flex-1 items-center justify-center px-4 py-8">
-        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h1 className="text-center text-xl font-bold" style={{ color: ND }}>
-            Σύνδεση πολιτών
+      <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
+        <div className="w-full max-w-[480px] rounded-2xl border border-[#E2E8F0] bg-white p-8 shadow-[0_8px_30px_rgba(0,52,118,0.08)] sm:p-10">
+          <div className="flex justify-center">
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-2xl text-lg font-extrabold text-[#0f172a]"
+              style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
+            >
+              ΚΚ
+            </div>
+          </div>
+          <h1 className="mt-4 text-center text-2xl font-extrabold" style={{ color: ND }}>
+            Σύνδεση
           </h1>
-          <p className="mt-1 text-center text-sm text-slate-500">Κωδικός πρόσβασης πύλης (όχι προσωπικού)</p>
-          {err && <p className="mt-3 text-center text-sm text-red-600" role="alert">{err}</p>}
+          <p className="mt-1 text-center text-sm text-[#64748B]">Πρόσβαση πολιτών στην πύλη (διαφορετική από το προσωπικό CRM)</p>
+          {err && (
+            <p className="mt-4 text-center text-sm text-red-600" role="alert">
+              {err}
+            </p>
+          )}
           <form
-            className="mt-6 space-y-4"
+            className="mt-8 space-y-5"
             onSubmit={async (e) => {
               e.preventDefault();
               setErr("");
@@ -51,7 +81,7 @@ function PortalLoginInner() {
                   setErr("Λάθος τύπος λογαριασμού. Χρησιμοποιήστε /login για προσωπικό.");
                   return;
                 }
-                router.push(next.startsWith("/portal") ? next : "/portal/dashboard");
+                router.push(destination);
                 router.refresh();
               } catch {
                 setErr("Σφάλμα δικτύου");
@@ -61,48 +91,55 @@ function PortalLoginInner() {
             }}
           >
             <div>
-              <label className="text-xs font-semibold text-slate-600" htmlFor="e">
+              <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]" htmlFor="e">
                 Email
               </label>
-              <input
-                id="e"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                type="email"
-                autoComplete="email"
-                required
-              />
+              <div className="relative mt-1.5">
+                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+                <input
+                  id="e"
+                  className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm text-[#1A1A2E] outline-none ring-0 transition focus:border-[#003476] focus:ring-2 focus:ring-[#003476]/20"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  autoComplete="email"
+                  required
+                />
+              </div>
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-600" htmlFor="p">
+              <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]" htmlFor="p">
                 Κωδικός
               </label>
-              <input
-                id="p"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                type="password"
-                autoComplete="current-password"
-                required
-              />
+              <div className="relative mt-1.5">
+                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+                <input
+                  id="p"
+                  className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm text-[#1A1A2E] outline-none focus:border-[#003476] focus:ring-2 focus:ring-[#003476]/20"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
             </div>
             <button
               type="submit"
-              className="w-full rounded-lg py-2.5 text-sm font-bold text-white"
+              className="w-full rounded-xl py-3.5 text-sm font-extrabold text-white shadow-md transition hover:brightness-110"
               style={{ background: ND }}
               disabled={loading}
             >
               {loading ? "…" : "Είσοδος"}
             </button>
           </form>
-          <p className="mt-4 text-center text-sm text-slate-600">
-            Χωρίς λογαριασμό;{" "}
-            <Link href="/portal/register" className="font-bold hover:underline" style={{ color: ND }}>
+          <p className="mt-2 text-center text-sm text-[#64748B]">
+            Δεν έχετε λογαριασμό;{" "}
+            <Link href="/portal/register" className="font-extrabold hover:underline" style={{ color: ND }}>
               Εγγραφή
             </Link>
           </p>
+          <p className="mt-6 text-center text-xs text-[#94A3B8]">Εγγεγραμμένοι πολίτες: 1.234+</p>
         </div>
       </div>
     </div>
@@ -111,7 +148,13 @@ function PortalLoginInner() {
 
 export default function PortalLoginPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-dvh items-center justify-center bg-[#FAFBFC] text-sm text-[#64748B]">
+          Φόρτωση…
+        </div>
+      }
+    >
       <PortalLoginInner />
     </Suspense>
   );

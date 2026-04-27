@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Calendar, ChevronRight, Inbox, Sparkles, TrendingUp } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { portalDisplayFirstName } from "@/lib/portal-display";
 
 const ND = "#003476";
-const GOLD = "#C9A84C";
 
 function base64ToUint8(b64: string): BufferSource {
   const padding = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -42,17 +43,20 @@ type Post = {
 function statusBadge(s: string) {
   const c =
     s === "Ολοκληρώθηκε"
-      ? "bg-emerald-100 text-emerald-900"
+      ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
       : s === "Σε εξέλιξη"
-        ? "bg-amber-100 text-amber-900"
-        : "bg-slate-200 text-slate-800";
+        ? "bg-amber-100 text-amber-900 ring-1 ring-amber-200"
+        : s === "Απορρίφθηκε"
+          ? "bg-rose-100 text-rose-800 ring-1 ring-rose-200"
+          : "bg-slate-100 text-slate-800 ring-1 ring-slate-200";
   return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${c}`}>{s || "Νέο"}</span>;
 }
 
 export default function PortalDashboardPage() {
   const router = useRouter();
-  const [name, setName] = useState<string | null>(null);
+  const [greeting, setGreeting] = useState("Πολίτη");
   const [portalRow, setPortalRow] = useState<PortalMe | null>(null);
+  const [nowStr, setNowStr] = useState("");
   const [requests, setRequests] = useState<Req[] | null>(null);
   const [news, setNews] = useState<Post[] | null>(null);
   const [err, setErr] = useState("");
@@ -64,7 +68,7 @@ export default function PortalDashboardPage() {
       const [mRes, rRes, nRes] = await Promise.all([
         fetchWithTimeout("/api/portal/me", { credentials: "same-origin" }),
         fetchWithTimeout("/api/portal/requests", { credentials: "same-origin" }),
-        fetchWithTimeout("/api/portal/news?limit=3", { credentials: "same-origin" }),
+        fetchWithTimeout("/api/portal/news?limit=4", { credentials: "same-origin" }),
       ]);
       if (mRes.status === 401) {
         router.replace("/portal/login?next=/portal/dashboard");
@@ -76,7 +80,7 @@ export default function PortalDashboardPage() {
       }
       const m = (await mRes.json()) as { portal: PortalMe };
       setPortalRow(m.portal ?? null);
-      setName(m.portal?.first_name ?? "Πολίτη");
+      setGreeting(portalDisplayFirstName(m.portal));
       if (rRes.ok) {
         const rj = (await rRes.json()) as { requests: Req[] };
         setRequests(rj.requests ?? []);
@@ -97,6 +101,23 @@ export default function PortalDashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const t = () =>
+      setNowStr(
+        new Date().toLocaleString("el-GR", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      );
+    t();
+    const id = window.setInterval(t, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (pushTried.current) {
@@ -154,7 +175,7 @@ export default function PortalDashboardPage() {
     void run();
   }, [portalRow]);
 
-  if (err && !name && requests === null) {
+  if (err && requests === null) {
     return <p className="p-6 text-sm text-red-600">{err}</p>;
   }
 
@@ -162,77 +183,175 @@ export default function PortalDashboardPage() {
   const openCount = all.filter((r) => r.status === "Νέο" || r.status === "Σε εξέλιξη").length;
   const done = all.filter((r) => r.status === "Ολοκληρώθηκε").length;
   const recent = all.slice(0, 5);
-  const posts = news ?? [];
+  const posts = (news ?? []).slice(0, 2);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 px-4 py-8 sm:px-6 sm:py-10">
       {portalRow && portalRow.verified === false && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+        <div
+          className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium"
+          style={{ color: "#92400e" }}
+        >
           Επαληθεύστε το email σας (ελέγξτε τα εισερχόμενα / spam).
         </div>
       )}
-      <h1 className="text-2xl font-bold text-slate-900">Καλώς ήρθατε, {name || "—"}!</h1>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div
+        className="overflow-hidden rounded-2xl p-6 text-white shadow-xl sm:p-8"
+        style={{ background: "linear-gradient(135deg, #003476 0%, #001a3d 100%)" }}
+      >
+        <p className="text-sm font-medium text-white/70">Πύλη πολιτών</p>
+        <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
+          Καλώς ήρθατε, {greeting}!
+        </h1>
+        <p className="mt-2 flex items-center gap-2 text-sm text-white/80">
+          <Calendar className="h-4 w-4" />
+          {nowStr}
+        </p>
+        <Link
+          href="/portal/requests/new"
+          className="mt-6 inline-flex items-center justify-center rounded-xl px-6 py-3.5 text-sm font-extrabold text-[#0f172a] shadow-md"
+          style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
+        >
+          Υποβολή νέου αιτήματος
+        </Link>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
         {[
-          { t: "Αιτήματά μου", n: all.length, sub: "συνολικά" },
-          { t: "Σε εξέλιξη", n: openCount, sub: "Νέο + Σε εξέλιξη" },
-          { t: "Ολοκληρώθηκαν", n: done, sub: "—" },
+          {
+            t: "Αιτήματά μου",
+            n: all.length,
+            sub: "συνολικά",
+            icon: Inbox,
+            c: ND,
+          },
+          {
+            t: "Σε εξέλιξη",
+            n: openCount,
+            sub: "Νέο + Σε εξέλιξη",
+            icon: TrendingUp,
+            c: "#1e5fa8",
+          },
+          {
+            t: "Ολοκληρώθηκαν",
+            n: done,
+            sub: "—",
+            icon: Sparkles,
+            c: "#059669",
+          },
         ].map((x) => (
           <div
             key={x.t}
-            className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
+            className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm"
           >
-            <p className="text-xs font-bold uppercase text-slate-500">{x.t}</p>
-            <p className="mt-1 text-2xl font-bold" style={{ color: ND }}>{x.n}</p>
-            <p className="text-xs text-slate-500">{x.sub}</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">{x.t}</p>
+              <x.icon className="h-4 w-4" style={{ color: x.c }} />
+            </div>
+            <p className="mt-2 text-3xl font-extrabold tabular-nums" style={{ color: x.c }}>
+              {x.n}
+            </p>
+            <p className="text-xs text-[#64748B]">{x.sub}</p>
           </div>
         ))}
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-bold text-slate-800">Πρόσφατα αιτήματα</h2>
-        <Link
-          href="/portal/requests/new"
-          className="inline-flex justify-center rounded-lg px-4 py-2.5 text-sm font-bold"
-          style={{ background: GOLD, color: "#0f172a" }}
-        >
-          Νέο αίτημα
-        </Link>
-      </div>
-      {recent.length === 0 ? (
-        <p className="text-sm text-slate-500">Καμία καταχώριση ακόμα.</p>
-      ) : (
-        <ul className="space-y-2">
-          {recent.map((r) => (
-            <li
-              key={r.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"
+      <div>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-extrabold" style={{ color: ND }}>
+            Πρόσφατα Αιτήματά μου
+          </h2>
+          <Link
+            href="/portal/requests"
+            className="text-sm font-bold hover:underline"
+            style={{ color: ND }}
+          >
+            Δείτε όλα →
+          </Link>
+        </div>
+        {recent.length === 0 ? (
+          <div className="flex flex-col items-center rounded-2xl border-2 border-dashed border-[#E2E8F0] bg-white px-6 py-12 text-center">
+            <Inbox className="h-14 w-14 text-[#94A3B8]" />
+            <p className="mt-4 text-lg font-bold text-[#1A1A2E]">Δεν έχετε υποβάλει αίτημα ακόμα</p>
+            <p className="mt-1 text-sm text-[#64748B]">Ξεκινήστε με μία υποβολή — παρακολουθήστε την πορεία εδώ.</p>
+            <Link
+              href="/portal/requests/new"
+              className="mt-6 inline-flex rounded-xl px-6 py-3 text-sm font-extrabold text-[#0f172a]"
+              style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
             >
-              <Link href={`/portal/requests/${r.id}`} className="min-w-0 flex-1 font-medium text-slate-900 hover:underline">
-                <span className="font-mono text-xs text-slate-500">{r.request_code} · </span>
-                {r.title}
-              </Link>
-              {statusBadge(r.status || "Νέο")}
-            </li>
-          ))}
-        </ul>
-      )}
+              Υποβολή αιτήματος
+            </Link>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {recent.map((r) => (
+              <li key={r.id}>
+                <Link
+                  href={`/portal/requests/${r.id}`}
+                  className="group flex items-start gap-3 rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm transition hover:shadow-md"
+                >
+                  <span
+                    className="mt-0.5 h-3 w-3 shrink-0 rounded-full"
+                    style={{
+                      background:
+                        r.status === "Ολοκληρώθηκε" ? "#059669" : r.status === "Σε εξέλιξη" ? "#1e5fa8" : "#C9A84C",
+                    }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {r.request_code && (
+                        <span
+                          className="rounded-full px-2 py-0.5 font-mono text-[11px] font-bold text-[#0f172a]"
+                          style={{ background: "linear-gradient(135deg, #C9A84C40, #8B691430)" }}
+                        >
+                          {r.request_code}
+                        </span>
+                      )}
+                      {statusBadge(r.status || "Νέο")}
+                    </div>
+                    <p className="mt-1 font-bold text-[#1A1A2E] group-hover:underline">{r.title}</p>
+                    <p className="text-xs text-[#64748B]">
+                      {r.created_at ? new Date(r.created_at).toLocaleString("el-GR") : ""}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-[#94A3B8] transition group-hover:translate-x-0.5" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-      <h2 className="text-lg font-bold text-slate-800">Τελευταία νέα</h2>
-      {posts.length === 0 ? (
-        <p className="text-sm text-slate-500">Δεν υπάρχουν δημοσιευμένα νεότερα.</p>
-      ) : (
-        <ul className="space-y-2">
-          {posts.map((p) => (
-            <li key={p.id}>
-              <Link href={`/portal/news/${p.slug}`} className="text-sm font-semibold" style={{ color: ND }}>
-                {p.title}
+      <div>
+        <h2 className="mb-4 text-xl font-extrabold" style={{ color: ND }}>
+          Τελευταία νέα
+        </h2>
+        {posts.length === 0 ? (
+          <p className="text-sm text-[#64748B]">Δεν υπάρχουν δημοσιευμένα νεότερα.</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {posts.map((p) => (
+              <Link
+                key={p.id}
+                href={`/portal/news/${p.slug}`}
+                className="group flex flex-col rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm transition hover:shadow-md"
+              >
+                <span
+                  className="w-fit rounded-full px-2.5 py-0.5 text-xs font-bold text-[#0f172a]"
+                  style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
+                >
+                  {p.category}
+                </span>
+                <p className="mt-2 line-clamp-2 text-lg font-bold text-[#1A1A2E] group-hover:underline">
+                  {p.title}
+                </p>
+                {p.excerpt && <p className="mt-1 line-clamp-2 text-sm text-[#64748B]">{p.excerpt}</p>}
               </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

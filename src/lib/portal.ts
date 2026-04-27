@@ -57,6 +57,8 @@ export async function registerPortalCitizen(input: {
     email,
     password: input.password,
     email_confirm: false,
+    /** Stops public.handle_new_user() from inserting a default CRM profile; register path upserts is_portal. */
+    app_metadata: { portal_signup: true },
   });
   if (authErr || !auth.user) {
     return { userId: "", error: authErr?.message ?? "auth error" };
@@ -72,19 +74,16 @@ export async function registerPortalCitizen(input: {
     }
   }
   if (!contactId) {
-    const { data: byEmail } = await admin.from("contacts").select("id").eq("email", email).limit(1).maybeSingle();
-    if (byEmail?.id) {
-      contactId = byEmail.id as string;
+    const phoneT = input.phone.trim();
+    const orParts: string[] = [];
+    if (email) orParts.push(`email.eq.${email}`);
+    if (phoneT) orParts.push(`phone.eq.${phoneT}`);
+    if (orParts.length) {
+      const { data: byOr } = await admin.from("contacts").select("id").or(orParts.join(",")).limit(1).maybeSingle();
+      if (byOr?.id) {
+        contactId = (byOr as { id: string }).id;
+      }
     }
-  }
-  if (!contactId && input.phone.trim()) {
-    const { data: byPh } = await admin
-      .from("contacts")
-      .select("id")
-      .eq("phone", input.phone.trim())
-      .limit(1)
-      .maybeSingle();
-    if (byPh?.id) contactId = (byPh as { id: string }).id;
   }
   if (!contactId) {
     const code = await nextPaddedCode(admin, "contacts", "contact_code", "EP");
@@ -96,6 +95,8 @@ export async function registerPortalCitizen(input: {
         email: email,
         phone: input.phone.trim() || null,
         contact_code: code,
+        source: "Portal",
+        call_status: "Pending",
       } as never)
       .select("id")
       .single();

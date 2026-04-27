@@ -32,7 +32,9 @@ import {
   X,
   HelpCircle,
 } from "lucide-react";
+import { CrmSessionBootScreen } from "@/components/crm-session-boot-screen";
 import { GlobalSearchOverlay } from "@/components/global-search-overlay";
+import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
 import { AlexaMiniWindow } from "@/components/alexandra/alexa-mini-window";
 import { AiAssistantWidget } from "@/components/ai-assistant-widget";
@@ -434,7 +436,7 @@ function SidebarContent({
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, loading: profileLoading } = useProfile();
+  const { profile, loading: profileLoading, sessionResolved } = useProfile();
   const isPortal = pathname === "/portal" || pathname.startsWith("/portal/");
   const isCrmLoginPublic = pathname === "/login";
   const [openRequestsCount, setOpenRequestsCount] = useState(0);
@@ -695,6 +697,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  if (!sessionResolved) {
+    return <CrmSessionBootScreen />;
+  }
+
+  const showSidebarNavSkeleton = profileLoading;
+
   return (
     <div className="min-h-[-webkit-fill-available] min-h-screen w-full max-w-full overflow-x-hidden bg-[var(--bg-primary)]" style={shellStyle}>
       <aside
@@ -733,18 +741,24 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <div className="relative z-10 mb-1 h-px flex-shrink-0 bg-gradient-to-r from-transparent via-[var(--accent-gold)]/40 to-transparent" />
 
         <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col">
-          <SidebarContent
-            pathname={pathname}
-            role={role}
-            openRequestsCount={openRequestsCount}
-            onNavigate={undefined}
-            showLabels={showLabels}
-            showGroupHeaders={showGroupHeaders}
-            groupState={groupState}
-            onToggleGroup={toggleGroup}
-            flatRail={mobileRail && !mobileNavOpen}
-            pinBottom={pinBottom({ onNavigate: undefined, showLabels })}
-          />
+          {showSidebarNavSkeleton ? (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <SidebarNavSkeleton rows={10} />
+            </div>
+          ) : (
+            <SidebarContent
+              pathname={pathname}
+              role={role}
+              openRequestsCount={openRequestsCount}
+              onNavigate={undefined}
+              showLabels={showLabels}
+              showGroupHeaders={showGroupHeaders}
+              groupState={groupState}
+              onToggleGroup={toggleGroup}
+              flatRail={mobileRail && !mobileNavOpen}
+              pinBottom={pinBottom({ onNavigate: undefined, showLabels })}
+            />
+          )}
         </div>
 
         <div className="relative z-10 mt-auto flex w-full flex-shrink-0 border-t border-[var(--border)]/50 pt-1.5">
@@ -800,18 +814,22 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <div className="mb-2 h-px bg-gradient-to-r from-transparent via-[var(--accent-gold)]/40 to-transparent" />
-            <SidebarContent
-              pathname={pathname}
-              role={role}
-              openRequestsCount={openRequestsCount}
-              onNavigate={() => setMobileNavOpen(false)}
-              showLabels
-              showGroupHeaders
-              groupState={groupState}
-              onToggleGroup={toggleGroup}
-              flatRail={false}
-              pinBottom={pinBottom({ onNavigate: () => setMobileNavOpen(false), showLabels: true })}
-            />
+            {showSidebarNavSkeleton ? (
+              <SidebarNavSkeleton rows={10} />
+            ) : (
+              <SidebarContent
+                pathname={pathname}
+                role={role}
+                openRequestsCount={openRequestsCount}
+                onNavigate={() => setMobileNavOpen(false)}
+                showLabels
+                showGroupHeaders
+                groupState={groupState}
+                onToggleGroup={toggleGroup}
+                flatRail={false}
+                pinBottom={pinBottom({ onNavigate: () => setMobileNavOpen(false), showLabels: true })}
+              />
+            )}
           </div>
         </>
       )}

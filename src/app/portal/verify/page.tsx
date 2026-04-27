@@ -44,7 +44,7 @@ function VerifyBody() {
   }, [sp, router]);
 
   return (
-    <div className="flex min-h-[-webkit-fill-available] min-h-dvh flex-col items-center justify-center bg-slate-50 px-4 text-center">
+    <div className="flex min-h-[-webkit-fill-available] min-h-dvh flex-col items-center justify-center bg-[#FAFBFC] px-4 text-center">
       {err && (
         <p className="text-sm text-red-600" role="alert">
           {err}{" "}

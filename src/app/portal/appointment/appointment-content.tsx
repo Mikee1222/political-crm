@@ -1,11 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { lux } from "@/lib/luxury-styles";
+
+const ND = "#003476";
 
 type Slot = { start: string; end: string };
+
+const label = "mb-1.5 block text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]";
+const input = "w-full rounded-xl border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-[#1A1A2E]";
 
 export function PortalAppointmentContent() {
   const sp = useSearchParams();
@@ -25,7 +30,9 @@ export function PortalAppointmentContent() {
   const [ok, setOk] = useState(false);
 
   const loadSlots = useCallback(async () => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return;
+    }
     setLoading(true);
     setErr(null);
     const res = await fetchWithTimeout(`/api/portal/appointments/slots?date=${encodeURIComponent(date)}`);
@@ -74,10 +81,15 @@ export function PortalAppointmentContent() {
 
   if (ok) {
     return (
-      <div className={`min-h-dvh ${lux.pageBg} flex flex-col items-center justify-center p-6`}>
-        <div className={lux.card + " max-w-md text-center"}>
-          <h1 className={lux.pageTitle}>Ραντεβού κλείστηκε</h1>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">Θα λάβετε επιβεβαίωση με email, εφόσον το έχετε δηλώσει.</p>
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-[#FAFBFC] p-6">
+        <div className="max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-8 text-center shadow-sm">
+          <h1 className="text-xl font-extrabold" style={{ color: ND }}>
+            Ραντεβού κλείστηκε
+          </h1>
+          <p className="mt-2 text-sm text-[#64748B]">Θα λάβετε επιβεβαίωση με email, εφόσον το έχετε δηλώσει.</p>
+          <Link href="/portal" className="mt-6 inline-block text-sm font-bold" style={{ color: ND }}>
+            ← Αρχική πύλη
+          </Link>
         </div>
       </div>
     );
@@ -85,27 +97,34 @@ export function PortalAppointmentContent() {
 
   if (!contact) {
     return (
-      <div className={`min-h-dvh ${lux.pageBg} flex items-center justify-center p-4`}>
-        <p className="text-sm text-amber-200">Χρειάζεται σύνδεσμος από το γραφείο (επαφή).</p>
+      <div className="flex min-h-dvh items-center justify-center bg-[#FAFBFC] p-4">
+        <p className="text-center text-sm text-amber-800">Χρειάζεται σύνδεσμος από το γραφείο (επαφή).</p>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-dvh ${lux.pageBg} p-4 py-8`}>
+    <div className="min-h-dvh bg-[#FAFBFC] p-4 py-8">
       <div className="mx-auto max-w-lg">
-        <h1 className="mb-2 text-xl font-bold text-[var(--text-primary)]">Κλείστε ραντεβού</h1>
-        <p className="mb-6 text-sm text-[var(--text-secondary)]">Η τελική αποδοχή πραγματοποιείται από το γραφείο.</p>
+        <p className="mb-4">
+          <Link href="/portal" className="text-sm font-extrabold" style={{ color: ND }}>
+            ← Αρχική
+          </Link>
+        </p>
+        <h1 className="mb-2 text-2xl font-extrabold" style={{ color: ND }}>
+          Κλείστε ραντεβού
+        </h1>
+        <p className="mb-6 text-sm text-[#64748B]">Η τελική αποδοχή πραγματοποιείται από το γραφείο.</p>
         <form onSubmit={book} className="space-y-4">
-          {err && <p className="text-sm text-red-200">{err}</p>}
+          {err && <p className="text-sm text-red-600">{err}</p>}
           <div>
-            <label className={lux.label} htmlFor="d">
+            <label className={label} htmlFor="d">
               Ημέρα
             </label>
             <input
               id="d"
               type="date"
-              className={lux.input}
+              className={input}
               value={date}
               onChange={(e) => {
                 setDate(e.target.value);
@@ -113,9 +132,9 @@ export function PortalAppointmentContent() {
             />
           </div>
           <div>
-            <p className="text-xs text-[var(--text-muted)]">Ώρα (30’)</p>
+            <p className="text-xs text-[#64748B]">Ώρα (30’)</p>
             {loading && <p className="text-sm">Φόρτωση…</p>}
-            {!loading && (slots?.length === 0 ? <p className="text-sm text-amber-200">Δεν υπάρχουν κενά.</p> : null)}
+            {!loading && (slots?.length === 0 ? <p className="text-sm text-amber-800">Δεν υπάρχουν κενά.</p> : null)}
             <ul className="mt-2 flex max-h-48 flex-col gap-1 overflow-y-auto">
               {(slots ?? []).map((s) => (
                 <li key={s.start}>
@@ -123,8 +142,8 @@ export function PortalAppointmentContent() {
                     type="button"
                     onClick={() => setPick(s)}
                     className={
-                      (pick?.start === s.start ? "border-[#C9A84C] bg-[#C9A84C]/10 " : "border-[var(--border)] ") +
-                      "w-full rounded-lg border px-3 py-2 text-left text-sm"
+                      (pick?.start === s.start ? "border-[#C9A84C] bg-amber-50 " : "border-[#E2E8F0] ") +
+                      "w-full rounded-lg border px-3 py-2 text-left text-sm text-[#1A1A2E]"
                     }
                   >
                     {new Date(s.start).toLocaleString("el-GR", { timeZone: "Europe/Athens", hour: "2-digit", minute: "2-digit" })} –{" "}
@@ -135,24 +154,36 @@ export function PortalAppointmentContent() {
             </ul>
           </div>
           <div>
-            <label className={lux.label} htmlFor="n">
+            <label className={label} htmlFor="n">
               Ονοματεπώνυμο
             </label>
-            <input id="n" className={lux.input} value={name} onChange={(e) => setName(e.target.value)} required />
+            <input id="n" className={input} value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div>
-            <label className={lux.label} htmlFor="p">
+            <label className={label} htmlFor="p">
               Τηλέφωνο
             </label>
-            <input id="p" className={lux.input} value={phoneIn} onChange={(e) => setPhoneIn(e.target.value)} required />
+            <input id="p" className={input} value={phoneIn} onChange={(e) => setPhoneIn(e.target.value)} required />
           </div>
           <div>
-            <label className={lux.label} htmlFor="r">
+            <label className={label} htmlFor="r">
               Θέμα συνάντησης
             </label>
-            <textarea id="r" className={lux.textarea} rows={4} value={reason} onChange={(e) => setReason(e.target.value)} required />
+            <textarea
+              id="r"
+              className={input + " min-h-[100px] py-2"}
+              rows={4}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              required
+            />
           </div>
-          <button type="submit" className={lux.btnPrimary + " w-full !py-3"} disabled={!pick}>
+          <button
+            type="submit"
+            className="w-full rounded-xl py-3.5 text-sm font-extrabold text-white disabled:opacity-50"
+            style={{ background: ND }}
+            disabled={!pick}
+          >
             Αίτημα ραντεβού
           </button>
         </form>

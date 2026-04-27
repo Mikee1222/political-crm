@@ -160,6 +160,13 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Portal signups: no row here; /api/portal/auth/register sets profiles.is_portal via service role.
+  if coalesce(new.raw_app_meta_data->>'portal_signup', 'false') = 'true' then
+    return new;
+  end if;
+  if coalesce(new.raw_user_meta_data->>'portal_signup', 'false') = 'true' then
+    return new;
+  end if;
   insert into public.profiles (id, full_name, role)
   values (
     new.id,
