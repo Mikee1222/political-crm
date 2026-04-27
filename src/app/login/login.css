@@ -1,0 +1,60 @@
+/* CRM login — right panel ambient (scoped via parent class) */
+.login-crm-right .login-aurora {
+  background: linear-gradient(
+    125deg,
+    #f1f5f9 0%,
+    #ffffff 28%,
+    #fffbeb 52%,
+    #f8fafc 78%,
+    #eef2f7 100%
+  );
+  background-size: 220% 220%;
+  animation: login-aurora-shift 16s ease-in-out infinite;
+}
+
+@keyframes login-aurora-shift {
+  0%,
+  100% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+}
+
+.login-crm-right .login-particle {
+  position: absolute;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.25), rgba(10, 22, 40, 0.08));
+  pointer-events: none;
+  animation: login-drift 18s ease-in-out infinite;
+}
+
+.login-crm-right .login-particle:nth-child(2) {
+  animation-delay: -4s;
+  animation-duration: 22s;
+}
+.login-crm-right .login-particle:nth-child(3) {
+  animation-delay: -9s;
+  animation-duration: 14s;
+}
+.login-crm-right .login-particle:nth-child(4) {
+  animation-delay: -2s;
+  animation-duration: 20s;
+}
+
+@keyframes login-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.35;
+  }
+  33% {
+    transform: translate(8px, -12px) scale(1.08);
+    opacity: 0.5;
+  }
+  66% {
+    transform: translate(-6px, 6px) scale(0.95);
+    opacity: 0.4;
+  }
+}
