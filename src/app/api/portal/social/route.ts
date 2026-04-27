@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { getPortalServiceOrAnon } from "@/lib/supabase/portal-service";
 import { nextJsonError } from "@/lib/api-resilience";
-import { buildFacebookPagePluginUrl } from "@/lib/facebook-page-plugin";
 export const dynamic = "force-dynamic";
 
-function isFacebookPageUrl(s: string): boolean {
+function isFacebookPostUrl(s: string): boolean {
   try {
     const u = new URL(s.trim());
     if (u.protocol !== "https:" && u.protocol !== "http:") return false;
@@ -51,13 +50,12 @@ export async function GET() {
     }
     const rows = posts ?? [];
     const fbRows = rows
-      .filter((r) => r.platform === "facebook" && isFacebookPageUrl(r.url))
+      .filter((r) => r.platform === "facebook" && isFacebookPostUrl(r.url))
       .slice(0, 3);
 
     const facebook = fbRows.map((r) => ({
       id: r.id,
       url: r.url,
-      iframeSrc: buildFacebookPagePluginUrl(r.url),
     }));
 
     return NextResponse.json({ settings, facebook });

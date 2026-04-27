@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Volume2, VolumeX } from "lucide-react";
-import { loadTikTokEmbedScript } from "@/lib/tiktok-embed";
 
 const ND = "#003476";
-const GOLD = "#C9A84C";
 
 type Settings = {
   show_tiktok: boolean;
@@ -18,14 +16,26 @@ type TabId = "tiktok" | "facebook" | "instagram";
 
 type SocialCore = {
   settings: Settings;
-  facebook: { id: string; url: string; iframeSrc: string }[];
+  facebook: { id: string; url: string }[];
 };
 
-type TiktokApi = { items: { id: string; url: string; blockquoteHtml: string | null }[] };
-
-type SocialPayload = SocialCore & {
-  tiktok: { id: string; url: string; blockquoteHtml: string | null }[];
+type TiktokItem = {
+  id: string;
+  url: string;
+  thumbnailUrl: string | null;
+  title: string | null;
+  authorName: string | null;
 };
+
+type TiktokApi = { items: TiktokItem[] };
+
+type SocialPayload = SocialCore & { tiktok: TiktokItem[] };
+
+declare global {
+  interface Window {
+    FB?: { XFBML: { parse: (el?: Element | null) => void } };
+  }
+}
 
 function TiktokGlyph({ className }: { className?: string }) {
   return (
@@ -46,78 +56,138 @@ function FacebookGlyph({ className }: { className?: string }) {
 function InstagramGlyph({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.98-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.98-6.98C15.667.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z" />
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.98-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.98-6.98C15.667.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 0 0 0 2.881 1.44 1.44 0 0 0 0-2.881z" />
     </svg>
   );
 }
 
-function TiktokCard({ blockquoteHtml, url }: { blockquoteHtml: string | null; url: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(false);
-  const [mutedU, setMutedU] = useState(true);
-
-  useEffect(() => {
-    if (!blockquoteHtml || !ref.current) {
-      if (!blockquoteHtml) setReady(true);
-      return;
-    }
-    ref.current.innerHTML = blockquoteHtml;
-    void loadTikTokEmbedScript()
-      .then(() => {
-        setTimeout(() => setReady(true), 500);
-      })
-      .catch(() => {
-        setReady(true);
-      });
-  }, [blockquoteHtml]);
-
-  if (!blockquoteHtml) {
-    return (
-      <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/50 p-4 text-center text-sm text-white/70">
-        <p>Το βίντεο δεν μπόρεσε να ενσωματωθεί. Ελέγξτε το URL στο CRM.</p>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 font-semibold underline"
-          style={{ color: GOLD }}
-        >
-          Άνοιγμα στο TikTok
-        </a>
-      </div>
-    );
-  }
-
+function TiktokCard({ item }: { item: TiktokItem }) {
+  const { url, thumbnailUrl, title, authorName } = item;
+  const [muted, setMuted] = useState(true);
+  const openTiktok = useCallback(() => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, [url]);
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-zinc-900 to-black shadow-xl">
-      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5">
-        <TiktokGlyph className="h-5 w-5 text-white" />
-        <span className="text-sm font-bold tracking-tight text-white/95">TikTok</span>
-      </div>
-      <div className="relative flex min-h-[420px] flex-1 items-stretch">
-        <div
-          className="portal-tiktok-embed relative w-full min-w-0 flex-1 [&_blockquote.tiktok-embed]:!m-0 [&_blockquote.tiktok-embed]:!max-w-none [&_blockquote.tiktok-embed]:!min-w-0"
-          ref={ref}
-        />
-        {!ready && (
+    <div
+      className="group flex h-full min-h-[320px] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-black shadow-xl transition hover:ring-2 hover:ring-zinc-600"
+    >
+      <div
+        role="link"
+        tabIndex={0}
+        className="relative flex flex-1 cursor-pointer flex-col"
+        onClick={openTiktok}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openTiktok();
+          }
+        }}
+        aria-label={`Άνοιγμα βίντεο στο TikTok${title ? `: ${title}` : ""}`}
+      >
+        <div className="relative flex aspect-[9/16] max-h-[min(70vh,520px)] w-full min-h-[220px] items-stretch justify-center overflow-hidden bg-zinc-950 sm:aspect-[10/16] sm:min-h-[280px]">
+          {thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={thumbnailUrl}
+              alt=""
+              className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-[1.02]"
+              loading="lazy"
+            />
+          ) : (
+            <div
+              className="flex h-full w-full items-center justify-center bg-gradient-to-b from-zinc-800 to-black"
+              aria-hidden
+            >
+              <TiktokGlyph className="h-16 w-16 text-zinc-600" />
+            </div>
+          )}
+          <div className="pointer-events-none absolute left-0 right-0 top-0 z-[1] flex items-start justify-between p-3">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/60 px-2.5 py-1.5 text-white backdrop-blur-sm">
+              <TiktokGlyph className="h-4 w-4" />
+              <span className="text-xs font-bold">TikTok</span>
+            </span>
+          </div>
           <div
-            className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-black/35"
+            className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-black/0 transition group-hover:bg-black/10"
             aria-hidden
           >
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-              <Play className="h-8 w-8 text-white" fill="white" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20 shadow-lg backdrop-blur-sm">
+              <Play className="h-8 w-8 text-white" fill="currentColor" />
             </div>
           </div>
-        )}
+          <button
+            type="button"
+            className="absolute bottom-2 right-2 z-[2] rounded-full border border-white/20 bg-black/55 p-2 text-white transition hover:bg-black/70"
+            title="Ήχος στο βίντεο (στο TikTok)"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMuted((m) => !m);
+            }}
+            aria-pressed={muted}
+          >
+            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </button>
+          <div className="absolute inset-x-0 bottom-0 z-[1] bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-12 text-left text-white">
+            {authorName ? <p className="text-xs font-semibold text-white/90">@{authorName.replace(/^@/, "")}</p> : null}
+            {title ? <p className="mt-1 line-clamp-3 text-sm font-medium leading-snug text-white/95">{title}</p> : null}
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-3">
         <button
           type="button"
-          className="absolute bottom-3 right-3 z-[2] rounded-full border border-white/20 bg-black/60 p-2.5 text-white shadow-lg backdrop-blur transition hover:bg-black/80"
-          onClick={() => setMutedU((m) => !m)}
-          title="Ο έλεγχος ήχου γίνεται από τον ενσωματωμένο παίκτη TikTok"
+          onClick={openTiktok}
+          className="inline-flex w-full items-center justify-center rounded-lg py-2.5 text-sm font-extrabold"
+          style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)", color: "#0f172a" }}
         >
-          {mutedU ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          Δείτε στο TikTok
         </button>
       </div>
+    </div>
+  );
+}
+
+function FacebookPostGrid({ posts }: { posts: { id: string; url: string }[] }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (posts.length === 0) return;
+    const parse = () => {
+      try {
+        if (typeof window !== "undefined" && window.FB?.XFBML) {
+          window.FB.XFBML.parse(rootRef.current ?? undefined);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    parse();
+    const t0 = window.setTimeout(parse, 200);
+    const t1 = window.setTimeout(parse, 800);
+    const t2 = window.setTimeout(parse, 2000);
+    const id = window.setInterval(parse, 1500);
+    window.setTimeout(() => window.clearInterval(id), 8000);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearInterval(id);
+    };
+  }, [posts]);
+
+  return (
+    <div
+      ref={rootRef}
+      className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {posts.map((f) => (
+        <div
+          key={f.id}
+          className="min-h-[200px] overflow-hidden rounded-2xl border-2 border-[#1877F2] bg-white p-1 shadow-md"
+        >
+          <div className="fb-post w-full" data-href={f.url} data-width="auto" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -146,7 +216,7 @@ export function PortalSocialSection() {
       return;
     }
     const core = (await rSocial.json()) as SocialCore;
-    let tiktok: SocialPayload["tiktok"] = [];
+    let tiktok: TiktokItem[] = [];
     if (rTt.ok) {
       const tt = (await rTt.json()) as TiktokApi;
       tiktok = tt.items ?? [];
@@ -269,7 +339,7 @@ export function PortalSocialSection() {
             ) : (
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {data.tiktok.map((t) => (
-                  <TiktokCard key={t.id} blockquoteHtml={t.blockquoteHtml} url={t.url} />
+                  <TiktokCard key={t.id} item={t} />
                 ))}
               </div>
             )}
@@ -285,38 +355,9 @@ export function PortalSocialSection() {
               Ακολουθήστε μας στο Facebook
             </h3>
             {data.facebook.length === 0 ? (
-              <p className="text-center text-slate-600">Προσθέστε συνδέσμους Facebook από το CRM.</p>
+              <p className="text-center text-slate-600">Προσθέστε δημόσια URL αναρτήσεων Facebook από το CRM.</p>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {data.facebook.map((f) => (
-                  <div
-                    key={f.id}
-                    className="flex flex-col overflow-hidden rounded-2xl border-2 p-0 shadow-lg"
-                    style={{ borderColor: "#1877F2", background: "linear-gradient(180deg, #E7F0FF, #fff)" }}
-                  >
-                    <div
-                      className="flex items-center gap-2 px-3 py-2.5"
-                      style={{ backgroundColor: "#1877F2" }}
-                    >
-                      <FacebookGlyph className="h-4 w-4 text-white" />
-                      <span className="text-sm font-bold text-white">Facebook</span>
-                    </div>
-                    <div className="min-h-0 w-full flex-1 overflow-x-auto p-1">
-                      <iframe
-                        title="Facebook"
-                        src={f.iframeSrc}
-                        width={340}
-                        height={500}
-                        style={{ border: "none", overflow: "hidden", maxWidth: "100%" }}
-                        className="mx-auto block w-[340px] max-w-full"
-                        scrolling="no"
-                        allowFullScreen
-                        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <FacebookPostGrid posts={data.facebook} />
             )}
           </div>
         )}
