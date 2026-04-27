@@ -4,25 +4,42 @@ import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { lux } from "@/lib/luxury-styles";
+import { mapAuthErrorToGreek, validateEmail } from "@/lib/form-validation";
+import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErr, setFieldErr] = useState<{ email?: string; password?: string }>({});
   const [mode, setMode] = useState<"login" | "signup">("login");
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setFieldErr({});
+    const em = validateEmail(email);
+    if (em) {
+      setFieldErr({ email: em });
+      return;
+    }
+    if (!password) {
+      setFieldErr({ password: "Υποχρεωτικός κωδικός" });
+      return;
+    }
+    if (mode === "signup" && password.length < 6) {
+      setFieldErr({ password: "Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες" });
+      return;
+    }
     const supabase = createClient();
     const action =
       mode === "login"
-        ? supabase.auth.signInWithPassword({ email, password })
-        : supabase.auth.signUp({ email, password });
+        ? supabase.auth.signInWithPassword({ email: email.trim(), password })
+        : supabase.auth.signUp({ email: email.trim(), password });
     const { error: authError } = await action;
     if (authError) {
-      setError(authError.message);
+      setError(mapAuthErrorToGreek(authError.message));
       return;
     }
     router.replace("/dashboard");
@@ -51,36 +68,45 @@ export default function LoginPage() {
         </div>
         <p className="text-center text-sm text-[var(--text-secondary)]">Σύνδεση με email και κωδικό</p>
         <div>
-          <label className={lux.label} htmlFor="em">
+          <HqLabel htmlFor="em" required>
             Email
-          </label>
+          </HqLabel>
           <input
             id="em"
-            className={lux.input}
+            className={[lux.input, fieldErr.email ? lux.inputError : ""].join(" ")}
             type="email"
             placeholder="name@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (fieldErr.email) setFieldErr((f) => ({ ...f, email: undefined }));
+            }}
             autoComplete="email"
+            aria-invalid={!!fieldErr.email}
           />
+          <HqFieldError>{fieldErr.email}</HqFieldError>
         </div>
         <div>
-          <label className={lux.label} htmlFor="pw">
+          <HqLabel htmlFor="pw" required>
             Κωδικός
-          </label>
+          </HqLabel>
           <input
             id="pw"
-            className={lux.input}
+            className={[lux.input, fieldErr.password ? lux.inputError : ""].join(" ")}
             type="password"
             placeholder="••••••••"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            onChange={(e) => {
+              setPassword(e.target.value);
+              if (fieldErr.password) setFieldErr((f) => ({ ...f, password: undefined }));
+            }}
             autoComplete="current-password"
+            aria-invalid={!!fieldErr.password}
+            minLength={mode === "signup" ? 6 : undefined}
           />
+          <HqFieldError>{fieldErr.password}</HqFieldError>
         </div>
-        {error && <p className="text-center text-sm text-[var(--danger)]">{error}</p>}
+        {error && <p className="text-center text-sm text-red-400">{error}</p>}
         <button
           type="submit"
           className={[

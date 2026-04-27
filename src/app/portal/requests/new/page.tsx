@@ -7,8 +7,12 @@ import { Check, ChevronLeft, ChevronRight, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { portalDisplayFirstName } from "@/lib/portal-display";
+import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { minLength, requiredText } from "@/lib/form-validation";
 
 const ND = "#003476";
+const inputBase =
+  "w-full rounded-xl border border-[#E2E8F0] bg-white py-3 px-3 text-sm text-[#1A1A2E] outline-none transition focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25";
 
 const STEPS = ["Στοιχεία", "Περιγραφή", "Επιβεβαίωση"] as const;
 
@@ -27,6 +31,7 @@ export default function NewPortalRequestPage() {
   } | null>(null);
   const [err, setErr] = useState("");
   const [sending, setSending] = useState(false);
+  const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const supabase = createClient();
@@ -53,8 +58,18 @@ export default function NewPortalRequestPage() {
   }, [router]);
 
   const onSubmit = useCallback(async () => {
-    if (!title.trim() || !category) {
-      setErr("Συμπληρώστε τίτλο και κατηγορία");
+    setFieldErr({});
+    const t = requiredText(title, "τίτλος");
+    const c = !category ? "Επιλέξτε κατηγορία" : null;
+    if (t || c) {
+      setFieldErr({ ...(t && { title: t }), ...(c && { category: c }) });
+      setErr("Ελέγξτε τα πεδία");
+      return;
+    }
+    const d = minLength(description, 3, "Η περιγραφή πρέπει να έχει τουλάχιστον 3 χαρακτήρες");
+    if (d) {
+      setFieldErr({ description: d });
+      setErr(d);
       return;
     }
     setErr("");
@@ -83,11 +98,32 @@ export default function NewPortalRequestPage() {
     }
   }, [title, description, category, router]);
 
-  const canStep0 = title.trim() && category;
-  const canStep1 = (description || "").trim().length >= 3;
+  const goNext0 = () => {
+    setFieldErr({});
+    const t = requiredText(title, "τίτλος");
+    if (t) {
+      setFieldErr({ title: t });
+      return;
+    }
+    if (!category) {
+      setFieldErr({ category: "Επιλέξτε κατηγορία" });
+      return;
+    }
+    setStep(1);
+  };
+
+  const goNext1 = () => {
+    setFieldErr({});
+    const d = minLength(description, 3, "Τουλάχιστον 3 χαρακτήρες");
+    if (d) {
+      setFieldErr({ description: d });
+      return;
+    }
+    setStep(2);
+  };
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-2xl px-4 py-8 sm:px-6 sm:py-10">
+    <div className="mx-auto w-full min-w-0 max-w-[640px] px-4 py-8 sm:px-6 sm:py-10">
       <p className="mb-2">
         <Link href="/portal/requests" className="text-sm font-bold hover:underline" style={{ color: ND }}>
           ← Όλα τα αιτήματα
@@ -97,18 +133,27 @@ export default function NewPortalRequestPage() {
       <h1 className="text-2xl font-extrabold" style={{ color: ND }}>
         Νέο αίτημα
       </h1>
+
       <p className="mt-1 text-sm text-[#64748B]">Βήμα {step + 1} / 3</p>
 
-      <div className="mb-6 mt-4 flex items-center justify-center gap-1">
+      <div className="mb-2 mt-4 flex w-full max-w-md mx-auto items-center justify-center gap-1" aria-label="Βήματα">
         {STEPS.map((s, i) => (
           <div key={s} className="flex items-center">
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ background: i <= step ? ND : "#E2E8F0" }}
-            >
-              {i < step ? <Check className="h-4 w-4" /> : i + 1}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold"
+                style={
+                  i <= step
+                    ? { background: ND, color: "white" }
+                    : { background: "#E2E8F0", color: "#64748B" }
+                }
+                aria-current={i === step ? "step" : undefined}
+              >
+                {i < step ? <Check className="h-4 w-4" /> : i + 1}
+              </div>
+              <span className="hidden text-[9px] font-bold uppercase text-[#64748B] sm:block">{s}</span>
             </div>
-            {i < STEPS.length - 1 && <div className="mx-1 w-4 border-t-2 sm:w-8" style={{ borderColor: i < step ? ND : "#E2E8F0" }} />}
+            {i < STEPS.length - 1 && <div className="mx-1 w-4 border-t-2 sm:w-8" style={{ borderColor: i < step ? ND : "#E2E8F0" }} aria-hidden />}
           </div>
         ))}
       </div>
@@ -130,27 +175,37 @@ export default function NewPortalRequestPage() {
         </div>
       )}
 
-      {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
+      {err && <p className="mt-4 text-center text-sm text-red-600" role="alert">{err}</p>}
 
       {step === 0 && (
         <div className="mt-6 space-y-4">
           <div>
-            <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Τίτλος αιτήματος</label>
+            <HqLabel htmlFor="pt" required>
+              Τίτλος αιτήματος
+            </HqLabel>
             <input
-              className="mt-1.5 w-full rounded-xl border border-[#E2E8F0] py-3 px-3 text-sm"
+              id="pt"
+              className={[inputBase, fieldErr.title ? "border-red-400" : ""].join(" ")}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (fieldErr.title) setFieldErr((f) => ({ ...f, title: "" }));
+              }}
+              aria-invalid={!!fieldErr.title}
             />
+            <HqFieldError>{fieldErr.title}</HqFieldError>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Κατηγορία</p>
+            <HqLabel required>Κατηγορία</HqLabel>
             <div className="mt-2 flex flex-wrap gap-2">
               {cats.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setCategory(c)}
+                  onClick={() => {
+                    setCategory(c);
+                    if (fieldErr.category) setFieldErr((f) => ({ ...f, category: "" }));
+                  }}
                   className={[
                     "rounded-full border-2 px-3 py-2 text-sm font-bold transition",
                     category === c
@@ -163,14 +218,14 @@ export default function NewPortalRequestPage() {
                 </button>
               ))}
             </div>
+            <HqFieldError>{fieldErr.category}</HqFieldError>
             {cats.length === 0 && <p className="text-sm text-amber-700">Δεν φορτώθηκαν κατηγορίες.</p>}
           </div>
           <button
             type="button"
-            className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl py-3.5 text-sm font-extrabold text-white disabled:opacity-50"
+            className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl py-3.5 text-sm font-extrabold text-white transition hover:brightness-110 disabled:opacity-50"
             style={{ background: ND }}
-            disabled={!canStep0}
-            onClick={() => setStep(1)}
+            onClick={goNext0}
           >
             Επόμενο
             <ChevronRight className="h-4 w-4" />
@@ -181,13 +236,20 @@ export default function NewPortalRequestPage() {
       {step === 1 && (
         <div className="mt-6 space-y-4">
           <div>
-            <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Περιγραφή</label>
+            <HqLabel htmlFor="pd" required>
+              Περιγραφή
+            </HqLabel>
             <textarea
-              className="mt-1.5 min-h-[200px] w-full rounded-xl border border-[#E2E8F0] p-3 text-sm leading-relaxed"
+              id="pd"
+              className={["min-h-[200px] rounded-xl border p-3 text-sm leading-relaxed focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25", fieldErr.description ? "border-red-400" : "border-[#E2E8F0]"].join(" ")}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                if (fieldErr.description) setFieldErr((f) => ({ ...f, description: "" }));
+              }}
               placeholder="Περιγράψτε αναλυτικά το ζήτημά σας…"
             />
+            <HqFieldError>{fieldErr.description}</HqFieldError>
           </div>
           <div className="flex gap-2">
             <button
@@ -200,10 +262,9 @@ export default function NewPortalRequestPage() {
             </button>
             <button
               type="button"
-              className="flex flex-1 items-center justify-center gap-1 rounded-xl py-3.5 text-sm font-extrabold text-white disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-1 rounded-xl py-3.5 text-sm font-extrabold text-white transition hover:brightness-110"
               style={{ background: ND }}
-              disabled={!canStep1}
-              onClick={() => setStep(2)}
+              onClick={goNext1}
             >
               Επόμενο
             </button>
@@ -237,7 +298,7 @@ export default function NewPortalRequestPage() {
             </button>
             <button
               type="button"
-              className="flex flex-1 items-center justify-center rounded-xl py-3.5 text-sm font-extrabold text-[#0f172a] disabled:opacity-50"
+              className="flex flex-1 items-center justify-center rounded-xl py-3.5 text-sm font-extrabold text-[#0f172a] transition hover:brightness-110 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
               onClick={() => void onSubmit()}
               disabled={sending}

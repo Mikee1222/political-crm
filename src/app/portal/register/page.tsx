@@ -6,6 +6,8 @@ import { useState, Suspense } from "react";
 import { Check, Lock, Mail, Phone, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { mapAuthErrorToGreek, minLength, requiredText, validateEmail, validatePhone10 } from "@/lib/form-validation";
+import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
 
 const ND = "#003476";
 
@@ -25,9 +27,8 @@ function RegisterForm() {
   const [gdpr, setGdpr] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fe, setFe] = useState<Record<string, string>>({});
 
-  const canNext0 = firstName.trim() && lastName.trim();
-  const canNext1 = email.trim() && email.includes("@");
   const canSubmit = password.length >= 6 && password === password2 && gdpr;
 
   return (
@@ -93,8 +94,22 @@ function RegisterForm() {
                 return;
               }
               setErr("");
+              setFe({});
+              const w1 = minLength(password, 6, "Τουλάχιστον 6 χαρακτήρες");
+              if (w1) {
+                setFe({ pw1: w1 });
+                return;
+              }
+              if (password !== password2) {
+                setFe({ pw2: "Οι κωδικοί δεν ταιριάζουν" });
+                return;
+              }
+              if (!gdpr) {
+                setErr("Απαιτείται αποδοχή επεξεργασίας δεδομένων (GDPR).");
+                return;
+              }
               if (!canSubmit) {
-                setErr("Συμφωνήστε με την πολιτική και ελέγξτε τον κωδικό");
+                setErr("Ελέγξτε κωδικό και συμφωνία GDPR.");
                 return;
               }
               setLoading(true);
@@ -113,19 +128,19 @@ function RegisterForm() {
                 });
                 const j = (await res.json()) as { error?: string };
                 if (!res.ok) {
-                  setErr(j.error ?? "Σφάλμα");
+                  setErr(j.error ?? "Η εγγραφή απέτυχε. Ελέγξτε τα στοιχεία.");
                   return;
                 }
                 const supabase = createClient();
                 const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
                 if (error) {
-                  setErr("Η εγγραφή πέτυχε, αλλά απέτυχε η αυτόματη σύνδεση. " + error.message);
+                  setErr("Η εγγραφή πέτυχε, αλλά απέτυχε η αυτόματη σύνδεση. " + mapAuthErrorToGreek(error.message));
                   return;
                 }
                 router.push("/portal/dashboard");
                 router.refresh();
               } catch {
-                setErr("Σφάλμα δικτύου");
+                setErr("Σφάλμα δικτύου. Δοκιμάστε ξανά.");
               } finally {
                 setLoading(false);
               }
@@ -134,36 +149,51 @@ function RegisterForm() {
             {step === 0 && (
               <>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Όνομα</label>
+                  <HqLabel className="!text-[#64748B]" required>Όνομα</HqLabel>
                   <div className="relative mt-1.5">
                     <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                     <input
-                      className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm"
+                      className={["w-full rounded-xl border py-3 pl-10 pr-3 text-sm", fe.fn ? "border-red-400" : "border-[#E2E8F0] focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25"].join(" ")}
                       value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      onChange={(e) => {
+                        setFirstName(e.target.value);
+                        if (fe.fn) setFe((f) => ({ ...f, fn: "" }));
+                      }}
                       autoComplete="given-name"
-                      required
                     />
                   </div>
+                  <HqFieldError>{fe.fn}</HqFieldError>
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Επίθετο</label>
+                  <HqLabel className="!text-[#64748B]" required>Επίθετο</HqLabel>
                   <div className="relative mt-1.5">
                     <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                     <input
-                      className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm"
+                      className={["w-full rounded-xl border py-3 pl-10 pr-3 text-sm", fe.ln ? "border-red-400" : "border-[#E2E8F0] focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25"].join(" ")}
                       value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
+                      onChange={(e) => {
+                        setLastName(e.target.value);
+                        if (fe.ln) setFe((f) => ({ ...f, ln: "" }));
+                      }}
                       autoComplete="family-name"
-                      required
                     />
                   </div>
+                  <HqFieldError>{fe.ln}</HqFieldError>
                 </div>
                 <button
                   type="button"
                   className="w-full rounded-xl py-3.5 text-sm font-extrabold text-white"
                   style={{ background: ND }}
-                  onClick={() => (canNext0 ? setStep(1) : setErr("Συμπληρώστε όνομα & επίθετο"))}
+                  onClick={() => {
+                    setErr("");
+                    const a = requiredText(firstName, "όνομα");
+                    const b = requiredText(lastName, "επίθετο");
+                    if (a || b) {
+                      setFe({ ...(a && { fn: a }), ...(b && { ln: b }) });
+                      return;
+                    }
+                    setStep(1);
+                  }}
                 >
                   Επόμενο
                 </button>
@@ -173,30 +203,39 @@ function RegisterForm() {
             {step === 1 && (
               <>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Email</label>
+                  <HqLabel className="!text-[#64748B]" required>
+                    Email
+                  </HqLabel>
                   <div className="relative mt-1.5">
                     <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                     <input
-                      className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm"
+                      className={["w-full rounded-xl border py-3 pl-10 pr-3 text-sm", fe.email ? "border-red-400" : "border-[#E2E8F0] focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25"].join(" ")}
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (fe.email) setFe((f) => ({ ...f, email: "" }));
+                      }}
                       type="email"
                       autoComplete="email"
-                      required
                     />
                   </div>
+                  <HqFieldError>{fe.email}</HqFieldError>
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Τηλέφωνο</label>
+                  <HqLabel className="!text-[#64748B]">Τηλέφωνο (10 ψηφία, προαιρετικό)</HqLabel>
                   <div className="relative mt-1.5">
                     <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                     <input
-                      className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm"
+                      className={["w-full rounded-xl border py-3 pl-10 pr-3 text-sm", fe.phone ? "border-red-400" : "border-[#E2E8F0] focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25"].join(" ")}
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => {
+                        setPhone(e.target.value);
+                        if (fe.phone) setFe((f) => ({ ...f, phone: "" }));
+                      }}
                       autoComplete="tel"
                     />
                   </div>
+                  <HqFieldError>{fe.phone}</HqFieldError>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -210,7 +249,17 @@ function RegisterForm() {
                     type="button"
                     className="flex-1 rounded-xl py-3 text-sm font-extrabold text-white"
                     style={{ background: ND }}
-                    onClick={() => (canNext1 ? setStep(2) : setErr("Έγκυρο email απαιτείται"))}
+                    onClick={() => {
+                      setErr("");
+                      setFe({});
+                      const em = validateEmail(email);
+                      const ph = validatePhone10(phone, false);
+                      if (em || ph) {
+                        setFe({ ...(em && { email: em }), ...(ph && { phone: ph }) });
+                        return;
+                      }
+                      setStep(2);
+                    }}
                   >
                     Επόμενο
                   </button>
@@ -221,33 +270,39 @@ function RegisterForm() {
             {step === 2 && (
               <>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Κωδικός</label>
+                  <HqLabel className="!text-[#64748B]" required>Κωδικός (ελάχ. 6)</HqLabel>
                   <div className="relative mt-1.5">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                     <input
-                      className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm"
+                      className={["w-full rounded-xl border py-3 pl-10 pr-3 text-sm", fe.pw1 ? "border-red-400" : "border-[#E2E8F0] focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25"].join(" ")}
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (fe.pw1) setFe((f) => ({ ...f, pw1: "" }));
+                      }}
                       type="password"
                       autoComplete="new-password"
-                      required
                       minLength={6}
                     />
                   </div>
+                  <HqFieldError>{fe.pw1}</HqFieldError>
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Επιβεβαίωση</label>
+                  <HqLabel className="!text-[#64748B]" required>Επιβεβαίωση κωδικού</HqLabel>
                   <div className="relative mt-1.5">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                     <input
-                      className="w-full rounded-xl border border-[#E2E8F0] py-3 pl-10 pr-3 text-sm"
+                      className={["w-full rounded-xl border py-3 pl-10 pr-3 text-sm", fe.pw2 ? "border-red-400" : "border-[#E2E8F0] focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/25"].join(" ")}
                       value={password2}
-                      onChange={(e) => setPassword2(e.target.value)}
+                      onChange={(e) => {
+                        setPassword2(e.target.value);
+                        if (fe.pw2) setFe((f) => ({ ...f, pw2: "" }));
+                      }}
                       type="password"
                       autoComplete="new-password"
-                      required
                     />
                   </div>
+                  <HqFieldError>{fe.pw2}</HqFieldError>
                 </div>
                 <label className="flex items-start gap-2 text-sm text-[#64748B]">
                   <input

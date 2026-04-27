@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
+import { CenteredModal } from "@/components/ui/centered-modal";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
 import type { RequestCategoryRow } from "@/lib/request-categories";
@@ -55,8 +56,6 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
     setErr("");
     void loadMeta();
   }, [open, loadMeta]);
-
-  if (!open) return null;
 
   const reset = () => {
     setContactId("");
@@ -115,13 +114,16 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
   };
 
   return (
-    <div className={lux.modalOverlay}>
-      <div
-        className={lux.modalPanel + " max-w-[640px]"}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-req-title"
-      >
+    <CenteredModal
+      open={open}
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      className="flex !max-w-[640px] flex-col overflow-hidden p-0"
+      ariaLabel="Νέο αίτημα"
+    >
+      <div className="flex max-h-[inherit] min-h-0 flex-1 flex-col" role="document">
         <div className="shrink-0 border-b border-[var(--border)] p-4 sm:px-6 sm:py-4">
           <h2 id="new-req-title" className={lux.sectionTitle}>
             Νέο αίτημα
@@ -324,6 +326,6 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </CenteredModal>
   );
 }

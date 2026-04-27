@@ -7,6 +7,9 @@ import type { Role } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { validateEmail, requiredText } from "@/lib/form-validation";
 import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
 import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
@@ -617,6 +620,7 @@ function RequestCategoryModal({
   const [color, setColor] = useState(initial?.color ?? "#6B7280");
   const [sort, setSort] = useState(initial != null ? String(initial.sort_order) : "0");
   const [busy, setBusy] = useState(false);
+  const [nameErr, setNameErr] = useState<string | null>(null);
   useEffect(() => {
     setName(initial?.name ?? "");
     setColor(initial?.color ?? "#6B7280");
@@ -624,8 +628,11 @@ function RequestCategoryModal({
   }, [initial]);
   const save = async () => {
     onError(null);
-    if (!name.trim()) {
-      onError("Υποχρεωτικό όνομα");
+    setNameErr(null);
+    const req = requiredText(name, "όνομα");
+    if (req) {
+      setNameErr(req);
+      onError(req);
       return;
     }
     const so = parseInt(sort, 10);
@@ -651,38 +658,54 @@ function RequestCategoryModal({
     }
   };
   return (
-    <div className={lux.modalOverlay}>
-      <div className="mx-4 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl">
-        <div className="border-b border-[var(--border)] px-5 py-4">
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}</h3>
+    <CenteredModal open onClose={onClose} className="flex !max-w-md flex-col" ariaLabel={initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}>
+      <div className="border-b border-[var(--border)] px-5 py-4">
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}</h3>
+      </div>
+      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4">
+        <div>
+          <HqLabel htmlFor="rc-name" required>
+            Όνομα
+          </HqLabel>
+          <input
+            id="rc-name"
+            className={[lux.input, nameErr ? lux.inputError : ""].join(" ")}
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameErr(null);
+            }}
+            autoFocus={!initial}
+          />
+          <HqFieldError>{nameErr}</HqFieldError>
         </div>
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4">
-          <div>
-            <label className={lux.label}>Όνομα *</label>
-            <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} />
-          </div>
-          <div>
-            <label className={lux.label}>Χρώμα</label>
-            <div className="mt-1 flex items-center gap-2">
-              <input type="color" className="h-10 w-14 cursor-pointer rounded border" value={color} onChange={(e) => setColor(e.target.value)} />
-              <input className={lux.input + " font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <label className={lux.label}>Σειρά</label>
-            <input className={lux.input} inputMode="numeric" value={sort} onChange={(e) => setSort(e.target.value.replace(/[^\d-]/g, ""))} />
+        <div>
+          <HqLabel>Χρώμα</HqLabel>
+          <div className="mt-1 flex items-center gap-2">
+            <input type="color" className="h-10 w-14 cursor-pointer rounded border" value={color} onChange={(e) => setColor(e.target.value)} />
+            <input className={lux.input + " font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-          <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={busy}>
-            Άκυρο
-          </button>
-          <button type="button" className={lux.btnPrimary} onClick={() => void save()} disabled={busy}>
-            {busy ? "…" : "Αποθήκευση"}
-          </button>
+        <div>
+          <HqLabel htmlFor="rc-sort">Σειρά</HqLabel>
+          <input
+            id="rc-sort"
+            className={lux.input}
+            inputMode="numeric"
+            value={sort}
+            onChange={(e) => setSort(e.target.value.replace(/[^\d-]/g, ""))}
+          />
         </div>
       </div>
-    </div>
+      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end">
+        <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={busy}>
+          Άκυρο
+        </button>
+        <button type="button" className={lux.btnPrimary} onClick={() => void save()} disabled={busy}>
+          {busy ? "…" : "Αποθήκευση"}
+        </button>
+      </div>
+    </CenteredModal>
   );
 }
 
@@ -994,39 +1017,45 @@ function TagEditModal({
   };
 
   return (
-    <div className={lux.modalOverlay}>
-      <div className="mx-4 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:mx-0 sm:max-h-[90vh] sm:self-center sm:max-w-lg">
-        <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}</h3>
+    <CenteredModal open onClose={onClose} className="flex !max-w-lg flex-col" ariaLabel={initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}>
+      <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ετικέτας" : "Νέα ετικέτα"}</h3>
+      </div>
+      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+        <div>
+          <HqLabel htmlFor="tag-name" required>
+            Όνομα
+          </HqLabel>
+          <input
+            id="tag-name"
+            className={lux.input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus={!initial}
+          />
         </div>
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
-          <div>
-            <label className={lux.label}>Όνομα *</label>
-            <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} />
+        <div>
+          <HqLabel>Χρώμα</HqLabel>
+          <div className="mt-1 flex items-center gap-3">
+            <input
+              type="color"
+              className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+            />
+            <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
           </div>
-          <div>
-            <label className={lux.label}>Χρώμα</label>
-            <div className="mt-1 flex items-center gap-3">
-              <input
-                type="color"
-                className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-              />
-              <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-            Άκυρο
-          </button>
-          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
-            {busy ? "…" : "Αποθήκευση"}
-          </button>
         </div>
       </div>
-    </div>
+      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+          Άκυρο
+        </button>
+        <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+          {busy ? "…" : "Αποθήκευση"}
+        </button>
+      </div>
+    </CenteredModal>
   );
 }
 
@@ -1206,48 +1235,49 @@ function GroupEditModal({
   };
 
   return (
-    <div className={lux.modalOverlay}>
-      <div className="mx-4 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:mx-0 sm:max-h-[90vh] sm:self-center sm:max-w-lg">
-        <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}</h3>
+    <CenteredModal open onClose={onClose} className="flex !max-w-lg flex-col" ariaLabel={initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}>
+      <div className="border-b border-[var(--border)] px-5 py-4 sm:px-6">
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">{initial ? "Επεξεργασία ομάδας" : "Νέα ομάδα"}</h3>
+      </div>
+      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+        <div>
+          <HqLabel htmlFor="grp-name" required>
+            Όνομα
+          </HqLabel>
+          <input id="grp-name" className={lux.input} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
-          <div>
-            <label className={lux.label}>Όνομα *</label>
-            <input className={lux.input} value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div>
-            <label className={lux.label}>Χρώμα</label>
-            <div className="mt-1 flex items-center gap-3">
-              <input type="color" className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]" value={color} onChange={(e) => setColor(e.target.value)} />
-              <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <label className={lux.label}>Έτος (π.χ. 2025)</label>
-            <input
-              className={lux.input}
-              inputMode="numeric"
-              placeholder="Κενό = οποιοδήποτε"
-              value={year}
-              onChange={(e) => setYear(e.target.value.replace(/\D/g, ""))}
-            />
-          </div>
-          <div>
-            <label className={lux.label}>Περιγραφή (εμφανίζεται στο ? στην λίστα)</label>
-            <textarea className={lux.textarea} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <div>
+          <HqLabel>Χρώμα</HqLabel>
+          <div className="mt-1 flex items-center gap-3">
+            <input type="color" className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--input-bg)]" value={color} onChange={(e) => setColor(e.target.value)} />
+            <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
           </div>
         </div>
-        <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-            Άκυρο
-          </button>
-          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
-            {busy ? "…" : "Αποθήκευση"}
-          </button>
+        <div>
+          <HqLabel htmlFor="grp-year">Έτος (π.χ. 2025)</HqLabel>
+          <input
+            id="grp-year"
+            className={lux.input}
+            inputMode="numeric"
+            placeholder="Κενό = οποιοδήποτε"
+            value={year}
+            onChange={(e) => setYear(e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+        <div>
+          <HqLabel htmlFor="grp-desc">Περιγραφή (εμφανίζεται στο ? στην λίστα)</HqLabel>
+          <textarea id="grp-desc" className={lux.textarea} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
       </div>
-    </div>
+      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+          Άκυρο
+        </button>
+        <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+          {busy ? "…" : "Αποθήκευση"}
+        </button>
+      </div>
+    </CenteredModal>
   );
 }
 
@@ -1263,6 +1293,11 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     setLocalErr(null);
     if (!full_name.trim() || !email.trim() || !password) {
       setLocalErr("Συμπληρώστε όλα τα πεδία");
+      return;
+    }
+    const em = validateEmail(email);
+    if (em) {
+      setLocalErr(em);
       return;
     }
     if (password.length < 8) {
@@ -1288,58 +1323,56 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   };
 
   return (
-    <div className={lux.modalOverlay}>
-      <div className={lux.modalPanel}>
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 sm:px-6">
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">Νέος χρήστης</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
-            aria-label="Κλείσιμο"
-          >
-            <span className="text-2xl leading-none">×</span>
-          </button>
+    <CenteredModal open onClose={onClose} className="flex !max-w-md flex-col" ariaLabel="Νέος χρήστης">
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 sm:px-6">
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">Νέος χρήστης</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+          aria-label="Κλείσιμο"
+        >
+          <span className="text-2xl leading-none">×</span>
+        </button>
+      </div>
+      <div className="min-h-0 max-h-[min(70dvh,560px)] space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+        {localErr && <p className="text-sm text-red-300">{localErr}</p>}
+        <div>
+          <HqLabel required>Πλήρες όνομα</HqLabel>
+          <input className={lux.input} value={full_name} onChange={(e) => setFull(e.target.value)} autoComplete="name" />
         </div>
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
-          {localErr && <p className="text-sm text-red-300">{localErr}</p>}
-          <div>
-            <label className={lux.label}>Πλήρες όνομα *</label>
-            <input className={lux.input} value={full_name} onChange={(e) => setFull(e.target.value)} autoComplete="name" />
-          </div>
-          <div>
-            <label className={lux.label}>Email *</label>
-            <input className={lux.input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
-          </div>
-          <div>
-            <label className={lux.label}>Κωδικός (ελάχ. 8) *</label>
-            <input
-              className={lux.input}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-            />
-          </div>
-          <div>
-            <label className={lux.label}>Ρόλος</label>
-            <select className={lux.select} value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="caller">Καλείς</option>
-              <option value="manager">Υπεύθυνος</option>
-              <option value="admin">Διαχειριστής</option>
-            </select>
-          </div>
+        <div>
+          <HqLabel required>Email</HqLabel>
+          <input className={lux.input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
         </div>
-        <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
-            Άκυρο
-          </button>
-          <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy}>
-            {busy ? "…" : "Δημιουργία χρήστη"}
-          </button>
+        <div>
+          <HqLabel required>Κωδικός (ελάχ. 8)</HqLabel>
+          <input
+            className={lux.input}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
+        <div>
+          <HqLabel>Ρόλος</HqLabel>
+          <select className={lux.select} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            <option value="caller">Καλείς</option>
+            <option value="manager">Υπεύθυνος</option>
+            <option value="admin">Διαχειριστής</option>
+          </select>
         </div>
       </div>
-    </div>
+      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+          Άκυρο
+        </button>
+        <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy}>
+          {busy ? "…" : "Δημιουργία χρήστη"}
+        </button>
+      </div>
+    </CenteredModal>
   );
 }
 
@@ -1357,8 +1390,8 @@ function ConfirmModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className={lux.modalOverlay}>
-      <div className="mx-4 w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-2xl sm:mx-0 sm:max-h-[90vh] sm:self-center">
+    <CenteredModal open onClose={onCancel} className="!w-[min(420px,calc(100vw-2rem))] !max-w-sm p-0" ariaLabel={title}>
+      <div className="p-6">
         <h4 className="text-lg font-bold text-[var(--text-primary)]">{title}</h4>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">{body}</p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -1370,6 +1403,6 @@ function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </CenteredModal>
   );
 }

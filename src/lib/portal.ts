@@ -6,6 +6,8 @@ import { inferRequestCategoryFromDescription } from "@/lib/request-auto-category
 import { addDaysYmd, computeSlaStatus } from "@/lib/request-sla";
 import { EmailTemplates, getPublicBaseUrl, sendResendEmail } from "@/lib/email";
 
+export { slugifyNews } from "@/lib/slugify";
+
 export type PortalUserRow = {
   id: string;
   auth_user_id: string;
@@ -19,18 +21,6 @@ export type PortalUserRow = {
   push_subscription?: unknown;
   verification_token?: string | null;
 };
-
-export function slugifyNews(title: string): string {
-  const t = title
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9\-\u0370-\u03ff\u1f00-\u1fff]+/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  if (t.length >= 8) return t.slice(0, 200);
-  return t || "ανακοινωση";
-}
 
 export async function getPortalUser(supabase: SupabaseClient, authUserId: string): Promise<PortalUserRow | null> {
   const { data } = await supabase
