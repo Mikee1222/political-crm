@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseAnon } from "@/lib/supabase/anon";
+import { PortalSocialSection } from "@/components/portal/portal-social-section";
 import { ArrowDown, ArrowRight, ClipboardList, LineChart, Newspaper } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -229,6 +230,8 @@ export default async function PortalHomePage() {
           </div>
         </section>
       )}
+
+      <PortalSocialSection />
 
       {/* CTA */}
       <section

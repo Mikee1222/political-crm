@@ -14,6 +14,7 @@ import { ElectoralSettingsSection } from "@/components/settings/electoral-settin
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
 import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
 import { PortalNewsSection } from "@/components/settings/portal-news-section";
+import { SocialMediaSettingsSection } from "@/components/settings/social-media-settings-section";
 import { TelegramSettingsSection } from "@/components/settings/telegram-settings-section";
 import { EmailSettingsSection } from "@/components/settings/email-settings-section";
 import { WhatsappSettingsSection } from "@/components/settings/whatsapp-settings-section";
@@ -321,6 +322,8 @@ export default function SettingsPage() {
       {isAdmin && <RequestCategoriesSettingsSection />}
 
       {isAdmin && <PortalNewsSection />}
+
+      {isAdmin && <SocialMediaSettingsSection />}
 
       <section className={lux.card}>
         <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>

@@ -41,6 +41,7 @@ function isApiPortalPublic(pathname: string) {
   if (pathname === "/api/portal/appointments/slots" || pathname === "/api/portal/appointments/book") {
     return true;
   }
+  if (pathname === "/api/portal/social") return true;
   return false;
 }
 

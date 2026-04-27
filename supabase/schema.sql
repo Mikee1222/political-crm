@@ -1226,3 +1226,80 @@ create policy "daily_call_list_skips crm" on public.daily_call_list_skips
   with check (
     exists (select 1 from public.profiles p where p.id = auth.uid () and coalesce(p.is_portal, false) = false)
   );
+
+-- Portal social (TikTok oEmbed, Facebook Page plugin, Instagram link)
+create table if not exists public.portal_social_settings (
+  id int primary key check (id = 1) default 1,
+  show_tiktok boolean not null default true,
+  show_facebook boolean not null default true,
+  show_instagram boolean not null default true,
+  instagram_follower_label text,
+  updated_at timestamptz not null default now ()
+);
+
+alter table public.portal_social_settings
+  add column if not exists instagram_follower_label text;
+
+create table if not exists public.social_posts (
+  id uuid primary key default gen_random_uuid (),
+  platform text not null,
+  url text not null,
+  active boolean not null default true,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now ()
+);
+
+create index if not exists idx_social_posts_platform on public.social_posts (platform, sort_order);
+
+alter table public.portal_social_settings enable row level security;
+alter table public.social_posts enable row level security;
+
+drop policy if exists "portal_social_settings public read" on public.portal_social_settings;
+create policy "portal_social_settings public read"
+  on public.portal_social_settings for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "social_posts public read" on public.social_posts;
+create policy "social_posts public read"
+  on public.social_posts for select
+  to anon, authenticated
+  using (active = true);
+
+drop policy if exists "portal_social_settings crm write" on public.portal_social_settings;
+create policy "portal_social_settings crm write"
+  on public.portal_social_settings for all
+  to authenticated
+  using (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid () and coalesce (p.is_portal, false) = false
+        and p.role in ('admin', 'manager')
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid () and coalesce (p.is_portal, false) = false
+        and p.role in ('admin', 'manager')
+    )
+  );
+
+drop policy if exists "social_posts crm write" on public.social_posts;
+create policy "social_posts crm write"
+  on public.social_posts for all
+  to authenticated
+  using (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid () and coalesce (p.is_portal, false) = false
+        and p.role in ('admin', 'manager')
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid () and coalesce (p.is_portal, false) = false
+        and p.role in ('admin', 'manager')
+    )
+  );
