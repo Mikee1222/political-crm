@@ -31,15 +31,6 @@ type Req = {
 
 type PortalMe = { first_name: string; last_name: string; verified?: boolean };
 
-type Post = {
-  id: string;
-  title: string;
-  slug: string;
-  category: string;
-  excerpt: string | null;
-  published_at: string | null;
-};
-
 function statusBadge(s: string) {
   const c =
     s === "Ολοκληρώθηκε"
@@ -58,17 +49,15 @@ export default function PortalDashboardPage() {
   const [portalRow, setPortalRow] = useState<PortalMe | null>(null);
   const [nowStr, setNowStr] = useState("");
   const [requests, setRequests] = useState<Req[] | null>(null);
-  const [news, setNews] = useState<Post[] | null>(null);
   const [err, setErr] = useState("");
   const pushTried = useRef(false);
 
   const load = useCallback(async () => {
     setErr("");
     try {
-      const [mRes, rRes, nRes] = await Promise.all([
+      const [mRes, rRes] = await Promise.all([
         fetchWithTimeout("/api/portal/me", { credentials: "same-origin" }),
         fetchWithTimeout("/api/portal/requests", { credentials: "same-origin" }),
-        fetchWithTimeout("/api/portal/news?limit=4", { credentials: "same-origin" }),
       ]);
       if (mRes.status === 401) {
         router.replace("/portal/login?next=/portal/dashboard");
@@ -86,12 +75,6 @@ export default function PortalDashboardPage() {
         setRequests(rj.requests ?? []);
       } else {
         setRequests([]);
-      }
-      if (nRes.ok) {
-        const nj = (await nRes.json()) as { posts: Post[] };
-        setNews(nj.posts ?? []);
-      } else {
-        setNews([]);
       }
     } catch {
       setErr("Σφάλμα");
@@ -183,7 +166,6 @@ export default function PortalDashboardPage() {
   const openCount = all.filter((r) => r.status === "Νέο" || r.status === "Σε εξέλιξη").length;
   const done = all.filter((r) => r.status === "Ολοκληρώθηκε").length;
   const recent = all.slice(0, 5);
-  const posts = (news ?? []).slice(0, 2);
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 px-4 py-8 sm:px-6 sm:py-10">
@@ -208,13 +190,6 @@ export default function PortalDashboardPage() {
           <Calendar className="h-4 w-4" />
           {nowStr}
         </p>
-        <Link
-          href="/portal/requests/new"
-          className="mt-6 inline-flex items-center justify-center rounded-xl px-6 py-3.5 text-sm font-extrabold text-[#0f172a] shadow-md"
-          style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-        >
-          Υποβολή νέου αιτήματος
-        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -258,30 +233,13 @@ export default function PortalDashboardPage() {
       </div>
 
       <div>
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-xl font-extrabold" style={{ color: ND }}>
-            Πρόσφατα Αιτήματά μου
-          </h2>
-          <Link
-            href="/portal/requests"
-            className="text-sm font-bold hover:underline"
-            style={{ color: ND }}
-          >
-            Δείτε όλα →
-          </Link>
-        </div>
+        <h2 className="mb-4 text-xl font-extrabold" style={{ color: ND }}>
+          Πρόσφατη δραστηριότητα
+        </h2>
         {recent.length === 0 ? (
-          <div className="flex flex-col items-center rounded-2xl border-2 border-dashed border-[#E2E8F0] bg-white px-6 py-12 text-center">
-            <Inbox className="h-14 w-14 text-[#94A3B8]" />
-            <p className="mt-4 text-lg font-bold text-[#1A1A2E]">Δεν έχετε υποβάλει αίτημα ακόμα</p>
-            <p className="mt-1 text-sm text-[#64748B]">Ξεκινήστε με μία υποβολή — παρακολουθήστε την πορεία εδώ.</p>
-            <Link
-              href="/portal/requests/new"
-              className="mt-6 inline-flex rounded-xl px-6 py-3 text-sm font-extrabold text-[#0f172a]"
-              style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-            >
-              Υποβολή αιτήματος
-            </Link>
+          <div className="rounded-2xl border border-[#E2E8F0] bg-white px-6 py-8 text-center text-sm text-[#64748B]">
+            <Inbox className="mx-auto h-10 w-10 text-[#94A3B8]" />
+            <p className="mt-3 text-[#1A1A2E]">Δεν υπάρχει πρόσφατη δραστηριότητα.</p>
           </div>
         ) : (
           <ul className="space-y-3">
@@ -320,36 +278,6 @@ export default function PortalDashboardPage() {
               </li>
             ))}
           </ul>
-        )}
-      </div>
-
-      <div>
-        <h2 className="mb-4 text-xl font-extrabold" style={{ color: ND }}>
-          Τελευταία νέα
-        </h2>
-        {posts.length === 0 ? (
-          <p className="text-sm text-[#64748B]">Δεν υπάρχουν δημοσιευμένα νεότερα.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {posts.map((p) => (
-              <Link
-                key={p.id}
-                href={`/portal/news/${p.slug}`}
-                className="group flex flex-col rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm transition hover:shadow-md"
-              >
-                <span
-                  className="w-fit rounded-full px-2.5 py-0.5 text-xs font-bold text-[#0f172a]"
-                  style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-                >
-                  {p.category}
-                </span>
-                <p className="mt-2 line-clamp-2 text-lg font-bold text-[#1A1A2E] group-hover:underline">
-                  {p.title}
-                </p>
-                {p.excerpt && <p className="mt-1 line-clamp-2 text-sm text-[#64748B]">{p.excerpt}</p>}
-              </Link>
-            ))}
-          </div>
         )}
       </div>
     </div>

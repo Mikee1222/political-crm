@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getPortalServiceOrAnon } from "@/lib/supabase/portal-service";
 import { createClient } from "@/lib/supabase/server";
 import { PortalSocialSection } from "@/components/portal/portal-social-section";
-import { ArrowDown, ArrowRight, ClipboardList, LineChart, MapPin, Newspaper, User } from "lucide-react";
+import { ArrowDown, ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,6 @@ export default async function PortalHomePage() {
   const {
     data: { user },
   } = await auth.auth.getUser();
-  const isLoggedIn = Boolean(user);
 
   const supabase = getPortalServiceOrAnon();
   const { data: posts } = await supabase
@@ -139,9 +138,9 @@ export default async function PortalHomePage() {
         </div>
         <div className="relative z-[1] flex justify-center pb-5 sm:pb-6">
           <a
-            href="#features"
+            href="#news-preview"
             className="portal-scroll-hint flex flex-col items-center gap-1 text-white/50"
-            aria-label="Κύλιση προς τα κάτω"
+            aria-label="Κύλιση προς τα νέα"
           >
             <span className="text-xs uppercase tracking-widest">Κύλιση</span>
             <ArrowDown className="h-5 w-5" />
@@ -200,96 +199,9 @@ export default async function PortalHomePage() {
         </div>
       </section>
 
-      {/* FEATURES */}
-      <section id="features" className="scroll-mt-20 bg-white py-16 sm:py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <h2
-            className="text-center text-2xl font-bold sm:text-3xl"
-            style={{ color: ND, fontWeight: 800 }}
-          >
-            Πώς μπορώ να σας βοηθήσω;
-          </h2>
-          <div
-            className="mx-auto mt-3 h-1 w-20 rounded-full"
-            style={{ background: "linear-gradient(90deg, #C9A84C, #8B6914)" }}
-            aria-hidden
-          />
-          <p className="mx-auto mt-4 max-w-2xl text-center text-base text-[#64748B]">
-            {isLoggedIn
-              ? "Υπηρεσίες γραφείου με διαφάνεια και άμεση παρακολούθηση."
-              : "Βιογραφικό, νέα και επαφή με το γραφείο — εγγραφείτε για πλήρη πρόσβαση."}
-          </p>
-          <div className="mt-12 grid gap-6 sm:grid-cols-3">
-            {(isLoggedIn
-              ? [
-                  {
-                    title: "Υποβάλετε Αίτημα",
-                    d: "Καταγράψτε το πρόβλημά σας και παρακολουθήστε την εξέλιξή του",
-                    href: "/portal/requests/new",
-                    Icon: ClipboardList,
-                  },
-                  {
-                    title: "Παρακολουθήστε την Πορεία",
-                    d: "Δείτε σε πραγματικό χρόνο την κατάσταση του αιτήματός σας",
-                    href: "/portal/requests",
-                    Icon: LineChart,
-                  },
-                  {
-                    title: "Ενημερωθείτε",
-                    d: "Νέα και ανακοινώσεις από τον βουλευτή και το γραφείο",
-                    href: "/portal/news",
-                    Icon: Newspaper,
-                  },
-                ]
-              : [
-                  {
-                    title: "Βιογραφικό",
-                    d: "Η πορεία, οι αρμοδιότητες και η πολιτική διαδρομή",
-                    href: "/portal/about",
-                    Icon: User,
-                  },
-                  {
-                    title: "Νέα",
-                    d: "Ανακοινώσεις και άρθρα από το γραφείο",
-                    href: "/portal/news",
-                    Icon: Newspaper,
-                  },
-                  {
-                    title: "Επικοινωνία",
-                    d: "Γραφεία, τηλέφωνα και χάρτης",
-                    href: "/portal/contact",
-                    Icon: MapPin,
-                  },
-                ]
-            ).map(({ title, d, href, Icon }) => (
-              <Link
-                key={title}
-                href={href}
-                className="group flex flex-col rounded-2xl border border-[#E2E8F0] border-t-[3px] border-t-transparent bg-[#FAFBFC] p-6 shadow-sm transition duration-300 hover:-translate-y-2 hover:border-t-[#C9A84C] hover:shadow-lg"
-              >
-                <div
-                  className="mb-4 flex h-20 w-20 items-center justify-center rounded-full"
-                  style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-                >
-                  <Icon className="h-9 w-9 text-white" strokeWidth={2} />
-                </div>
-                <h3 className="text-xl font-bold text-[#1A1A2E]">{title}</h3>
-                <p className="mt-2 flex-1 text-base leading-relaxed text-[#64748B]">{d}</p>
-                <span
-                  className="mt-4 inline-flex items-center gap-1 text-sm font-bold"
-                  style={{ color: ND }}
-                >
-                  Συνεχίστε <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* NEWS PREVIEW */}
       {list.length > 0 && (
-        <section className="bg-[#F1F5F9] py-16 sm:py-20">
+        <section id="news-preview" className="scroll-mt-20 bg-[#F1F5F9] py-16 sm:py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mb-8 flex flex-wrap items-end justify-between gap-2">
               <h2
@@ -355,6 +267,28 @@ export default async function PortalHomePage() {
         </section>
       )}
 
+      <section className="border-b border-[#E2E8F0] bg-white py-12 sm:py-14">
+        <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
+          <h2 className="text-2xl font-extrabold" style={{ color: ND, fontWeight: 800 }}>
+            Επικοινωνία
+          </h2>
+          <div
+            className="mx-auto mt-3 h-1 w-20 rounded-full"
+            style={{ background: "linear-gradient(90deg, #C9A84C, #8B6914)" }}
+            aria-hidden
+          />
+          <p className="mx-auto mt-4 max-w-xl text-base text-[#64748B]">Πολιτικά γραφεία Αγρίνιο και Αθήνα, τηλέφωνα και σύνδεσμοι χάρτη.</p>
+          <Link
+            href="/portal/contact"
+            className="mt-6 inline-flex items-center gap-2 rounded-xl px-8 py-3.5 text-base font-extrabold text-white shadow-md transition hover:brightness-105"
+            style={{ background: "linear-gradient(135deg, #003476, #001a3d)" }}
+          >
+            Στοιχεία επικοινωνίας
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+
       <PortalSocialSection />
 
       {/* CTA */}
@@ -365,25 +299,16 @@ export default async function PortalHomePage() {
         }}
       >
         <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-          {isLoggedIn ? (
+          {user ? (
             <>
-              <p className="text-2xl font-extrabold text-white sm:text-3xl">
-                Υποβάλετε και παρακολουθήστε αιτήματα από το μενού «Αιτήματα».
-              </p>
-              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <Link
-                  href="/portal/requests"
-                  className="inline-flex rounded-xl border-2 border-white/50 px-8 py-3 text-sm font-bold text-white transition hover:bg-white/10"
-                >
-                  Τα αιτήματά μου
-                </Link>
-                <Link
-                  href="/portal/news"
-                  className="text-sm font-semibold text-white/80 underline decoration-white/30 underline-offset-4 hover:text-white"
-                >
-                  Τελευταία νέα
-                </Link>
-              </div>
+              <p className="text-xl font-extrabold text-white sm:text-2xl">Καλώς ήρθατε στην πύλη πολιτών.</p>
+              <Link
+                href="/portal/dashboard"
+                className="mt-8 inline-flex items-center justify-center gap-1 rounded-xl border-2 border-white/50 px-8 py-3 text-sm font-extrabold text-white transition hover:bg-white/10"
+              >
+                Πίνακας ελέγχου
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </>
           ) : (
             <>

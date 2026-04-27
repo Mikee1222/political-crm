@@ -213,8 +213,8 @@ function PortalFooter({ signedIn }: { signedIn: boolean }) {
               <span className="font-bold text-white">Κώστας Καραγκούνης</span>
             </div>
             <p className="text-sm leading-relaxed text-slate-400">
-              Υφυπουργός Εργασίας &amp; Κοινωνικής Ασφάλισης — Βουλευτής Αιτωλοακαρνανίας. Η πύλη για αιτήματα, ενημέρωση και
-              επικοινωνία.
+              Υφυπουργός Εργασίας &amp; Κοινωνικής Ασφάλισης — Βουλευτής Αιτωλοακαρνανίας. Η πύλη για ενημέρωση και επικοινωνία
+              με τους πολίτες.
             </p>
           </div>
           <div>
