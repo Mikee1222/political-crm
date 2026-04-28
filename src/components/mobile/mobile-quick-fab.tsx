@@ -116,13 +116,14 @@ export function MobileQuickFab({ role }: Props) {
                 aria-haspopup="menu"
                 aria-label={open ? "Κλείσιμο γρήγορων ενεργειών" : "Γρήγορες ενέργειες"}
                 onClick={() => setOpen((o) => !o)}
-                className="pointer-events-auto flex h-14 w-14 min-h-14 min-w-14 items-center justify-center rounded-full border-2 border-[color-mix(in_srgb,var(--accent-gold)_85%,var(--bg-primary))] text-[var(--text-badge-on-gold)] shadow-[0_10px_40px_color-mix(in_srgb,var(--accent-gold)_42%,transparent)] transition hq-press-mobile"
+                className="pointer-events-auto relative flex h-14 w-14 min-h-14 min-w-14 items-center justify-center rounded-2xl border border-amber-300/70 text-[var(--text-badge-on-gold)] shadow-[0_8px_24px_rgba(201,168,76,0.4)] transition hq-press-mobile"
                 style={{
-                  background: "linear-gradient(145deg, var(--accent-gold-light) 0%, var(--accent-gold) 40%, color-mix(in srgb, var(--accent-gold) 72%, var(--bg-primary)) 100%)",
+                  background: "linear-gradient(145deg, #f0c76b 0%, #C9A84C 45%, #b88f2f 100%)",
                   transform: open ? "rotate(45deg)" : undefined,
                 }}
               >
-                <Plus className="h-7 w-7" strokeWidth={2.5} />
+                <span className="pointer-events-none absolute inset-0 -z-10 animate-ping rounded-2xl border border-amber-400/45" aria-hidden />
+                <Plus className="h-7 w-7 text-2xl font-thin" strokeWidth={1.8} />
               </button>
             </div>
           </>,

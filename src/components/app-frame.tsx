@@ -131,19 +131,19 @@ function initials(fullName: string | null, fallback: string) {
 }
 
 const navItemBase =
-  "group flex h-12 max-h-12 shrink-0 items-center gap-3 rounded-lg border-l-[3px] border-transparent pl-2 pr-2 text-sm transition duration-200 ease-out";
+  "group flex h-12 max-h-12 shrink-0 items-center gap-3 rounded-[10px] border-l-2 border-transparent px-4 text-sm transition duration-200 ease-out";
 const navItemInactive = [
-  "text-[var(--nav-ink)]",
-  "[&>span]:text-[var(--nav-ink)]",
-  "hover:border-transparent hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)] hover:[&>span]:text-[var(--nav-ink-hover)]",
+  "text-gray-400",
+  "[&>span]:text-gray-400",
+  "hover:border-transparent hover:bg-white/4 hover:text-white hover:[&>span]:text-white",
 ].join(" ");
-const navItemIconInactive = "text-[var(--nav-icon-inactive)] group-hover:text-[var(--nav-icon-hover)]";
+const navItemIconInactive = "text-gray-400/50 group-hover:text-white group-hover:opacity-100";
 const navItemActive = [
-  "border-[var(--nav-item-active-border)] bg-[var(--nav-item-active-bg)]",
-  "!text-[var(--nav-item-active-fg)] [&>span]:!text-[var(--nav-item-active-fg)]",
+  "border-[#C9A84C] bg-gradient-to-r from-amber-500/15 to-transparent",
+  "!text-white [&>span]:!text-white font-semibold",
 ].join(" ");
-const navItemIconActive = "text-[var(--nav-icon-active)]";
-const groupHeaderClass = "px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]/90";
+const navItemIconActive = "text-amber-400";
+const groupHeaderClass = "relative flex items-center gap-2 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-amber-500/40 before:content-[''] before:h-px before:w-4 before:bg-amber-500/30";
 
 const MOBILE_TAB_ORDER = ["/dashboard", "/contacts", "/requests", "/campaigns", "/alexandra"] as const;
 
@@ -895,8 +895,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileNavOpen(false)}
           />
           <div
-            className="fixed left-0 top-0 z-[45] box-border h-full w-[min(100vw,280px)] max-w-full overflow-y-auto border-r border-[var(--border)] p-3 shadow-[0_0_32px_rgba(0,0,0,0.45)]"
-            style={{ background: "var(--sidebar-bg)" }}
+            className="fixed left-0 top-0 z-[45] box-border h-full w-[min(100vw,280px)] max-w-full overflow-y-auto border-r border-amber-500/15 bg-[#080D1A] p-3 shadow-[0_0_32px_rgba(0,0,0,0.45)]"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.035) 1px, transparent 0), linear-gradient(to bottom, rgba(255,255,255,0.015), transparent)",
+              backgroundSize: "3px 3px, 100% 100%",
+            }}
             role="dialog"
             aria-modal
             aria-label="Μενού πλοήγησης"
@@ -904,25 +908,26 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <div className="mb-2 flex w-full min-w-0 items-center justify-between pl-0.5">
               <div className="flex min-w-0 items-center gap-2">
                 <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-amber-500/50 text-sm font-bold text-white"
                   style={{ background: "linear-gradient(145deg, #c9a84c 0%, #8b6914 100%)" }}
                 >
                   ΚΚ
                 </div>
-                <p className="min-w-0 text-sm font-semibold" style={{ color: "var(--sidebar-brand-title)" }}>
-                  Καραγκούνης
-                </p>
+                <div className="min-w-0">
+                  <p className="min-w-0 text-sm font-semibold text-white">Καραγκούνης</p>
+                  <p className="text-[10px] uppercase tracking-widest text-amber-400/60">Πολιτικό Γραφείο</p>
+                </div>
               </div>
               <button
                 type="button"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)]"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-white/8 hover:text-white"
                 onClick={() => setMobileNavOpen(false)}
                 aria-label="Κλείσιμο"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="mb-2 h-px bg-gradient-to-r from-transparent via-[var(--accent-gold)]/40 to-transparent" />
+            <div className="mb-2 h-px bg-gradient-to-r from-transparent via-amber-500/70 to-transparent" />
             {showSidebarNavSkeleton ? (
               <SidebarNavSkeleton rows={10} />
             ) : (
@@ -939,6 +944,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 pinBottom={pinBottom({ onNavigate: () => setMobileNavOpen(false), showLabels: true })}
               />
             )}
+            <div className="mt-3 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+            <p className="pb-4 pt-2 text-center text-[10px] text-gray-600">v1.0 · Καραγκούνης CRM</p>
           </div>
         </>
       )}

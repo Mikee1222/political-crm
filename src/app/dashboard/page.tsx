@@ -14,6 +14,7 @@ import {
   ListTodo,
   PhoneCall,
   PhoneOff,
+  ArrowRight,
   Sparkles,
   Cake,
   UserPlus,
@@ -282,18 +283,20 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         subtitle="Κέντρο εντολών — εικόνα της ημέρας, ειδοποιήσεις και γρήγορες ενέργειες."
+        className="border-l-[3px] border-l-[#C9A84C] bg-gradient-to-br from-[#0D1528] to-[#080D1A]"
       />
       <section
-        className="hq-particles relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-[var(--card-shadow)] [data-theme='light']:bg-white sm:p-6"
+        className="hq-particles relative overflow-hidden rounded-2xl border border-amber-500/10 bg-gradient-to-br from-amber-500/8 to-transparent p-5 shadow-[var(--card-shadow)] [data-theme='light']:bg-white sm:p-6"
         aria-label="Χαιρετισμός"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-lg font-bold text-[var(--text-primary)] sm:text-xl">
+              <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[#C9A84C]" aria-hidden />
               {greetingForHour(now)},{" "}
               <span className="text-[var(--accent-gold)]">{firstNameFromProfile(profile?.full_name)}!</span>
             </p>
-            <p className="mt-1 text-sm capitalize leading-[1.6] text-[var(--text-muted)]">
+            <p className="mt-1 text-sm capitalize leading-[1.6] text-gray-400">
               {now.toLocaleDateString("el-GR", {
                 weekday: "long",
                 day: "numeric",
@@ -302,16 +305,16 @@ export default function DashboardPage() {
               })}
             </p>
           </div>
-          <p className="hq-metric-tabular text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+          <p className="hq-metric-tabular font-mono text-3xl font-bold tabular-nums text-white">
             {now.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </p>
         </div>
       </section>
       <section
-        className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_1px_12px_rgba(0,0,0,0.06)]"
+        className="rounded-2xl border border-white/6 bg-[var(--bg-card)] p-5 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_1px_12px_rgba(0,0,0,0.06)]"
         aria-label="Γρήγορες ενέργειες"
       >
-        <h2 className="hq-section-label">Γρήγορες ενέργειες</h2>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-amber-400">ΓΡΗΓΟΡΕΣ ΕΝΕΡΓΕΙΕΣ</h2>
         <p className="mt-3 text-sm text-[var(--text-muted)]">Συντομεύσεις στις συχνότερες εργασίες</p>
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <QuickAction
@@ -320,7 +323,7 @@ export default function DashboardPage() {
             title="Νέα Επαφή"
             subtitle="Καταχώριση πολίτη στη βάση"
             icon={UserPlus}
-            iconWrapClass="bg-sky-500/15 text-sky-500"
+            iconWrapClass="from-sky-500/40 to-cyan-500/20 text-sky-200"
           />
           <QuickAction
             index={1}
@@ -328,7 +331,7 @@ export default function DashboardPage() {
             title="Νέο Αίτημα"
             subtitle="Καταγραφή αιτήματος πολίτη"
             icon={Inbox}
-            iconWrapClass="bg-violet-500/15 text-violet-500"
+            iconWrapClass="from-violet-500/40 to-fuchsia-500/20 text-violet-200"
           />
           <QuickAction
             index={2}
@@ -336,7 +339,7 @@ export default function DashboardPage() {
             title="Νέα Εργασία"
             subtitle="Υπενθύμιση & follow-up"
             icon={ListTodo}
-            iconWrapClass="bg-amber-500/15 text-amber-600"
+            iconWrapClass="from-amber-500/45 to-orange-500/25 text-amber-100"
           />
           <QuickAction
             index={3}
@@ -344,7 +347,7 @@ export default function DashboardPage() {
             title="Έναρξη Καμπάνιας"
             subtitle="Καμπάνιες κλήσεων & στόχοι"
             icon={Megaphone}
-            iconWrapClass="bg-rose-500/15 text-rose-500"
+            iconWrapClass="from-rose-500/40 to-pink-500/25 text-rose-200"
           />
           <QuickAction
             index={4}
@@ -352,7 +355,7 @@ export default function DashboardPage() {
             title="Εορτάζοντες Σήμερα"
             subtitle="Ονομαστικές & ευχές"
             icon={Cake}
-            iconWrapClass="bg-pink-500/15 text-pink-500"
+            iconWrapClass="from-pink-500/40 to-rose-500/25 text-pink-200"
           />
           <QuickAction
             index={5}
@@ -360,7 +363,7 @@ export default function DashboardPage() {
             title="Πρόγραμμα"
             subtitle="Ραντεβού & calendar"
             icon={Calendar}
-            iconWrapClass="bg-emerald-500/15 text-emerald-600"
+            iconWrapClass="from-emerald-500/45 to-teal-500/25 text-emerald-100"
           />
         </div>
       </section>
@@ -666,18 +669,19 @@ function QuickAction({
     <Link
       href={href}
       style={{ ["--stagger" as string]: String(index) }}
-      className="hq-stagger-item group flex cursor-pointer gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 transition duration-200 will-change-transform [data-theme='light']:bg-white hover:scale-[1.03] hover:border-[var(--accent-gold)]/70 hover:shadow-md"
+      className="hq-stagger-item group flex cursor-pointer items-center gap-3 rounded-[12px] border border-white/6 bg-white/3 p-4 transition duration-200 will-change-transform [data-theme='light']:bg-white hover:scale-[1.02] hover:bg-white/6 hover:border-[var(--accent-gold)]/70"
     >
       <div
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${iconWrapClass}`}
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${iconWrapClass}`}
         aria-hidden
       >
         <Icon className="h-5 w-5" />
       </div>
-      <div className="min-w-0">
-        <p className="font-bold text-[var(--text-primary)]">{title}</p>
-        <p className="mt-0.5 line-clamp-2 text-sm text-[var(--text-muted)]">{subtitle}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <p className="mt-0.5 line-clamp-2 text-xs text-gray-400">{subtitle}</p>
       </div>
+      <ArrowRight className="h-4 w-4 shrink-0 text-gray-600 transition-colors group-hover:text-amber-400" aria-hidden />
     </Link>
   );
 }
