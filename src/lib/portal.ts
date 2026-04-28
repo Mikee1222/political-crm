@@ -38,8 +38,6 @@ export async function registerPortalCitizen(input: {
   first_name: string;
   last_name: string;
   phone: string;
-  /** Προσκλητήριο: token από σύνδεσμο /portal/register?invite= */
-  invite_token?: string;
 }): Promise<{ userId: string; error?: string }> {
   const admin = createServiceClient();
   const email = input.email.trim().toLowerCase();
@@ -56,23 +54,14 @@ export async function registerPortalCitizen(input: {
   const userId = auth.user.id;
 
   let contactId: string | null = null;
-  const inviteT = (input.invite_token ?? "").trim();
-  if (inviteT) {
-    const { data: invC } = await admin.from("contacts").select("id, email, portal_invite_token").eq("portal_invite_token", inviteT).limit(1).maybeSingle();
-    if (invC?.id) {
-      contactId = (invC as { id: string }).id;
-    }
-  }
-  if (!contactId) {
-    const phoneT = input.phone.trim();
-    const orParts: string[] = [];
-    if (email) orParts.push(`email.eq.${email}`);
-    if (phoneT) orParts.push(`phone.eq.${phoneT}`);
-    if (orParts.length) {
-      const { data: byOr } = await admin.from("contacts").select("id").or(orParts.join(",")).limit(1).maybeSingle();
-      if (byOr?.id) {
-        contactId = (byOr as { id: string }).id;
-      }
+  const phoneT = input.phone.trim();
+  const orParts: string[] = [];
+  if (email) orParts.push(`email.eq.${email}`);
+  if (phoneT) orParts.push(`phone.eq.${phoneT}`);
+  if (orParts.length) {
+    const { data: byOr } = await admin.from("contacts").select("id").or(orParts.join(",")).limit(1).maybeSingle();
+    if (byOr?.id) {
+      contactId = (byOr as { id: string }).id;
     }
   }
   if (!contactId) {
@@ -114,10 +103,6 @@ export async function registerPortalCitizen(input: {
     await admin.auth.admin.deleteUser(userId);
     return { userId: "", error: pIns.message };
   }
-  if (inviteT) {
-    await admin.from("contacts").update({ portal_invite_token: null } as never).eq("id", contactId);
-  }
-
   const fullName = `${input.first_name.trim()} ${input.last_name.trim()}`;
   await admin.from("profiles").upsert(
     {

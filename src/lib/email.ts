@@ -57,17 +57,6 @@ export const EmailTemplates = {
     );
     return { subj, html: body };
   },
-  portalInvitation(registerUrl: string) {
-    const subj = "Πρόσκληση εγγραφής στο portal Καραγκούνη";
-    const body = wrapHtml(
-      subj,
-      `<p>Καλησπέρα σας,</p>
-       <p>Μπορείτε να εγγραφείτε στο <strong>portal πολιτών</strong> για να υποβάλλετε αιτήματα και να παρακολουθείτε την πορεία τους.</p>
-       <p><a href="${registerUrl}" style="display:inline-block;padding:10px 18px;background:${GOLD};color:#0f172a;text-decoration:none;border-radius:8px;font-weight:700">Εγγραφή</a></p>
-       <p style="font-size:13px;color:#64748b">Αν δεν ζητήσατε αυτό το email, αγνοήστε το.</p>`,
-    );
-    return { subj, html: body };
-  },
   newsletter(subject: string, htmlContent: string, unsubscribeUrl?: string) {
     const foot = unsubscribeUrl
       ? `<a href="${unsubscribeUrl}" style="color:#64748b">Διαγραφή από τη λίστα</a>`

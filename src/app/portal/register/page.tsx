@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState, Suspense } from "react";
 import { Check, Lock, Mail, Phone, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -17,8 +17,6 @@ const STEPS = ["Προσωπικά", "Επαφή", "Κωδικός"] as const;
 
 function RegisterForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const invite = (searchParams.get("invite") ?? "").trim();
   const [step, setStep] = useState(0);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -132,7 +130,6 @@ function RegisterForm() {
                     first_name: firstName.trim(),
                     last_name: lastName.trim(),
                     phone: phone.trim(),
-                    invite: invite || undefined,
                   }),
                 });
                 const j = (await res.json()) as { error?: string };

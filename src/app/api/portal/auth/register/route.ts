@@ -11,7 +11,6 @@ export async function POST(request: NextRequest) {
       first_name?: string;
       last_name?: string;
       phone?: string;
-      invite?: string;
     };
     const email = String(body.email ?? "").trim();
     const password = String(body.password ?? "");
@@ -30,7 +29,6 @@ export async function POST(request: NextRequest) {
       first_name,
       last_name,
       phone,
-      invite_token: String(body.invite ?? "").trim() || undefined,
     });
     if (error || !userId) {
       return NextResponse.json({ error: error ?? "Σφάλμα εγγραφής" }, { status: 400 });
