@@ -1,20 +1,15 @@
-import nextDynamic from "next/dynamic";
+"use client";
 
-/** Avoid prerender: leaflet touches `window` during import. */
-export const dynamic = "force-dynamic";
+import dynamic from "next/dynamic";
+import { HeatmapClient } from "./heatmap-client";
 
-const HeatmapClient = nextDynamic(
-  () => import("./heatmap-client").then((m) => m.HeatmapClient),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="min-h-full bg-[var(--bg-primary)] p-6">
-        <p className="text-sm text-[var(--text-secondary)]">Φόρτωση χάρτη…</p>
-      </div>
-    ),
-  },
-);
+const DynamicMap = dynamic(() => import("@/components/map/DynamicMap"), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: "500px", width: "100%" }} className="animate-pulse rounded-xl bg-gray-100 dark:bg-[var(--bg-elevated)]" />
+  ),
+});
 
 export default function HeatmapPage() {
-  return <HeatmapClient />;
+  return <HeatmapClient DynamicMap={DynamicMap} />;
 }

@@ -59,11 +59,17 @@ export async function GET(request: NextRequest) {
     const sc = await createClient();
     const documents = await Promise.all(
       rows.map(async (r) => {
+        let signedUrl: string | null = null;
         const { data: s } = await sc.storage.from("documents").createSignedUrl(r.file_url, 3600);
+        signedUrl = s?.signedUrl ?? null;
+        if (!signedUrl) {
+          const { data: s2 } = await admin.storage.from("documents").createSignedUrl(r.file_url, 3600);
+          signedUrl = s2?.signedUrl ?? null;
+        }
         return {
           ...r,
           uploader_name: r.uploaded_by ? nameById.get(r.uploaded_by) ?? null : null,
-          signed_url: s?.signedUrl ?? null,
+          signed_url: signedUrl,
         };
       }),
     );

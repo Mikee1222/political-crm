@@ -336,15 +336,19 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="w-full min-w-0 max-w-6xl space-y-4">
+    <div className="w-full min-w-0 max-w-6xl space-y-6 px-4 py-2 sm:px-0">
       {toast && (
         <div className="fixed bottom-6 right-6 z-[200] max-w-sm rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-4 py-2 text-sm text-emerald-100 shadow-lg">
           {toast}
         </div>
       )}
 
-      <h1 className={lux.pageTitle}>Έγγραφα</h1>
-      <p className="text-sm text-[var(--text-secondary)]">Αποθήκευση αρχείων, λήψη, και (ενότητα) ανάλυση PDF/κειμένου με τεχνητή νοημοσύνη.</p>
+      <header>
+        <h1 className={lux.pageTitle}>Έγγραφα</h1>
+        <p className="mt-2 max-w-2xl text-sm text-[var(--text-secondary)]">
+          Αποθήκη αρχείων στο Supabase (bucket <code className="rounded bg-[var(--bg-elevated)] px-1 text-xs">documents</code>), λήψη με ασφαλή σύνδεσμο και ανάλυση PDF/κειμένου με AI.
+        </p>
+      </header>
 
       <div className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/50 p-1">
         {(
@@ -372,66 +376,66 @@ export default function DocumentsPage() {
       {err && <p className="text-sm text-red-300">{err}</p>}
 
       {tab === "files" && (
-        <div className="space-y-4">
-          <div className="data-hq-card overflow-hidden rounded-2xl p-4 sm:p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">Μεταφόρτωση</h2>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">Μεταφόρτωση στο αποθετήριο Supabase (bucket: documents)</p>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  void onPickFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={pickAndUpload}
-                className={lux.btnPrimary + " inline-flex items-center justify-center gap-2"}
-                disabled={upPct !== null}
-              >
-                <Upload className="h-4 w-4" />
-                {upPct !== null ? `Μεταφόρτωση ${upPct}%` : "Επιλογή αρχείου"}
-              </button>
+        <div className="space-y-6">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              void onPickFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+
+          <div
+            className={[
+              "relative flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 transition-all sm:min-h-[220px]",
+              drag
+                ? "border-[#C9A84C] bg-[#C9A84C]/10 shadow-[0_0_0_1px_rgba(201,168,76,0.35)]"
+                : "border-[var(--border)] bg-[var(--bg-card)]/60 hover:border-[#C9A84C]/50 hover:bg-[var(--bg-elevated)]/30",
+            ].join(" ")}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDrag(true);
+            }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDrag(false);
+              void onPickFiles(e.dataTransfer.files);
+            }}
+            onClick={pickAndUpload}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") pickAndUpload();
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#C9A84C]/25 to-[#003476]/20 ring-1 ring-[var(--border)]">
+              <Upload className="h-8 w-8 text-[#C9A84C]" />
             </div>
+            <p className="text-center text-base font-semibold text-[var(--text-primary)]">Σύρετε & αφήστε αρχεία εδώ</p>
+            <p className="mt-1 text-center text-sm text-[var(--text-secondary)]">ή κλικ για επιλογή · έως 50MB</p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                pickAndUpload();
+              }}
+              className={lux.btnPrimary + " mt-6 inline-flex items-center gap-2"}
+              disabled={upPct !== null}
+            >
+              <FileUp className="h-4 w-4" />
+              {upPct !== null ? `Μεταφόρτωση ${upPct}%` : "Επιλογή αρχείου"}
+            </button>
             {upPct !== null && (
-              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+              <div className="absolute bottom-4 left-4 right-4 h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
                 <div
                   className="h-full bg-gradient-to-r from-[#003476] to-[#C9A84C] transition-all duration-200"
                   style={{ width: `${upPct}%` }}
                 />
               </div>
             )}
-
-            <div
-              className={[
-                "mt-4 flex min-h-[8rem] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-6 transition-colors",
-                drag ? "border-[var(--accent-gold)] bg-[var(--bg-elevated)]" : "border-[var(--border)]",
-              ].join(" ")}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDrag(true);
-              }}
-              onDragLeave={() => setDrag(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDrag(false);
-                void onPickFiles(e.dataTransfer.files);
-              }}
-              onClick={pickAndUpload}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") pickAndUpload();
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <FileUp className="mb-2 h-8 w-8 text-[var(--text-muted)]" />
-              <p className="text-center text-sm text-[var(--text-secondary)]">Σύρετε αρχείο εδώ ή κλικ για επιλογή</p>
-            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -479,12 +483,12 @@ export default function DocumentsPage() {
           )}
 
           {filtered.length > 0 && (
-            <ul className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+            <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((d) => {
                 return (
                   <li
                     key={d.id}
-                    className="data-hq-card group flex min-h-[5.5rem] flex-row items-stretch gap-3 rounded-2xl p-4 transition hover:border-[#C9A84C]/40"
+                    className="data-hq-card group flex min-h-[5.5rem] flex-col gap-3 rounded-2xl p-4 transition hover:border-[#C9A84C]/40 sm:flex-row sm:items-stretch"
                   >
                     <FileTypeIconV2 ft={d.file_type} name={d.name} />
                     <div className="min-w-0 flex-1">

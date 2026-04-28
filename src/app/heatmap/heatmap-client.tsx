@@ -1,26 +1,35 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import type { ComponentType } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import type { DynamicMapProps } from "@/components/map/DynamicMap";
 import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
-import type { ForMapRow, MapColorVariant, MapMode } from "@/components/heatmap/municipal-map";
 
-const LeafletMap = dynamic(() => import("@/components/map/LeafletMap"), {
-  ssr: false,
-  loading: () => (
-    <div
-      className="flex w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a] text-sm text-[var(--text-secondary)]"
-      role="status"
-      aria-live="polite"
-      style={{ height: 500 }}
-    >
-      Φόρτωση χάρτη…
-    </div>
-  ),
-});
+export type MapMode = "contacts" | "positive" | "negative";
+
+export type ForMapRow = {
+  muni: string;
+  total: number;
+  positive: number;
+  negative: number;
+  pending: number;
+  noAnswer: number;
+  heat: number;
+  lat: number;
+  lng: number;
+  radius: number;
+  ndPercent?: number;
+  syrizaPercent?: number;
+  pasokPercent?: number;
+  totalElectionVotes?: number;
+  crmPositivePercent?: number;
+  compareHighlight?: boolean;
+};
+
+export type MapColorVariant = "gold" | "nd" | "compare";
 
 type MuniRow = {
   muni: string;
@@ -40,6 +49,7 @@ type ApiPayload = {
   forMap: ForMapRow[];
   top10: MuniRow[];
   maxTotal: number;
+  maxCount?: number;
 };
 
 const views: { id: "crm" | "electoral" | "compare"; label: string }[] = [
@@ -58,7 +68,7 @@ function muniShort(name: string) {
   return name.replace(/^Δήμος /, "");
 }
 
-export function HeatmapClient() {
+export function HeatmapClient({ DynamicMap }: { DynamicMap: ComponentType<DynamicMapProps> }) {
   const { profile, loading: profileLoading } = useProfile();
   const [view, setView] = useState<"crm" | "electoral" | "compare">("crm");
   const [mode, setMode] = useState<MapMode>("contacts");
@@ -115,6 +125,15 @@ export function HeatmapClient() {
 
   const top = data?.top10 ?? [];
   const maxTop = top.length ? Math.max(1, ...top.map((r) => r.total)) : 1;
+  const maxHeat = Math.max(1, data?.maxCount ?? data?.maxTotal ?? 1);
+
+  const markers: HeatmapMarker[] = (data?.forMap ?? []).map((r) => ({
+    lat: r.lat,
+    lng: r.lng,
+    muni: r.muni,
+    total: r.total,
+    heat: r.heat,
+  }));
 
   return (
     <div className={`${lux.pageBg} ${lux.pageAnimated} min-h-0 space-y-4 p-4 pb-24 md:pb-6`}>
@@ -173,21 +192,11 @@ export function HeatmapClient() {
 
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row">
         <div className="relative w-full min-h-[500px] flex-1 overflow-hidden rounded-2xl">
-          {data && (
-            <LeafletMap
-              points={(data.forMap as ForMapRow[]).map((r) => ({
-                lat: r.lat,
-                lng: r.lng,
-                label: r.muni,
-                count: r.total,
-              }))}
-              maxCount={data.maxTotal}
-            />
-          )}
+          {data ? <DynamicMap markers={markers} maxHeat={maxHeat} /> : null}
           {!data && !err && (
             <div
               className="flex w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a]/50 text-sm text-[var(--text-secondary)]"
-              style={{ height: 500 }}
+              style={{ height: 500, width: "100%" }}
             >
               Φόρτωση δεδομένων χάρτη…
             </div>
@@ -210,27 +219,28 @@ export function HeatmapClient() {
               const barVal = view === "electoral" && typeof elec.ndPercent === "number" ? elec.ndPercent : r.total;
               const barMax = view === "electoral" ? 100 : maxTop;
               return (
-              <li key={r.muni} className="min-w-0">
-                <div className="mb-1 flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text-primary)]" title={r.muni}>
-                    {i + 1}. {muniShort(r.muni)}
-                  </span>
-                  <span className="shrink-0 text-[12px] tabular-nums text-[var(--accent-gold)]">
-                    {view === "electoral" && typeof elec.ndPercent === "number"
-                      ? `${elec.ndPercent.toFixed(1)}% ΝΔ`
-                      : r.total}
-                  </span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#1e3a8a] to-[#3b82f6] shadow-[0_0_12px_rgba(30,58,138,0.4)]"
-                    style={{
-                      width: `${Math.min(100, view === "electoral" ? barVal : (barVal / barMax) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </li>
-            )})}
+                <li key={r.muni} className="min-w-0">
+                  <div className="mb-1 flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text-primary)]" title={r.muni}>
+                      {i + 1}. {muniShort(r.muni)}
+                    </span>
+                    <span className="shrink-0 text-[12px] tabular-nums text-[var(--accent-gold)]">
+                      {view === "electoral" && typeof elec.ndPercent === "number"
+                        ? `${elec.ndPercent.toFixed(1)}% ΝΔ`
+                        : r.total}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#1e3a8a] to-[#3b82f6] shadow-[0_0_12px_rgba(30,58,138,0.4)]"
+                      style={{
+                        width: `${Math.min(100, view === "electoral" ? barVal : (barVal / barMax) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         </aside>
       </div>

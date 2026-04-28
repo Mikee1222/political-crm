@@ -35,20 +35,29 @@ export async function GET() {
     }
     const ids = (data ?? []).map((r) => (r as { id: string }).id);
     const counts: Record<string, number> = {};
+    const optionCountsByPoll: Record<string, Record<string, number>> = {};
     if (ids.length) {
       const { data: resRows } = await supabase
         .from("poll_responses")
-        .select("poll_id")
+        .select("poll_id, option_id")
         .in("poll_id", ids);
       for (const r of resRows ?? []) {
-        const pid = (r as { poll_id: string }).poll_id;
+        const row = r as { poll_id: string; option_id: string };
+        const pid = row.poll_id;
         counts[pid] = (counts[pid] ?? 0) + 1;
+        if (!optionCountsByPoll[pid]) optionCountsByPoll[pid] = {};
+        const oid = row.option_id;
+        optionCountsByPoll[pid][oid] = (optionCountsByPoll[pid][oid] ?? 0) + 1;
       }
     }
-    const polls = (data ?? []).map((p) => ({
-      ...p,
-      response_count: counts[(p as { id: string }).id] ?? 0,
-    }));
+    const polls = (data ?? []).map((p) => {
+      const id = (p as { id: string }).id;
+      return {
+        ...p,
+        response_count: counts[id] ?? 0,
+        option_counts: optionCountsByPoll[id] ?? {},
+      };
+    });
     return NextResponse.json({ polls });
   } catch (e) {
     console.error("[api/polls GET]", e);

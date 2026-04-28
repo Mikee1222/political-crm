@@ -37,10 +37,10 @@ export async function POST(request: NextRequest) {
     const path = `crm/${user.id}/${Date.now()}-${safe}`;
 
     const admin = createServiceClient();
-    const ab = await file.arrayBuffer();
-    const { error: upErr } = await admin.storage.from("documents").upload(path, ab, {
+    const { error: upErr } = await admin.storage.from("documents").upload(path, file, {
       contentType: file.type || "application/octet-stream",
       upsert: false,
+      cacheControl: "3600",
     });
     if (upErr) {
       console.error("[documents upload storage]", upErr);
