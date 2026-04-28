@@ -63,7 +63,7 @@ export default function RootLayout({
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body
-        className="min-h-full flex min-h-[-webkit-fill-available] flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] leading-[1.6]"
+        className="min-h-full min-h-[-webkit-fill-available] flex w-full max-w-full flex-col overflow-x-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] leading-[1.6]"
         suppressHydrationWarning
       >
         <Script id="crm-theme-init" strategy="beforeInteractive">

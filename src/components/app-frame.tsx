@@ -943,7 +943,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </>
       )}
 
-      <div className="app-main-shell ml-0 box-border flex min-h-0 min-w-0 flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
+      <div className="app-main-shell ml-0 box-border flex min-h-0 min-w-0 w-full max-w-full flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
         <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]">
           <MobileGlassHeader
             firstName={mobileFirstName}
@@ -1054,9 +1054,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] max-lg:pt-2 sm:p-6 md:p-8"
         >
           {installable && !installed && !installBannerDismissed ? (
-            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-card))] px-3 py-2">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Εγκαταστήστε το Καραγκούνης CRM</p>
-              <div className="flex items-center gap-2">
+            <div className="mb-3 flex w-full max-w-full flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-card))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="min-w-0 text-sm font-semibold text-[var(--text-primary)]">Εγκαταστήστε το Καραγκούνης CRM</p>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void triggerInstallPrompt()}

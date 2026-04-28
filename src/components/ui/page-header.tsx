@@ -34,7 +34,11 @@ export function PageHeader({ title, subtitle, actions, metrics, className = "" }
           ) : null}
           {metrics ? <div className="relative z-[1] mt-5 w-full min-w-0">{metrics}</div> : null}
         </div>
-        {actions ? <div className="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">{actions}</div> : null}
+        {actions ? (
+          <div className="flex w-full min-w-0 max-w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            {actions}
+          </div>
+        ) : null}
       </div>
     </header>
   );

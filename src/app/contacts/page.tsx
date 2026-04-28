@@ -1029,7 +1029,7 @@ function ContactsPage() {
         title="Επαφές"
         subtitle="Διαχείριση εκλογικής βάσης — αναζήτηση, φίλτρα, εξαγωγή και μαζικές ενέργειες."
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex w-full min-w-0 max-w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <button
               type="button"
               onClick={() => {
@@ -1047,7 +1047,7 @@ function ContactsPage() {
                 </span>
               </span>
             </button>
-            <div className="relative">
+            <div className="relative w-full max-w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => setExportOpen((o) => !o)}
@@ -1060,7 +1060,7 @@ function ContactsPage() {
               </button>
               {exportOpen && (
                 <div
-                  className="absolute right-0 top-full z-20 mt-1 min-w-[220px] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-xl"
+                  className="absolute right-0 top-full z-20 mt-1 w-full max-w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-xl sm:min-w-[220px] sm:w-auto"
                   role="menu"
                 >
                   {canManage && (
