@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Home, Inbox, Menu, Sparkles, Users } from "lucide-react";
-import { hasMinRole, type Role } from "@/lib/roles";
+import { CalendarDays, Home, Inbox, Megaphone, Menu, Sparkles, Users } from "lucide-react";
+import { hasMinRole } from "@/lib/roles";
+import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 
 type MobileBottomNavProps = {
   role: string;
@@ -11,95 +12,127 @@ type MobileBottomNavProps = {
   openRequestsCount: number;
 };
 
-const activeIcon = "text-[var(--nav-mobile-active)]";
-const inactiveIcon = "text-[var(--nav-mobile-inactive)]";
-const itemBase = "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 min-h-[44px] text-[10px] font-medium transition duration-200 ease-out";
-const itemLabel = (active: boolean) => (active ? "text-[var(--nav-mobile-active)]" : "text-[var(--nav-mobile-inactive)]");
-const navClass =
-  "hq-bottom-nav bottom-nav safe-bottom fixed bottom-0 left-0 right-0 z-40 flex h-14 w-full border-t border-[var(--border)] backdrop-blur-md md:hidden";
+const inactive = "text-[var(--nav-mobile-inactive)]";
+const active = "text-[var(--nav-mobile-active)]";
+
+const navShell =
+  "hq-bottom-nav safe-bottom fixed bottom-0 left-0 right-0 z-40 flex h-16 min-h-16 w-full border-t border-[var(--border)]/70 backdrop-blur-xl lg:hidden";
+
+const innerBar =
+  "grid w-full grid-cols-5 bg-white/80 pb-[env(safe-area-inset-bottom,0px)] pt-1 dark:bg-gray-900/80";
+const innerBarVolunteer = "grid w-full grid-cols-4 bg-white/80 pb-[env(safe-area-inset-bottom,0px)] pt-1 dark:bg-gray-900/80";
 
 export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileBottomNavProps) {
   const pathname = usePathname();
   const mgr = hasMinRole(role, "manager");
+  const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
 
   const isActive = (path: string, exact = false) => {
     if (exact) return pathname === path;
     return pathname === path || pathname.startsWith(`${path}/`);
   };
 
+  const alexActive = pathname.startsWith("/alexandra");
+
+  const tabClass = (on: boolean) =>
+    [
+      "hq-press-mobile flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-[10px] font-semibold tracking-tight transition-transform duration-200",
+      on ? active : inactive,
+      on ? "hq-bottom-nav-item-active" : "opacity-90",
+    ].join(" ");
+
   if (mgr) {
     return (
-      <nav
-        className={navClass + " min-h-14"}
-        role="navigation"
-        aria-label="Κύρια πλοήγηση"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-      >
-        <Link href="/dashboard" className={`${itemBase} ${itemLabel(isActive("/dashboard", true))}`} prefetch>
-          <Home className={`h-5 w-5 shrink-0 ${isActive("/dashboard", true) ? activeIcon : inactiveIcon}`} />
-          <span>Dashboard</span>
-        </Link>
-        <Link href="/contacts" className={`${itemBase} ${itemLabel(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}`} prefetch>
-          <Users className={`h-5 w-5 shrink-0 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? activeIcon : inactiveIcon}`} />
-          <span>Επαφές</span>
-        </Link>
-        <Link href="/alexandra" className={`${itemBase} ${itemLabel(pathname.startsWith("/alexandra"))}`} prefetch>
-          <Sparkles className={`h-5 w-5 shrink-0 ${pathname.startsWith("/alexandra") ? activeIcon : inactiveIcon}`} />
-          <span className={itemLabel(pathname.startsWith("/alexandra"))}>Αλεξάνδρα</span>
-        </Link>
-        <Link href="/requests" className={`${itemBase} ${itemLabel(isActive("/requests", true))} relative`} prefetch>
-          <Inbox className={`h-5 w-5 shrink-0 ${isActive("/requests", true) ? activeIcon : inactiveIcon}`} />
-          <span>Αιτήματα</span>
-          {openRequestsCount > 0 && (
-            <span
-              className="absolute right-2 top-0.5 min-w-[1rem] rounded-full px-1 text-center text-[9px] font-bold"
-              style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}
+      <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
+        <div className={innerBar}>
+          <Link href="/dashboard" prefetch className={tabClass(isActive("/dashboard", true))}>
+            <Home className={`h-5 w-5 shrink-0 ${isActive("/dashboard", true) ? active : inactive}`} />
+            <span>Dashboard</span>
+          </Link>
+          <Link href="/contacts" prefetch className={tabClass(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}>
+            <Users className={`h-5 w-5 shrink-0 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? active : inactive}`} />
+            <span>Επαφές</span>
+          </Link>
+          <Link href="/requests" prefetch className={`${tabClass(isActive("/requests", true))} relative`}>
+            <Inbox className={`h-5 w-5 shrink-0 ${isActive("/requests", true) ? active : inactive}`} />
+            <span>Αιτήματα</span>
+            {openRequestsCount > 0 && (
+              <span
+                className="absolute right-1 top-0 min-w-[1.1rem] rounded-full px-1 text-center text-[9px] font-bold leading-tight"
+                style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}
+              >
+                {openRequestsCount > 9 ? "9+" : openRequestsCount}
+              </span>
+            )}
+          </Link>
+          <Link href="/campaigns" prefetch className={tabClass(isActive("/campaigns", true))}>
+            <Megaphone className={`h-5 w-5 shrink-0 ${isActive("/campaigns", true) ? active : inactive}`} />
+            <span>Καμπάνιες</span>
+          </Link>
+          {hasMinRole(role, "caller") ? (
+            <button
+              type="button"
+              className={tabClass(alexActive)}
+              onClick={() => {
+                openMiniFromBubble();
+                setMiniWindowMinimized(false);
+              }}
+              aria-current={alexActive ? "page" : undefined}
             >
-              {openRequestsCount > 9 ? "9+" : openRequestsCount}
+              <Sparkles className={`h-5 w-5 shrink-0 ${alexActive ? active : inactive}`} />
+              <span>Αλεξάνδρα</span>
+            </button>
+          ) : (
+            <span className={`${tabClass(false)} cursor-not-allowed opacity-40`} aria-disabled>
+              <Sparkles className="h-5 w-5 shrink-0" />
+              <span>Αλεξάνδρα</span>
             </span>
           )}
-        </Link>
-        <button
-          type="button"
-          className={itemBase + " w-full border-0 bg-transparent p-0 text-[var(--nav-mobile-inactive)]"}
-          onClick={onOpenMore}
-          aria-label="Περισσότερα"
-        >
-          <Menu className="h-5 w-5" />
-          <span>Περισσότερα</span>
-        </button>
+        </div>
       </nav>
     );
   }
 
   return (
-    <nav
-      className={navClass}
-      role="navigation"
-      aria-label="Κύρια πλοήγηση"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-    >
-      <Link href="/contacts" className={`${itemBase} ${itemLabel(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}`} prefetch>
-        <Users className={`h-5 w-5 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? activeIcon : inactiveIcon}`} />
-        <span>Επαφές</span>
-      </Link>
-      <Link href="/namedays" className={`${itemBase} ${itemLabel(isActive("/namedays", true))}`} prefetch>
-        <CalendarDays className={`h-5 w-5 ${isActive("/namedays", true) ? activeIcon : inactiveIcon}`} />
-        <span>Εορτ.</span>
-      </Link>
-      <Link href="/alexandra" className={`${itemBase} ${itemLabel(pathname.startsWith("/alexandra"))}`} prefetch>
-        <Sparkles className={`h-5 w-5 ${pathname.startsWith("/alexandra") ? activeIcon : inactiveIcon}`} />
-        <span className={itemLabel(pathname.startsWith("/alexandra"))}>Αλεξάνδρα</span>
-      </Link>
-      <button
-        type="button"
-        className={itemBase + " flex-1 border-0 bg-transparent p-0 text-[var(--nav-mobile-inactive)]"}
-        onClick={onOpenMore}
-        aria-label="Περισσότερα"
-      >
-        <Menu className="h-5 w-5" />
-        <span>Παράπ.</span>
-      </button>
+    <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
+      <div className={innerBarVolunteer}>
+        <Link href="/contacts" prefetch className={tabClass(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}>
+          <Users className={`h-5 w-5 shrink-0 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? active : inactive}`} />
+          <span>Επαφές</span>
+        </Link>
+        <Link href="/namedays" prefetch className={tabClass(isActive("/namedays", true))}>
+          <CalendarDays className={`h-5 w-5 shrink-0 ${isActive("/namedays", true) ? active : inactive}`} />
+          <span>Εορτ.</span>
+        </Link>
+        {hasMinRole(role, "caller") ? (
+          <button
+            type="button"
+            className={tabClass(alexActive)}
+            onClick={() => {
+              openMiniFromBubble();
+              setMiniWindowMinimized(false);
+            }}
+            aria-current={alexActive ? "page" : undefined}
+          >
+            <Sparkles className={`h-5 w-5 shrink-0 ${alexActive ? active : inactive}`} />
+            <span>Αλεξάνδρα</span>
+          </button>
+        ) : (
+          <span className={`${tabClass(false)} opacity-40`} aria-hidden>
+            <Sparkles className="h-5 w-5 shrink-0" />
+            <span>Αλεξάνδρα</span>
+          </span>
+        )}
+        <button
+          type="button"
+          className={`${tabClass(false)} border-0 bg-transparent text-[var(--nav-mobile-inactive)]`}
+          onClick={onOpenMore}
+          aria-label="Περισσότερα"
+        >
+          <Menu className="h-5 w-5" />
+          <span>Περισσ.</span>
+        </button>
+      </div>
     </nav>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { FileText, Inbox, Pencil, Stethoscope, Wrench, HelpCircle } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -32,9 +32,22 @@ type RequestRow = {
   contacts: { first_name: string; last_name: string; phone?: string | null } | null;
 };
 
+function RequestsMobileSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden>
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="hq-skeleton-shimmer h-52 rounded-[20px] border border-[var(--border)]/40 shadow-[var(--card-shadow)]" />
+      ))}
+    </div>
+  );
+}
+
 export default function RequestsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState<RequestRow[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [selected, setSelected] = useState<RequestRow | null>(null);
@@ -42,14 +55,28 @@ export default function RequestsPage() {
 
   const load = useCallback(async () => {
     const q = new URLSearchParams({ status, category });
-    const res = await fetchWithTimeout(`/api/requests?${q.toString()}`);
-    const data = await res.json();
-    setRows(data.requests ?? []);
+    setListLoading(true);
+    try {
+      const res = await fetchWithTimeout(`/api/requests?${q.toString()}`);
+      const data = await res.json();
+      setRows(data.requests ?? []);
+    } finally {
+      setListLoading(false);
+    }
   }, [status, category]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setCreateOpen(true);
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("new");
+    const q = p.toString();
+    startTransition(() => router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false }));
+  }, [searchParams, router, pathname]);
 
   const categories = useMemo(() => {
     return Array.from(new Set(rows.map((r) => r.category).filter(Boolean))) as string[];
@@ -102,8 +129,11 @@ export default function RequestsPage() {
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {listLoading ? (
+        <RequestsMobileSkeleton />
+      ) : rows.length === 0 ? (
         <EmptyState
+          className="max-lg:border-[var(--border)] max-lg:bg-[var(--bg-card)]/80 max-lg:py-12"
           title="Δεν υπάρχουν αιτήματα ακόμα"
           subtitle="Δημιουργήστε το πρώτο αίτημα για να εμφανιστεί εδώ με κωδικό, SLA και επαφή."
           action={
@@ -384,6 +414,7 @@ function EditRequestModal({
       onClose={onClose}
       title="Επεξεργασία αιτήματος"
       ariaLabel="Επεξεργασία αιτήματος"
+      sheetOnMobile
       className="!max-w-xl"
       footer={
         <>

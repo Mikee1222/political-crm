@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  ArrowLeft,
   Calendar,
   CalendarDays,
   ChartColumnBig,
@@ -13,7 +12,6 @@ import {
   FileText,
   Map as MapIcon,
   Megaphone,
-  Menu,
   NotebookText,
   PenLine,
   Search,
@@ -39,6 +37,9 @@ import { AlexaMiniWindow } from "@/components/alexandra/alexa-mini-window";
 import { AiAssistantWidget } from "@/components/ai-assistant-widget";
 import { LogoutButton } from "@/components/logout-button";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
+import { MobileGlassHeader } from "@/components/mobile/mobile-glass-header";
+import { MobilePullToRefresh } from "@/components/mobile/mobile-pull-to-refresh";
+import { MobileQuickFab } from "@/components/mobile/mobile-quick-fab";
 import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useProfile } from "@/contexts/profile-context";
@@ -143,11 +144,23 @@ const navItemActive = [
 const navItemIconActive = "text-[var(--nav-icon-active)]";
 const groupHeaderClass = "px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]/90";
 
+const MOBILE_TAB_ORDER = ["/dashboard", "/contacts", "/requests", "/campaigns", "/alexandra"] as const;
+
 function mainTabHrefsForRole(r: string | null | undefined): Set<string> {
   if (hasMinRole(r, "manager")) {
-    return new Set(["/dashboard", "/contacts", "/alexandra", "/requests"]);
+    return new Set(["/dashboard", "/contacts", "/alexandra", "/requests", "/campaigns"]);
   }
   return new Set(["/contacts", "/namedays", "/alexandra"]);
+}
+
+function mobilePrimaryTabRank(pathname: string): number {
+  for (let i = 0; i < MOBILE_TAB_ORDER.length; i++) {
+    const prefix = MOBILE_TAB_ORDER[i];
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function resolveItemsForGroup(hrefs: string[], role: string | null | undefined) {
@@ -444,6 +457,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [avatarImgErr, setAvatarImgErr] = useState(false);
+  const [mobileGlassHeaderHidden, setMobileGlassHeaderHidden] = useState(false);
+  const [mobilePageEnter, setMobilePageEnter] = useState<"left" | "right" | "">("");
+  const mainScrollRef = useRef<HTMLDivElement>(null);
+  const lastMainScrollY = useRef(0);
+  const prevPathForMobileAnim = useRef<string | null>(null);
+  const skipNextMobileRouteAnim = useRef(true);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const gNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gPendingRef = useRef(false);
@@ -520,8 +539,57 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    if (isLg) return;
+    const prev = prevPathForMobileAnim.current;
+    if (skipNextMobileRouteAnim.current) {
+      skipNextMobileRouteAnim.current = false;
+      prevPathForMobileAnim.current = pathname;
+      setMobilePageEnter("");
+      return;
+    }
+    if (prev == null) {
+      prevPathForMobileAnim.current = pathname;
+      setMobilePageEnter("");
+      return;
+    }
+    const a = mobilePrimaryTabRank(prev);
+    const b = mobilePrimaryTabRank(pathname);
+    prevPathForMobileAnim.current = pathname;
+    if (a < 0 || b < 0) {
+      setMobilePageEnter("");
+      return;
+    }
+    if (b > a) setMobilePageEnter("right");
+    else if (b < a) setMobilePageEnter("left");
+    else setMobilePageEnter("");
+  }, [pathname, isLg]);
+
+  useEffect(() => {
     setAvatarImgErr(false);
   }, [profile?.avatar_url]);
+
+  useEffect(() => {
+    setMobileGlassHeaderHidden(false);
+    if (mainScrollRef.current) {
+      lastMainScrollY.current = mainScrollRef.current.scrollTop;
+    }
+  }, [pathname]);
+
+  const onMainScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (isLg) return;
+      const y = e.currentTarget.scrollTop;
+      const d = y - lastMainScrollY.current;
+      lastMainScrollY.current = y;
+      if (y < 12) setMobileGlassHeaderHidden(false);
+      else if (d > 10) setMobileGlassHeaderHidden(true);
+      else if (d < -10) setMobileGlassHeaderHidden(false);
+    },
+    [isLg],
+  );
+
+  const mobileFirstName = profile?.full_name?.trim().split(/\s+/).filter(Boolean)[0] ?? "Φίλε";
+  const pullRefreshEnabled = !isLg && (pathname.startsWith("/contacts") || pathname.startsWith("/requests"));
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -832,46 +900,34 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="app-main-shell box-border flex min-h-0 min-w-0 flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
-        <header
-          className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]"
-        >
-          <div className="box-border flex h-[52px] w-full min-w-0 max-w-full items-center justify-between gap-2 px-3 sm:px-6 md:h-[60px] md:px-8">
+        <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]">
+          <MobileGlassHeader
+            firstName={mobileFirstName}
+            avatarUrl={profile?.avatar_url}
+            avatarFallback={initials(profile?.full_name ?? null, "ΚΚ")}
+            avatarImgErr={avatarImgErr}
+            onAvatarImgError={() => setAvatarImgErr(true)}
+            showBack={showBackMobile}
+            onBack={() => router.back()}
+            mobileNavOpen={mobileNavOpen}
+            onToggleMenu={() => setMobileNavOpen((o) => !o)}
+            canGlobalSearch={hasMinRole(role, "manager")}
+            onOpenSearch={() => setSearchOpen(true)}
+            requestsHref={hasMinRole(role, "manager") ? "/requests" : undefined}
+            hidden={mobileGlassHeaderHidden}
+          />
+          <div className="hidden h-[60px] w-full min-w-0 max-w-full items-center justify-between gap-2 px-6 lg:flex lg:px-8">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <div className="flex shrink-0 items-center gap-0.5 lg:hidden">
-                {showBackMobile && (
-                  <button
-                    type="button"
-                    className="flex h-10 min-h-10 w-10 min-w-10 items-center justify-center rounded-lg text-[var(--text-primary)] active:bg-[var(--bg-elevated)]"
-                    onClick={() => router.back()}
-                    aria-label="Πίσω"
-                  >
-                    <ArrowLeft className="h-5 w-5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="flex h-10 min-h-10 w-10 min-w-10 items-center justify-center rounded-lg text-[var(--text-primary)] active:bg-[var(--bg-elevated)]"
-                  onClick={() => {
-                    setMobileNavOpen((o) => !o);
-                  }}
-                  aria-label={mobileNavOpen ? "Κλείσιμο μενού" : "Μενού"}
-                >
-                  {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-                </button>
-              </div>
-              <div className="hidden min-w-0 flex-1 overflow-hidden md:block">
-                <h1 className="hq-breadcrumb line-clamp-1 text-left text-base md:text-[18px]">{breadcrumbFor(pathname)}</h1>
-              </div>
-              <div className="min-w-0 flex-1 text-center md:hidden">
-                <span className="line-clamp-1 break-words text-sm font-semibold text-[var(--text-primary)]">{pageTitle(pathname)}</span>
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <h1 className="hq-breadcrumb line-clamp-1 text-left text-[18px]">{breadcrumbFor(pathname)}</h1>
               </div>
             </div>
-            <div className="box-border flex shrink-0 items-center gap-1 pl-1 sm:gap-2 sm:pl-2">
+            <div className="flex shrink-0 items-center gap-2 pl-2">
               {hasMinRole(role, "manager") ? (
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)] sm:inline-flex"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
                   aria-label="Καθολική αναζήτηση"
                   title="Αναζήτηση (⌘K)"
                 >
@@ -880,14 +936,14 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               ) : (
                 <Link
                   href="/contacts"
-                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)] sm:inline-flex"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
                   aria-label="Επαφές"
                 >
                   <Search className="h-[18px] w-[18px]" />
                 </Link>
               )}
               {profile && (
-                <span className="max-w-[8rem] shrink-0 truncate rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/80 px-2 py-0.5 text-[10px] font-medium text-[var(--accent-gold)] sm:max-w-none sm:px-2.5 sm:py-1 sm:text-xs">
+                <span className="max-w-none shrink-0 truncate rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/80 px-2.5 py-1 text-xs font-medium text-[var(--accent-gold)]">
                   {role in ROLE_BADGE ? ROLE_BADGE[role as Role] : role}
                 </span>
               )}
@@ -936,8 +992,19 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-lg:pb-24 max-lg:pt-2 sm:p-6 md:p-8">
-          {children}
+        <main
+          ref={mainScrollRef}
+          onScroll={onMainScroll}
+          className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] max-lg:pt-2 sm:p-6 md:p-8"
+        >
+          <MobilePullToRefresh enabled={pullRefreshEnabled} />
+          <div
+            key={pathname}
+            data-page-enter={mobilePageEnter || undefined}
+            className="hq-mobile-route-shell flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col"
+          >
+            {children}
+          </div>
         </main>
         <AlexaMiniWindow />
         {alexVoiceToast && (
@@ -949,9 +1016,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             Αλεξάνδρα ακούει…
           </div>
         )}
-        <div className="max-md:hidden">
+        <div className="max-lg:hidden">
           <AiAssistantWidget />
         </div>
+        <MobileQuickFab role={role} />
         <div className="lg:hidden">
           <MobileBottomNav role={role} onOpenMore={() => setMoreOpen(true)} openRequestsCount={openRequestsCount} />
         </div>

@@ -90,6 +90,8 @@ export type CenteredModalProps = {
   ariaLabel?: string;
   overlayClassName?: string;
   closeOnBackdrop?: boolean;
+  /** On small screens: bottom sheet style (slide-up, full width, large touch targets). */
+  sheetOnMobile?: boolean;
 };
 
 /**
@@ -106,11 +108,21 @@ export function CenteredModal({
   ariaLabel,
   overlayClassName,
   closeOnBackdrop,
+  sheetOnMobile,
 }: CenteredModalProps) {
   const titleId = useId();
 
   return (
-    <ModalShell open={open} onClose={onClose} overlayClassName={overlayClassName} closeOnBackdrop={closeOnBackdrop}>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      overlayClassName={clsx(
+        sheetOnMobile &&
+          "max-sm:flex max-sm:flex-col max-sm:items-stretch max-sm:justify-end max-sm:p-0 sm:items-center sm:justify-center",
+        overlayClassName,
+      )}
+      closeOnBackdrop={closeOnBackdrop}
+    >
       <div
         role="dialog"
         aria-modal
@@ -118,6 +130,8 @@ export function CenteredModal({
         {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
         className={clsx(
           "relative flex max-h-[min(90dvh,90vh)] w-[min(680px,calc(100vw-2rem))] max-w-full flex-col overflow-hidden rounded-none border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl sm:border",
+          sheetOnMobile &&
+            "max-sm:mt-auto max-sm:max-h-[min(95dvh,95vh)] max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none max-sm:rounded-t-3xl max-sm:border-x-0 max-sm:border-b-0",
           className,
         )}
       >
@@ -130,16 +144,34 @@ export function CenteredModal({
           <X className="h-5 w-5" aria-hidden strokeWidth={2.25} />
         </button>
 
-        <header className="shrink-0 border-b border-[var(--border)] px-4 py-3 pr-14 pt-3 sm:px-6 sm:py-4 sm:pr-16">
+        <header
+          className={clsx(
+            "shrink-0 border-b border-[var(--border)] px-4 py-3 pr-14 pt-3 sm:px-6 sm:py-4 sm:pr-16",
+            sheetOnMobile && "max-sm:px-5 max-sm:py-4 max-sm:pr-16",
+          )}
+        >
           <h2 id={titleId} className="text-lg font-bold text-[var(--text-primary)]">
             {title}
           </h2>
         </header>
 
-        <div className={clsx("min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4", bodyClassName)}>{children}</div>
+        <div
+          className={clsx(
+            "min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4",
+            sheetOnMobile && "max-sm:px-5 max-sm:py-4",
+            bodyClassName,
+          )}
+        >
+          {children}
+        </div>
 
         {footer != null ? (
-          <footer className="flex shrink-0 flex-col gap-2 border-t border-[var(--border)] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-6 sm:py-4">
+          <footer
+            className={clsx(
+              "flex shrink-0 flex-col gap-2 border-t border-[var(--border)] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-6 sm:py-4",
+              sheetOnMobile && "max-sm:gap-3 max-sm:px-5 max-sm:py-4 [&_button]:min-h-12 [&_a]:min-h-12",
+            )}
+          >
             {footer}
           </footer>
         ) : null}

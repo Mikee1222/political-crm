@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { AlexandraChatView } from "@/components/alexandra/alexandra-chat-view";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 const POS_KEY = "alexandra-mini-position";
 const SIZE_KEY = "alexandra-mini-size";
@@ -65,6 +66,7 @@ function saveSize(s: { w: number; h: number }) {
 
 export function AlexaMiniWindow() {
   const pathname = usePathname();
+  const isDesktop = useMediaQuery("(min-width: 1024px)", false);
   const {
     miniWindowOpen,
     miniWindowMinimized,
@@ -78,19 +80,14 @@ export function AlexaMiniWindow() {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const drag = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const resize = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
-  const opened = useRef(false);
 
   useEffect(() => {
-    if (!miniWindowOpen) {
-      opened.current = false;
-      return;
+    if (!miniWindowOpen) return;
+    if (isDesktop) {
+      setPos((p) => p ?? readPos());
+      setSize((s) => s ?? readSize());
     }
-    if (!opened.current) {
-      setPos(readPos());
-      setSize(readSize());
-      opened.current = true;
-    }
-  }, [miniWindowOpen]);
+  }, [miniWindowOpen, isDesktop]);
 
   const effW = size?.w ?? W;
   const effH = size?.h ?? H;
@@ -114,6 +111,15 @@ export function AlexaMiniWindow() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [layoutPos]);
+
+  useEffect(() => {
+    if (!miniWindowOpen || isDesktop) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [miniWindowOpen, isDesktop]);
 
   const onPointerDownHeader = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -143,7 +149,91 @@ export function AlexaMiniWindow() {
   if (pathname === "/alexandra" || pathname.startsWith("/alexandra/")) {
     return null;
   }
-  if (!miniWindowOpen || pos === null || size === null) {
+  if (!miniWindowOpen) {
+    return null;
+  }
+
+  if (!isDesktop) {
+    if (miniWindowMinimized) {
+      const chip = (
+        <div
+          className="fixed left-1/2 z-[60] w-[min(100vw-24px,320px)] max-w-full -translate-x-1/2"
+          style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}
+        >
+          <div className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 shadow-2xl backdrop-blur-md">
+            <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--accent-gold)]">{currentTitle || "Αλεξάνδρα"}</span>
+            <button
+              type="button"
+              className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition duration-200 hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
+              aria-label="Ανάπτυξη"
+              onClick={() => setMiniWindowMinimized(false)}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] transition duration-200 hover:bg-[var(--status-negative-bg)] hover:text-[var(--status-negative-text)]"
+              aria-label="Κλείσιμο"
+              onClick={closeMiniWindow}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      );
+      return typeof document === "undefined" ? null : createPortal(chip, document.body);
+    }
+
+    const sheet = (
+      <div className="fixed inset-0 z-[60] flex flex-col lg:hidden" role="dialog" aria-modal aria-label="Αλεξάνδρα">
+        <button type="button" className="min-h-0 flex-1 bg-black/45 backdrop-blur-[2px]" aria-label="Κλείσιμο" onClick={closeMiniWindow} />
+        <div
+          className="flex max-h-[80dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border border-b-0 border-[var(--border)] bg-[var(--bg-primary)] shadow-[0_-12px_48px_rgba(0,0,0,0.35)]"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          <div className="flex shrink-0 flex-col items-center border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3 pt-2 pb-1">
+            <div className="mb-2 h-1 w-10 rounded-full bg-[var(--text-muted)]/40" aria-hidden />
+            <div className="flex w-full items-center gap-1 pb-1">
+              <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-[var(--accent-gold)]">{currentTitle || "Αλεξάνδρα"}</span>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg p-2 text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)]"
+                title="Ελαχιστοποίηση"
+                aria-label="Ελαχιστοποίηση"
+                onClick={() => setMiniWindowMinimized(true)}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg p-2 text-[var(--accent-gold)] transition hover:bg-[var(--bg-elevated)]"
+                title="Πλήρης οθόνη"
+                aria-label="Πλήρης οθόνη"
+                onClick={goToFullAlexandra}
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg p-2 text-[var(--text-secondary)] transition hover:bg-[var(--status-negative-bg)] hover:text-[var(--status-negative-text)]"
+                title="Κλείσιμο"
+                aria-label="Κλείσιμο"
+                onClick={closeMiniWindow}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <AlexandraChatView mode="mini" />
+          </div>
+        </div>
+      </div>
+    );
+    return typeof document === "undefined" ? null : createPortal(sheet, document.body);
+  }
+
+  if (pos === null || size === null) {
     return null;
   }
 
@@ -209,7 +299,7 @@ export function AlexaMiniWindow() {
 
   const shell = (
     <div
-      className="fixed z-[60] flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-[var(--card-shadow)]"
+      className="fixed z-[60] hidden flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-[var(--card-shadow)] lg:flex"
       style={{
         left: pos.x,
         top: pos.y,

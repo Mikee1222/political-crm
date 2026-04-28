@@ -144,6 +144,7 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
         onClose();
       }}
       title="Νέο αίτημα"
+      sheetOnMobile
       className="!max-w-[640px]"
       ariaLabel="Νέο αίτημα"
       footer={

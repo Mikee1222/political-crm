@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpDown, ChevronDown, Download, Pencil, Phone, Plus, Search, User, X } from "lucide-react";
+import { ArrowUpDown, ChevronDown, Download, Phone, Plus, Search, Sparkles, Trash2, User, X } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
@@ -26,6 +26,9 @@ import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
+import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type Contact = {
   id: string;
@@ -282,20 +285,55 @@ function ContactDesktopRowCard({
 
 type Camp = { id: string; name: string };
 
+const SW_CALL = 58;
+const SW_DEL = 58;
+const SW_ALEX = 80;
+
+function ContactsMobileSkeleton() {
+  return (
+    <ul className="space-y-3 md:hidden" aria-hidden>
+      {Array.from({ length: 7 }, (_, i) => (
+        <li
+          key={i}
+          className="hq-skeleton-shimmer h-[8.25rem] w-full rounded-[20px] border border-[var(--border)]/35 shadow-[var(--card-shadow)]"
+        />
+      ))}
+    </ul>
+  );
+}
+
 function ContactSwipeCard({
   c,
   onCall,
   onOpenDetail,
   canCall,
+  isAdmin,
+  onDeleted,
 }: {
   c: Contact;
   onCall: () => void;
   onOpenDetail: () => void;
   canCall: boolean;
+  isAdmin: boolean;
+  onDeleted: () => void;
 }) {
   const pr = c.priority ?? "Medium";
-  const skipNav = useRef(false);
-  const touch0 = useRef<{ x: number; moved: boolean } | null>(null);
+  const pageCtx = useOptionalAlexandraPageContact();
+  const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
+  const [tx, setTx] = useState(0);
+  const [touching, setTouching] = useState(false);
+  const drag = useRef<{ x0: number; tx0: number } | null>(null);
+  const skipTapNav = useRef(false);
+
+  const delW = isAdmin ? SW_DEL : 0;
+  const minTx = -(SW_CALL + delW);
+  const maxTx = SW_ALEX;
+  const clamp = (n: number) => Math.max(minTx, Math.min(maxTx, n));
+  const snapFrom = (t: number) => {
+    if (t > maxTx * 0.4) return maxTx;
+    if (t < minTx * 0.4) return minTx;
+    return 0;
+  };
 
   const nd = formatNameDayGreek(c.name_day);
   const ndGold = isNameDayTodayOrThisWeek(c.name_day);
@@ -303,121 +341,177 @@ function ContactSwipeCard({
   const gradM = avatarGradientFromName(c.first_name, c.last_name);
 
   return (
-    <div
-      className="relative touch-pan-y overflow-hidden rounded-xl border border-gray-200 bg-white shadow-md shadow-gray-200/50 transition-all duration-200 dark:border-white/[0.08] dark:bg-white/[0.03] dark:shadow-black/30 dark:backdrop-blur-md"
-      onTouchStart={(e) => {
-        touch0.current = { x: e.touches[0].clientX, moved: false };
-      }}
-      onTouchMove={(e) => {
-        const t = touch0.current;
-        if (t && Math.abs(e.touches[0].clientX - t.x) > 14) t.moved = true;
-      }}
-      onTouchEnd={(e) => {
-        const t0 = touch0.current;
-        touch0.current = null;
-        if (!t0) return;
-        const d = e.changedTouches[0].clientX - t0.x;
-        if (t0.moved && d > 48) {
-          skipNav.current = true;
-          if (canCall) onCall();
-          return;
-        }
-        if (t0.moved && d < -48) {
-          skipNav.current = true;
-          onOpenDetail();
-        }
-      }}
-      onClick={() => {
-        if (skipNav.current) {
-          skipNav.current = false;
-          return;
-        }
-        onOpenDetail();
-      }}
-    >
-      <div className="pointer-events-none absolute inset-0 z-0 flex max-md:select-none" aria-hidden>
-        <div className="flex w-14 shrink-0 items-center justify-center" style={{ background: "linear-gradient(90deg, rgba(201,168,76,0.3), transparent)" }}>
-          <span className="text-[9px] font-bold uppercase text-[#C9A84C] [writing-mode:vertical-rl]">Κλήση</span>
-        </div>
-        <div className="min-w-0 flex-1" />
-        <div
-          className="flex w-14 shrink-0 items-center justify-center"
-          style={{ background: "linear-gradient(270deg, rgba(0,52,118,0.35), transparent)" }}
+    <div className="relative w-full max-w-full touch-pan-y overflow-hidden rounded-[20px] border border-[var(--border)] shadow-[var(--card-shadow)] md:max-w-none">
+      <div className="absolute inset-0 z-10 flex">
+        <button
+          type="button"
+          className="hq-press-mobile flex w-[80px] shrink-0 flex-col items-center justify-center gap-1 border-r border-[var(--border)]/30 bg-gradient-to-br from-[#C9A84C]/35 to-[#8b6914]/25 text-[var(--text-primary)]"
+          style={{ width: SW_ALEX }}
+          onClick={(e) => {
+            e.stopPropagation();
+            pageCtx?.setContactPage({
+              contactId: c.id,
+              contactName: `${c.first_name} ${c.last_name}`.trim(),
+            });
+            openMiniFromBubble();
+            setMiniWindowMinimized(false);
+            setTx(0);
+          }}
         >
-          <Pencil className="h-4 w-4 text-[#1e5fa8]" aria-hidden />
-        </div>
+          <Sparkles className="h-5 w-5 text-[#C9A84C]" />
+          <span className="text-[9px] font-bold uppercase leading-tight text-[#C9A84C]">Αλεξάνδρα</span>
+        </button>
+        <div className="min-w-0 flex-1 bg-[var(--bg-secondary)]/40" />
+        <button
+          type="button"
+          className="hq-press-mobile flex shrink-0 flex-col items-center justify-center gap-0.5 bg-gradient-to-bl from-sky-600/90 to-blue-800/95 text-white disabled:opacity-40"
+          style={{ width: SW_CALL }}
+          disabled={!canCall}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (canCall) onCall();
+            setTx(0);
+          }}
+        >
+          <Phone className="h-5 w-5" />
+          <span className="text-[9px] font-bold uppercase">Κλήση</span>
+        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            className="hq-press-mobile flex w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 bg-gradient-to-bl from-red-600 to-red-900 text-white"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const ok = window.confirm(
+                `Διαγραφή της επαφής «${c.first_name} ${c.last_name}»; Η ενέργεια δεν αναιρείται.`,
+              );
+              if (!ok) return;
+              const res = await fetchWithTimeout(`/api/contacts/${c.id}`, { method: "DELETE" });
+              if (!res.ok) {
+                window.alert("Η διαγραφή απέτυχε.");
+                return;
+              }
+              setTx(0);
+              onDeleted();
+            }}
+          >
+            <Trash2 className="h-5 w-5" />
+            <span className="text-[9px] font-bold uppercase">Διαγρ.</span>
+          </button>
+        ) : null}
       </div>
-      <div className="relative z-[1] flex min-h-[4.75rem] min-w-0 items-stretch bg-white/92 backdrop-blur-sm dark:bg-[#0a0f1e]/88 dark:backdrop-blur-md">
-        <div
-          className={`my-3 ml-1 w-[3px] shrink-0 self-stretch rounded-full ${callStatusAccentBarClass(c.call_status)}`}
-          title={callStatusLabel(c.call_status)}
-          aria-hidden
-        />
-        <div className="flex min-w-0 flex-1 items-center gap-3 p-3 pl-2 pr-2">
-          <div className="relative shrink-0">
-            <div
-              className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold text-white shadow-inner ring-0 transition-all duration-200 ring-offset-2 ring-offset-white group-active:ring-2 group-active:ring-amber-400/50 dark:ring-offset-[#0a0f1e] ${gradM}`}
-            >
-              {initialsM}
-            </div>
-            <span
-              className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-[#0a0f1e] ${callStatusAvatarRingClass(c.call_status)}`}
-              title={callStatusLabel(c.call_status)}
-              aria-hidden
-            />
-          </div>
-          <div className="min-w-0 flex-1 pr-1">
-            <p className="flex flex-wrap items-center gap-1.5">
+
+      <div
+        role="button"
+        tabIndex={0}
+        className="hq-card-tap-feedback relative z-20 flex min-h-[6.5rem] w-full min-w-0 cursor-pointer items-stretch border border-[var(--border)] bg-[var(--bg-card)]/95 backdrop-blur-md transition-[transform,box-shadow] duration-200 ease-out max-md:active:shadow-md"
+        style={{
+          transform: `translate3d(${tx}px,0,0)`,
+          transition: touching ? "none" : "transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}
+        onTouchStart={(e) => {
+          setTouching(true);
+          drag.current = { x0: e.touches[0].clientX, tx0: tx };
+        }}
+        onTouchMove={(e) => {
+          if (!drag.current) return;
+          const dx = e.touches[0].clientX - drag.current.x0;
+          if (Math.abs(dx) > 10) skipTapNav.current = true;
+          setTx(clamp(drag.current.tx0 + dx));
+        }}
+        onTouchEnd={() => {
+          drag.current = null;
+          setTouching(false);
+          setTx((t) => snapFrom(t));
+        }}
+        onTouchCancel={() => {
+          drag.current = null;
+          setTouching(false);
+          setTx((t) => snapFrom(t));
+        }}
+        onClick={() => {
+          if (skipTapNav.current) {
+            skipTapNav.current = false;
+            return;
+          }
+          if (tx !== 0) {
+            setTx(0);
+            return;
+          }
+          onOpenDetail();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpenDetail();
+          }
+        }}
+      >
+        <div className="hq-card-tap-inner flex min-w-0 flex-1 items-stretch">
+          <div
+            className={`my-4 ml-1 w-[3px] shrink-0 self-stretch rounded-full ${callStatusAccentBarClass(c.call_status)}`}
+            title={callStatusLabel(c.call_status)}
+            aria-hidden
+          />
+          <div className="flex min-w-0 flex-1 items-center gap-3 p-4 pl-2 pr-2">
+            <div className="relative shrink-0">
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-full text-base font-semibold text-white shadow-inner ${gradM}`}
+              >
+                {initialsM}
+              </div>
               <span
-                className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
-                title={pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+                className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
+                title={callStatusLabel(c.call_status)}
+                aria-hidden
               />
-              <span className="min-w-0 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
-                {c.first_name} {c.last_name}
-              </span>
-              {c.contact_code ? (
-                <span className="shrink-0 rounded-full border border-amber-200/50 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-600/80 dark:border-amber-400/10 dark:bg-amber-400/5 dark:text-amber-400/60">
-                  {c.contact_code}
-                </span>
-              ) : null}
-            </p>
-            <p className="mt-1 font-mono text-sm text-gray-500 dark:text-gray-400">
-              <span className="block">{c.phone || "—"}</span>
-              {c.phone2?.trim() ? <span className="block text-[11px] text-gray-400 dark:text-gray-500">{c.phone2}</span> : null}
-              {c.landline?.trim() ? (
-                <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-gray-500" title="Σταθερό">
-                  {c.landline}
-                </span>
-              ) : null}
-            </p>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              {c.municipality?.trim() ? (
-                <span className="inline-flex max-w-full truncate rounded-full border border-sky-100 bg-sky-50 px-2.5 py-0.5 text-[11px] text-sky-700 dark:border-sky-400/15 dark:bg-sky-400/8 dark:text-sky-300">
-                  {c.municipality}
-                </span>
-              ) : null}
-              {nd ? (
-                <span
-                  className={
-                    "inline-flex items-center gap-0.5 rounded-full border border-rose-100 bg-rose-50 px-2.5 py-0.5 text-[11px] text-rose-600 dark:border-rose-400/15 dark:bg-rose-400/8 dark:text-rose-300 " +
-                    (ndGold ? "ring-1 ring-[#C9A84C]/40" : "")
-                  }
-                >
-                  🎂 {nd}
-                </span>
-              ) : null}
             </div>
-            {(c.area?.trim() && c.area !== c.municipality) || c.contact_groups ? (
-              <p className="mt-1 line-clamp-1 text-[11px] text-gray-500 dark:text-gray-400">
-                {c.area?.trim() && c.area !== c.municipality ? <span>{c.area}</span> : null}
-                {c.contact_groups ? (
-                  <span className="font-medium text-gray-600 dark:text-gray-300">
-                    {c.area?.trim() && c.area !== c.municipality ? " · " : ""}
-                    {c.contact_groups.name}
+            <div className="min-w-0 flex-1 pr-1">
+              <p className="flex flex-wrap items-center gap-1.5">
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+                  title={pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+                />
+                <span className="min-w-0 text-base font-bold tracking-tight text-[var(--text-primary)]">
+                  {c.first_name} {c.last_name}
+                </span>
+                {c.contact_code ? (
+                  <span className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 font-mono text-[10px] text-[var(--accent-gold)]">
+                    {c.contact_code}
                   </span>
                 ) : null}
               </p>
-            ) : null}
+              <p className="mt-0.5 font-mono text-sm text-[var(--text-secondary)]">
+                <span className="block">{c.phone || "—"}</span>
+                {c.municipality?.trim() ? (
+                  <span className="mt-1 inline-block max-w-full truncate text-[13px] text-[var(--text-muted)]">{c.municipality}</span>
+                ) : null}
+              </p>
+              {nd ? (
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  <span
+                    className={
+                      "inline-flex items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)] " +
+                      (ndGold ? "ring-1 ring-[#C9A84C]/40" : "")
+                    }
+                  >
+                    🎂 {nd}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="hq-press-mobile ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/35 disabled:pointer-events-none disabled:opacity-35"
+              title={canCall ? "Κλήση" : "Μόνο managers"}
+              disabled={!canCall}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (canCall) onCall();
+              }}
+            >
+              <Phone className="h-5 w-5" />
+            </button>
           </div>
         </div>
       </div>
@@ -614,6 +708,7 @@ function ContactsPage() {
   const searchParams = useSearchParams();
   const [f, setF] = useState<ContactListFilters>(getDefaultContactFilters);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [listTotal, setListTotal] = useState(0);
   const pageSize = 50;
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
@@ -677,6 +772,7 @@ function ContactsPage() {
     const params = contactFiltersToSearchParams(q);
     params.set("page", q.page || "1");
     params.set("page_size", String(pageSize));
+    setListLoading(true);
     try {
       const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
       const data = (await res.json().catch(() => ({}))) as { contacts?: Contact[]; total?: number };
@@ -695,6 +791,8 @@ function ContactsPage() {
     } catch {
       setContacts([]);
       setListTotal(0);
+    } finally {
+      setListLoading(false);
     }
   }, [f, pageSize]);
 
@@ -1173,7 +1271,9 @@ function ContactsPage() {
 
       {canManage && <ContactsImportWizard onImported={load} />}
 
-      {contacts.length > 0 && (
+      {listLoading ? (
+        <ContactsMobileSkeleton />
+      ) : contacts.length > 0 ? (
         <div className="md:hidden">
           <ul className="space-y-3">
             {contacts.map((c) => (
@@ -1181,12 +1281,30 @@ function ContactsPage() {
                 <ContactSwipeCard
                   c={c}
                   canCall={canManage}
+                  isAdmin={isAdmin}
                   onCall={() => void triggerCallById(c.id)}
                   onOpenDetail={() => router.push(`/contacts/${c.id}`)}
+                  onDeleted={() => void load()}
                 />
               </li>
             ))}
           </ul>
+        </div>
+      ) : (
+        <div className="md:hidden">
+          <EmptyState
+            className="border-[var(--border)] bg-[var(--bg-card)]/80 py-12"
+            icon={<span className="text-5xl">👤</span>}
+            title="Δεν βρέθηκαν επαφές"
+            subtitle="Προσαρμόστε τα φίλτρα ή προσθέστε νέα επαφή για να ξεκινήσετε την καμπάνια σας."
+            action={
+              canManage ? (
+                <button type="button" onClick={() => setOpenCreate(true)} className={lux.btnGold}>
+                  Νέα επαφή
+                </button>
+              ) : null
+            }
+          />
         </div>
       )}
 
@@ -1236,13 +1354,10 @@ function ContactsPage() {
             />
           ))}
         </div>
-        {contacts.length === 0 ? (
+        {contacts.length === 0 && !listLoading ? (
           <p className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Δεν βρέθηκαν επαφές</p>
         ) : null}
       </div>
-      {contacts.length === 0 && (
-        <p className="p-4 text-center text-sm text-[var(--text-secondary)] md:hidden">Δεν βρέθηκαν επαφές</p>
-      )}
 
       {listTotal > 0 && (
         <div className="flex w-full min-w-0 max-w-full flex-col items-stretch justify-between gap-3 border-t border-[var(--border)]/60 pt-4 sm:flex-row sm:items-center">
@@ -1285,20 +1400,8 @@ function ContactsPage() {
         </div>
       )}
 
-      {canManage && (
-        <button
-          type="button"
-          className="no-mobile-scale fixed bottom-24 right-4 z-30 flex h-14 w-14 min-h-14 min-w-14 items-center justify-center rounded-full border-2 border-[#8B6914] text-[#0A1628] shadow-[0_6px_24px_rgba(0,0,0,0.4)] max-md:bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:hidden"
-          style={{ backgroundColor: "#C9A84C" }}
-          onClick={() => setOpenCreate(true)}
-          aria-label="Νέα επαφή"
-        >
-          <Plus className="h-6 w-6" strokeWidth={2.5} />
-        </button>
-      )}
-
       {selectedIds.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-50 max-w-[100vw] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:bottom-6 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:max-w-[calc(100vw-1rem)] md:-translate-x-1/2 md:px-0">
+        <div className="fixed inset-x-0 bottom-0 z-50 max-w-[100vw] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] max-md:bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-6 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:max-w-[calc(100vw-1rem)] md:-translate-x-1/2 md:px-0">
           <div className="hq-bulk-bar-inner rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.15),0_0_0_1px_rgba(0,0,0,0.05)] dark:border-white/10 dark:bg-[#161B2E] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.05)]">
             {bulkErr && (
               <p className="mb-2 break-words text-center text-xs text-red-600 dark:text-red-300" role="alert">
@@ -1435,6 +1538,7 @@ function ContactsPage() {
           onClose={() => setDeleteOpen(false)}
           title="Μαζική διαγραφή"
           ariaLabel="Μαζική διαγραφή"
+          sheetOnMobile
           className="!max-w-md"
           footer={
             <>
@@ -1612,6 +1716,7 @@ function CreateContactModal({
       onClose={onClose}
       title="Νέα Επαφή"
       ariaLabel="Νέα επαφή"
+      sheetOnMobile
       className="!max-w-[680px]"
       footer={
         <>

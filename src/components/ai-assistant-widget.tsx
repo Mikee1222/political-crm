@@ -16,7 +16,7 @@ export function AiAssistantWidget() {
   }
 
   return (
-    <div className="pointer-events-auto fixed bottom-6 right-6 z-50 max-md:bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] max-md:right-4">
+    <div className="pointer-events-auto fixed bottom-6 right-6 z-50 max-lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] max-lg:right-4">
       <div className="relative">
         <div
           className="hq-alexandra-glow-ring pointer-events-none absolute -inset-1 rounded-2xl bg-[radial-gradient(circle,rgba(201,168,76,0.35)_0%,transparent_72%)] opacity-90"

@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
@@ -88,6 +89,9 @@ function athensTodayYmd() {
 }
 
 export default function TasksPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [view, setView] = useState<"list" | "kanban">("list");
   const [tab, setTab] = useState<TaskTabFilter>("all");
   const [pending, setPending] = useState<TaskT[]>([]);
@@ -132,6 +136,15 @@ export default function TasksPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setModal(true);
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("new");
+    const q = p.toString();
+    startTransition(() => router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false }));
+  }, [searchParams, router, pathname]);
 
   const loadHeat = useCallback(async () => {
     const { year, m } = heat;
@@ -935,6 +948,7 @@ function NewTaskModal({
       open
       onClose={onClose}
       title="Νέα Εργασία"
+      sheetOnMobile
       className="w-full max-w-[640px]"
       ariaLabel="Νέα εργασία"
       footer={

@@ -53,11 +53,11 @@ export function FormToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={clsx(
-              "pointer-events-auto max-w-[min(480px,calc(100vw-2rem))] rounded-xl border px-4 py-3 text-center text-sm font-medium shadow-lg",
+              "pointer-events-auto max-w-[min(480px,calc(100vw-2rem))] rounded-xl border px-4 py-3 text-center text-sm font-medium shadow-lg max-lg:transition-shadow",
               t.variant === "success" &&
-                "border-emerald-500/40 bg-emerald-950/90 text-emerald-100 [data-theme='light']:bg-emerald-50 [data-theme='light']:text-emerald-900",
+                "hq-success-flash border-emerald-500/40 bg-emerald-950/90 text-emerald-100 [data-theme='light']:bg-emerald-50 [data-theme='light']:text-emerald-900",
               t.variant === "error" &&
-                "border-red-500/40 bg-red-950/90 text-red-100 [data-theme='light']:bg-red-50 [data-theme='light']:text-red-900",
+                "hq-shake-error border-red-500/40 bg-red-950/90 text-red-100 [data-theme='light']:bg-red-50 [data-theme='light']:text-red-900",
             )}
           >
             {t.message}
