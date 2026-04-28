@@ -89,8 +89,28 @@ function isPortalAppPath(pathname: string) {
   return pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/");
 }
 
+const PORTAL_HOSTS = new Set(["kkaragkounis.com", "www.kkaragkounis.com"]);
+const CRM_HOST = "crm.kkaragkounis.com";
+
+function isPortalProductionHost(host: string) {
+  return PORTAL_HOSTS.has(host);
+}
+
+function isCrmProductionHost(host: string) {
+  return host === CRM_HOST;
+}
+
+/** Local + Vercel preview: do not apply apex/crm domain split. */
+function isDevOrPreviewHost(host: string) {
+  return host === "localhost" || host.startsWith("127.0.0.1") || host.endsWith(".vercel.app");
+}
+
+function portalOrigin(): string {
+  return (process.env.NEXT_PUBLIC_PORTAL_URL || "https://kkaragkounis.com").replace(/\/$/, "");
+}
+
 function portalDashboardRedirectUrl(): URL {
-  return new URL("/portal/dashboard", "https://kkaragkounis.com");
+  return new URL("/portal/dashboard", portalOrigin());
 }
 
 export async function middleware(request: NextRequest) {
@@ -98,26 +118,33 @@ export async function middleware(request: NextRequest) {
   const host = hostname.split(":")[0]?.toLowerCase() ?? "";
   const pathname = request.nextUrl.pathname;
 
-  // Domain split:
-  // - kkaragkounis.com / www.kkaragkounis.com => citizen portal only
-  // - crm.kkaragkounis.com => normal CRM + existing portal-user guards
-  const isPortalDomain = host === "kkaragkounis.com" || host === "www.kkaragkounis.com";
-  if (isPortalDomain) {
-    const portalDomainAllowed =
-      pathname === "/portal" ||
-      pathname === "/portal/" ||
-      pathname.startsWith("/portal/") ||
-      pathname.startsWith("/api/portal/") ||
-      pathname.startsWith("/api/public/") ||
-      pathname.startsWith("/_next/") ||
-      pathname === "/favicon.ico" ||
-      pathname === "/hero-karagkounis.png" ||
-      pathname === "/viografiko2-682x1024.jpg";
-    if (!portalDomainAllowed) {
-      const u = request.nextUrl.clone();
-      u.pathname = "/portal";
-      u.search = "";
-      return NextResponse.redirect(u);
+  // Production domain split (same Vercel deployment, two hostnames):
+  // - kkaragkounis.com / www → portal only: /portal/*, portal APIs, static
+  // - crm.kkaragkounis.com → CRM only: block browser /portal/* (send to public portal origin)
+  if (!isDevOrPreviewHost(host)) {
+    if (isPortalProductionHost(host)) {
+      const portalDomainAllowed =
+        isNextStaticOrAsset(pathname) ||
+        pathname === "/portal" ||
+        pathname === "/portal/" ||
+        pathname.startsWith("/portal/") ||
+        pathname.startsWith("/api/portal/") ||
+        pathname.startsWith("/api/public/") ||
+        pathname.startsWith("/_next/") ||
+        pathname === "/favicon.ico" ||
+        pathname === "/hero-karagkounis.png" ||
+        pathname === "/viografiko2-682x1024.jpg";
+      if (!portalDomainAllowed) {
+        const u = request.nextUrl.clone();
+        u.pathname = "/portal";
+        u.search = "";
+        return NextResponse.redirect(u);
+      }
+    } else if (isCrmProductionHost(host)) {
+      if (pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/")) {
+        const dest = new URL(pathname + request.nextUrl.search, `${portalOrigin()}/`);
+        return NextResponse.redirect(dest);
+      }
     }
   }
 

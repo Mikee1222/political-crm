@@ -23,6 +23,23 @@ const nextConfig = {
       },
     ],
   },
+  /** Apex + www: root path goes to citizen portal (middleware also guards non-portal routes). */
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/portal",
+        permanent: false,
+        has: [{ type: "host", value: "kkaragkounis.com" }],
+      },
+      {
+        source: "/",
+        destination: "/portal",
+        permanent: false,
+        has: [{ type: "host", value: "www.kkaragkounis.com" }],
+      },
+    ];
+  },
   async headers() {
     return [
       {
