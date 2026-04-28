@@ -11,13 +11,15 @@ import type { UserPreferences } from "@/lib/user-preferences";
 export type Profile = {
   id: string;
   full_name: string | null;
-  role: Role;
+  role: Role | string;
   is_portal?: boolean;
   created_at?: string;
   email?: string | null;
   avatar_url?: string | null;
   theme?: "dark" | "light" | string;
   preferences?: UserPreferences;
+  /** Allowed permission keys for this user's role (from `role_permissions`). */
+  permissions?: Record<string, boolean>;
 };
 
 type Ctx = {

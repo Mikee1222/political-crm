@@ -13,7 +13,7 @@ type MobileMoreSheetProps = {
   onClose: () => void;
   items: MoreNavItem[];
   openRequestsCount: number;
-  role: Role;
+  role: string;
 };
 
 export function MobileMoreSheet({ open, onClose, items, openRequestsCount, role }: MobileMoreSheetProps) {

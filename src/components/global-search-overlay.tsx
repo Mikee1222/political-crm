@@ -36,7 +36,7 @@ const sectionTitle =
 
 type Entry = { k: "c" | "r" | "t" | "ca"; id: string; href: string; title: string; sub: string };
 
-type Props = { open: boolean; onClose: () => void; role: Role };
+type Props = { open: boolean; onClose: () => void; role: string };
 
 function av(fn: string, ln: string) {
   return `${(fn[0] ?? "?").toUpperCase()}${(ln[0] ?? "?").toUpperCase()}`;

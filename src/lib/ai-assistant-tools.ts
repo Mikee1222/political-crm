@@ -743,8 +743,10 @@ export type ToolContext = {
   supabase: SupabaseClient;
   forward: (path: string, init: RequestInit) => Promise<Response>;
   profile: UserProfile;
-  role: Role;
+  role: string;
   userId: string;
+  /** When set, tool gates use this matrix; when omitted, legacy hasMinRole checks apply. */
+  allowedPermissionKeys?: ReadonlySet<string>;
   /** Επαφή από /contacts/[id] — default για tools με contact_id */
   defaultContactId?: string | null;
   /** Πλήρεις γραμμές import από το τρέχον αίτημα (client attachment) */
@@ -980,6 +982,12 @@ export async function runAlexTool(
   const raw = input && typeof input === "object" ? input : {};
   const isMgr = hasMinRole(ctx.profile.role, "manager");
   const isCaller = ctx.profile.role === "caller";
+  function permLegacy(permissionKey: string, legacy: boolean): boolean {
+    if (ctx.allowedPermissionKeys !== undefined) {
+      return ctx.allowedPermissionKeys.has(permissionKey);
+    }
+    return legacy;
+  }
 
   if (name === "find_contacts") {
     const gMap = await buildGroupNameToIdMap(ctx.supabase);
@@ -1043,8 +1051,8 @@ export async function runAlexTool(
   }
 
   if (name === "update_contact" || name === "edit_contact") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο υπεύθυνοι (manager) μπορούν να ενημερώνουν επαφές" }) };
+    if (!permLegacy("contacts_edit", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η επεξεργασία επαφών για αυτόν τον ρόλο" }) };
     }
     const contact_id = pickContactId(raw.contact_id, ctx);
     const fields = raw.fields;
@@ -1448,8 +1456,8 @@ export async function runAlexTool(
   }
 
   if (name === "import_csv_data") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_import", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η εισαγωγή για αυτόν τον ρόλο" }) };
     }
     const dataStr = String(raw.data ?? "");
     const mapping = raw.mapping;
@@ -1516,8 +1524,8 @@ export async function runAlexTool(
   }
 
   if (name === "bulk_create_contacts") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_import", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η μαζική δημιουργία για αυτόν τον ρόλο" }) };
     }
     const mapping = raw.mapping;
     if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
@@ -1656,8 +1664,8 @@ export async function runAlexTool(
   }
 
   if (name === "bulk_update_contacts") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_tool_bulk_update_contacts", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η μαζική ενημέρωση για αυτόν τον ρόλο" }) };
     }
     const contact_ids = raw.contact_ids;
     const fields = raw.fields;
@@ -1685,8 +1693,8 @@ export async function runAlexTool(
   }
 
   if (name === "bulk_delete_contacts") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_tool_bulk_delete_contacts", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η μαζική διαγραφή για αυτόν τον ρόλο" }) };
     }
     const user_confirmed = raw.user_confirmed === true;
     const body: Record<string, unknown> = { user_confirmed };
@@ -1737,8 +1745,8 @@ export async function runAlexTool(
   }
 
   if (name === "smart_excel_import") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_import", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται το import για αυτόν τον ρόλο" }) };
     }
     const mapping = raw.mapping;
     if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
@@ -2546,8 +2554,8 @@ export async function runAlexTool(
   }
 
   if (name === "start_campaign") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_tool_start_campaign", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η εκκίνηση καμπάνιας για αυτόν τον ρόλο" }) };
     }
     const cid = String(raw.campaign_id ?? "").trim();
     if (!cid) {
@@ -2562,8 +2570,8 @@ export async function runAlexTool(
   }
 
   if (name === "export_contacts") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_tool_export_contacts", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η εξαγωγή για αυτόν τον ρόλο" }) };
     }
     const r = await ctx.forward("/api/contacts/export", { method: "GET" });
     const txt = await r.text();
@@ -2598,8 +2606,8 @@ export async function runAlexTool(
   }
 
   if (name === "bulk_update_status") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    if (!permLegacy("alexandra_tool_bulk_update_contacts", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η μαζική ενημέρωση για αυτόν τον ρόλο" }) };
     }
     const ids = Array.isArray(raw.contact_ids) ? (raw.contact_ids as unknown[]).map((x) => String(x).trim()).filter(Boolean) : [];
     const status = String(raw.status ?? "").trim();

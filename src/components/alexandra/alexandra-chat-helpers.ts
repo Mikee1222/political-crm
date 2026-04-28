@@ -109,17 +109,17 @@ export function initialsName(first: string, last: string) {
   return `${(first?.[0] ?? "?").toUpperCase()}${(last?.[0] ?? "?").toUpperCase()}`;
 }
 
-export function canExecuteAction(role: Role | null | undefined, a: ActionPayload) {
+export function canExecuteAction(role: string | null | undefined, a: ActionPayload) {
   if (a.action === "find_contacts") return false;
   if (a.action === "update_status") return true;
   return hasMinRole(role, "manager");
 }
 
-export function canConfirmStartCall(role: Role | null | undefined, a: ActionPayload) {
+export function canConfirmStartCall(role: string | null | undefined, a: ActionPayload) {
   return a.action === "start_call" && hasMinRole(role, "manager");
 }
 
-export function canConfirmCreate(role: Role | null | undefined, a: ActionPayload) {
+export function canConfirmCreate(role: string | null | undefined, a: ActionPayload) {
   return a.action === "create_contact" && hasMinRole(role, "manager");
 }
 

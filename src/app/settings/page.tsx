@@ -18,6 +18,7 @@ import { GeographicDataSection } from "@/components/settings/geographic-data-sec
 import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
 import { PortalNewsSection } from "@/components/settings/portal-news-section";
 import { SocialMediaSettingsSection } from "@/components/settings/social-media-settings-section";
+import { RolesManagementSection } from "@/components/settings/roles-management-section";
 import { TelegramSettingsSection } from "@/components/settings/telegram-settings-section";
 import { EmailSettingsSection } from "@/components/settings/email-settings-section";
 import { WhatsappSettingsSection } from "@/components/settings/whatsapp-settings-section";
@@ -34,10 +35,12 @@ type UserRow = {
   id: string;
   email: string;
   full_name: string | null;
-  role: Role;
+  role: string;
   joined_at: string;
   last_sign_in_at: string | null;
 };
+
+type CrmRoleOption = { name: string; label: string };
 
 function GoogleCalendarReturnHandler({ onConnected }: { onConnected: () => void | Promise<void> }) {
   const sp = useSearchParams();
@@ -55,7 +58,14 @@ function GoogleCalendarReturnHandler({ onConnected }: { onConnected: () => void 
 export default function SettingsPage() {
   const { profile } = useProfile();
   const isAdmin = profile?.role === "admin";
-  const canAccess = hasMinRole(profile?.role, "manager");
+  const canAccess =
+    hasMinRole(profile?.role as Role, "manager") || profile?.permissions?.["settings_view"] === true;
+  const [adminSettingsTab, setAdminSettingsTab] = useState<"main" | "roles">("main");
+  const [crmRoles, setCrmRoles] = useState<CrmRoleOption[]>([
+    { name: "caller", label: "Καλητής" },
+    { name: "manager", label: "Διευθυντής" },
+    { name: "admin", label: "Διαχειριστής" },
+  ]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [integrations, setIntegrations] = useState<{
     retell: boolean;
@@ -86,6 +96,17 @@ export default function SettingsPage() {
     }
   }, [isAdmin, loadUsers]);
 
+  const loadRoleNames = useCallback(async () => {
+    const res = await fetchWithTimeout("/api/admin/roles");
+    if (!res.ok) return;
+    const j = (await res.json()) as { roles: { name: string; label: string }[] };
+    setCrmRoles((j.roles ?? []).map((r) => ({ name: r.name, label: r.label })));
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) void loadRoleNames();
+  }, [isAdmin, loadRoleNames]);
+
   useEffect(() => {
     if (canAccess) {
       void loadInt();
@@ -94,7 +115,7 @@ export default function SettingsPage() {
 
   const googleConnected = Boolean(integrations?.hasStoredGoogleTokens);
 
-  const setRole = async (userId: string, role: Role) => {
+  const setRole = async (userId: string, role: string) => {
     setErr(null);
     const res = await fetchWithTimeout(`/api/admin/users/${userId}`, {
       method: "PUT",
@@ -160,6 +181,35 @@ export default function SettingsPage() {
   return (
     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
     <div className="w-full min-w-0 max-w-full space-y-6 [&>section]:w-full [&>section]:min-w-0 [&>section]:max-w-full">
+      {isAdmin && (
+        <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
+          <button
+            type="button"
+            onClick={() => setAdminSettingsTab("main")}
+            className={
+              (adminSettingsTab === "main" ? lux.btnPrimary : lux.btnSecondary) +
+              " !min-w-[120px] flex-1 sm:flex-none"
+            }
+          >
+            Ρυθμίσεις
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminSettingsTab("roles")}
+            className={
+              (adminSettingsTab === "roles" ? lux.btnPrimary : lux.btnSecondary) +
+              " !min-w-[120px] flex-1 sm:flex-none"
+            }
+          >
+            Ρόλοι
+          </button>
+        </div>
+      )}
+
+      {isAdmin && adminSettingsTab === "roles" ? (
+        <RolesManagementSection />
+      ) : (
+        <>
       {canAccess && (
         <Suspense fallback={null}>
           <GoogleCalendarReturnHandler onConnected={loadInt} />
@@ -211,13 +261,15 @@ export default function SettingsPage() {
                       <HqSelect
                         className="!h-9 max-w-[200px]"
                         value={u.role}
-                        onChange={(e) => setRole(u.id, e.target.value as Role)}
+                        onChange={(e) => void setRole(u.id, e.target.value)}
                         disabled={u.id === profile?.id}
                         aria-label={`Ρόλος για ${u.email}`}
                       >
-                        <option value="caller">Καλείς</option>
-                        <option value="manager">Υπεύθυνος</option>
-                        <option value="admin">Διαχειριστής</option>
+                        {crmRoles.map((o) => (
+                          <option key={o.name} value={o.name}>
+                            {o.label}
+                          </option>
+                        ))}
                       </HqSelect>
                     </td>
                     <td className="p-3 text-[var(--text-secondary)]">
@@ -255,6 +307,7 @@ export default function SettingsPage() {
 
       {isAdmin && addOpen && (
         <AddUserModal
+          roleOptions={crmRoles}
           onClose={() => setAddOpen(false)}
           onCreated={async () => {
             setAddOpen(false);
@@ -354,6 +407,8 @@ export default function SettingsPage() {
           Πολιτική φιγούρα: <strong className="text-[var(--text-primary)]">Κώστας Καραγκούνης</strong>
         </p>
       </section>
+        </>
+      )}
     </div>
     </div>
   );
@@ -1379,12 +1434,20 @@ function GroupEditModal({
   );
 }
 
-function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void | Promise<void> }) {
+function AddUserModal({
+  roleOptions,
+  onClose,
+  onCreated,
+}: {
+  roleOptions: CrmRoleOption[];
+  onClose: () => void;
+  onCreated: () => void | Promise<void>;
+}) {
   const { showToast } = useFormToast();
   const [full_name, setFull] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("caller");
+  const [role, setRole] = useState(() => roleOptions[0]?.name ?? "caller");
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -1469,10 +1532,12 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
         </div>
         <div>
           <HqLabel>Ρόλος</HqLabel>
-          <HqSelect value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="caller">Καλείς</option>
-            <option value="manager">Υπεύθυνος</option>
-            <option value="admin">Διαχειριστής</option>
+          <HqSelect value={role} onChange={(e) => setRole(e.target.value)}>
+            {roleOptions.map((o) => (
+              <option key={o.name} value={o.name}>
+                {o.label}
+              </option>
+            ))}
           </HqSelect>
         </div>
       </div>

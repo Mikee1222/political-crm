@@ -7,7 +7,8 @@ import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 export type UserProfile = {
   id: string;
   full_name: string | null;
-  role: Role;
+  /** `profiles.role` — system names admin|manager|caller or custom role from `roles`. */
+  role: string;
   is_portal?: boolean;
   created_at?: string;
   email?: string | null;
@@ -29,7 +30,7 @@ function profileFromRow(
     theme?: string | null;
   } | null,
   userId: string,
-  role: Role,
+  role: string,
   email: string | null | undefined,
 ): UserProfile {
   if (row) {
@@ -78,7 +79,7 @@ export async function getSessionWithProfile() {
     return { user: null, profile: null, supabase };
   }
   const { data: row } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-  const role = (row?.role as Role) || "caller";
+  const role = (row?.role as string) || "caller";
   const profile: UserProfile = row
     ? profileFromRow(
         {
@@ -114,7 +115,7 @@ export function forbidden() {
 }
 
 export function requireAnyRole(profile: UserProfile, roles: Role[]) {
-  return roles.includes(profile.role);
+  return roles.includes(profile.role as Role);
 }
 
 export function isCrmUser(profile: UserProfile | null | undefined): boolean {

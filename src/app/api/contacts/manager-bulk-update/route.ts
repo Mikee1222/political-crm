@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { hasPermissionFlexible } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
     const { user, profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) {
+    if (!(await hasPermissionFlexible(user.id, "alexandra_bulk_update", hasMinRole(profile?.role, "manager")))) {
       return forbidden();
     }
     const parsed = bodySchema.safeParse(await request.json());

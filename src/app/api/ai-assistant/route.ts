@@ -11,6 +11,8 @@ import {
   runAlexTool,
 } from "@/lib/ai-assistant-tools";
 import { hasMinRole } from "@/lib/roles";
+import { getAllowedPermissionKeysForRole } from "@/lib/permission-check";
+import { forbidden } from "@/lib/auth-helpers";
 import { z } from "zod";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 export const dynamic = 'force-dynamic';
@@ -79,6 +81,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
   }
   const p: UserProfile = profile;
+
+  const allowedKeys = await getAllowedPermissionKeysForRole(p.role);
+  if (allowedKeys !== null && !allowedKeys.has("alexandra_use")) {
+    return forbidden();
+  }
 
   let bodyIn: z.infer<typeof bodySchema>;
   try {
@@ -224,6 +231,7 @@ export async function POST(request: NextRequest) {
         profile: p,
         role: p.role,
         userId: user.id,
+        allowedPermissionKeys: allowedKeys === null ? undefined : allowedKeys,
         defaultContactId: pageContext?.contactId ?? null,
         importRows: importRowsForTool,
         importContextMunicipality,

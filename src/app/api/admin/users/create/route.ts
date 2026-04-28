@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
-import type { Role } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +10,7 @@ const bodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   full_name: z.string().min(1),
-  role: z.enum(["caller", "manager", "admin"]),
+  role: z.string().min(2).max(64),
 });
 
 export async function POST(request: NextRequest) {
@@ -25,14 +24,13 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Άκυρα δεδομένα" }, { status: 400 });
   }
-  const { email, password, full_name, role } = parsed.data as {
-    email: string;
-    password: string;
-    full_name: string;
-    role: Role;
-  };
+  const { email, password, full_name, role } = parsed.data;
 
   const admin = createServiceClient();
+  const { data: roleOk } = await admin.from("roles").select("name").eq("name", role.trim()).maybeSingle();
+  if (!roleOk) {
+    return NextResponse.json({ error: "Άκυρος ρόλος" }, { status: 400 });
+  }
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,
     password,
@@ -45,7 +43,7 @@ export async function POST(request: NextRequest) {
 
   const { error: upErr } = await admin
     .from("profiles")
-    .update({ full_name, role })
+    .update({ full_name, role: role.trim() })
     .eq("id", created.user.id);
   if (upErr) {
     return NextResponse.json({ error: upErr.message }, { status: 400 });

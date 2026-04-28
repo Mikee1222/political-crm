@@ -143,14 +143,14 @@ const navItemActive = [
 const navItemIconActive = "text-[var(--nav-icon-active)]";
 const groupHeaderClass = "px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]/90";
 
-function mainTabHrefsForRole(r: Role): Set<string> {
+function mainTabHrefsForRole(r: string | null | undefined): Set<string> {
   if (hasMinRole(r, "manager")) {
     return new Set(["/dashboard", "/contacts", "/alexandra", "/requests"]);
   }
   return new Set(["/contacts", "/namedays", "/alexandra"]);
 }
 
-function resolveItemsForGroup(hrefs: string[], role: Role) {
+function resolveItemsForGroup(hrefs: string[], role: string | null | undefined) {
   const out: NavItem[] = [];
   for (const h of hrefs) {
     const it = navItemByHref.get(h);
@@ -159,7 +159,7 @@ function resolveItemsForGroup(hrefs: string[], role: Role) {
   return out;
 }
 
-function flatOrderedNavItems(role: Role) {
+function flatOrderedNavItems(role: string | null | undefined) {
   const all: NavItem[] = [];
   for (const g of groupDefs) {
     for (const it of resolveItemsForGroup(g.hrefs, role)) all.push(it);
@@ -178,7 +178,7 @@ function NavItemRow({
 }: {
   item: NavItem;
   pathname: string;
-  role: Role;
+  role: string;
   openRequestsCount: number;
   onNavigate?: () => void;
   showLabels: boolean;
@@ -229,7 +229,7 @@ function AlexandraRow({
   onNavigate,
   showLabels,
 }: {
-  role: Role;
+  role: string;
   pathname: string;
   onNavigate?: () => void;
   showLabels: boolean;
@@ -303,7 +303,7 @@ function GroupBlock({
   groupOpen: boolean;
   onToggleGroup: () => void;
   pathname: string;
-  role: Role;
+  role: string;
   openRequestsCount: number;
   onNavigate?: () => void;
   showLabels: boolean;
@@ -363,7 +363,7 @@ function GroupBlock({
 
 type SidebarContentProps = {
   pathname: string;
-  role: Role;
+  role: string;
   openRequestsCount: number;
   onNavigate?: () => void;
   showLabels: boolean;
@@ -467,7 +467,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     }
   }, [isCrmLoginPublic, isPortal]);
 
-  const role: Role = profile?.role ?? "caller";
+  const role = profile?.role ?? "caller";
   const depth = pathname.split("/").filter(Boolean).length;
   const showBackMobile = depth >= 2;
 
@@ -888,7 +888,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               )}
               {profile && (
                 <span className="max-w-[8rem] shrink-0 truncate rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/80 px-2 py-0.5 text-[10px] font-medium text-[var(--accent-gold)] sm:max-w-none sm:px-2.5 sm:py-1 sm:text-xs">
-                  {ROLE_BADGE[role]}
+                  {role in ROLE_BADGE ? ROLE_BADGE[role as Role] : role}
                 </span>
               )}
               <ThemeToggle />

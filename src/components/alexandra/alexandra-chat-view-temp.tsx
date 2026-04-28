@@ -74,17 +74,17 @@ function initialsName(first: string, last: string) {
   return `${(first?.[0] ?? "?").toUpperCase()}${(last?.[0] ?? "?").toUpperCase()}`;
 }
 
-function canExecuteAction(role: Role | null | undefined, a: ActionPayload) {
+function canExecuteAction(role: string | null | undefined, a: ActionPayload) {
   if (a.action === "find_contacts") return false;
   if (a.action === "update_status") return true;
   return hasMinRole(role, "manager");
 }
 
-function canConfirmStartCall(role: Role | null | undefined, a: ActionPayload) {
+function canConfirmStartCall(role: string | null | undefined, a: ActionPayload) {
   return a.action === "start_call" && hasMinRole(role, "manager");
 }
 
-function canConfirmCreate(role: Role | null | undefined, a: ActionPayload) {
+function canConfirmCreate(role: string | null | undefined, a: ActionPayload) {
   return a.action === "create_contact" && hasMinRole(role, "manager");
 }
 

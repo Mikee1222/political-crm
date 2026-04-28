@@ -2,6 +2,7 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { hasPermissionFlexible } from "@/lib/permission-check";
 import {
   applyContactListFiltersToBuilder,
   buildContactsQueryFromListFilters,
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
+    const { user, profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "caller")) {
       return forbidden();
     }
@@ -74,7 +75,8 @@ export async function GET(request: NextRequest) {
     } else if (filtered) {
       query = buildContactsQueryFromListFilters(supabase, f);
     } else {
-      if (!isManager) {
+      const canFullExport = await hasPermissionFlexible(user.id, "contacts_export", isManager);
+      if (!canFullExport) {
         return NextResponse.json({ error: "Η εξαγωγή όλων απαιτεί δικαιώματα υπευθύνου" }, { status: 403 });
       }
     }

@@ -6,7 +6,7 @@ import { CalendarDays, Home, Inbox, Menu, Sparkles, Users } from "lucide-react";
 import { hasMinRole, type Role } from "@/lib/roles";
 
 type MobileBottomNavProps = {
-  role: Role;
+  role: string;
   onOpenMore: () => void;
   openRequestsCount: number;
 };

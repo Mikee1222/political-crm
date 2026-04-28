@@ -200,7 +200,16 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isLoggedIn && !isCrmLoginPage && !isRetellPublic(pathname) && !isPortalUser) {
-    if (role === "caller") {
+    let navTier: "caller" | "manager" | "admin" =
+      role === "admin" ? "admin" : role === "manager" ? "manager" : "caller";
+    try {
+      const { data: tierRow } = await supabase.from("roles").select("access_tier").eq("name", role).maybeSingle();
+      const t = (tierRow as { access_tier?: string } | null)?.access_tier;
+      if (t === "admin" || t === "manager" || t === "caller") navTier = t;
+    } catch {
+      /* roles table may not exist before migration */
+    }
+    if (navTier === "caller") {
       for (const p of CALLER_BLOCKED_PREFIXES) {
         if (pathname === p || pathname.startsWith(`${p}/`)) {
           return redirectWithSession(request, "/contacts", sessionResponse);

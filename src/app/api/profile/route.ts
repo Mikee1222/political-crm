@@ -2,6 +2,8 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { mergePreferences, type UserPreferences } from "@/lib/user-preferences";
+import { ALL_PERMISSION_KEYS } from "@/lib/permissions";
+import { createServiceClient } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
@@ -15,11 +17,27 @@ export async function GET() {
       .eq("id", user.id)
       .maybeSingle();
     const th = (row as { theme?: string } | null)?.theme;
+    const roleName = (row?.role as string) ?? profile?.role ?? "caller";
+    const permissions: Record<string, boolean> = {};
+    for (const k of ALL_PERMISSION_KEYS) permissions[k] = false;
+    try {
+      const admin = createServiceClient();
+      const { data: prow } = await admin
+        .from("role_permissions")
+        .select("permission_key, allowed")
+        .eq("role_name", roleName)
+        .eq("allowed", true);
+      for (const r of prow ?? []) {
+        permissions[r.permission_key as string] = true;
+      }
+    } catch {
+      /* migration not applied — leave all false */
+    }
     return NextResponse.json({
       profile: {
         id: user.id,
         full_name: row?.full_name ?? profile?.full_name ?? null,
-        role: profile?.role ?? "caller",
+        role: roleName,
         is_portal: Boolean((row as { is_portal?: boolean } | null)?.is_portal),
         email: user.email ?? null,
         avatar_url: row?.avatar_url ?? profile?.avatar_url ?? null,
@@ -28,6 +46,7 @@ export async function GET() {
           (row as { preferences?: UserPreferences } | null)?.preferences ?? null,
           null,
         ),
+        permissions,
       },
     });
   } catch (e) {
