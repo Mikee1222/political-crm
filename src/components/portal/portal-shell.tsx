@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Facebook, Instagram, Menu, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { portalDisplayFirstName } from "@/lib/portal-display";
 import { PORTAL_SOCIAL } from "@/lib/portal-social-urls";
@@ -315,7 +316,18 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     void (async () => {
       const {
         data: { user },
+        error: sessionErr,
       } = await supabase.auth.getUser();
+      if (sessionErr && isInvalidRefreshTokenError(sessionErr)) {
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          /* ignore */
+        }
+        setMe(null);
+        window.location.assign("/portal/login");
+        return;
+      }
       if (!user) {
         setMe(null);
         return;

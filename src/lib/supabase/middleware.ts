@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
 /**
  * Refreshes session. Use the returned `user` and `response` in middleware only:
@@ -37,7 +38,18 @@ export async function updateSession(request: NextRequest) {
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+
+  if (userError && isInvalidRefreshTokenError(userError)) {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      /* ignore */
+    }
+    return { supabase, response: supabaseResponse, user: null };
+  }
+
   return { supabase, response: supabaseResponse, user: user ?? null };
 }
 

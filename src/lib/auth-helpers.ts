@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/lib/roles";
 import { mergePreferences, type UserPreferences } from "@/lib/user-preferences";
+import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
 export type UserProfile = {
   id: string;
@@ -63,7 +64,16 @@ export async function getSessionWithProfile() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+  if (userError && isInvalidRefreshTokenError(userError)) {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      /* ignore */
+    }
+    return { user: null, profile: null, supabase };
+  }
   if (!user) {
     return { user: null, profile: null, supabase };
   }

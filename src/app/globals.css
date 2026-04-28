@@ -2,9 +2,8 @@
 @import "leaflet/dist/leaflet.css";
 /* Inter: weights 300–700 via next/font in layout.tsx (Greek + Latin) */
 
-/* Design tokens — default & Σκοτεινό (war room): */
-:root,
-:root[data-theme="dark"] {
+/* Design tokens — Σκοτεινό (war room): attribute on <html> switches tokens instantly */
+[data-theme="dark"] {
   --bg-primary: #050d1a;
   --bg-secondary: #0a1628;
   --bg-card: #0f1e35;
@@ -99,7 +98,7 @@
 }
 
 /* Ανοιχτό — luxury cream / government office */
-:root[data-theme="light"] {
+[data-theme="light"] {
   --bg-primary: #f5f0e8;
   --bg-secondary: #ede8dc;
   --bg-card: #ffffff;

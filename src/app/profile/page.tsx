@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { useTheme } from "next-themes";
+import { useCrmTheme } from "@/components/theme-provider";
 import { useProfile } from "@/contexts/profile-context";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
@@ -24,7 +24,7 @@ function sectionCard(title: string, children: ReactNode) {
 export default function ProfilePage() {
   const { showToast } = useFormToast();
   const { profile, loading, refresh } = useProfile();
-  const { setTheme, resolvedTheme } = useTheme();
+  const { setTheme, theme: resolvedTheme } = useCrmTheme();
   const [fullName, setFullName] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);

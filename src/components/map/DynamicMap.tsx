@@ -61,20 +61,23 @@ export default function DynamicMap({ markers, maxHeat }: DynamicMapProps) {
     return (
       <div
         style={{ height: 500, width: "100%" }}
-        className="animate-pulse rounded-xl bg-[var(--bg-elevated)]"
+        className="h-[500px] min-h-[500px] w-full animate-pulse rounded-xl bg-[var(--bg-elevated)]"
         aria-hidden
       />
     );
   }
 
   return (
-    <div style={{ height: 500, width: "100%" }} className="relative z-0 overflow-hidden rounded-xl border border-[var(--border)]">
+    <div
+      style={{ height: 500, width: "100%" }}
+      className="relative z-0 h-[500px] min-h-[500px] w-full overflow-hidden rounded-xl border border-[var(--border)]"
+    >
       <MapContainer
         center={CENTER}
         zoom={ZOOM}
         scrollWheelZoom
-        style={{ height: "100%", width: "100%" }}
-        className="z-0 [&_.leaflet-container]:h-full [&_.leaflet-container]:w-full [&_.leaflet-container]:font-sans"
+        style={{ height: "100%", width: "100%", minHeight: 500 }}
+        className="z-0 h-full min-h-[500px] w-full [&_.leaflet-container]:h-full [&_.leaflet-container]:min-h-[500px] [&_.leaflet-container]:w-full [&_.leaflet-container]:font-sans"
       >
         <MapResize />
         <TileLayer attribution={ATTR} url={TILE} maxZoom={19} />

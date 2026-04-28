@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import type { Role } from "@/lib/roles";
 import type { UserPreferences } from "@/lib/user-preferences";
@@ -91,8 +92,24 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       setSessionResolved(false);
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: sessionErr,
+      } = await supabase.auth.getUser();
       if (cancelled) {
+        return;
+      }
+      if (sessionErr && isInvalidRefreshTokenError(sessionErr)) {
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          /* ignore */
+        }
+        crmSessionReadyRef.current = false;
+        setSessionResolved(true);
+        setProfile(null);
+        setLoading(false);
+        window.location.assign("/login");
         return;
       }
       crmSessionReadyRef.current = true;

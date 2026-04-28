@@ -3,7 +3,7 @@
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import type { DynamicMapProps } from "@/components/map/DynamicMap";
+import type { DynamicMapProps, HeatmapMarker } from "@/components/map/DynamicMap";
 import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
@@ -191,7 +191,7 @@ export function HeatmapClient({ DynamicMap }: { DynamicMap: ComponentType<Dynami
       )}
 
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row">
-        <div className="relative w-full min-h-[500px] flex-1 overflow-hidden rounded-2xl">
+        <div className="relative h-[500px] w-full min-h-[500px] shrink-0 overflow-hidden rounded-2xl lg:min-w-0 lg:flex-1">
           {data ? <DynamicMap markers={markers} maxHeat={maxHeat} /> : null}
           {!data && !err && (
             <div

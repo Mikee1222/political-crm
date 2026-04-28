@@ -55,7 +55,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon; minRole: Role; b
 const NAV_CONFIG: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: ChartColumnBig, minRole: "manager" },
   { href: "/contacts", label: "Επαφές", icon: Users, minRole: "caller" },
-  { href: "/heatmap", label: "Χάρτης", icon: MapIcon, minRole: "manager" },
+  { href: "/map", label: "Χάρτης", icon: MapIcon, minRole: "manager" },
   { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager", badge: "requests" },
   { href: "/campaigns", label: "Καμπάνιες", icon: Megaphone, minRole: "manager" },
   { href: "/events", label: "Εκδηλώσεις", icon: CalendarCheck, minRole: "manager" },
@@ -73,7 +73,7 @@ const NAV_CONFIG: NavItem[] = [
 ];
 
 const groupDefs: { id: string; label: string; hrefs: string[] }[] = [
-  { id: "kyria", label: "ΚΥΡΙΑ", hrefs: ["/dashboard", "/contacts", "/heatmap"] },
+  { id: "kyria", label: "ΚΥΡΙΑ", hrefs: ["/dashboard", "/contacts", "/map"] },
   { id: "politika", label: "ΠΟΛΙΤΙΚΑ", hrefs: ["/requests", "/campaigns", "/events"] },
   { id: "organosi", label: "ΟΡΓΑΝΩΣΗ", hrefs: ["/tasks", "/volunteers", "/analytics", "/namedays"] },
   { id: "ergaleia", label: "ΕΡΓΑΛΕΙΑ", hrefs: ["/schedule", "/data-tools", "/qrcode", "/polls", "/documents", "/content"] },
@@ -97,7 +97,7 @@ const settingsItem: NavItem = navItemByHref.get("/settings")!;
 function pageTitle(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "Dashboard";
   if (pathname.startsWith("/contacts")) return "Επαφές";
-  if (pathname.startsWith("/heatmap")) return "Χάρτης";
+  if (pathname.startsWith("/map") || pathname.startsWith("/heatmap")) return "Χάρτης";
   if (pathname.startsWith("/namedays")) return "Εορτολόγιο";
   if (pathname.startsWith("/campaigns")) return "Καμπάνιες";
   if (pathname.startsWith("/events")) return "Εκδηλώσεις";

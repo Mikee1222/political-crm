@@ -67,7 +67,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <Script id="crm-theme-init" strategy="beforeInteractive">
-          {`(function(){try{var t=localStorage.getItem('crm-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`}
+          {`(function(){try{var t=localStorage.getItem('crm-theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`}
         </Script>
         <PwaServiceWorkerRegister />
         <ThemeProvider>
