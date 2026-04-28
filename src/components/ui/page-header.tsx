@@ -5,6 +5,8 @@ type Props = {
   subtitle?: string;
   /** e.g. export / CTA group — right-aligned on sm+ */
   actions?: ReactNode;
+  /** Optional metrics row (e.g. war-room stats) below subtitle */
+  metrics?: ReactNode;
   className?: string;
 };
 
@@ -12,7 +14,7 @@ type Props = {
  * Consistent “premium” page hero: big title, muted subtitle, 48px gold rule, optional actions.
  * Uses only CSS variables from globals (hq-page-header-*).
  */
-export function PageHeader({ title, subtitle, actions, className = "" }: Props) {
+export function PageHeader({ title, subtitle, actions, metrics, className = "" }: Props) {
   return (
     <header
       className={`hq-page-header relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-[var(--card-shadow)] sm:p-6 md:p-8 ${className}`.trim()}
@@ -30,6 +32,7 @@ export function PageHeader({ title, subtitle, actions, className = "" }: Props) 
           {subtitle ? (
             <p className="mt-3 max-w-2xl text-sm leading-[1.6] text-[var(--text-muted)]">{subtitle}</p>
           ) : null}
+          {metrics ? <div className="relative z-[1] mt-5 w-full min-w-0">{metrics}</div> : null}
         </div>
         {actions ? <div className="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">{actions}</div> : null}
       </div>

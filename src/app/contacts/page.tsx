@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Download, Pencil, Phone, Plus, Search, User } from "lucide-react";
+import { ArrowUpDown, ChevronDown, Download, Pencil, Phone, Plus, Search, User, X } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
@@ -18,7 +18,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { hasMinRole } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { avatarContact, callStatusLabel, lux } from "@/lib/luxury-styles";
+import { callStatusLabel, lux } from "@/lib/luxury-styles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
@@ -95,30 +95,188 @@ function callStatusAvatarRingClass(st: string | null | undefined) {
   return "bg-zinc-400";
 }
 
-function GroupPillWithHint({ g }: { g: NonNullable<Contact["contact_groups"]> }) {
-  const border = g.color || "#003476";
+/** 3px left accent on war-room cards: ενεργός / αναμονή / αρνητικός / άγνωστος */
+function callStatusAccentBarClass(st: string | null | undefined): string {
+  const s = st ?? "";
+  if (s === "Positive") return "bg-emerald-500";
+  if (s === "Pending") return "bg-amber-400";
+  if (s === "Negative") return "bg-red-500";
+  if (s === "No Answer") return "bg-zinc-400";
+  return "bg-zinc-400";
+}
+
+function avatarGradientFromName(first: string, last: string): string {
+  const s = `${first}${last}`;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i) * (i + 1)) % 1000;
+  const sets = [
+    "bg-gradient-to-br from-slate-600 to-slate-900",
+    "bg-gradient-to-br from-indigo-600 to-slate-900",
+    "bg-gradient-to-br from-emerald-700 to-slate-900",
+    "bg-gradient-to-br from-rose-600 to-slate-900",
+    "bg-gradient-to-br from-amber-700 to-stone-900",
+    "bg-gradient-to-br from-cyan-700 to-slate-900",
+  ];
+  return sets[h % sets.length]!;
+}
+
+function countActiveContactFilters(filters: ContactListFilters): number {
+  let n = 0;
+  if (filters.search.trim()) n += 1;
+  if (filters.call_statuses.length) n += 1;
+  if (filters.call_status) n += 1;
+  if (filters.municipality) n += 1;
+  if (filters.area) n += 1;
+  if (filters.priority) n += 1;
+  if (filters.tag) n += 1;
+  if (filters.political_stance) n += 1;
+  if (filters.phone) n += 1;
+  if (filters.group_id) n += 1;
+  if (filters.group_ids.length) n += 1;
+  if (filters.exclude_group_ids.length) n += 1;
+  if (filters.not_contacted_days) n += 1;
+  if (filters.score_tier) n += 1;
+  if (filters.is_volunteer) n += 1;
+  if (filters.nameday_today) n += 1;
+  if (filters.age_min || filters.age_max) n += 1;
+  if (filters.birth_year_from || filters.birth_year_to) n += 1;
+  if (filters.volunteer_area) n += 1;
+  if (filters.limit) n += 1;
+  return n;
+}
+
+function ContactDesktopRowCard({
+  c,
+  selected,
+  onToggleSelected,
+  canManage,
+  onRowNavigate,
+  onTriggerCall,
+}: {
+  c: Contact;
+  selected: boolean;
+  onToggleSelected: () => void;
+  canManage: boolean;
+  onRowNavigate: () => void;
+  onTriggerCall: (e: React.MouseEvent) => void;
+}) {
+  const nameDay = formatNameDayGreek(c.name_day);
+  const nameDayGold = isNameDayTodayOrThisWeek(c.name_day);
+  const initials = `${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`;
+  const grad = avatarGradientFromName(c.first_name, c.last_name);
+
   return (
-    <span className="inline-flex max-w-full shrink-0 items-center gap-0.5">
-      <span
-        className="inline-flex max-w-[7.5rem] truncate rounded-full border px-1.5 py-px text-[9px] font-semibold"
-        style={{
-          borderColor: border,
-          color: border,
-          background: "var(--bg-elevated)",
-        }}
-        title={g.name}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onRowNavigate}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onRowNavigate();
+        }
+      }}
+      className="group/contact-card relative flex w-full min-w-0 cursor-pointer items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm shadow-gray-200/40 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-px hover:border-gray-200 hover:shadow-lg hover:shadow-gray-200/80 dark:border-white/[0.08] dark:bg-white/[0.03] dark:shadow-black/20 dark:backdrop-blur-md dark:hover:border-white/[0.12] dark:hover:shadow-lg dark:hover:shadow-black/40"
+    >
+      <div className="flex shrink-0 items-start pt-4 pl-3" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelected}
+          className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-300 text-[#C9A84C] accent-[#C9A84C] focus:ring-[#C9A84C]/40 dark:border-white/20 dark:bg-white/5"
+          aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
+        />
+      </div>
+      <div
+        className={`mt-3 mb-3 w-[3px] shrink-0 self-stretch rounded-full ${callStatusAccentBarClass(c.call_status)}`}
+        title={callStatusLabel(c.call_status)}
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 items-start gap-3 py-3 pl-2 pr-2">
+        <div className="relative shrink-0">
+          <div
+            className={`flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-white shadow-inner ring-0 transition-all duration-200 ring-offset-2 ring-offset-white group-hover/contact-card:ring-2 group-hover/contact-card:ring-amber-400/60 dark:ring-offset-[#0a0f1e] ${grad}`}
+          >
+            {initials}
+          </div>
+          <span
+            className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-[#0a0f1e] ${callStatusAvatarRingClass(c.call_status)}`}
+            title={callStatusLabel(c.call_status)}
+            aria-hidden
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+              title={c.priority === "High" ? "Υψηλή" : c.priority === "Low" ? "Χαμηλή" : "Μεσαία"}
+            />
+            <span className="truncate text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
+              {c.first_name} {c.last_name}
+            </span>
+            {c.contact_code ? (
+              <span className="shrink-0 rounded-full border border-amber-200/50 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-600/80 dark:border-amber-400/10 dark:bg-amber-400/5 dark:text-amber-400/60">
+                {c.contact_code}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {c.municipality?.trim() ? (
+              <span className="inline-flex max-w-full truncate rounded-full border border-sky-100 bg-sky-50 px-2.5 py-0.5 text-[11px] text-sky-700 dark:border-sky-400/15 dark:bg-sky-400/8 dark:text-sky-300">
+                {c.municipality}
+              </span>
+            ) : null}
+            {nameDay ? (
+              <span
+                className={
+                  "inline-flex items-center gap-0.5 rounded-full border border-rose-100 bg-rose-50 px-2.5 py-0.5 text-[11px] text-rose-600 dark:border-rose-400/15 dark:bg-rose-400/8 dark:text-rose-300 " +
+                  (nameDayGold ? " ring-1 ring-[#C9A84C]/40" : "")
+                }
+              >
+                🎂 {nameDay}
+              </span>
+            ) : null}
+          </div>
+          {(c.contact_groups || c.father_name?.trim()) && (
+            <div className="mt-1.5 line-clamp-1 text-[11px] text-gray-500 dark:text-gray-400">
+              {c.contact_groups ? <span className="font-medium text-gray-600 dark:text-gray-300">{c.contact_groups.name}</span> : null}
+              {c.contact_groups && c.father_name?.trim() ? <span> · </span> : null}
+              {c.father_name?.trim() ? <span>{c.father_name}</span> : null}
+            </div>
+          )}
+        </div>
+      </div>
+      <div
+        className="flex w-[9.5rem] shrink-0 flex-col items-end justify-center gap-2 border-l border-gray-100 py-3 pr-3 pl-2 dark:border-white/[0.06]"
+        onClick={(e) => e.stopPropagation()}
       >
-        {g.name}
-      </span>
-      {g.description ? (
-        <span
-          className="inline-flex h-3.5 w-3.5 shrink-0 cursor-help items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[8px] font-bold leading-none text-[var(--text-secondary)]"
-          title={g.description}
-        >
-          ?
-        </span>
-      ) : null}
-    </span>
+        <div className="w-full text-right font-mono text-sm text-gray-500 dark:text-gray-400">
+          <div className="truncate" title={c.phone ?? undefined}>
+            {c.phone || "—"}
+          </div>
+          {c.phone2?.trim() ? <div className="truncate text-[11px] text-gray-400 dark:text-gray-500">{c.phone2}</div> : null}
+        </div>
+        <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover/contact-card:opacity-100">
+          <button
+            type="button"
+            className="rounded-lg bg-emerald-500 p-2 text-white shadow-lg shadow-emerald-500/30 transition-colors duration-200 hover:bg-emerald-400 disabled:pointer-events-none disabled:opacity-40"
+            title={canManage ? "Κλήση (Retell)" : "Μόνο managers"}
+            disabled={!canManage}
+            onClick={onTriggerCall}
+          >
+            <Phone className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="rounded-lg bg-gray-100 p-2 text-gray-700 transition-colors duration-200 hover:bg-amber-50 dark:bg-white/8 dark:text-gray-200 dark:hover:bg-amber-400/10"
+            title="Προφίλ"
+            onClick={onRowNavigate}
+          >
+            <User className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -139,9 +297,14 @@ function ContactSwipeCard({
   const skipNav = useRef(false);
   const touch0 = useRef<{ x: number; moved: boolean } | null>(null);
 
+  const nd = formatNameDayGreek(c.name_day);
+  const ndGold = isNameDayTodayOrThisWeek(c.name_day);
+  const initialsM = `${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`;
+  const gradM = avatarGradientFromName(c.first_name, c.last_name);
+
   return (
     <div
-      className="relative touch-pan-y overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-md"
+      className="relative touch-pan-y overflow-hidden rounded-xl border border-gray-200 bg-white shadow-md shadow-gray-200/50 transition-all duration-200 dark:border-white/[0.08] dark:bg-white/[0.03] dark:shadow-black/30 dark:backdrop-blur-md"
       onTouchStart={(e) => {
         touch0.current = { x: e.touches[0].clientX, moved: false };
       }}
@@ -174,58 +337,88 @@ function ContactSwipeCard({
     >
       <div className="pointer-events-none absolute inset-0 z-0 flex max-md:select-none" aria-hidden>
         <div className="flex w-14 shrink-0 items-center justify-center" style={{ background: "linear-gradient(90deg, rgba(201,168,76,0.3), transparent)" }}>
-          <span className="text-[9px] font-bold uppercase text-[var(--accent-gold)] [writing-mode:vertical-rl]">Κλήση</span>
+          <span className="text-[9px] font-bold uppercase text-[#C9A84C] [writing-mode:vertical-rl]">Κλήση</span>
         </div>
         <div className="min-w-0 flex-1" />
         <div
           className="flex w-14 shrink-0 items-center justify-center"
           style={{ background: "linear-gradient(270deg, rgba(0,52,118,0.35), transparent)" }}
         >
-          <Pencil className="h-4 w-4 text-[var(--accent-blue-bright)]" aria-hidden />
+          <Pencil className="h-4 w-4 text-[#1e5fa8]" aria-hidden />
         </div>
       </div>
-      <div className="relative z-[1] flex min-h-[4.5rem] min-w-0 items-center gap-3 p-3 pl-2 pr-2">
-        <div className="relative shrink-0">
-          <div className={avatarContact + " !h-12 !w-12 text-sm"}>
-            {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
-          </div>
-          <span
-            className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
-            title={callStatusLabel(c.call_status)}
-            aria-hidden
-          />
-        </div>
-        <div className="min-w-0 flex-1 pr-1">
-          <p className="flex flex-wrap items-center gap-1.5">
+      <div className="relative z-[1] flex min-h-[4.75rem] min-w-0 items-stretch bg-white/92 backdrop-blur-sm dark:bg-[#0a0f1e]/88 dark:backdrop-blur-md">
+        <div
+          className={`my-3 ml-1 w-[3px] shrink-0 self-stretch rounded-full ${callStatusAccentBarClass(c.call_status)}`}
+          title={callStatusLabel(c.call_status)}
+          aria-hidden
+        />
+        <div className="flex min-w-0 flex-1 items-center gap-3 p-3 pl-2 pr-2">
+          <div className="relative shrink-0">
+            <div
+              className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold text-white shadow-inner ring-0 transition-all duration-200 ring-offset-2 ring-offset-white group-active:ring-2 group-active:ring-amber-400/50 dark:ring-offset-[#0a0f1e] ${gradM}`}
+            >
+              {initialsM}
+            </div>
             <span
-              className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
-              title={pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+              className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-[#0a0f1e] ${callStatusAvatarRingClass(c.call_status)}`}
+              title={callStatusLabel(c.call_status)}
+              aria-hidden
             />
-            <span className="min-w-0 font-semibold text-[var(--text-primary)]">
-              {c.first_name} {c.last_name}
-            </span>
-            {c.contact_code ? (
-              <span className="shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] font-normal text-[var(--text-muted)]">
-                {c.contact_code}
+          </div>
+          <div className="min-w-0 flex-1 pr-1">
+            <p className="flex flex-wrap items-center gap-1.5">
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+                title={pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+              />
+              <span className="min-w-0 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
+                {c.first_name} {c.last_name}
               </span>
+              {c.contact_code ? (
+                <span className="shrink-0 rounded-full border border-amber-200/50 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-600/80 dark:border-amber-400/10 dark:bg-amber-400/5 dark:text-amber-400/60">
+                  {c.contact_code}
+                </span>
+              ) : null}
+            </p>
+            <p className="mt-1 font-mono text-sm text-gray-500 dark:text-gray-400">
+              <span className="block">{c.phone || "—"}</span>
+              {c.phone2?.trim() ? <span className="block text-[11px] text-gray-400 dark:text-gray-500">{c.phone2}</span> : null}
+              {c.landline?.trim() ? (
+                <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-gray-500" title="Σταθερό">
+                  {c.landline}
+                </span>
+              ) : null}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              {c.municipality?.trim() ? (
+                <span className="inline-flex max-w-full truncate rounded-full border border-sky-100 bg-sky-50 px-2.5 py-0.5 text-[11px] text-sky-700 dark:border-sky-400/15 dark:bg-sky-400/8 dark:text-sky-300">
+                  {c.municipality}
+                </span>
+              ) : null}
+              {nd ? (
+                <span
+                  className={
+                    "inline-flex items-center gap-0.5 rounded-full border border-rose-100 bg-rose-50 px-2.5 py-0.5 text-[11px] text-rose-600 dark:border-rose-400/15 dark:bg-rose-400/8 dark:text-rose-300 " +
+                    (ndGold ? "ring-1 ring-[#C9A84C]/40" : "")
+                  }
+                >
+                  🎂 {nd}
+                </span>
+              ) : null}
+            </div>
+            {(c.area?.trim() && c.area !== c.municipality) || c.contact_groups ? (
+              <p className="mt-1 line-clamp-1 text-[11px] text-gray-500 dark:text-gray-400">
+                {c.area?.trim() && c.area !== c.municipality ? <span>{c.area}</span> : null}
+                {c.contact_groups ? (
+                  <span className="font-medium text-gray-600 dark:text-gray-300">
+                    {c.area?.trim() && c.area !== c.municipality ? " · " : ""}
+                    {c.contact_groups.name}
+                  </span>
+                ) : null}
+              </p>
             ) : null}
-          </p>
-          <p className="mt-0.5 font-mono text-[13px] text-[var(--text-secondary)]">
-            <span className="block">{c.phone || "—"}</span>
-            {c.phone2?.trim() ? <span className="block text-[11px] text-[var(--text-muted)]">{c.phone2}</span> : null}
-            {c.landline?.trim() ? (
-              <span className="mt-0.5 block text-[10px] text-[var(--text-muted)]" title="Σταθερό">
-                {c.landline}
-              </span>
-            ) : null}
-          </p>
-          <p className="mt-0.5 line-clamp-1 text-[11px] text-[var(--text-muted)]">
-            {[c.municipality, c.area].filter(Boolean).join(" · ") || "—"}
-            {c.contact_groups ? <span className="ml-1.5 font-medium text-[var(--text-secondary)]">· {c.contact_groups.name}</span> : null}
-            {formatNameDayGreek(c.name_day) ? (
-              <span className="ml-1.5 font-medium text-[#C9A84C]">· {formatNameDayGreek(c.name_day)}</span>
-            ) : null}
-          </p>
+          </div>
         </div>
       </div>
     </div>
@@ -562,6 +755,13 @@ function ContactsPage() {
   const selectedIds = [...selected];
   const allChecked = contacts.length > 0 && contacts.every((c) => selected.has(c.id));
 
+  const activeFilterPillCount = useMemo(() => countActiveContactFilters(f), [f]);
+  const pagePositiveCount = useMemo(() => contacts.filter((c) => c.call_status === "Positive").length, [contacts]);
+  const pagePendingCount = useMemo(
+    () => contacts.filter((c) => !c.call_status || c.call_status === "Pending").length,
+    [contacts],
+  );
+
   const triggerCall = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!canManage) return;
@@ -730,6 +930,28 @@ function ContactsPage() {
             )}
           </div>
         }
+        metrics={
+          <div className="grid w-full max-w-4xl grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="flex flex-col border-b border-gray-200 pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left dark:border-gray-700 dark:sm:border-white/10">
+              <span className="font-mono text-2xl font-bold tabular-nums text-gray-900 dark:text-white">{listTotal}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-500">Σύνολο στη βάση</span>
+            </div>
+            <div className="flex flex-col border-b border-gray-200 pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left dark:border-gray-700 dark:sm:border-white/10">
+              <span className="font-mono text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{pagePositiveCount}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-500">Θετικοί (σελίδα)</span>
+            </div>
+            <div className="flex flex-col border-b border-gray-200 pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left dark:border-gray-700 dark:sm:border-white/10">
+              <span className="font-mono text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{pagePendingCount}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-500">Αναμονή (σελίδα)</span>
+            </div>
+            <div className="flex flex-col pt-1 text-center sm:pt-0 sm:text-left">
+              <span className="font-mono text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
+                {currentPage}/{totalPages}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-500">Σελίδα</span>
+            </div>
+          </div>
+        }
       />
 
       <div className={lux.card + " !py-4 w-full min-w-0 max-w-full"}>
@@ -769,17 +991,25 @@ function ContactsPage() {
             </label>
             <div className="relative">
               <Search
-                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500"
                 aria-hidden
               />
               <input
                 id="f-search"
-                className={lux.input + " !h-12 !rounded-full !pl-10 !pr-4 hq-input-elevated text-base sm:!text-sm"}
-                placeholder="Όνομα, τηλέφωνο, δήμος…"
+                className={
+                  "h-12 w-full rounded-xl border-[1.5px] border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-900 shadow-sm outline-none transition-all duration-200 placeholder:text-gray-400 focus:border-[#C9A84C] focus:shadow-[0_0_0_3px_rgba(201,168,76,0.15)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-500 dark:focus:border-[#C9A84C] " +
+                  (activeFilterPillCount > 0 ? "pr-28 sm:pr-32" : "pr-4")
+                }
+                placeholder="Αναζήτηση επαφής, αριθμού, δήμου..."
                 value={f.search}
                 onChange={(e) => patch({ search: e.target.value })}
                 autoComplete="off"
               />
+              {activeFilterPillCount > 0 ? (
+                <span className="pointer-events-none absolute right-2.5 top-1/2 inline-flex max-w-[5.5rem] -translate-y-1/2 truncate rounded-full border border-amber-200/60 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 sm:max-w-none sm:px-2.5 sm:text-[11px] dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200/90">
+                  {activeFilterPillCount} φίλτρα
+                </span>
+              ) : null}
             </div>
             {(f.call_statuses.length > 0 ||
               f.municipality ||
@@ -945,7 +1175,7 @@ function ContactsPage() {
 
       {contacts.length > 0 && (
         <div className="md:hidden">
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {contacts.map((c) => (
               <li key={c.id}>
                 <ContactSwipeCard
@@ -960,244 +1190,55 @@ function ContactsPage() {
         </div>
       )}
 
-      <div
-        className="data-hq-card hq-table-shell hq-table-contacts relative hidden w-full min-w-0 max-w-full min-h-0 overflow-x-auto md:block max-h-[min(70vh,900px)]"
-      >
-        {/*
-          Exactly 8 columns: (1) checkbox (2) avatar+name+code (3) phone (4) municipality
-          (5) group (6) nameday (7) patronymic (8) actions — same count in thead and every tbody tr.
-        */}
-        <table className="w-full min-w-[930px] table-fixed text-sm text-[var(--text-table)]">
-          <colgroup>
-            <col style={{ width: 40 }} />
-            <col style={{ width: 240 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 100 }} />
-            <col style={{ width: 90 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 80 }} />
-          </colgroup>
-          <thead>
-            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th
-                scope="col"
-                className="sticky left-0 top-0 z-[32] w-10 min-w-10 max-w-10 border-r border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left align-middle"
-              >
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-[var(--border)]"
-                  checked={allChecked}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    if (allChecked) setSelected(new Set());
-                    else setSelected(new Set(contacts.map((x) => x.id)));
-                  }}
-                  title="Επιλογή όλων"
-                  aria-label="Επιλογή όλων"
-                />
-              </th>
-              <th
-                scope="col"
-                className="sticky left-10 top-0 z-[31] w-60 min-w-60 max-w-60 border-r border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]"
-              >
-                Επαφή
-              </th>
-              <th scope="col" className="w-[140px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
-                Τηλέφωνο
-              </th>
-              <th scope="col" className="w-[120px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
-                Δήμος
-              </th>
-              <th scope="col" className="w-[100px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
-                Ομάδα
-              </th>
-              <th scope="col" className="w-[90px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
-                Γιορτή
-              </th>
-              <th scope="col" className="w-[120px] px-4 py-3 text-left align-middle font-medium text-[var(--text-table-header)]">
-                Πατρώνυμο
-              </th>
-              <th scope="col" className="w-20 px-4 py-3 text-right align-middle" aria-label="Ενέργειες" />
-            </tr>
-          </thead>
-          <tbody>
-            {contacts.map((c, rowIdx) => {
-              const rowBg = rowIdx % 2 === 0 ? "bg-[var(--bg-card)]" : "bg-[var(--bg-elevated)]/35";
-              const nameDay = formatNameDayGreek(c.name_day);
-              const nameDayGold = isNameDayTodayOrThisWeek(c.name_day);
-              const cellHover = `${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`;
-              return (
-                <tr
-                  key={c.id}
-                  className={
-                    "group/contact-row border-b border-l-2 border-l-transparent border-b-[var(--border)] text-[var(--text-table)] transition-[border-color,background-color] duration-200 last:border-0 hover:border-l-[#C9A84C] " +
-                    rowBg
-                  }
-                  onClick={() => router.push(`/contacts/${c.id}`)}
-                >
-                  <td
-                    className={`sticky left-0 z-[22] w-10 min-w-10 max-w-10 border-r border-[var(--border)] px-4 py-3 align-middle ${cellHover}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-[var(--border)]"
-                      checked={selected.has(c.id)}
-                      onChange={() =>
-                        setSelected((prev) => {
-                          const n = new Set(prev);
-                          if (n.has(c.id)) n.delete(c.id);
-                          else n.add(c.id);
-                          return n;
-                        })
-                      }
-                      aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
-                    />
-                  </td>
-                  <td
-                    className={`sticky left-10 z-[21] w-60 min-w-60 max-w-60 border-r border-[var(--border)] px-4 py-3 align-middle ${cellHover}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      className="flex w-full min-w-0 max-w-full items-center gap-2.5 text-left"
-                      onClick={() => router.push(`/contacts/${c.id}`)}
-                    >
-                      <div className="relative h-9 w-9 shrink-0 [flex-shrink:0]">
-                        <div
-                          className={
-                            avatarContact +
-                            " !flex !h-9 !w-9 !min-h-[36px] !min-w-[36px] !shrink-0 !items-center !justify-center !text-[13px] !font-semibold !leading-none"
-                          }
-                        >
-                          {`${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`}
-                        </div>
-                        <span
-                          className={`absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
-                          title={callStatusLabel(c.call_status)}
-                          aria-hidden
-                        />
-                      </div>
-                      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-                        <p className="flex min-w-0 items-center gap-1.5">
-                          <span
-                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
-                            title={
-                              c.priority === "High"
-                                ? "Υψηλή"
-                                : c.priority === "Low"
-                                  ? "Χαμηλή"
-                                  : "Μεσαία"
-                            }
-                          />
-                          <span className="min-w-0 truncate font-semibold leading-tight text-[var(--text-table)]">
-                            {c.first_name} {c.last_name}
-                          </span>
-                        </p>
-                        {c.contact_code ? (
-                          <span className="mt-1 inline-block max-w-full truncate rounded border border-[var(--border)]/70 bg-[var(--bg-elevated)]/90 px-1.5 py-0.5 font-mono text-[11px] leading-tight text-[var(--text-muted)]">
-                            {c.contact_code}
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-                  </td>
-                  <td
-                    className={`w-[140px] max-w-[140px] overflow-hidden px-4 py-3 align-middle font-mono text-xs leading-tight text-[var(--text-secondary)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
-                  >
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <div className="min-w-0 max-w-full whitespace-nowrap" title={c.phone ?? undefined}>
-                        {c.phone || "—"}
-                      </div>
-                      {c.phone2?.trim() ? (
-                        <div
-                          className="min-w-0 max-w-full text-[10px] leading-tight text-[var(--text-muted)] [overflow-wrap:normal] whitespace-nowrap"
-                          title={c.phone2}
-                        >
-                          {c.phone2}
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td
-                    className={`w-[120px] max-w-[120px] overflow-hidden px-4 py-3 align-middle text-xs leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium" title={c.municipality ?? ""}>
-                        {c.municipality?.trim() || "—"}
-                      </div>
-                      <div className="truncate text-[10px] text-[var(--text-muted)]" title={c.area ?? ""}>
-                        {c.area?.trim() || "—"}
-                      </div>
-                    </div>
-                  </td>
-                  <td
-                    className={`w-[100px] max-w-[100px] overflow-hidden px-4 py-3 align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
-                  >
-                    {c.contact_groups ? (
-                      <div className="min-w-0 max-w-full overflow-hidden">
-                        <GroupPillWithHint g={c.contact_groups} />
-                      </div>
-                    ) : (
-                      <span className="text-xs text-[var(--text-muted)]">—</span>
-                    )}
-                  </td>
-                  <td
-                    className={`w-[90px] max-w-[90px] overflow-hidden px-4 py-3 align-middle text-xs ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
-                  >
-                    {nameDay ? (
-                      <span
-                        className={nameDayGold ? "font-medium text-[#C9A84C]" : "text-[var(--text-secondary)]"}
-                        title={nameDayGold ? "Σήμερα ή αυτή την εβδομάδα" : undefined}
-                      >
-                        {nameDay}
-                      </span>
-                    ) : (
-                      <span className="text-[var(--text-muted)]">—</span>
-                    )}
-                  </td>
-                  <td
-                    className={`w-[120px] max-w-[120px] overflow-hidden px-4 py-3 align-middle text-xs leading-tight text-[var(--text-table)] ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
-                  >
-                    {c.father_name?.trim() ? (
-                      <span className="line-clamp-1 min-w-0" title={c.father_name}>
-                        {c.father_name}
-                      </span>
-                    ) : (
-                      <span className="text-[var(--text-muted)]">—</span>
-                    )}
-                  </td>
-                  <td
-                    className={`w-20 min-w-20 max-w-20 overflow-hidden px-4 py-3 text-right align-middle ${rowBg} group-hover/contact-row:bg-[var(--bg-elevated)]/50`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex w-full min-w-0 items-center justify-end gap-0.5">
-                      <button
-                        type="button"
-                        className={lux.btnIcon + " !h-7 !w-7 !min-h-0 !min-w-0" + (canManage ? "" : " opacity-40 pointer-events-none")}
-                        title={canManage ? "Κλήση (Retell)" : "Μόνο managers"}
-                        disabled={!canManage}
-                        onClick={(e) => void triggerCall(e, c.id)}
-                      >
-                        <Phone className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className={lux.btnIcon + " !h-7 !w-7 !min-h-0 !min-w-0"}
-                        title="Άνοιγμα επαφής"
-                        onClick={() => router.push(`/contacts/${c.id}`)}
-                      >
-                        <User className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {contacts.length === 0 && <p className="p-8 text-center text-sm text-[var(--text-secondary)]">Δεν βρέθηκαν επαφές</p>}
+      <div className="relative hidden max-h-[min(70vh,900px)] min-h-0 w-full min-w-0 max-w-full overflow-y-auto rounded-2xl border border-gray-200 bg-gray-50/60 p-3 md:block dark:border-white/[0.08] dark:bg-[#0a0f1e]/50">
+        <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-center gap-2 border-b border-gray-200/90 bg-gray-50/85 px-3 py-2.5 backdrop-blur-md dark:border-white/[0.06] dark:bg-[rgba(10,15,30,0.85)]">
+          <div className="flex w-10 shrink-0 items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 cursor-pointer rounded border-gray-300 accent-[#C9A84C] focus:ring-[#C9A84C]/40 dark:border-white/20 dark:bg-white/5"
+              checked={allChecked}
+              onChange={(e) => {
+                e.stopPropagation();
+                if (allChecked) setSelected(new Set());
+                else setSelected(new Set(contacts.map((x) => x.id)));
+              }}
+              title="Επιλογή όλων"
+              aria-label="Επιλογή όλων"
+            />
+          </div>
+          <div className="w-[3px] shrink-0 self-stretch rounded-full bg-transparent" aria-hidden />
+          <div className="group flex min-w-0 flex-1 cursor-default items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 transition-colors duration-200 hover:text-amber-600 dark:text-gray-500 dark:hover:text-amber-400">
+            Επαφή
+            <ArrowUpDown className="h-3 w-3 opacity-0 transition-opacity duration-200 group-hover:opacity-50" aria-hidden />
+          </div>
+          <div className="group hidden w-[9.5rem] shrink-0 cursor-default items-center justify-end gap-1.5 border-l border-gray-200/80 pl-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 transition-colors duration-200 hover:text-amber-600 sm:flex dark:border-white/[0.08] dark:text-gray-500 dark:hover:text-amber-400">
+            Τηλέφωνο
+            <ArrowUpDown className="h-3 w-3 opacity-0 transition-opacity duration-200 group-hover:opacity-50" aria-hidden />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 pb-1">
+          {contacts.map((c) => (
+            <ContactDesktopRowCard
+              key={c.id}
+              c={c}
+              selected={selected.has(c.id)}
+              onToggleSelected={() =>
+                setSelected((prev) => {
+                  const n = new Set(prev);
+                  if (n.has(c.id)) n.delete(c.id);
+                  else n.add(c.id);
+                  return n;
+                })
+              }
+              canManage={canManage}
+              onRowNavigate={() => router.push(`/contacts/${c.id}`)}
+              onTriggerCall={(e) => void triggerCall(e, c.id)}
+            />
+          ))}
+        </div>
+        {contacts.length === 0 ? (
+          <p className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Δεν βρέθηκαν επαφές</p>
+        ) : null}
       </div>
       {contacts.length === 0 && (
         <p className="p-4 text-center text-sm text-[var(--text-secondary)] md:hidden">Δεν βρέθηκαν επαφές</p>
@@ -1257,105 +1298,132 @@ function ContactsPage() {
       )}
 
       {selectedIds.length > 0 && (
-        <div className="hq-bulk-bar fixed inset-x-0 bottom-0 z-50 max-w-[100vw] overflow-x-hidden max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border)] bg-[var(--surface-bulk)] p-2 shadow-[var(--card-shadow)] backdrop-blur-md sm:p-3 md:bottom-4 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:max-w-[calc(100vw-1rem)] md:-translate-x-1/2 md:rounded-2xl md:border md:px-3">
-          {bulkErr && <p className="mb-2 break-words text-center text-xs text-[var(--status-negative-text)]">{bulkErr}</p>}
-          <div className="flex w-full min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2 sm:justify-between">
-            <p className="w-full min-w-0 shrink-0 text-center text-sm font-medium text-[var(--text-primary)] sm:w-auto sm:max-w-[12rem] sm:text-left">
-              {selectedIds.length} επαφές επιλεγμένες
-            </p>
-            <div className="flex w-full min-w-0 max-w-full flex-1 flex-col items-stretch gap-2 [min-width:0] sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
-              {canManage && (
-                <>
-                  <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:items-center">
-                    <label className="sr-only" htmlFor="bulk-status">Αλλαγή status</label>
-                    <HqSelect
-                      id="bulk-status"
-                      className="!h-9 w-full sm:min-w-[11rem]"
-                      value={bulkStatus}
-                      onChange={(e) => setBulkStatus(e.target.value)}
-                    >
-                      <option value="Pending">Αναμονή</option>
-                      <option value="Positive">Θετικός</option>
-                      <option value="Negative">Αρνητικός</option>
-                      <option value="No Answer">Δεν απάντησε</option>
-                    </HqSelect>
-                    <button
-                      type="button"
-                      className={lux.btnPrimary + " w-full !py-2 text-xs sm:w-auto sm:!px-3"}
-                      onClick={() => void postBulk("update_status", bulkStatus)}
-                      disabled={saving}
-                    >
-                      Αλλαγή status
-                    </button>
-                  </div>
-                  <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:items-center">
-                    <label className="sr-only" htmlFor="bulk-camp">Καμπάνια</label>
-                    <HqSelect
-                      id="bulk-camp"
-                      className="!h-9 w-full sm:min-w-[12rem]"
-                      value={bulkCampaign}
-                      onChange={(e) => setBulkCampaign(e.target.value)}
-                    >
-                      <option value="">Ανάθεση σε καμπάνια</option>
-                      {campaigns.map((cc) => (
-                        <option key={cc.id} value={cc.id}>
-                          {cc.name}
-                        </option>
-                      ))}
-                    </HqSelect>
-                    <button
-                      type="button"
-                      className={lux.btnSecondary + " w-full !py-2 text-xs sm:w-auto sm:!px-3"}
-                      onClick={() => (bulkCampaign ? void postBulk("add_to_campaign", bulkCampaign) : null)}
-                      disabled={saving || !bulkCampaign}
-                    >
-                      Προσθήκη
-                    </button>
-                  </div>
-                  <div className="flex w-full max-w-full flex-col gap-1 sm:w-full sm:min-w-0 sm:flex-1 sm:flex-row sm:items-end">
-                    <div className="min-w-0 flex-1">
-                      <label className="mb-0.5 block text-[10px] font-medium uppercase text-[var(--text-muted)}" htmlFor="bulk-wa">
-                        Αποστολή WhatsApp
+        <div className="fixed inset-x-0 bottom-0 z-50 max-w-[100vw] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:bottom-6 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:max-w-[calc(100vw-1rem)] md:-translate-x-1/2 md:px-0">
+          <div className="hq-bulk-bar-inner rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.15),0_0_0_1px_rgba(0,0,0,0.05)] dark:border-white/10 dark:bg-[#161B2E] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.05)]">
+            {bulkErr && (
+              <p className="mb-2 break-words text-center text-xs text-red-600 dark:text-red-300" role="alert">
+                {bulkErr}
+              </p>
+            )}
+            <div className="flex w-full min-w-0 flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#C9A84C] to-[#8B6914] font-mono text-sm font-bold text-white shadow-md shadow-amber-900/20">
+                  {selectedIds.length}
+                </div>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">επαφές επιλέχθηκαν</p>
+              </div>
+              <div className="hidden h-6 w-px shrink-0 bg-gray-200 md:block dark:bg-white/10" aria-hidden />
+              <div className="flex min-w-0 flex-1 flex-col flex-wrap items-stretch gap-2 md:flex-row md:items-center md:justify-end">
+                {canManage && (
+                  <>
+                    <div className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center">
+                      <label className="sr-only" htmlFor="bulk-status">
+                        Αλλαγή status
                       </label>
-                      <input
-                        id="bulk-wa"
-                        className={lux.select + " !h-9 w-full !text-sm"}
-                        value={bulkWaMessage}
-                        onChange={(e) => setBulkWaMessage(e.target.value)}
-                        placeholder="Κείμενο (1 δευτερόλεπτο ανά επαφή)…"
-                      />
+                      <HqSelect
+                        id="bulk-status"
+                        className="!h-9 w-full sm:min-w-[10rem]"
+                        value={bulkStatus}
+                        onChange={(e) => setBulkStatus(e.target.value)}
+                      >
+                        <option value="Pending">Αναμονή</option>
+                        <option value="Positive">Θετικός</option>
+                        <option value="Negative">Αρνητικός</option>
+                        <option value="No Answer">Δεν απάντησε</option>
+                      </HqSelect>
+                      <button
+                        type="button"
+                        className="h-9 w-full rounded-lg bg-gray-100 px-3.5 text-[13px] font-medium text-gray-800 transition-colors duration-200 hover:bg-amber-50 disabled:opacity-50 dark:bg-white/8 dark:text-gray-100 dark:hover:bg-amber-400/10 sm:w-auto"
+                        onClick={() => void postBulk("update_status", bulkStatus)}
+                        disabled={saving}
+                      >
+                        Αλλαγή status
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className={lux.btnSecondary + " w-full !py-2 text-xs sm:w-auto sm:!shrink-0 sm:!px-3"}
-                      disabled={saving || !bulkWaMessage.trim()}
-                      onClick={() => void postBulk("send_whatsapp", bulkWaMessage)}
-                    >
-                      Αποστολή WA
-                    </button>
-                  </div>
-                </>
-              )}
-              <a
-                className={lux.btnSecondary + " inline-flex w-full !items-center !justify-center gap-2 !py-2.5 sm:w-auto sm:!px-3"}
-                href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
-                onClick={(e) => {
-                  if (!selectedIds.length) e.preventDefault();
-                }}
-              >
-                <Download className="h-4 w-4" />
-                Εξαγωγή
-              </a>
-              {isAdmin && canManage && (
-                <button
-                  type="button"
-                  className={lux.btnDanger + " w-full !py-2.5 sm:w-auto sm:!px-3"}
-                  disabled={saving}
-                  onClick={() => setDeleteOpen(true)}
+                    <div className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center">
+                      <label className="sr-only" htmlFor="bulk-camp">
+                        Καμπάνια
+                      </label>
+                      <HqSelect
+                        id="bulk-camp"
+                        className="!h-9 w-full sm:min-w-[11rem]"
+                        value={bulkCampaign}
+                        onChange={(e) => setBulkCampaign(e.target.value)}
+                      >
+                        <option value="">Ανάθεση σε καμπάνια</option>
+                        {campaigns.map((cc) => (
+                          <option key={cc.id} value={cc.id}>
+                            {cc.name}
+                          </option>
+                        ))}
+                      </HqSelect>
+                      <button
+                        type="button"
+                        className="h-9 w-full rounded-lg bg-gray-100 px-3.5 text-[13px] font-medium text-gray-800 transition-colors duration-200 hover:bg-blue-50 disabled:opacity-50 dark:bg-white/8 dark:text-gray-100 dark:hover:bg-blue-400/10 sm:w-auto"
+                        onClick={() => (bulkCampaign ? void postBulk("add_to_campaign", bulkCampaign) : null)}
+                        disabled={saving || !bulkCampaign}
+                      >
+                        Ανάθεση καμπάνιας
+                      </button>
+                    </div>
+                    <div className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-end">
+                      <div className="min-w-0 flex-1">
+                        <label className="mb-0.5 block text-[10px] font-medium uppercase text-gray-500 dark:text-gray-400" htmlFor="bulk-wa">
+                          Αποστολή WhatsApp
+                        </label>
+                        <input
+                          id="bulk-wa"
+                          className={
+                            lux.select +
+                            " !h-9 w-full !text-sm border-gray-200 bg-white dark:border-white/10 dark:bg-white/5"
+                          }
+                          value={bulkWaMessage}
+                          onChange={(e) => setBulkWaMessage(e.target.value)}
+                          placeholder="Κείμενο (1 δευτερόλεπτο ανά επαφή)…"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="h-9 w-full shrink-0 rounded-lg bg-emerald-500 px-3.5 text-[13px] font-medium text-white shadow-[0_4px_12px_rgba(16,185,129,0.3)] transition-colors duration-200 hover:bg-emerald-400 disabled:opacity-50 sm:w-auto"
+                        disabled={saving || !bulkWaMessage.trim()}
+                        onClick={() => void postBulk("send_whatsapp", bulkWaMessage)}
+                      >
+                        Αποστολή WA
+                      </button>
+                    </div>
+                  </>
+                )}
+                <a
+                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-gray-100 px-3.5 text-[13px] font-medium text-gray-800 transition-colors duration-200 hover:bg-gray-200 dark:bg-white/8 dark:text-gray-100 dark:hover:bg-white/12 sm:w-auto"
+                  href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
+                  onClick={(e) => {
+                    if (!selectedIds.length) e.preventDefault();
+                  }}
                 >
-                  Διαγραφή
-                </button>
-              )}
+                  <Download className="h-4 w-4" />
+                  Εξαγωγή
+                </a>
+                {isAdmin && canManage && (
+                  <button
+                    type="button"
+                    className={lux.btnDanger + " h-9 w-full !py-0 text-[13px] sm:w-auto sm:!px-3"}
+                    disabled={saving}
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    Διαγραφή
+                  </button>
+                )}
+              </div>
+              <div className="hidden h-6 w-px shrink-0 bg-gray-200 md:block dark:bg-white/10" aria-hidden />
+              <button
+                type="button"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors duration-200 hover:text-red-500 md:ml-0"
+                title="Αποεπιλογή όλων"
+                aria-label="Αποεπιλογή όλων"
+                onClick={() => setSelected(new Set())}
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
           </div>
         </div>

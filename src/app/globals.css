@@ -1031,6 +1031,53 @@ textarea::placeholder {
   box-shadow: 0 0 0 2px var(--bg-card);
 }
 
-.hq-bulk-bar {
-  animation: hq-slide-in-left 0.35s ease-out both;
+@keyframes hq-bulk-slide-up-fade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
+.hq-bulk-bar-inner {
+  animation: hq-bulk-slide-up-fade 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes hq-alexandra-shimmer-bg {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.hq-alexandra-launch-btn {
+  background: linear-gradient(135deg, #c9a84c 0%, #8b6914 50%, #c9a84c 100%);
+  background-size: 200% 200%;
+  animation: hq-alexandra-shimmer-bg 4s ease infinite;
+}
+
+@keyframes hq-alexandra-ping-soft {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.08;
+  }
+}
+
+.hq-alexandra-glow-ring {
+  animation: hq-alexandra-ping-soft 3s ease-in-out infinite;
+}
+
+/* .hq-bulk-bar: layout classes on element; motion on .hq-bulk-bar-inner */
