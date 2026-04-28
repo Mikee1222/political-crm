@@ -1060,7 +1060,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <main
           ref={mainScrollRef}
           onScroll={onMainScroll}
-          className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] max-lg:mx-0 max-lg:px-0 pt-3 sm:pt-6 max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] lg:px-8 lg:pt-8 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]"
+          className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] max-lg:mx-0 p-0 max-lg:pt-0 sm:p-6 md:p-8 max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] lg:px-8 lg:pt-8 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]"
         >
           {installable && !installed && !installBannerDismissed ? (
             <div className="mb-3 flex w-full max-w-full flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-card))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">

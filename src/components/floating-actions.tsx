@@ -1,9 +1,9 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { CheckSquare, Inbox, Plus, UserPlus, X } from "lucide-react";
+import { CheckSquare, Inbox, Plus, Sparkles, UserPlus, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 import { hasMinRole } from "@/lib/roles";
@@ -93,30 +93,43 @@ function DesktopMergedFabButton({
   );
 }
 
-function SpeedDialItems({
-  items,
-  onPick,
-}: {
-  items: { label: string; icon: LucideIcon; onClick: () => void }[];
-  onPick: () => void;
-}) {
+type DialItem = {
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+  variant?: "alex" | "default";
+};
+
+function SpeedDialItems({ items, onPick }: { items: DialItem[]; onPick: () => void }) {
   return (
     <div className="pointer-events-auto mb-1 flex w-full min-w-0 flex-col items-stretch gap-3">
-      {items.map((it, i) => (
-        <button
-          key={it.label}
-          type="button"
-          style={{ animationDelay: `${i * 50}ms` }}
-          className="hq-floating-dial-item flex h-12 min-h-12 w-[10.5rem] max-w-[min(10.5rem,calc(100vw-48px))] shrink-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-left text-sm font-semibold text-[var(--text-primary)] shadow-lg backdrop-blur-md hq-press-mobile"
-          onClick={() => {
-            it.onClick();
-            onPick();
-          }}
-        >
-          <it.icon className="h-5 w-5 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-          {it.label}
-        </button>
-      ))}
+      {items.map((it, i) => {
+        const isAlex = it.variant === "alex";
+        return (
+          <button
+            key={it.label}
+            type="button"
+            style={
+              isAlex
+                ? { animationDelay: `${i * 50}ms`, ...goldGradientStyle }
+                : { animationDelay: `${i * 50}ms` }
+            }
+            className={[
+              "hq-floating-dial-item flex h-12 min-h-12 w-[10.5rem] max-w-[min(10.5rem,calc(100vw-48px))] shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold shadow-lg backdrop-blur-md hq-press-mobile",
+              isAlex
+                ? "border border-white/25 text-white"
+                : "border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)]",
+            ].join(" ")}
+            onClick={() => {
+              it.onClick();
+              onPick();
+            }}
+          >
+            <it.icon className={["h-5 w-5 shrink-0", isAlex ? "text-white" : "text-[var(--accent-gold)]"].join(" ")} aria-hidden />
+            {it.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -172,13 +185,27 @@ export function FloatingActions({ role }: Props) {
     setMiniWindowMinimized(false);
   }, [openMiniFromBubble, setMiniWindowMinimized]);
 
-  if (hide) return null;
+  const dialItems: DialItem[] = useMemo(() => {
+    const rest: DialItem[] = [
+      { label: "Νέα Επαφή", icon: UserPlus, onClick: () => go("/contacts?new=1") },
+      { label: "Νέο Αίτημα", icon: Inbox, onClick: () => go("/requests?new=1") },
+      { label: "Νέα Εργασία", icon: CheckSquare, onClick: () => go("/tasks?new=1") },
+    ];
+    if (canAlex) {
+      return [
+        {
+          label: "Αλεξάνδρα AI",
+          icon: Sparkles,
+          onClick: () => go("/alexandra"),
+          variant: "alex",
+        },
+        ...rest,
+      ];
+    }
+    return rest;
+  }, [canAlex, go]);
 
-  const dialItems = [
-    { label: "Νέα Επαφή", icon: UserPlus, onClick: () => go("/contacts?new=1") },
-    { label: "Νέο Αίτημα", icon: Inbox, onClick: () => go("/requests?new=1") },
-    { label: "Νέα Εργασία", icon: CheckSquare, onClick: () => go("/tasks?new=1") },
-  ];
+  if (hide) return null;
 
   const showAny = isManager || canAlex;
   if (!showAny) return null;
