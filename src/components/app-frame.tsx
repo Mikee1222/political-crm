@@ -813,7 +813,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-screen max-w-screen min-w-0 overflow-x-hidden bg-[#080D1A]"
+      className="flex min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-full max-w-full min-w-0 flex-col overflow-x-hidden bg-[#080D1A]"
       style={shellStyle}
     >
       <aside
