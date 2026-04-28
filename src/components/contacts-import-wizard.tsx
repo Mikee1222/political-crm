@@ -259,13 +259,9 @@ export function ContactsImportWizard({ onImported }: Props) {
       </div>
 
       {open && (
-        <ModalShell
-          open={open}
-          onClose={close}
-          overlayClassName="items-stretch justify-end p-0 sm:items-center sm:justify-center"
-        >
+        <ModalShell open={open} onClose={close}>
           <div
-            className="flex max-h-[100dvh] w-full max-w-[720px] flex-col border border-[var(--border)] bg-[#0A1628] shadow-2xl sm:max-h-[min(90dvh,880px)] sm:rounded-2xl sm:border"
+            className="flex max-h-[100dvh] w-[min(720px,calc(100vw-2rem))] max-w-full flex-col border border-[var(--border)] bg-[#0A1628] shadow-2xl sm:max-h-[min(90dvh,880px)] sm:rounded-2xl sm:border"
             role="dialog"
             aria-modal
             aria-labelledby="import-wizard-title"

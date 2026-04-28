@@ -142,13 +142,16 @@ function TiktokPlayCard({ item }: { item: TiktokItem }) {
       {mounted && open && id
         ? createPortal(
             <div
-              className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm sm:p-4"
               role="dialog"
               aria-modal="true"
               aria-label="TikTok"
               onClick={() => setOpen(false)}
             >
-              <div className="flex min-h-0 flex-1 flex-col bg-black sm:mx-auto sm:my-auto sm:max-h-[min(92dvh,880px)] sm:max-w-3xl sm:rounded-xl sm:ring-1 sm:ring-white/15" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="mx-4 flex h-[min(92dvh,880px)] w-full max-w-3xl flex-col overflow-hidden rounded-none bg-black ring-white/15 sm:rounded-xl sm:ring-1"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="flex flex-shrink-0 items-center justify-end gap-2 border-b border-white/10 bg-black/95 px-2 py-1.5">
                   <button
                     type="button"

@@ -61,7 +61,13 @@ export function ModalShell({
       role="presentation"
       onClick={closeOnBackdrop ? onClose : undefined}
     >
-      <div className={clsx("pointer-events-auto max-h-full w-full min-w-0 outline-none", className)} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={clsx(
+          "pointer-events-auto flex max-h-full w-full min-h-0 min-w-0 flex-row items-center justify-center outline-none",
+          className,
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>,
@@ -111,7 +117,7 @@ export function CenteredModal({
         aria-labelledby={titleId}
         {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
         className={clsx(
-          "relative flex max-h-[min(90dvh,90vh)] w-[min(680px,calc(100vw-1rem))] flex-col overflow-hidden rounded-none border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl sm:border",
+          "relative flex max-h-[min(90dvh,90vh)] w-[min(680px,calc(100vw-2rem))] max-w-full flex-col overflow-hidden rounded-none border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl sm:border",
           className,
         )}
       >
