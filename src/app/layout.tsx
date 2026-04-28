@@ -60,16 +60,16 @@ export default function RootLayout({
       lang="el"
       data-theme="dark"
       suppressHydrationWarning
-      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full min-h-full min-h-[100dvh] w-full antialiased`}
     >
       <body
-        className="min-h-full min-h-[-webkit-fill-available] flex w-full max-w-full flex-col overflow-x-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] leading-[1.6]"
+        className="m-0 flex min-h-full min-h-screen min-h-[100dvh] min-h-[-webkit-fill-available] w-full max-w-full flex-col overflow-x-hidden bg-[var(--bg-primary)] p-0 text-[var(--text-primary)] leading-[1.6]"
         suppressHydrationWarning
       >
         <Script id="crm-theme-init" strategy="beforeInteractive">
           {`(function(){try{var t=localStorage.getItem('crm-theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`}
         </Script>
-        <div className="overflow-x-hidden max-w-full w-full">
+        <div className="flex min-h-screen min-h-[100dvh] w-screen max-w-screen min-w-0 flex-1 flex-col overflow-x-hidden">
           <PwaServiceWorkerRegister />
           <ThemeProvider>
             <FormToastProvider>

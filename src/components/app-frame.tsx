@@ -813,7 +813,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const showSidebarNavSkeleton = profileLoading;
 
   return (
-    <div className="min-h-[-webkit-fill-available] min-h-screen w-full max-w-full overflow-x-hidden bg-[var(--bg-primary)]" style={shellStyle}>
+    <div
+      className="min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden bg-[var(--bg-primary)]"
+      style={shellStyle}
+    >
       <aside
         className="app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 hidden h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)] px-2 py-3 pb-2 lg:flex"
         style={{ background: "var(--sidebar-bg)" }}

@@ -11,7 +11,7 @@ const inter = Inter({
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={inter.className} data-portal="1">
+    <div className={`${inter.className} min-h-[100dvh] w-full max-w-full overflow-x-hidden`} data-portal="1">
       <div id="fb-root" />
       <Script
         id="fb-sdk"
