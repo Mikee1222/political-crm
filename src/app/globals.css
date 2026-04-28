@@ -133,6 +133,9 @@
   --input-focus-border: #003476;
   --border: rgba(139, 105, 20, 0.2);
   --border-hover: rgba(139, 105, 20, 0.45);
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
   --status-positive-bg: #dcfce7;
   --status-positive-text: #15803d;
   --status-negative-bg: #fee2e2;
@@ -1166,6 +1169,56 @@ textarea::placeholder {
 
 .hq-bulk-bar-inner {
   animation: hq-bulk-slide-up-fade 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Contacts /epafes — Alexandra FAB-style CTA (design tokens only) */
+.hq-contacts-alex-launch {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    var(--accent-gold-light) 0%,
+    var(--accent-gold) 42%,
+    color-mix(in srgb, var(--accent-gold) 72%, var(--bg-primary)) 100%
+  );
+  background-size: 200% 200%;
+  animation: hq-alexandra-shimmer-bg 4s ease infinite;
+  color: var(--text-badge-on-gold);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-gold) 38%, transparent),
+    0 8px 28px color-mix(in srgb, var(--accent-gold) 32%, transparent);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.hq-contacts-alex-launch:hover {
+  transform: scale(1.03);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-gold) 55%, transparent),
+    0 12px 36px color-mix(in srgb, var(--accent-gold) 42%, transparent);
+}
+.hq-contacts-alex-launch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 18%, transparent) 42%,
+    transparent 75%
+  );
+  transform: translateX(-100%);
+  animation: hq-contacts-alex-sheen 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes hq-contacts-alex-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  50%,
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes hq-alexandra-shimmer-bg {

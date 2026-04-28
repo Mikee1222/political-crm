@@ -3,7 +3,17 @@
 import { ArrowUpDown, ChevronDown, Download, Phone, Plus, Search, Sparkles, Trash2, User, X } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+  type CSSProperties,
+} from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import {
   getDefaultContactFilters,
@@ -84,43 +94,40 @@ function isNameDayTodayOrThisWeek(iso: string | null | undefined): boolean {
   return weekStartMondayTime(occ) === weekStartMondayTime(today);
 }
 
-function priorityDotClass(pr: string | null | undefined) {
+function priorityDotStyle(pr: string | null | undefined): CSSProperties {
   const p = pr ?? "Medium";
-  if (p === "High") return "bg-red-500";
-  if (p === "Low") return "bg-zinc-400";
-  return "bg-amber-500";
+  if (p === "High") return { background: "var(--danger)" };
+  if (p === "Low") return { background: "color-mix(in srgb, var(--text-muted) 65%, var(--border))" };
+  return { background: "var(--warning)" };
 }
 
-function callStatusAvatarRingClass(st: string | null | undefined) {
-  const s = st ?? "Pending";
-  if (s === "Positive") return "bg-emerald-500";
-  if (s === "Negative") return "bg-red-500";
-  return "bg-zinc-400";
-}
-
-/** 3px left accent on war-room cards: ενεργός / αναμονή / αρνητικός / άγνωστος */
-function callStatusAccentBarClass(st: string | null | undefined): string {
+/** Status dot / 3px bar — tokens only (Θετικός / Αναμονή / Αρνητικός / default). */
+function callStatusAccentStyle(st: string | null | undefined): CSSProperties {
   const s = st ?? "";
-  if (s === "Positive") return "bg-emerald-500";
-  if (s === "Pending") return "bg-amber-400";
-  if (s === "Negative") return "bg-red-500";
-  if (s === "No Answer") return "bg-zinc-400";
-  return "bg-zinc-400";
+  if (s === "Positive") return { background: "var(--success)" };
+  if (s === "Pending") return { background: "var(--warning)" };
+  if (s === "Negative") return { background: "var(--danger)" };
+  return { background: "color-mix(in srgb, var(--text-muted) 55%, var(--border))" };
 }
 
-function avatarGradientFromName(first: string, last: string): string {
+const AVATAR_GRADIENT_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["var(--accent-blue-bright)", "var(--bg-elevated)"],
+  ["var(--accent-gold)", "var(--accent-blue)"],
+  ["color-mix(in srgb, var(--success) 42%, var(--bg-card))", "var(--bg-elevated)"],
+  ["color-mix(in srgb, var(--accent-gold) 52%, var(--bg-card))", "var(--accent-blue-bright)"],
+  ["var(--accent-blue)", "color-mix(in srgb, var(--accent-gold) 32%, var(--bg-card))"],
+  ["color-mix(in srgb, var(--accent-blue-bright) 48%, var(--bg-elevated))", "var(--bg-card)"],
+];
+
+function avatarGradientStyle(first: string, last: string): CSSProperties {
   const s = `${first}${last}`;
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i) * (i + 1)) % 1000;
-  const sets = [
-    "bg-gradient-to-br from-slate-600 to-slate-900",
-    "bg-gradient-to-br from-indigo-600 to-slate-900",
-    "bg-gradient-to-br from-emerald-700 to-slate-900",
-    "bg-gradient-to-br from-rose-600 to-slate-900",
-    "bg-gradient-to-br from-amber-700 to-stone-900",
-    "bg-gradient-to-br from-cyan-700 to-slate-900",
-  ];
-  return sets[h % sets.length]!;
+  const pair = AVATAR_GRADIENT_PAIRS[h % AVATAR_GRADIENT_PAIRS.length]!;
+  const [c1, c2] = pair;
+  return {
+    background: `linear-gradient(145deg, color-mix(in srgb, ${c1} 72%, var(--bg-card)), ${c2})`,
+  };
 }
 
 function countActiveContactFilters(filters: ContactListFilters): number {
@@ -166,7 +173,11 @@ function ContactDesktopRowCard({
   const nameDay = formatNameDayGreek(c.name_day);
   const nameDayGold = isNameDayTodayOrThisWeek(c.name_day);
   const initials = `${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`;
-  const grad = avatarGradientFromName(c.first_name, c.last_name);
+  const avatarBg = avatarGradientStyle(c.first_name, c.last_name);
+  const muniPillClass =
+    "inline-flex max-w-full truncate rounded-full border px-2.5 py-0.5 text-[11px] border-[color-mix(in_srgb,var(--accent-blue-bright)_38%,var(--border))] bg-[color-mix(in_srgb,var(--accent-blue-bright)_14%,var(--bg-elevated))] text-[var(--accent-blue)]";
+  const rosePillClass =
+    "inline-flex items-center gap-0.5 rounded-full border px-2.5 py-0.5 text-[11px] border-[color-mix(in_srgb,var(--danger)_28%,var(--border))] bg-[color-mix(in_srgb,var(--danger)_11%,var(--bg-elevated))] text-[color-mix(in_srgb,var(--danger)_82%,var(--text-primary))]";
 
   return (
     <div
@@ -179,31 +190,34 @@ function ContactDesktopRowCard({
           onRowNavigate();
         }
       }}
-      className="group/contact-card relative flex w-full min-w-0 cursor-pointer items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm shadow-gray-200/40 transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-px hover:border-gray-200 hover:shadow-lg hover:shadow-gray-200/80 dark:border-white/[0.08] dark:bg-white/[0.03] dark:shadow-black/20 dark:backdrop-blur-md dark:hover:border-white/[0.12] dark:hover:shadow-lg dark:hover:shadow-black/40"
+      className="group/contact-card relative flex w-full min-w-0 cursor-pointer items-stretch overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)] backdrop-blur-md transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-px hover:border-[color-mix(in_srgb,var(--accent-gold)_48%,var(--border))] hover:shadow-[var(--card-shadow-hover)]"
     >
       <div className="flex shrink-0 items-start pt-4 pl-3" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
           checked={selected}
           onChange={onToggleSelected}
-          className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-300 text-[#C9A84C] accent-[#C9A84C] focus:ring-[#C9A84C]/40 dark:border-white/20 dark:bg-white/5"
+          className="mt-0.5 h-4 w-4 cursor-pointer rounded border-[var(--border)] bg-[var(--input-bg)] accent-[var(--accent-gold)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-gold)_35%,transparent)]"
           aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
         />
       </div>
       <div
-        className={`mt-3 mb-3 w-[3px] shrink-0 self-stretch rounded-full ${callStatusAccentBarClass(c.call_status)}`}
+        className="mt-3 mb-3 w-[3px] shrink-0 self-stretch rounded-full transition-[box-shadow] duration-200 group-hover/contact-card:[box-shadow:0_0_18px_2px_color-mix(in_srgb,var(--accent-gold)_50%,transparent)]"
+        style={callStatusAccentStyle(c.call_status)}
         title={callStatusLabel(c.call_status)}
         aria-hidden
       />
       <div className="flex min-w-0 flex-1 items-start gap-3 py-3 pl-2 pr-2">
-        <div className="relative shrink-0">
+        <div className="relative h-11 w-11 shrink-0">
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-white shadow-inner ring-0 transition-all duration-200 ring-offset-2 ring-offset-white group-hover/contact-card:ring-2 group-hover/contact-card:ring-amber-400/60 dark:ring-offset-[#0a0f1e] ${grad}`}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[13px] font-bold shadow-[inset_0_1px_0_color-mix(in_srgb,var(--text-primary)_12%,transparent)] ring-0 ring-offset-2 ring-offset-[var(--bg-card)] transition-[box-shadow] duration-200 group-hover/contact-card:ring-2 group-hover/contact-card:ring-[color-mix(in_srgb,var(--accent-gold)_45%,transparent)]"
+            style={{ ...avatarBg, color: "var(--text-primary)" }}
           >
             {initials}
           </div>
           <span
-            className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-[#0a0f1e] ${callStatusAvatarRingClass(c.call_status)}`}
+            className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)]"
+            style={callStatusAccentStyle(c.call_status)}
             title={callStatusLabel(c.call_status)}
             aria-hidden
           />
@@ -211,29 +225,28 @@ function ContactDesktopRowCard({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={priorityDotStyle(c.priority)}
               title={c.priority === "High" ? "Υψηλή" : c.priority === "Low" ? "Χαμηλή" : "Μεσαία"}
             />
-            <span className="truncate text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
+            <span className="min-w-0 truncate text-[15px] font-bold tracking-tight text-[var(--text-primary)]">
               {c.first_name} {c.last_name}
             </span>
-            {c.contact_code ? (
-              <span className="shrink-0 rounded-full border border-amber-200/50 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-600/80 dark:border-amber-400/10 dark:bg-amber-400/5 dark:text-amber-400/60">
+          </div>
+          {c.contact_code ? (
+            <div className="mt-1">
+              <span className="inline-flex rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_42%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-2 py-0.5 font-mono text-[10px] font-semibold text-[var(--accent-gold)]">
                 {c.contact_code}
               </span>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {c.municipality?.trim() ? (
-              <span className="inline-flex max-w-full truncate rounded-full border border-sky-100 bg-sky-50 px-2.5 py-0.5 text-[11px] text-sky-700 dark:border-sky-400/15 dark:bg-sky-400/8 dark:text-sky-300">
-                {c.municipality}
-              </span>
-            ) : null}
+            {c.municipality?.trim() ? <span className={muniPillClass}>{c.municipality}</span> : null}
             {nameDay ? (
               <span
                 className={
-                  "inline-flex items-center gap-0.5 rounded-full border border-rose-100 bg-rose-50 px-2.5 py-0.5 text-[11px] text-rose-600 dark:border-rose-400/15 dark:bg-rose-400/8 dark:text-rose-300 " +
-                  (nameDayGold ? " ring-1 ring-[#C9A84C]/40" : "")
+                  rosePillClass +
+                  (nameDayGold ? " ring-1 ring-[color-mix(in_srgb,var(--accent-gold)_48%,transparent)]" : "")
                 }
               >
                 🎂 {nameDay}
@@ -241,8 +254,8 @@ function ContactDesktopRowCard({
             ) : null}
           </div>
           {(c.contact_groups || c.father_name?.trim()) && (
-            <div className="mt-1.5 line-clamp-1 text-[11px] text-gray-500 dark:text-gray-400">
-              {c.contact_groups ? <span className="font-medium text-gray-600 dark:text-gray-300">{c.contact_groups.name}</span> : null}
+            <div className="mt-1.5 line-clamp-1 text-[11px] text-[var(--text-muted)]">
+              {c.contact_groups ? <span className="font-medium text-[var(--text-secondary)]">{c.contact_groups.name}</span> : null}
               {c.contact_groups && c.father_name?.trim() ? <span> · </span> : null}
               {c.father_name?.trim() ? <span>{c.father_name}</span> : null}
             </div>
@@ -250,19 +263,22 @@ function ContactDesktopRowCard({
         </div>
       </div>
       <div
-        className="flex w-[9.5rem] shrink-0 flex-col items-end justify-center gap-2 border-l border-gray-100 py-3 pr-3 pl-2 dark:border-white/[0.06]"
+        className="flex w-[9.5rem] shrink-0 flex-col items-end justify-center gap-2 border-l border-[var(--border)] py-3 pr-3 pl-2"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-full text-right font-mono text-sm text-gray-500 dark:text-gray-400">
+        <div className="w-full text-right font-mono text-sm text-[var(--text-secondary)]">
           <div className="truncate" title={c.phone ?? undefined}>
             {c.phone || "—"}
           </div>
-          {c.phone2?.trim() ? <div className="truncate text-[11px] text-gray-400 dark:text-gray-500">{c.phone2}</div> : null}
+          {c.phone2?.trim() ? (
+            <div className="truncate text-[11px] text-[var(--text-muted)]">{c.phone2}</div>
+          ) : null}
         </div>
         <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover/contact-card:opacity-100">
           <button
             type="button"
-            className="rounded-lg bg-emerald-500 p-2 text-white shadow-lg shadow-emerald-500/30 transition-colors duration-200 hover:bg-emerald-400 disabled:pointer-events-none disabled:opacity-40"
+            className="rounded-lg p-2 text-[var(--text-primary)] shadow-[0_6px_18px_color-mix(in_srgb,var(--success)_35%,transparent)] transition-[filter,opacity] duration-200 hover:brightness-110 disabled:pointer-events-none disabled:opacity-40"
+            style={{ background: "var(--success)" }}
             title={canManage ? "Κλήση (Retell)" : "Μόνο managers"}
             disabled={!canManage}
             onClick={onTriggerCall}
@@ -271,7 +287,7 @@ function ContactDesktopRowCard({
           </button>
           <button
             type="button"
-            className="rounded-lg bg-gray-100 p-2 text-gray-700 transition-colors duration-200 hover:bg-amber-50 dark:bg-white/8 dark:text-gray-200 dark:hover:bg-amber-400/10"
+            className="rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--border))] p-2 text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent-gold)_14%,var(--bg-elevated))]"
             title="Προφίλ"
             onClick={onRowNavigate}
           >
@@ -338,15 +354,19 @@ function ContactSwipeCard({
   const nd = formatNameDayGreek(c.name_day);
   const ndGold = isNameDayTodayOrThisWeek(c.name_day);
   const initialsM = `${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`;
-  const gradM = avatarGradientFromName(c.first_name, c.last_name);
+  const avatarMStyle = avatarGradientStyle(c.first_name, c.last_name);
 
   return (
     <div className="relative w-full max-w-full touch-pan-y overflow-hidden rounded-[20px] border border-[var(--border)] shadow-[var(--card-shadow)] md:max-w-none">
       <div className="absolute inset-0 z-10 flex">
         <button
           type="button"
-          className="hq-press-mobile flex w-[80px] shrink-0 flex-col items-center justify-center gap-1 border-r border-[var(--border)]/30 bg-gradient-to-br from-[#C9A84C]/35 to-[#8b6914]/25 text-[var(--text-primary)]"
-          style={{ width: SW_ALEX }}
+          className="hq-press-mobile flex w-[80px] shrink-0 flex-col items-center justify-center gap-1 border-r border-[var(--border)]/30 text-[var(--text-primary)]"
+          style={{
+            width: SW_ALEX,
+            background:
+              "linear-gradient(to bottom right, color-mix(in srgb, var(--accent-gold) 32%, transparent), color-mix(in srgb, var(--accent-gold) 10%, var(--bg-secondary)))",
+          }}
           onClick={(e) => {
             e.stopPropagation();
             pageCtx?.setContactPage({
@@ -358,14 +378,18 @@ function ContactSwipeCard({
             setTx(0);
           }}
         >
-          <Sparkles className="h-5 w-5 text-[#C9A84C]" />
-          <span className="text-[9px] font-bold uppercase leading-tight text-[#C9A84C]">Αλεξάνδρα</span>
+          <Sparkles className="h-5 w-5 text-[var(--accent-gold)]" />
+          <span className="text-[9px] font-bold uppercase leading-tight text-[var(--accent-gold)]">Αλεξάνδρα</span>
         </button>
         <div className="min-w-0 flex-1 bg-[var(--bg-secondary)]/40" />
         <button
           type="button"
-          className="hq-press-mobile flex shrink-0 flex-col items-center justify-center gap-0.5 bg-gradient-to-bl from-sky-600/90 to-blue-800/95 text-white disabled:opacity-40"
-          style={{ width: SW_CALL }}
+          className="hq-press-mobile flex shrink-0 flex-col items-center justify-center gap-0.5 text-[var(--text-primary)] disabled:opacity-40"
+          style={{
+            width: SW_CALL,
+            background:
+              "linear-gradient(to bottom left, color-mix(in srgb, var(--accent-blue-bright) 88%, var(--bg-card)), var(--accent-blue))",
+          }}
           disabled={!canCall}
           onClick={(e) => {
             e.stopPropagation();
@@ -379,7 +403,10 @@ function ContactSwipeCard({
         {isAdmin ? (
           <button
             type="button"
-            className="hq-press-mobile flex w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 bg-gradient-to-bl from-red-600 to-red-900 text-white"
+            className="hq-press-mobile flex w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 text-[var(--text-primary)]"
+            style={{
+              background: "linear-gradient(to bottom left, var(--danger), color-mix(in srgb, var(--danger) 58%, var(--bg-primary)))",
+            }}
             onClick={async (e) => {
               e.stopPropagation();
               const ok = window.confirm(
@@ -449,19 +476,22 @@ function ContactSwipeCard({
       >
         <div className="hq-card-tap-inner flex min-w-0 flex-1 items-stretch">
           <div
-            className={`my-4 ml-1 w-[3px] shrink-0 self-stretch rounded-full ${callStatusAccentBarClass(c.call_status)}`}
+            className="my-4 ml-1 w-[3px] shrink-0 self-stretch rounded-full"
+            style={callStatusAccentStyle(c.call_status)}
             title={callStatusLabel(c.call_status)}
             aria-hidden
           />
           <div className="flex min-w-0 flex-1 items-center gap-3 p-4 pl-2 pr-2">
             <div className="relative shrink-0">
               <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full text-base font-semibold text-white shadow-inner ${gradM}`}
+                className="flex h-12 w-12 items-center justify-center rounded-full text-base font-bold shadow-[inset_0_1px_0_color-mix(in_srgb,var(--text-primary)_10%,transparent)]"
+                style={{ ...avatarMStyle, color: "var(--text-primary)" }}
               >
                 {initialsM}
               </div>
               <span
-                className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)] ${callStatusAvatarRingClass(c.call_status)}`}
+                className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--bg-card)]"
+                style={callStatusAccentStyle(c.call_status)}
                 title={callStatusLabel(c.call_status)}
                 aria-hidden
               />
@@ -469,7 +499,8 @@ function ContactSwipeCard({
             <div className="min-w-0 flex-1 pr-1">
               <p className="flex flex-wrap items-center gap-1.5">
                 <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${priorityDotClass(c.priority)}`}
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={priorityDotStyle(c.priority)}
                   title={pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
                 />
                 <span className="min-w-0 text-base font-bold tracking-tight text-[var(--text-primary)]">
@@ -492,7 +523,7 @@ function ContactSwipeCard({
                   <span
                     className={
                       "inline-flex items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)] " +
-                      (ndGold ? "ring-1 ring-[#C9A84C]/40" : "")
+                      (ndGold ? "ring-1 ring-[color-mix(in_srgb,var(--accent-gold)_48%,transparent)]" : "")
                     }
                   >
                     🎂 {nd}
@@ -502,7 +533,8 @@ function ContactSwipeCard({
             </div>
             <button
               type="button"
-              className="hq-press-mobile ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/35 disabled:pointer-events-none disabled:opacity-35"
+              className="hq-press-mobile ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full text-[var(--text-primary)] shadow-[0_8px_22px_color-mix(in_srgb,var(--success)_38%,transparent)] disabled:pointer-events-none disabled:opacity-35"
+              style={{ background: "var(--success)" }}
               title={canCall ? "Κλήση" : "Μόνο managers"}
               disabled={!canCall}
               onClick={(e) => {
@@ -605,7 +637,7 @@ function GroupMultiSelect({
                   </span>
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
-                    style={{ background: g.color || "#003476" }}
+                    style={{ background: g.color || "var(--accent-blue)" }}
                     aria-hidden
                   />
                   <span className="min-w-0 flex-1 truncate">
@@ -703,6 +735,14 @@ function ContactsPage() {
   const { profile } = useProfile();
   const canManage = hasMinRole(profile?.role, "manager");
   const isAdmin = profile?.role === "admin";
+  const pageAlexCtx = useOptionalAlexandraPageContact();
+  const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
+  const [warStats, setWarStats] = useState<{
+    total: number;
+    positive: number;
+    pending: number;
+    this_month: number;
+  } | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -815,6 +855,32 @@ function ContactsPage() {
   }, [load]);
 
   useEffect(() => {
+    let cancelled = false;
+    fetchWithTimeout("/api/contacts/summary-stats")
+      .then(async (r) => {
+        const d = (await r.json().catch(() => ({}))) as {
+          total?: number;
+          positive?: number;
+          pending?: number;
+          this_month?: number;
+        };
+        if (!r.ok || cancelled) return;
+        setWarStats({
+          total: typeof d.total === "number" ? d.total : 0,
+          positive: typeof d.positive === "number" ? d.positive : 0,
+          pending: typeof d.pending === "number" ? d.pending : 0,
+          this_month: typeof d.this_month === "number" ? d.this_month : 0,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setWarStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!canManage) return;
     fetchWithTimeout("/api/campaigns")
       .then((r) => r.json())
@@ -854,11 +920,6 @@ function ContactsPage() {
   const allChecked = contacts.length > 0 && contacts.every((c) => selected.has(c.id));
 
   const activeFilterPillCount = useMemo(() => countActiveContactFilters(f), [f]);
-  const pagePositiveCount = useMemo(() => contacts.filter((c) => c.call_status === "Positive").length, [contacts]);
-  const pagePendingCount = useMemo(
-    () => contacts.filter((c) => !c.call_status || c.call_status === "Pending").length,
-    [contacts],
-  );
 
   const triggerCall = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -957,8 +1018,8 @@ function ContactsPage() {
           role="status"
           className={
             retellCallMsg.type === "ok"
-              ? "rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100"
-              : "rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+              ? "rounded-lg border border-[color-mix(in_srgb,var(--success)_45%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--bg-card))] px-3 py-2 text-sm text-[var(--text-primary)]"
+              : "rounded-lg border border-[color-mix(in_srgb,var(--danger)_45%,var(--border))] bg-[color-mix(in_srgb,var(--danger)_12%,var(--bg-card))] px-3 py-2 text-sm text-[var(--text-primary)]"
           }
         >
           {retellCallMsg.text}
@@ -969,6 +1030,23 @@ function ContactsPage() {
         subtitle="Διαχείριση εκλογικής βάσης — αναζήτηση, φίλτρα, εξαγωγή και μαζικές ενέργειες."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                pageAlexCtx?.setContactPage(null);
+                openMiniFromBubble();
+                setMiniWindowMinimized(false);
+              }}
+              className="hq-contacts-alex-launch relative z-0 inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-left text-[13px] font-bold tracking-tight"
+            >
+              <span className="relative z-[1] flex items-center gap-2">
+                <Sparkles className="h-4 w-4 shrink-0 opacity-95" aria-hidden />
+                <span className="hidden sm:inline">Αλεξάνδρα</span>
+                <span className="rounded-md border border-[color-mix(in_srgb,var(--text-badge-on-gold)_35%,transparent)] bg-[color-mix(in_srgb,var(--text-badge-on-gold)_18%,transparent)] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider">
+                  AI
+                </span>
+              </span>
+            </button>
             <div className="relative">
               <button
                 type="button"
@@ -1029,24 +1107,33 @@ function ContactsPage() {
           </div>
         }
         metrics={
-          <div className="grid w-full max-w-4xl grid-cols-2 gap-4 sm:grid-cols-4">
-            <div className="flex flex-col border-b border-gray-200 pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left dark:border-gray-700 dark:sm:border-white/10">
-              <span className="font-mono text-2xl font-bold tabular-nums text-gray-900 dark:text-white">{listTotal}</span>
-              <span className="text-xs text-gray-500 dark:text-gray-500">Σύνολο στη βάση</span>
-            </div>
-            <div className="flex flex-col border-b border-gray-200 pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left dark:border-gray-700 dark:sm:border-white/10">
-              <span className="font-mono text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{pagePositiveCount}</span>
-              <span className="text-xs text-gray-500 dark:text-gray-500">Θετικοί (σελίδα)</span>
-            </div>
-            <div className="flex flex-col border-b border-gray-200 pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left dark:border-gray-700 dark:sm:border-white/10">
-              <span className="font-mono text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{pagePendingCount}</span>
-              <span className="text-xs text-gray-500 dark:text-gray-500">Αναμονή (σελίδα)</span>
-            </div>
-            <div className="flex flex-col pt-1 text-center sm:pt-0 sm:text-left">
-              <span className="font-mono text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
-                {currentPage}/{totalPages}
+          <div className="grid w-full max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+            <div className="flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
+              <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--text-metric-value)]">
+                {warStats ? warStats.total : "—"}
               </span>
-              <span className="text-xs text-gray-500 dark:text-gray-500">Σελίδα</span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Σύνολο</span>
+            </div>
+            <div className="flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
+              <span
+                className="font-mono text-2xl font-bold tabular-nums tracking-tight"
+                style={{ color: "var(--status-positive-text, var(--success))" }}
+              >
+                {warStats ? warStats.positive : "—"}
+              </span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Θετικοί</span>
+            </div>
+            <div className="flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
+              <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--warning)]">
+                {warStats ? warStats.pending : "—"}
+              </span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Αναμονή</span>
+            </div>
+            <div className="flex flex-col gap-1 pt-0.5 text-center sm:pt-0 sm:text-left">
+              <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--text-metric-value)]">
+                {warStats ? warStats.this_month : "—"}
+              </span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Αυτό το μήνα</span>
             </div>
           </div>
         }
@@ -1089,13 +1176,13 @@ function ContactsPage() {
             </label>
             <div className="relative">
               <Search
-                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
                 aria-hidden
               />
               <input
                 id="f-search"
                 className={
-                  "h-12 w-full rounded-xl border-[1.5px] border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-900 shadow-sm outline-none transition-all duration-200 placeholder:text-gray-400 focus:border-[#C9A84C] focus:shadow-[0_0_0_3px_rgba(201,168,76,0.15)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-500 dark:focus:border-[#C9A84C] " +
+                  "h-12 w-full rounded-[12px] border-[1.5px] border-[var(--border)] bg-[var(--input-bg)] pl-10 pr-4 text-sm text-[var(--text-input)] shadow-[var(--card-shadow)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[var(--text-placeholder)] focus:border-[var(--accent-gold)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent-gold)_22%,transparent),0_8px_28px_color-mix(in_srgb,var(--accent-gold)_18%,transparent)] " +
                   (activeFilterPillCount > 0 ? "pr-28 sm:pr-32" : "pr-4")
                 }
                 placeholder="Αναζήτηση επαφής, αριθμού, δήμου..."
@@ -1104,7 +1191,7 @@ function ContactsPage() {
                 autoComplete="off"
               />
               {activeFilterPillCount > 0 ? (
-                <span className="pointer-events-none absolute right-2.5 top-1/2 inline-flex max-w-[5.5rem] -translate-y-1/2 truncate rounded-full border border-amber-200/60 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 sm:max-w-none sm:px-2.5 sm:text-[11px] dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200/90">
+                <span className="pointer-events-none absolute right-2.5 top-1/2 inline-flex max-w-[5.5rem] -translate-y-1/2 truncate rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_42%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent-gold)] sm:max-w-none sm:px-2.5 sm:text-[11px]">
                   {activeFilterPillCount} φίλτρα
                 </span>
               ) : null}
@@ -1117,7 +1204,7 @@ function ContactsPage() {
               f.tag) && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {f.search.trim() ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-2.5 py-0.5 text-[10px] font-bold text-[var(--text-primary)]">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-2.5 py-0.5 text-[10px] font-bold text-[var(--text-primary)]">
                     Ζ: {f.search}
                   </span>
                 ) : null}
@@ -1308,12 +1395,12 @@ function ContactsPage() {
         </div>
       )}
 
-      <div className="relative hidden max-h-[min(70vh,900px)] min-h-0 w-full min-w-0 max-w-full overflow-y-auto rounded-2xl border border-gray-200 bg-gray-50/60 p-3 md:block dark:border-white/[0.08] dark:bg-[#0a0f1e]/50">
-        <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-center gap-2 border-b border-gray-200/90 bg-gray-50/85 px-3 py-2.5 backdrop-blur-md dark:border-white/[0.06] dark:bg-[rgba(10,15,30,0.85)]">
+      <div className="relative hidden max-h-[min(70vh,900px)] min-h-0 w-full min-w-0 max-w-full overflow-y-auto rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-secondary)_55%,var(--bg-card))] p-3 md:block">
+        <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-center gap-2 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-card)_82%,transparent)] px-3 py-2.5 backdrop-blur-md">
           <div className="flex w-10 shrink-0 items-center justify-center">
             <input
               type="checkbox"
-              className="h-4 w-4 cursor-pointer rounded border-gray-300 accent-[#C9A84C] focus:ring-[#C9A84C]/40 dark:border-white/20 dark:bg-white/5"
+              className="h-4 w-4 cursor-pointer rounded border-[var(--border)] bg-[var(--input-bg)] accent-[var(--accent-gold)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-gold)_35%,transparent)]"
               checked={allChecked}
               onChange={(e) => {
                 e.stopPropagation();
@@ -1325,11 +1412,11 @@ function ContactsPage() {
             />
           </div>
           <div className="w-[3px] shrink-0 self-stretch rounded-full bg-transparent" aria-hidden />
-          <div className="group flex min-w-0 flex-1 cursor-default items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 transition-colors duration-200 hover:text-amber-600 dark:text-gray-500 dark:hover:text-amber-400">
+          <div className="group flex min-w-0 flex-1 cursor-default items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-table-header)] transition-colors duration-200 hover:text-[var(--accent-gold)]">
             Επαφή
             <ArrowUpDown className="h-3 w-3 opacity-0 transition-opacity duration-200 group-hover:opacity-50" aria-hidden />
           </div>
-          <div className="group hidden w-[9.5rem] shrink-0 cursor-default items-center justify-end gap-1.5 border-l border-gray-200/80 pl-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 transition-colors duration-200 hover:text-amber-600 sm:flex dark:border-white/[0.08] dark:text-gray-500 dark:hover:text-amber-400">
+          <div className="group hidden w-[9.5rem] shrink-0 cursor-default items-center justify-end gap-1.5 border-l border-[var(--border)] pl-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-table-header)] transition-colors duration-200 hover:text-[var(--accent-gold)] sm:flex">
             Τηλέφωνο
             <ArrowUpDown className="h-3 w-3 opacity-0 transition-opacity duration-200 group-hover:opacity-50" aria-hidden />
           </div>
@@ -1355,7 +1442,7 @@ function ContactsPage() {
           ))}
         </div>
         {contacts.length === 0 && !listLoading ? (
-          <p className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Δεν βρέθηκαν επαφές</p>
+          <p className="p-8 text-center text-sm text-[var(--text-muted)]">Δεν βρέθηκαν επαφές</p>
         ) : null}
       </div>
 
@@ -1379,7 +1466,7 @@ function ContactsPage() {
                 type="button"
                 className={
                   lux.btnSecondary +
-                  (pn === currentPage ? " !ring-1 !ring-[#C9A84C]" : "") +
+                  (pn === currentPage ? " !ring-1 !ring-[var(--accent-gold)]" : "") +
                   " !min-w-[2.5rem] !px-2 !py-2 text-xs sm:text-sm"
                 }
                 onClick={() => patch({ page: String(pn) })}
@@ -1402,20 +1489,25 @@ function ContactsPage() {
 
       {selectedIds.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-50 max-w-[100vw] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] max-md:bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-6 md:left-1/2 md:right-auto md:w-[min(96%,56rem)] md:max-w-[calc(100vw-1rem)] md:-translate-x-1/2 md:px-0">
-          <div className="hq-bulk-bar-inner rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.15),0_0_0_1px_rgba(0,0,0,0.05)] dark:border-white/10 dark:bg-[#161B2E] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.05)]">
+          <div className="hq-bulk-bar-inner rounded-2xl border border-[var(--border)] bg-[var(--surface-bulk)] px-4 py-3 shadow-[var(--card-shadow-hover)] backdrop-blur-xl">
             {bulkErr && (
-              <p className="mb-2 break-words text-center text-xs text-red-600 dark:text-red-300" role="alert">
+              <p className="mb-2 break-words text-center text-xs text-[var(--danger)]" role="alert">
                 {bulkErr}
               </p>
             )}
             <div className="flex w-full min-w-0 flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-3">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#C9A84C] to-[#8B6914] font-mono text-sm font-bold text-white shadow-md shadow-amber-900/20">
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold text-[var(--text-badge-on-gold)] shadow-[0_4px_16px_color-mix(in_srgb,var(--accent-gold)_35%,transparent)]"
+                  style={{
+                    background: "linear-gradient(145deg, var(--accent-gold-light), var(--accent-gold), color-mix(in srgb, var(--accent-gold) 70%, var(--bg-primary)))",
+                  }}
+                >
                   {selectedIds.length}
                 </div>
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">επαφές επιλέχθηκαν</p>
+                <p className="text-sm font-medium text-[var(--text-primary)]">επαφές επιλέχθηκαν</p>
               </div>
-              <div className="hidden h-6 w-px shrink-0 bg-gray-200 md:block dark:bg-white/10" aria-hidden />
+              <div className="hidden h-6 w-px shrink-0 bg-[var(--border)] md:block" aria-hidden />
               <div className="flex min-w-0 flex-1 flex-col flex-wrap items-stretch gap-2 md:flex-row md:items-center md:justify-end">
                 {canManage && (
                   <>
@@ -1436,7 +1528,7 @@ function ContactsPage() {
                       </HqSelect>
                       <button
                         type="button"
-                        className="h-9 w-full rounded-lg bg-gray-100 px-3.5 text-[13px] font-medium text-gray-800 transition-colors duration-200 hover:bg-amber-50 disabled:opacity-50 dark:bg-white/8 dark:text-gray-100 dark:hover:bg-amber-400/10 sm:w-auto"
+                        className="h-9 w-full rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--border))] px-3.5 text-[13px] font-medium text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] disabled:opacity-50 sm:w-auto"
                         onClick={() => void postBulk("update_status", bulkStatus)}
                         disabled={saving}
                       >
@@ -1462,24 +1554,21 @@ function ContactsPage() {
                       </HqSelect>
                       <button
                         type="button"
-                        className="h-9 w-full rounded-lg bg-gray-100 px-3.5 text-[13px] font-medium text-gray-800 transition-colors duration-200 hover:bg-blue-50 disabled:opacity-50 dark:bg-white/8 dark:text-gray-100 dark:hover:bg-blue-400/10 sm:w-auto"
+                        className="h-9 w-full rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--border))] px-3.5 text-[13px] font-medium text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent-blue-bright)_14%,var(--bg-elevated))] disabled:opacity-50 sm:w-auto"
                         onClick={() => (bulkCampaign ? void postBulk("add_to_campaign", bulkCampaign) : null)}
                         disabled={saving || !bulkCampaign}
                       >
-                        Ανάθεση καμπάνιας
+                        Καμπάνια
                       </button>
                     </div>
                     <div className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-end">
                       <div className="min-w-0 flex-1">
-                        <label className="mb-0.5 block text-[10px] font-medium uppercase text-gray-500 dark:text-gray-400" htmlFor="bulk-wa">
-                          Αποστολή WhatsApp
+                        <label className="mb-0.5 block text-[10px] font-medium uppercase text-[var(--text-label)]" htmlFor="bulk-wa">
+                          WhatsApp
                         </label>
                         <input
                           id="bulk-wa"
-                          className={
-                            lux.select +
-                            " !h-9 w-full !text-sm border-gray-200 bg-white dark:border-white/10 dark:bg-white/5"
-                          }
+                          className={lux.select + " !h-9 w-full !text-sm border-[var(--border)] bg-[var(--input-bg)]"}
                           value={bulkWaMessage}
                           onChange={(e) => setBulkWaMessage(e.target.value)}
                           placeholder="Κείμενο (1 δευτερόλεπτο ανά επαφή)…"
@@ -1487,17 +1576,18 @@ function ContactsPage() {
                       </div>
                       <button
                         type="button"
-                        className="h-9 w-full shrink-0 rounded-lg bg-emerald-500 px-3.5 text-[13px] font-medium text-white shadow-[0_4px_12px_rgba(16,185,129,0.3)] transition-colors duration-200 hover:bg-emerald-400 disabled:opacity-50 sm:w-auto"
+                        className="h-9 w-full shrink-0 rounded-lg px-3.5 text-[13px] font-medium text-[var(--text-primary)] shadow-[0_4px_14px_color-mix(in_srgb,var(--success)_32%,transparent)] transition-[filter,opacity] duration-200 hover:brightness-110 disabled:opacity-50 sm:w-auto"
+                        style={{ background: "var(--success)" }}
                         disabled={saving || !bulkWaMessage.trim()}
                         onClick={() => void postBulk("send_whatsapp", bulkWaMessage)}
                       >
-                        Αποστολή WA
+                        WhatsApp
                       </button>
                     </div>
                   </>
                 )}
                 <a
-                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-gray-100 px-3.5 text-[13px] font-medium text-gray-800 transition-colors duration-200 hover:bg-gray-200 dark:bg-white/8 dark:text-gray-100 dark:hover:bg-white/12 sm:w-auto"
+                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--border))] px-3.5 text-[13px] font-medium text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--text-primary)_6%,var(--bg-elevated))] sm:w-auto"
                   href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
                   onClick={(e) => {
                     if (!selectedIds.length) e.preventDefault();
@@ -1517,10 +1607,10 @@ function ContactsPage() {
                   </button>
                 )}
               </div>
-              <div className="hidden h-6 w-px shrink-0 bg-gray-200 md:block dark:bg-white/10" aria-hidden />
+              <div className="hidden h-6 w-px shrink-0 bg-[var(--border)] md:block" aria-hidden />
               <button
                 type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors duration-200 hover:text-red-500 md:ml-0"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-transparent text-[var(--text-muted)] transition-colors duration-200 hover:border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] hover:text-[var(--danger)] md:ml-0"
                 title="Αποεπιλογή όλων"
                 aria-label="Αποεπιλογή όλων"
                 onClick={() => setSelected(new Set())}
