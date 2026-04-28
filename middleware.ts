@@ -90,7 +90,32 @@ function isPortalAppPath(pathname: string) {
 }
 
 export async function middleware(request: NextRequest) {
+  const hostname = request.headers.get("host") || "";
+  const host = hostname.split(":")[0]?.toLowerCase() ?? "";
   const pathname = request.nextUrl.pathname;
+
+  // Domain split:
+  // - kkaragkounis.com / www.kkaragkounis.com => citizen portal only
+  // - crm.kkaragkounis.com => normal CRM + existing portal-user guards
+  const isPortalDomain = host === "kkaragkounis.com" || host === "www.kkaragkounis.com";
+  if (isPortalDomain) {
+    const portalDomainAllowed =
+      pathname === "/portal" ||
+      pathname === "/portal/" ||
+      pathname.startsWith("/portal/") ||
+      pathname.startsWith("/api/portal/") ||
+      pathname.startsWith("/api/public/") ||
+      pathname.startsWith("/_next/") ||
+      pathname === "/favicon.ico" ||
+      pathname === "/hero-karagkounis.png" ||
+      pathname === "/viografiko2-682x1024.jpg";
+    if (!portalDomainAllowed) {
+      const u = request.nextUrl.clone();
+      u.pathname = "/portal";
+      u.search = "";
+      return NextResponse.redirect(u);
+    }
+  }
 
   if (
     isNextStaticOrAsset(pathname) ||
