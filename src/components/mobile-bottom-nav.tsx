@@ -16,7 +16,7 @@ const inactive = "text-[var(--nav-mobile-inactive)]";
 const active = "text-[var(--nav-mobile-active)]";
 
 const navShell =
-  "hq-bottom-nav safe-bottom fixed bottom-0 left-0 right-0 z-40 flex h-16 min-h-16 w-full border-t border-[var(--border)]/70 backdrop-blur-xl lg:hidden";
+  "hq-bottom-nav safe-bottom fixed bottom-0 left-0 right-0 z-40 flex h-16 min-h-16 w-full overflow-hidden border-t border-[var(--border)]/70 backdrop-blur-xl lg:hidden";
 
 const innerBar =
   "grid w-full grid-cols-5 bg-white/80 pb-[env(safe-area-inset-bottom,0px)] pt-1 dark:bg-gray-900/80";
