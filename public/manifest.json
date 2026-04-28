@@ -4,8 +4,8 @@
   "description": "Political Campaign HQ",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#050D1A",
-  "theme_color": "#050D1A",
+  "background_color": "#080D1A",
+  "theme_color": "#080D1A",
   "orientation": "portrait",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },

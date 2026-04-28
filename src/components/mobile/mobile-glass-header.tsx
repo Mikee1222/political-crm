@@ -23,7 +23,7 @@ type MobileGlassHeaderProps = {
 };
 
 /**
- * 56px glass strip: greeting + avatar, bell, search; hides on scroll down.
+ * Glass strip (toolbar row + safe-area top): greeting + avatar, bell, search; hides on scroll down.
  */
 export function MobileGlassHeader({
   firstName,
@@ -44,10 +44,10 @@ export function MobileGlassHeader({
 }: MobileGlassHeaderProps) {
   return (
     <div
-      className="hq-mobile-glass-header sticky top-0 z-[25] w-full border-b border-[var(--border)]/60 backdrop-blur-xl transition-transform duration-300 ease-out lg:hidden"
+      className="mobile-header hq-mobile-glass-header sticky top-0 z-[25] w-full border-b border-[var(--border)]/60 backdrop-blur-xl transition-transform duration-300 ease-out lg:hidden"
       style={{
-        paddingTop: "max(0px, env(safe-area-inset-top, 0px))",
-        background: "color-mix(in srgb, var(--topbar-bg) 88%, transparent)",
+        background:
+          "linear-gradient(180deg, #080d1a 0px, #080d1a calc(env(safe-area-inset-top, 0px) + 12px), color-mix(in srgb, var(--topbar-bg) 90%, #080d1a) 100%)",
         transform: hidden ? "translateY(-108%)" : "translateY(0)",
       }}
     >

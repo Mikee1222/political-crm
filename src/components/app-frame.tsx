@@ -35,12 +35,11 @@ import { GlobalSearchOverlay } from "@/components/global-search-overlay";
 import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
 import { AlexaMiniWindow } from "@/components/alexandra/alexa-mini-window";
-import { AiAssistantWidget } from "@/components/ai-assistant-widget";
+import { FloatingActions } from "@/components/floating-actions";
 import { LogoutButton } from "@/components/logout-button";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { MobileGlassHeader } from "@/components/mobile/mobile-glass-header";
 import { MobilePullToRefresh } from "@/components/mobile/mobile-pull-to-refresh";
-import { MobileQuickFab } from "@/components/mobile/mobile-quick-fab";
 import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useProfile } from "@/contexts/profile-context";
@@ -814,7 +813,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden bg-[var(--bg-primary)]"
+      className="min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-screen max-w-screen min-w-0 overflow-x-hidden bg-[#080D1A]"
       style={shellStyle}
     >
       <aside
@@ -954,7 +953,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="app-main-shell ml-0 box-border flex min-h-0 min-w-0 w-full max-w-full flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
-        <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]">
+        <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-0 backdrop-blur-lg lg:[background:var(--topbar-bg)]">
           <MobileGlassHeader
             firstName={mobileFirstName}
             avatarUrl={profile?.avatar_url}
@@ -1061,7 +1060,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <main
           ref={mainScrollRef}
           onScroll={onMainScroll}
-          className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] max-lg:pt-2 sm:p-6 md:p-8"
+          className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] pt-3 sm:pt-6 sm:pl-[max(1.5rem,env(safe-area-inset-left,0px))] sm:pr-[max(1.5rem,env(safe-area-inset-right,0px))] max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] md:pl-[max(2rem,env(safe-area-inset-left,0px))] md:pr-[max(2rem,env(safe-area-inset-right,0px))] lg:pt-8 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))] lg:pl-8 lg:pr-8"
         >
           {installable && !installed && !installBannerDismissed ? (
             <div className="mb-3 flex w-full max-w-full flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-card))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1105,10 +1104,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             Αλεξάνδρα ακούει…
           </div>
         )}
-        <div className="max-lg:hidden">
-          <AiAssistantWidget />
-        </div>
-        <MobileQuickFab role={role} />
+        <FloatingActions role={role} />
         <div className="lg:hidden">
           <MobileBottomNav role={role} onOpenMore={() => setMoreOpen(true)} openRequestsCount={openRequestsCount} />
         </div>

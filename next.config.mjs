@@ -32,6 +32,10 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: csp,
           },
+          {
+            key: "theme-color",
+            value: "#080D1A",
+          },
         ],
       },
     ];
