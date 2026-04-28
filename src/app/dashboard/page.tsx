@@ -572,23 +572,6 @@ export default function DashboardPage() {
       </div>
 
       <section className={lux.card}>
-        <h2 className="hq-card-title mb-5">Πρόοδος καμπάνιας</h2>
-        <div className="space-y-5">
-          <ProgressRow label="Θετική ανταπόκριση" value={safePositiveRate} color="from-emerald-500 to-emerald-600" />
-          <ProgressRow
-            label="Εκκρεμή follow-ups"
-            value={Math.min((safePendingContacts / Math.max(safeTotalContacts, 1)) * 100, 100)}
-            color="from-amber-500 to-amber-600"
-          />
-          <ProgressRow
-            label="Ημερήσια δραστηριότητα"
-            value={Math.min((safeTotalCallsToday / Math.max(safeTotalContacts, 1)) * 100, 100)}
-            color="from-[var(--accent-blue-bright)] to-[var(--accent-blue)]"
-          />
-        </div>
-      </section>
-
-      <section className={lux.card}>
         <h2 className="hq-card-title mb-4">Πρόσφατη δραστηριότητα</h2>
         {acts.length === 0 ? (
           <p className="text-sm text-[var(--text-subtitle)]">Δεν υπάρχει πρόσφατη δραστηριότητα.</p>
@@ -790,20 +773,3 @@ function Stat({
   );
 }
 
-function ProgressRow({ label, value, color }: { label: string; value: number; color: string }) {
-  const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(value, 100)) : 0;
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between text-sm">
-        <span className="text-[var(--text-subtitle)]">{label}</span>
-        <span className="font-semibold text-[var(--text-primary)]">{safeValue.toFixed(1)}%</span>
-      </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-[var(--bg-elevated)] ring-1 ring-inset ring-[var(--border)]">
-        <div
-          className={`h-full rounded-full bg-gradient-to-r ${color} transition-all duration-500 ease-out shadow-[0_0_12px_rgba(201,168,76,0.15)]`}
-          style={{ width: `${safeValue}%` }}
-        />
-      </div>
-    </div>
-  );
-}

@@ -278,6 +278,11 @@ create policy "ai_messages through conversation" on public.ai_messages for all t
 alter table public.tasks
   alter column contact_id drop not null;
 
+-- Ανάθεση εργασίας σε χρήστη CRM (profiles.id = auth uid)
+alter table public.tasks
+  add column if not exists assigned_to_user_id uuid references public.profiles (id) on delete set null;
+create index if not exists idx_tasks_assigned_to_user on public.tasks (assigned_to_user_id);
+
 -- Μνήμη Αλεξάνδρας (προτιμήσεις/σημειώσεις χρήστη)
 create table if not exists public.alexandra_memory (
   id uuid primary key default gen_random_uuid(),

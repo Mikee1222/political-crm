@@ -640,6 +640,103 @@ export const ALEX_TOOLS: Tool[] = [
       properties: {},
     },
   },
+  {
+    name: "get_analytics",
+    description: "Σύνοψη KPI και αναλυτικών (GET /api/analytics): επαφές, νέες 30ημέρου, θετικοί %, αιτήματα, γραφήματα-μεταδεδομένα.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "create_event",
+    description: "Δημιουργία εκδήλωσης (POST /api/events).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string" as const },
+        date: { type: "string" as const, description: "YYYY-MM-DD" },
+        location: { type: "string" as const },
+        type: { type: "string" as const },
+        description: { type: "string" as const },
+      },
+      required: ["title", "date"],
+    },
+  },
+  {
+    name: "get_events",
+    description: "Λίστα εκδηλώσεων (GET /api/events). upcoming=true φιλτράρει μελλοντικές.",
+    input_schema: {
+      type: "object" as const,
+      properties: { upcoming: { type: "boolean" as const } },
+    },
+  },
+  {
+    name: "create_poll",
+    description: "Νέα δημοσκόπηση (POST /api/polls) — options ως κείμενα.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string" as const },
+        question: { type: "string" as const },
+        options: { type: "array" as const, items: { type: "string" as const }, minItems: 2 },
+        target_group_id: { type: "string" as const },
+        ends_at: { type: "string" as const, description: "ISO ή YYYY-MM-DD" },
+      },
+      required: ["title", "question", "options"],
+    },
+  },
+  {
+    name: "get_poll_results",
+    description: "Αποτελέσματα δημοσκόπησης (GET /api/polls/:id).",
+    input_schema: {
+      type: "object" as const,
+      properties: { poll_id: { type: "string" as const } },
+      required: ["poll_id"],
+    },
+  },
+  {
+    name: "start_campaign",
+    description: "Εκκίνηση επόμενης κλήσης καμπάνιας (POST /api/campaigns/:id/dial-next).",
+    input_schema: {
+      type: "object" as const,
+      properties: { campaign_id: { type: "string" as const } },
+      required: ["campaign_id"],
+    },
+  },
+  {
+    name: "export_contacts",
+    description: "Πλήρης εξαγωγή επαφών CSV (GET /api/contacts/export) — μόνο manager· επιστρέφει περίληψη.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "send_nameday_wishes",
+    description: "Ευχές ονομαστικής: βρίσκει επαφές που εορτάζουν (ημερομηνία) και δημιουργεί καμπάνια — ίδιο με bulk_send_nameday_wishes.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        date: { type: "string" as const, description: "YYYY-MM-DD, προαιρετικό" },
+        municipality: { type: "string" as const },
+      },
+    },
+  },
+  {
+    name: "get_documents",
+    description: "Έγγραφα (GET /api/documents) — προαιρετικό contact_id.",
+    input_schema: {
+      type: "object" as const,
+      properties: { contact_id: { type: "string" as const } },
+    },
+  },
+  {
+    name: "bulk_update_status",
+    description: "Μαζική ενημέρωση call_status επαφών (POST /api/contacts/manager-bulk-update).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        contact_ids: { type: "array" as const, items: { type: "string" as const } },
+        status: { type: "string" as const, enum: ["Pending", "Positive", "Negative", "No Answer"] as const },
+      },
+      required: ["contact_ids", "status"],
+    },
+  },
 ];
 
 export type ToolContext = {
@@ -2049,7 +2146,7 @@ export async function runAlexTool(
     return { content: JSON.stringify({ ok: true, post: out.text, platform }), executedToolName: "generate_social_post" };
   }
 
-  if (name === "bulk_send_nameday_wishes") {
+  if (name === "bulk_send_nameday_wishes" || name === "send_nameday_wishes") {
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
     }
@@ -2332,6 +2429,198 @@ export async function runAlexTool(
     };
   }
 
+  if (name === "get_analytics") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const r = await ctx.forward("/api/analytics", { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: (j.error as string) || "Σφάλμα" }) };
+    }
+    const kpis = j.kpis as Record<string, unknown> | undefined;
+    const summary = kpis
+      ? `Επαφές: ${kpis.totalContacts}, νέες 30ημ.: ${kpis.newContacts30d}, θετικοί %: ${kpis.positivePercent}, ολοκλ. αιτήματα: ${kpis.completedRequests}`
+      : "Αναλυτικά φορτώθηκαν.";
+    return {
+      content: JSON.stringify({ ok: true, summary, kpis: j.kpis ?? null }),
+      executedToolName: "get_analytics",
+    };
+  }
+
+  if (name === "create_event") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const title = String(raw.title ?? "").trim();
+    const date = String(raw.date ?? "").trim();
+    if (!title || !date) {
+      return { content: JSON.stringify({ error: "Χρειάζονται title, date" }) };
+    }
+    const body = {
+      title,
+      date,
+      location: raw.location != null ? String(raw.location) : null,
+      type: raw.type != null ? String(raw.type) : "Εκδήλωση",
+      description: raw.description != null ? String(raw.description) : null,
+    };
+    const r = await ctx.forward("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; id?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
+    }
+    return { content: JSON.stringify({ ok: true, event_id: j.id }), executedToolName: "create_event" };
+  }
+
+  if (name === "get_events") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const r = await ctx.forward("/api/events", { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as { events?: unknown[]; error?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
+    }
+    let ev = (j.events ?? []) as Array<{ date?: string }>;
+    if (raw.upcoming === true) {
+      const today = todayYmdAthens();
+      ev = ev.filter((e) => (e.date ?? "").slice(0, 10) >= today);
+    }
+    return {
+      content: JSON.stringify({ ok: true, count: ev.length, events: ev.slice(0, 20) }),
+      executedToolName: "get_events",
+    };
+  }
+
+  if (name === "create_poll") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const optsIn = Array.isArray(raw.options) ? (raw.options as unknown[]) : [];
+    const texts = optsIn.map((x) => String(x).trim()).filter(Boolean);
+    if (texts.length < 2) {
+      return { content: JSON.stringify({ error: "Τουλάχιστον 2 επιλογές" }) };
+    }
+    const options = texts.map((t, i) => ({ id: `opt-${i + 1}`, text: t }));
+    const payload = {
+      title: String(raw.title ?? "").trim(),
+      question: String(raw.question ?? "").trim(),
+      options,
+      target_group_id: raw.target_group_id != null ? String(raw.target_group_id) : null,
+      ends_at: raw.ends_at != null ? String(raw.ends_at) : null,
+    };
+    if (!payload.title || !payload.question) {
+      return { content: JSON.stringify({ error: "Χρειάζονται title, question" }) };
+    }
+    const r = await ctx.forward("/api/polls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const j2 = (await r.json().catch(() => ({}))) as { error?: string; poll?: { id: string } };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j2.error || "Σφάλμα" }) };
+    }
+    const pid = j2.poll?.id;
+    return { content: JSON.stringify({ ok: true, poll_id: pid }), executedToolName: "create_poll" };
+  }
+
+  if (name === "get_poll_results") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const pid = String(raw.poll_id ?? "").trim();
+    if (!pid) {
+      return { content: JSON.stringify({ error: "poll_id" }) };
+    }
+    const r = await ctx.forward(`/api/polls/${pid}`, { method: "GET" });
+    const j3 = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: (j3.error as string) || "Σφάλμα" }) };
+    }
+    return { content: JSON.stringify({ ok: true, ...j3 }), executedToolName: "get_poll_results" };
+  }
+
+  if (name === "start_campaign") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const cid = String(raw.campaign_id ?? "").trim();
+    if (!cid) {
+      return { content: JSON.stringify({ error: "campaign_id" }) };
+    }
+    const r = await ctx.forward(`/api/campaigns/${cid}/dial-next`, { method: "POST" });
+    const j4 = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: (j4.error as string) || "Σφάλμα" }) };
+    }
+    return { content: JSON.stringify({ ok: true, ...j4 }), executedToolName: "start_campaign" };
+  }
+
+  if (name === "export_contacts") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const r = await ctx.forward("/api/contacts/export", { method: "GET" });
+    const txt = await r.text();
+    const first = txt.split(/\r?\n/).slice(0, 2).join(" | ");
+    return {
+      content: JSON.stringify({
+        ok: r.ok,
+        bytes: txt.length,
+        header_preview: first.slice(0, 240),
+        note: "Το CRM παράγει CSV (epafes-ημερομηνία.csv). Ο χρήστης κατεβάζει από Επαφές → Εξαγωγή.",
+      }),
+      executedToolName: "export_contacts",
+    };
+  }
+
+  if (name === "get_documents") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const cid = raw.contact_id != null ? String(raw.contact_id).trim() : "";
+    const path = cid ? `/api/documents?contact_id=${encodeURIComponent(cid)}` : "/api/documents";
+    const r = await ctx.forward(path, { method: "GET" });
+    const j5 = (await r.json().catch(() => ({}))) as { documents?: unknown[]; error?: string };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j5.error || "Σφάλμα" }) };
+    }
+    const docs = (j5.documents ?? []) as object[];
+    return {
+      content: JSON.stringify({ ok: true, count: docs.length, documents: docs.slice(0, 15) }),
+      executedToolName: "get_documents",
+    };
+  }
+
+  if (name === "bulk_update_status") {
+    if (!isMgr) {
+      return { content: JSON.stringify({ error: "Μόνο manager" }) };
+    }
+    const ids = Array.isArray(raw.contact_ids) ? (raw.contact_ids as unknown[]).map((x) => String(x).trim()).filter(Boolean) : [];
+    const status = String(raw.status ?? "").trim();
+    if (!ids.length || !["Pending", "Positive", "Negative", "No Answer"].includes(status)) {
+      return { content: JSON.stringify({ error: "Άκυρα contact_ids ή status" }) };
+    }
+    const r = await ctx.forward("/api/contacts/manager-bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contact_ids: ids.slice(0, 5000), fields: { call_status: status } }),
+    });
+    const j6 = (await r.json().catch(() => ({}))) as { error?: string; updated?: number; failed?: number };
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: j6.error || "Σφάλμα" }) };
+    }
+    return {
+      content: JSON.stringify({ ok: true, updated: j6.updated ?? 0, failed: j6.failed ?? 0 }),
+      executedToolName: "bulk_update_status",
+    };
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
@@ -2356,7 +2645,7 @@ export function buildSystemPrompt({
 ΓΝΩΣΗ CRM:
 - contacts: first_name, last_name, phone, phone2, landline, municipality, area, toponym, call_status (Pending/Positive/Negative/No Answer), priority, political_stance, father_name, mother_name, notes, tags, group_id, nickname
 - requests: title, description, category, status (Νέο/Σε εξέλιξη/Ολοκληρώθηκε/Απορρίφθηκε), assigned_to
-- tasks: title, due_date, completed, contact_id
+- tasks: title, due_date, completed, contact_id, assigned_to_user_id (ανάθεση σε υπάλληλο / profiles)
 - campaigns: name, status, calls, τάση positive rate vs προηγούμενη καμπάνια
 - calls: outcome, duration_seconds, transferred_to_politician
 - Duplicate = ίδιο phone
@@ -2365,7 +2654,19 @@ export function buildSystemPrompt({
 - SLA αιτημάτων: sla_due_date, ένδειξη on_track / at_risk / overdue
 - predicted_score: ακέραιο 0–100 (πειθω/πειθωτικότητα) — χαμηλό 0–33, μέτριο 34–66, υψηλό 67–100. Υπολογισμός από Εργαλεία δεδομένων ή εργαλείο calculate_scores.
 - Σελίδες: /documents, /content, /analytics, /events (εκδηλώσεις, RSVP), /volunteers (εθελοντές), /contacts (γλώσσα επαφής language, εθελοντικά πεδία).
-- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, search_media, add_event_rsvp, get_volunteer_list, get_contact_summary, get_todays_call_list
+- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, search_media, add_event_rsvp, get_volunteer_list, get_contact_summary, get_todays_call_list, get_analytics, create_event, get_events, create_poll, get_poll_results, start_campaign, export_contacts, get_documents, bulk_update_status
+
+ΝΕΕΣ ΔΥΝΑΤΟΤΗΤΕΣ:
+- Διαχείριση εκδηλώσεων (δημιουργία, επεξεργασία, RSVP)
+- Διαχείριση εθελοντών
+- Δημοσκοπήσεις (δημιουργία, αποστολή, αποτελέσματα)
+- Ανάλυση αναλυτικών δεδομένων
+- Διαχείριση εγγράφων
+- Καμπάνιες κλήσεων (εκκίνηση, παρακολούθηση)
+- Εξαγωγή δεδομένων
+- Αποστολή email ευχών
+- Predictive call list
+- Αναζήτηση με AI matching
 
 ΚΑΝΟΝΕΣ TOOLS:
 - Χρησιμοποίησε tools ΑΜΕΣΩΣ χωρίς να ρωτάς άδεια για απλές ενέργειες

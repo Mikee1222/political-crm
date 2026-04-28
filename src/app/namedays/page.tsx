@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { normalizeGreek } from "@/lib/nameday-celebrating";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 const MONTHS_HEADER = [
@@ -36,13 +37,6 @@ const MONTHS_GEN = [
   "Νοεμβρίου",
   "Δεκεμβρίου",
 ] as const;
-
-function normGreek(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 type DayRow = { month: number; day: number; names: string[] };
 
@@ -112,13 +106,13 @@ export default function NamedaysPage() {
     return m;
   }, [days]);
 
-  const queryNorm = useMemo(() => normGreek(q.trim()), [q]);
+  const queryNorm = useMemo(() => normalizeGreek(q.trim()), [q]);
   const hasQuery = queryNorm.length > 0;
 
   const nameMatches = useCallback(
     (row: DayRow) => {
       if (!hasQuery) return false;
-      return row.names.some((name) => normGreek(name).includes(queryNorm));
+      return row.names.some((name) => normalizeGreek(name).includes(queryNorm));
     },
     [hasQuery, queryNorm],
   );

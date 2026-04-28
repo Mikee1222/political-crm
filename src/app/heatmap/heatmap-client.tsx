@@ -2,30 +2,25 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
 import type { ForMapRow, MapColorVariant, MapMode } from "@/components/heatmap/municipal-map";
 
-/** Leaflet + react-leaflet: must be client-only (no SSR). */
-const MunicipalMap = dynamic(
-  () => import("@/components/heatmap/municipal-map").then((m) => m.MunicipalMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div
-        className="flex h-[min(60vh,720px)] min-h-[500px] w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a] text-sm text-[var(--text-secondary)]"
-        role="status"
-        aria-live="polite"
-        style={{ minHeight: 500 }}
-      >
-        Φόρτωση Leaflet…
-      </div>
-    ),
-  },
-);
+const LeafletMap = dynamic(() => import("@/components/map/LeafletMap"), {
+  ssr: false,
+  loading: () => (
+    <div
+      className="flex w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a] text-sm text-[var(--text-secondary)]"
+      role="status"
+      aria-live="polite"
+      style={{ height: 500 }}
+    >
+      Φόρτωση χάρτη…
+    </div>
+  ),
+});
 
 type MuniRow = {
   muni: string;
@@ -65,7 +60,6 @@ function muniShort(name: string) {
 
 export function HeatmapClient() {
   const { profile, loading: profileLoading } = useProfile();
-  const router = useRouter();
   const [view, setView] = useState<"crm" | "electoral" | "compare">("crm");
   const [mode, setMode] = useState<MapMode>("contacts");
   const [data, setData] = useState<ApiPayload | null>(null);
@@ -99,21 +93,6 @@ export function HeatmapClient() {
     }
     void load(mode, view);
   }, [load, mode, view, canView, profileLoading]);
-
-  const onSelectMuni = useCallback(
-    (muni: string) => {
-      const p = new URLSearchParams();
-      p.set("municipality", muni);
-      if (view === "crm" && mode === "positive") {
-        p.set("call_status", "Positive");
-      }
-      if (view === "crm" && mode === "negative") {
-        p.set("call_status", "Negative");
-      }
-      router.push(`/contacts?${p.toString()}`);
-    },
-    [mode, router, view],
-  );
 
   if (profileLoading) {
     return (
@@ -193,55 +172,26 @@ export function HeatmapClient() {
       )}
 
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row">
-        <div
-          className="relative w-full min-h-[500px] flex-1 overflow-hidden rounded-2xl"
-          style={{ minHeight: 500, height: "min(60vh, 720px)" }}
-        >
+        <div className="relative w-full min-h-[500px] flex-1 overflow-hidden rounded-2xl">
           {data && (
-            <MunicipalMap
-              forMap={data.forMap}
-              onSelect={onSelectMuni}
-              colorVariant={data.mapColorVariant ?? "gold"}
-              tooltipMode={view}
+            <LeafletMap
+              points={(data.forMap as ForMapRow[]).map((r) => ({
+                lat: r.lat,
+                lng: r.lng,
+                label: r.muni,
+                count: r.total,
+              }))}
+              maxCount={data.maxTotal}
             />
           )}
           {!data && !err && (
             <div
-              className="absolute inset-0 z-0 flex items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a]/50 text-sm text-[var(--text-secondary)]"
-              style={{ minHeight: 500 }}
+              className="flex w-full items-center justify-center rounded-2xl border border-[var(--border)] bg-[#0a0f1a]/50 text-sm text-[var(--text-secondary)]"
+              style={{ height: 500 }}
             >
               Φόρτωση δεδομένων χάρτη…
             </div>
           )}
-          <div
-            className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[min(100%,220px)] rounded-xl border border-[var(--border)] bg-[var(--bg-card)]/95 px-3 py-2.5 text-[10px] text-[var(--text-secondary)] shadow-md backdrop-blur-md"
-            role="img"
-            aria-label="Υπόμνημα"
-          >
-            <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Υπόμνημα</p>
-            <ul className="space-y-1.5">
-              <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full border border-[var(--border)]" />
-                <span>0 — κενό</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-sm bg-[#C9A84C]/30" />
-                <span>1–10 (ανά επιλεγμένη προβολή)</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-sm bg-[#C9A84C]/60" />
-                <span>11–50</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-sm bg-[#E8C96B]/80" />
-                <span>51–100</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-sm bg-[#E8C96B] shadow-[0_0_8px_rgba(201,168,76,0.7)]" />
-                <span>100+ (φωτισμός)</span>
-              </li>
-            </ul>
-          </div>
         </div>
 
         <aside

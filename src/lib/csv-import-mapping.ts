@@ -6,6 +6,8 @@ export const CRM_FIELD_IDS = [
   "father_name",
   "mother_name",
   "phone",
+  "phone2",
+  "landline",
   "email",
   "area",
   "municipality",
@@ -13,6 +15,10 @@ export const CRM_FIELD_IDS = [
   "toponym",
   "political_stance",
   "notes",
+  "tags",
+  "group",
+  "priority",
+  "call_status",
   "ignore",
 ] as const;
 export type CrmFieldId = (typeof CRM_FIELD_IDS)[number];
@@ -22,7 +28,9 @@ const LABELS: Record<CrmFieldId, string> = {
   last_name: "Επίθετο",
   father_name: "Πατρώνυμο",
   mother_name: "Μητρώνυμο",
-  phone: "Τηλέφωνο",
+  phone: "Τηλέφωνο 1",
+  phone2: "Τηλέφωνο 2",
+  landline: "Σταθερό",
   email: "Email",
   area: "Περιοχή",
   municipality: "Δήμος",
@@ -30,6 +38,10 @@ const LABELS: Record<CrmFieldId, string> = {
   toponym: "Τοπωνύμιο",
   political_stance: "Πολιτική Τοποθέτηση",
   notes: "Σημειώσεις",
+  tags: "Ετικέτες",
+  group: "Ομάδα (όνομα)",
+  priority: "Προτεραιότητα",
+  call_status: "Κατάσταση κλήσης",
   ignore: "Αγνόησε",
 };
 
@@ -78,7 +90,9 @@ const RULES: { field: CrmFieldId; patterns: RegExp[] }[] = [
       /μητρώνυμο/i,
     ],
   },
-  { field: "phone", patterns: [/thl|tilef|til|kinito|kιν|miso|misis|phone|mobile|κιν|αριθμ|τηλ/i, /^tel/i] },
+  { field: "phone2", patterns: [/phone2|τηλ2|κινητό 2|δεύτερο/i] },
+  { field: "phone", patterns: [/thl|tilef|til|kinito|kιν|miso|misis|phone|mobile|κιν|αριθμ|τηλ/i, /^tel/i, /τηλέφωνο 1/i, /^phone1$/i] },
+  { field: "landline", patterns: [/landline|σταθερ|σταθερό|stather/i] },
   { field: "email", patterns: [/e-?mail|ηλεκτ|mail|ημαιλ/i] },
   { field: "area", patterns: [/perioch|περιοχ|region|locality|^area$/i] },
   { field: "municipality", patterns: [/^dimos$/i, /dήμ|δημ|δήμ|municip/i] },
@@ -86,6 +100,10 @@ const RULES: { field: CrmFieldId; patterns: RegExp[] }[] = [
   { field: "toponym", patterns: [/toponym|topω|τοπων/i, /τόπος/i] },
   { field: "political_stance", patterns: [/πολιτ|polit|stances|stasis|ideol/i, /tάξη|taxi/] },
   { field: "notes", patterns: [/^note|^σημ|remarks|observ|σχόλ|παρα/i] },
+  { field: "tags", patterns: [/ετικέτ|tags?|labels/i] },
+  { field: "group", patterns: [/^ομάδα$|^omada$/i, /group(?!_id)/i] },
+  { field: "priority", patterns: [/προτερ|priority/i] },
+  { field: "call_status", patterns: [/κλήση|call_status|κατάσταση/i] },
 ];
 
 export function suggestCrmField(headerRaw: string): CrmFieldId {
@@ -112,6 +130,8 @@ export type MappedRowForInsert = {
   father_name: string | null;
   mother_name: string | null;
   phone: string;
+  phone2: string | null;
+  landline: string | null;
   email: string | null;
   area: string | null;
   municipality: string | null;
@@ -119,8 +139,10 @@ export type MappedRowForInsert = {
   toponym: string | null;
   political_stance: string | null;
   notes: string | null;
-  call_status: "Pending";
-  priority: "Medium";
+  tags: string[] | null;
+  group: string | null;
+  call_status: "Pending" | "Positive" | "Negative" | "No Answer";
+  priority: "High" | "Medium" | "Low";
 };
 
 type Acc = Partial<Record<Exclude<CrmFieldId, "ignore">, string>>;
@@ -132,7 +154,7 @@ function buildAcc(raw: Record<string, string>, mapping: Record<string, CrmFieldI
     if (key === "ignore") continue;
     const t = (v ?? "").toString().trim();
     if (!t) continue;
-    if (key === "phone") {
+    if (key === "phone" || key === "phone2" || key === "landline") {
       acc[key] = t;
       continue;
     }
@@ -145,6 +167,35 @@ function buildAcc(raw: Record<string, string>, mapping: Record<string, CrmFieldI
 function pickStr(acc: Acc, f: keyof Acc): string {
   const s = (acc as Record<string, string | undefined>)[f];
   return s == null ? "" : String(s).trim();
+}
+
+function parseCallStatus(s: string): "Pending" | "Positive" | "Negative" | "No Answer" | null {
+  const u = s.trim().toLowerCase();
+  if (!u) return null;
+  if (u === "pending" || u.includes("αναμον")) return "Pending";
+  if (u === "positive" || u.includes("θετ")) return "Positive";
+  if (u === "negative" || u.includes("αρνητ")) return "Negative";
+  if (u.includes("no answer") || u.includes("δεν απαν")) return "No Answer";
+  return null;
+}
+
+function parsePriority(s: string): "High" | "Medium" | "Low" | null {
+  const u = s.trim().toLowerCase();
+  if (!u) return null;
+  if (u.includes("υψηλ") || u === "high") return "High";
+  if (u.includes("χαμηλ") || u === "low") return "Low";
+  if (u.includes("μεσ") || u === "medium") return "Medium";
+  return null;
+}
+
+function parseTags(s: string): string[] | null {
+  const t = s.trim();
+  if (!t) return null;
+  const parts = t
+    .split(/[;,|]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return parts.length ? parts : null;
 }
 
 function splitFullName(s: string): { first: string; last: string } {
@@ -191,12 +242,21 @@ export function mapRowsToContacts(
     }
     const fa = pickStr(acc, "father_name");
     const mo = pickStr(acc, "mother_name");
+    const p2raw = pickStr(acc, "phone2");
+    const landRaw = pickStr(acc, "landline");
+    const p2d = normalizePhone(p2raw) ?? (onlyDigits(p2raw).length >= 8 ? onlyDigits(p2raw) : null);
+    const landd = normalizePhone(landRaw) ?? (onlyDigits(landRaw).length >= 8 ? onlyDigits(landRaw) : null);
+    const cs = parseCallStatus(pickStr(acc, "call_status"));
+    const pr = parsePriority(pickStr(acc, "priority"));
+    const tg = parseTags(pickStr(acc, "tags"));
     out.push({
       first_name: first,
       last_name: last,
       father_name: fa || null,
       mother_name: mo || null,
       phone: n,
+      phone2: p2d,
+      landline: landd,
       email: pickStr(acc, "email") || null,
       area: pickStr(acc, "area") || null,
       municipality: pickStr(acc, "municipality") || null,
@@ -204,8 +264,10 @@ export function mapRowsToContacts(
       toponym: pickStr(acc, "toponym") || null,
       political_stance: pickStr(acc, "political_stance") || null,
       notes: pickStr(acc, "notes") || null,
-      call_status: "Pending",
-      priority: "Medium",
+      tags: tg,
+      group: pickStr(acc, "group") || null,
+      call_status: cs ?? "Pending",
+      priority: pr ?? "Medium",
     });
   }
   return { rows: out, skippedNoPhone, skippedEmpty };

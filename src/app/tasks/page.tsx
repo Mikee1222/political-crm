@@ -34,6 +34,7 @@ import { PageHeader } from "@/components/ui/page-header";
 type TaskT = {
   id: string;
   contact_id: string;
+  assigned_to_user_id?: string | null;
   title: string;
   description: string | null;
   due_date: string | null;
@@ -43,7 +44,17 @@ type TaskT = {
   priority: string | null;
   category: string | null;
   contacts: { id: string; first_name: string; last_name: string; phone?: string } | null;
+  assignee?: { id: string; full_name: string | null } | null;
 };
+
+type AssigneeOpt = { id: string; full_name: string | null };
+
+function assigneeInitials(name: string | null | undefined) {
+  if (!name?.trim()) return "?";
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  if (p.length >= 2) return `${(p[0]![0] ?? "?")}${(p[p.length - 1]![0] ?? "?")}`.toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 
 const TABS: { id: TaskTabFilter; label: string }[] = [
   { id: "all", label: "Όλες" },
@@ -91,6 +102,14 @@ export default function TasksPage() {
   });
   const [heatCounts, setHeatCounts] = useState<Record<string, number>>({});
   const [heatMax, setHeatMax] = useState(0);
+  const [assignees, setAssignees] = useState<AssigneeOpt[]>([]);
+
+  useEffect(() => {
+    void fetchWithTimeout("/api/team/assignees")
+      .then((r) => r.json())
+      .then((d: { assignees?: AssigneeOpt[] }) => setAssignees(d.assignees ?? []))
+      .catch(() => setAssignees([]));
+  }, []);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -270,6 +289,7 @@ export default function TasksPage() {
               <TaskCard
                 key={t.id}
                 t={t}
+                assignees={assignees}
                 anchor={anchorYmd}
                 isCompleted={false}
                 expanded={expanded === t.id}
@@ -299,6 +319,7 @@ export default function TasksPage() {
               <TaskCard
                 key={t.id}
                 t={t}
+                assignees={assignees}
                 anchor={anchorYmd}
                 isCompleted
                 expanded={expanded === t.id}
@@ -329,6 +350,7 @@ export default function TasksPage() {
                 <TaskCard
                   key={t.id}
                   t={t}
+                  assignees={assignees}
                   anchor={anchorYmd}
                   isCompleted={false}
                   expanded={expanded === t.id}
@@ -358,6 +380,7 @@ export default function TasksPage() {
                 <TaskCard
                   key={t.id}
                   t={t}
+                  assignees={assignees}
                   anchor={anchorYmd}
                   isCompleted={false}
                   expanded={expanded === t.id}
@@ -386,6 +409,7 @@ export default function TasksPage() {
                 <TaskCard
                   key={t.id}
                   t={t}
+                  assignees={assignees}
                   anchor={anchorYmd}
                   isCompleted
                   expanded={expanded === t.id}
@@ -412,6 +436,7 @@ export default function TasksPage() {
 
       {modal && (
         <NewTaskModal
+          assignees={assignees}
           onClose={() => setModal(false)}
           onCreated={async () => {
             await load();
@@ -449,6 +474,7 @@ async function removeTask(id: string, setE: (s: string | null) => void, onOk: ()
 
 function TaskCard({
   t: task,
+  assignees,
   anchor,
   isCompleted,
   expanded,
@@ -458,6 +484,7 @@ function TaskCard({
   onSaved,
 }: {
   t: TaskT;
+  assignees: AssigneeOpt[];
   anchor: string;
   isCompleted: boolean;
   expanded: boolean;
@@ -480,6 +507,7 @@ function TaskCard({
     priority: (task.priority ?? "Medium") as "High" | "Medium" | "Low",
     contact_id: task.contact_id,
     category: task.category || "other",
+    assigned_to_user_id: task.assigned_to_user_id ?? "",
   });
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Partial<TaskT["contacts"] & { id: string; phone: string }>[]>([]);
@@ -495,6 +523,7 @@ function TaskCard({
       priority: (task.priority as "High" | "Medium" | "Low") ?? "Medium",
       contact_id: task.contact_id,
       category: task.category || "other",
+      assigned_to_user_id: task.assigned_to_user_id ?? "",
     });
   }, [expanded, task]);
 
@@ -615,8 +644,19 @@ function TaskCard({
               </Link>
             </p>
           )}
+          {task.assignee?.full_name ? (
+            <p className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
+              <span
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#003476]/35 text-[9px] font-bold text-[#C9A84C]"
+                title={task.assignee.full_name}
+              >
+                {assigneeInitials(task.assignee.full_name)}
+              </span>
+              <span className="truncate">{task.assignee.full_name}</span>
+            </p>
+          ) : null}
         </button>
-        <div className="shrink-0">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           {(() => {
             const pk =
               task.priority === "High" || task.priority === "Low" || task.priority === "Medium"
@@ -718,6 +758,21 @@ function TaskCard({
               <p className="mt-1 text-[10px] text-[var(--text-muted)]">Ενεργό ID: {edit.contact_id.slice(0, 8)}…</p>
             </div>
             <div className="sm:col-span-2">
+              <label className={clsx(lux.label)}>Ανάθεση σε υπάλληλο</label>
+              <HqSelect
+                className="!min-h-11 w-full !text-base"
+                value={edit.assigned_to_user_id}
+                onChange={(e) => setEdit((x) => ({ ...x, assigned_to_user_id: e.target.value }))}
+              >
+                <option value="">— Κανένας —</option>
+                {assignees.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.full_name?.trim() || `Χρήστης ${a.id.slice(0, 8)}…`}
+                  </option>
+                ))}
+              </HqSelect>
+            </div>
+            <div className="sm:col-span-2">
               <label className={clsx(lux.label)}>Τίτλος</label>
               <input
                 className={clsx(lux.input, "w-full !min-h-11 !text-base")}
@@ -755,6 +810,7 @@ function TaskCard({
                       priority: edit.priority,
                       category: edit.category,
                       contact_id: edit.contact_id,
+                      assigned_to_user_id: edit.assigned_to_user_id || null,
                     }),
                   });
                   const d = (await r.json().catch(() => ({}))) as { error?: string };
@@ -781,7 +837,15 @@ function TaskCard({
   );
 }
 
-function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void | Promise<void> }) {
+function NewTaskModal({
+  assignees,
+  onClose,
+  onCreated,
+}: {
+  assignees: AssigneeOpt[];
+  onClose: () => void;
+  onCreated: () => void | Promise<void>;
+}) {
   const [saving, setSaving] = useState(false);
   const [e, setE] = useState<string | null>(null);
   const [titleErr, setTitleErr] = useState<string | null>(null);
@@ -794,6 +858,7 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     priority: "Medium" as "High" | "Medium" | "Low",
     category: "other",
     contact_id: "" as string,
+    assigned_to_user_id: "" as string,
   });
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<{ id: string; first_name: string; last_name: string; phone: string }[]>([]);
@@ -843,6 +908,7 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           due_date: f.due_date || null,
           priority: f.priority,
           category: f.category || null,
+          assigned_to_user_id: f.assigned_to_user_id || null,
         }),
       });
       const d = (await r.json().catch(() => ({}))) as { error?: string };
@@ -941,6 +1007,21 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                 {CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
+                  </option>
+                ))}
+              </HqSelect>
+            </div>
+            <div className="sm:col-span-2">
+              <label className={lux.label}>Ανάθεση σε υπάλληλο</label>
+              <HqSelect
+                className="w-full !min-h-11 !text-base"
+                value={f.assigned_to_user_id}
+                onChange={(ev) => setF((x) => ({ ...x, assigned_to_user_id: ev.target.value }))}
+              >
+                <option value="">— Κανένας —</option>
+                {assignees.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.full_name?.trim() || `Χρήστης ${a.id.slice(0, 8)}…`}
                   </option>
                 ))}
               </HqSelect>

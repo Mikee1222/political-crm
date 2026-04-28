@@ -25,7 +25,24 @@ export async function GET() {
     }
 
     const rows = (data ?? []) as NameDayRow[];
-    return NextResponse.json({ days: rows });
+    const merged = new Map<string, { month: number; day: number; names: Set<string> }>();
+    for (const r of rows) {
+      const k = `${r.month}-${r.day}`;
+      if (!merged.has(k)) merged.set(k, { month: r.month, day: r.day, names: new Set() });
+      const b = merged.get(k)!;
+      for (const n of r.names ?? []) {
+        const t = String(n).trim();
+        if (t) b.names.add(t);
+      }
+    }
+    const days: NameDayRow[] = [...merged.values()]
+      .map((v) => ({
+        month: v.month,
+        day: v.day,
+        names: [...v.names].sort((a, b) => a.localeCompare(b, "el")),
+      }))
+      .sort((a, b) => (a.month !== b.month ? a.month - b.month : a.day - b.day));
+    return NextResponse.json({ days });
   } catch (e) {
     console.error("[api/namedays/calendar]", e);
     return nextJsonError();

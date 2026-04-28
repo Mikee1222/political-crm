@@ -25,6 +25,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     category?: string | null;
     contact_id?: string;
     completed?: boolean;
+    assigned_to_user_id?: string | null;
   };
 
   const patch: Record<string, unknown> = {};
@@ -40,6 +41,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
   if (body.category !== undefined) patch.category = body.category;
   if (body.contact_id !== undefined) patch.contact_id = body.contact_id;
+  if (body.assigned_to_user_id !== undefined) {
+    if (body.assigned_to_user_id === null || body.assigned_to_user_id === "") {
+      patch.assigned_to_user_id = null;
+    } else {
+      const { data: prof, error: pe } = await supabase.from("profiles").select("id").eq("id", body.assigned_to_user_id).maybeSingle();
+      if (pe || !prof) {
+        return NextResponse.json({ error: "Άκυρος υπεύθυνος χρήστης" }, { status: 400 });
+      }
+      patch.assigned_to_user_id = body.assigned_to_user_id;
+    }
+  }
   if (body.completed === true) {
     patch.completed = true;
     patch.completed_at = new Date().toISOString();
@@ -78,7 +90,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ? { actor_name: firstNameFromFull(profile?.full_name), changed_fields: ch, contact_id: (data as { contact_id?: string }).contact_id }
         : { actor_name: firstNameFromFull(profile?.full_name), contact_id: (data as { contact_id?: string }).contact_id },
   });
-  return NextResponse.json({ task: { ...data, contacts: contact ?? null } });
+  const aid = (data as { assigned_to_user_id?: string | null }).assigned_to_user_id;
+  let assignee: { id: string; full_name: string | null } | null = null;
+  if (aid) {
+    const { data: pr } = await supabase.from("profiles").select("id, full_name").eq("id", aid).maybeSingle();
+    if (pr) assignee = pr as { id: string; full_name: string | null };
+  }
+  return NextResponse.json({ task: { ...data, contacts: contact ?? null, assignee } });
   } catch (e) {
     console.error("[api/tasks/id PATCH]", e);
     return nextJsonError();

@@ -17,7 +17,7 @@ export async function POST() {
       return forbidden();
     }
     const rows = getNamedaySeedRows();
-    const { error: delErr } = await supabase.from("name_days").delete().gte("month", 1).lte("month", 12);
+    const { error: delErr } = await supabase.from("name_days").delete().not("id", "is", null);
     if (delErr) {
       return NextResponse.json({ error: delErr.message }, { status: 400 });
     }
