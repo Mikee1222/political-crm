@@ -142,29 +142,32 @@ function TiktokPlayCard({ item }: { item: TiktokItem }) {
       {mounted && open && id
         ? createPortal(
             <div
-              className="fixed inset-0 z-[200] flex flex-col bg-black"
+              className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm"
               role="dialog"
               aria-modal="true"
               aria-label="TikTok"
+              onClick={() => setOpen(false)}
             >
-              <div className="flex flex-shrink-0 items-center justify-end gap-2 border-b border-white/10 bg-black/90 px-2 py-1.5">
-                <button
-                  type="button"
-                  className="flex h-11 w-11 items-center justify-center rounded-lg text-white transition hover:bg-white/10"
-                  onClick={() => setOpen(false)}
-                  aria-label="Κλείσιμο"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-              <div className="relative min-h-0 flex-1 w-full">
-                <iframe
-                  title="TikTok"
-                  src={`https://www.tiktok.com/embed/v2/${encodeURIComponent(id)}`}
-                  className="absolute inset-0 h-full w-full border-0"
-                  allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-                  allowFullScreen
-                />
+              <div className="flex min-h-0 flex-1 flex-col bg-black sm:mx-auto sm:my-auto sm:max-h-[min(92dvh,880px)] sm:max-w-3xl sm:rounded-xl sm:ring-1 sm:ring-white/15" onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-shrink-0 items-center justify-end gap-2 border-b border-white/10 bg-black/95 px-2 py-1.5">
+                  <button
+                    type="button"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/15 bg-white/10 text-white transition hover:bg-white/20"
+                    onClick={() => setOpen(false)}
+                    aria-label="Κλείσιμο"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+                <div className="relative min-h-0 flex-1 w-full">
+                  <iframe
+                    title="TikTok"
+                    src={`https://www.tiktok.com/embed/v2/${encodeURIComponent(id)}`}
+                    className="absolute inset-0 h-full w-full border-0"
+                    allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
               </div>
             </div>,
             document.body,

@@ -2,7 +2,6 @@
 
 import { X } from "lucide-react";
 import { useCallback, useMemo, useState, type ChangeEventHandler } from "react";
-import { createPortal } from "react-dom";
 import {
   CRM_FIELD_IDS,
   type CrmFieldId,
@@ -15,6 +14,7 @@ import {
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { HqSelect } from "@/components/ui/hq-select";
+import { ModalShell } from "@/components/ui/centered-modal";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 const BATCH = 30;
@@ -239,10 +239,6 @@ export function ContactsImportWizard({ onImported }: Props) {
     }
   }, [mappedRows, onImported, showToast]);
 
-  if (typeof document === "undefined") {
-    return null;
-  }
-
   return (
     <>
       <div className={lux.card + " !py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"}>
@@ -262,15 +258,18 @@ export function ContactsImportWizard({ onImported }: Props) {
         {errMsg && !open && <p className="w-full text-sm text-amber-200/95">{errMsg}</p>}
       </div>
 
-      {open &&
-        createPortal(
+      {open && (
+        <ModalShell
+          open={open}
+          onClose={close}
+          overlayClassName="items-stretch justify-end p-0 sm:items-center sm:justify-center"
+        >
           <div
-            className="fixed inset-0 z-[200] flex items-stretch justify-end p-0 backdrop-blur-sm [background:var(--overlay-scrim)] sm:items-center sm:justify-center sm:p-4"
+            className="flex max-h-[100dvh] w-full max-w-[720px] flex-col border border-[var(--border)] bg-[#0A1628] shadow-2xl sm:max-h-[min(90dvh,880px)] sm:rounded-2xl sm:border"
             role="dialog"
             aria-modal
             aria-labelledby="import-wizard-title"
           >
-            <div className="flex max-h-[100dvh] w-full max-w-[720px] flex-col border border-[var(--border)] bg-[#0A1628] shadow-2xl sm:max-h-[min(90dvh,880px)] sm:rounded-2xl sm:border">
               <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 pr-2">
                 <h2 id="import-wizard-title" className="text-base font-semibold text-[#F0F4FF]">
                   {pdfMode === "textOnly" ? "PDF — Προεπισκόπηση" : "Μαζική εισαγωγή"}
@@ -487,9 +486,8 @@ export function ContactsImportWizard({ onImported }: Props) {
                 </div>
               )}
             </div>
-          </div>,
-          document.body,
-        )}
+        </ModalShell>
+      )}
     </>
   );
 }

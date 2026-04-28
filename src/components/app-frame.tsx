@@ -778,12 +778,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-[50] [background:var(--overlay-scrim)]"
+            className="fixed inset-0 z-40 [background:var(--overlay-scrim)] backdrop-blur-[2px]"
             aria-label="Κλείσιμο μενού"
             onClick={() => setMobileNavOpen(false)}
           />
           <div
-            className="fixed left-0 top-0 z-[55] box-border h-full w-[min(100vw,280px)] max-w-full overflow-y-auto border-r border-[var(--border)] p-3 shadow-[0_0_32px_rgba(0,0,0,0.45)]"
+            className="fixed left-0 top-0 z-[45] box-border h-full w-[min(100vw,280px)] max-w-full overflow-y-auto border-r border-[var(--border)] p-3 shadow-[0_0_32px_rgba(0,0,0,0.45)]"
             style={{ background: "var(--sidebar-bg)" }}
             role="dialog"
             aria-modal

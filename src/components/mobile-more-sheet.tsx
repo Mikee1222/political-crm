@@ -25,12 +25,12 @@ export function MobileMoreSheet({ open, onClose, items, openRequestsCount, role 
     <>
       <button
         type="button"
-        className="fixed inset-0 z-[100] transition-opacity duration-200 ease-out [background:var(--overlay-scrim)]"
+        className="fixed inset-0 z-30 transition-opacity duration-200 ease-out [background:var(--overlay-scrim)] backdrop-blur-[2px]"
         aria-label="Κλείσιμο"
         onClick={onClose}
       />
       <div
-            className="mobile-more-sheet max-h-[85dvh] fixed bottom-0 left-0 right-0 z-[101] overflow-y-auto rounded-t-2xl border-t border-[var(--border)] bg-[var(--bg-secondary)] shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition duration-200 ease-out"
+            className="mobile-more-sheet max-h-[85dvh] fixed bottom-0 left-0 right-0 z-[35] overflow-y-auto rounded-t-2xl border-t border-[var(--border)] bg-[var(--bg-secondary)] shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition duration-200 ease-out"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))" }}
         role="dialog"
         aria-label="Περισσότερα"

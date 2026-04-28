@@ -9,6 +9,7 @@ import { useProfile } from "@/contexts/profile-context";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { callStatusLabel, callStatusPill } from "@/lib/luxury-styles";
+import { CenteredModal } from "@/components/ui/centered-modal";
 
 const SUGGESTED: string[] = [
   "Τι έχω για σήμερα;",
@@ -956,23 +957,25 @@ export function AlexandraApp() {
       </div>
 
       {toDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[8px] [background:var(--overlay-scrim)]"
-          role="dialog"
-          aria-modal
-        >
-          <div className="hq-modal-panel max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-xl">
-            <p className="text-sm font-medium text-[var(--text-primary)]">Διαγραφή αυτής της συνομιλίας;</p>
-            <div className="mt-4 flex justify-end gap-2">
+        <CenteredModal
+          open={!!toDelete}
+          onClose={() => setToDelete(null)}
+          title="Διαγραφή συνομιλίας"
+          ariaLabel="Επιβεβαίωση διαγραφής συνομιλίας"
+          className="!max-w-sm"
+          footer={
+            <>
               <button type="button" onClick={() => setToDelete(null)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)]">
                 Άκυρο
               </button>
               <button type="button" disabled={loading} onClick={() => void deleteConv(toDelete)} className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 Διαγραφή
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="text-sm font-medium text-[var(--text-primary)]">Διαγραφή αυτής της συνομιλίας;</p>
+        </CenteredModal>
       )}
     </div>
   );

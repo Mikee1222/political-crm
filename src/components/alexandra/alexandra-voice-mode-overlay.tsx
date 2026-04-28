@@ -67,6 +67,18 @@ export function AlexandraVoiceModeOverlay({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onEnd();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onEnd]);
+
   if (!mounted || !open) return null;
 
   const isConnecting = phase === "CONNECTING";
@@ -83,14 +95,27 @@ export function AlexandraVoiceModeOverlay({
 
   const node = (
     <div
-      className="fixed inset-0 z-[500] flex flex-col items-center justify-between overflow-hidden bg-[#030910]/80 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-md"
+      className="fixed inset-0 z-[500] flex flex-col items-center justify-between overflow-hidden bg-black/50 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-md"
       role="dialog"
       aria-modal
       aria-labelledby={titleId}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onEnd();
+      }}
     >
       <p id={titleId} className="sr-only">
         Φωνητική συνομιλία με την Αλεξάνδρα
       </p>
+      <div className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 sm:right-5 sm:top-5">
+        <button
+          type="button"
+          onClick={onEnd}
+          className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[#0a1628]/90 text-[var(--text-secondary)] shadow-lg transition hover:border-[#C9A84C]/50 hover:text-[#C9A84C]"
+          aria-label="Κλείσιμο"
+        >
+          <X className="h-5 w-5" strokeWidth={2.25} />
+        </button>
+      </div>
 
       {isConnecting && (
         <p className="max-w-md text-center text-[10px] leading-tight text-[#94A3B8]" aria-hidden>

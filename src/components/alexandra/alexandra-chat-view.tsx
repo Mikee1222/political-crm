@@ -26,6 +26,7 @@ import { useAlexandraSpeechToText } from "@/hooks/use-alexandra-speech-to-text";
 import { useAlexandraChat, type BriefingToday } from "./alexandra-chat-provider";
 import { AlexandraActivityPanel } from "./alexandra-activity-panel";
 import { HqSelect } from "@/components/ui/hq-select";
+import { CenteredModal } from "@/components/ui/centered-modal";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 function isBriefingReady(b: BriefingToday | "loading" | null): b is BriefingToday {
@@ -927,14 +928,14 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
       />
 
       {toDelete && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-[8px] [background:var(--overlay-scrim)]"
-          role="dialog"
-          aria-modal
-        >
-          <div className="hq-modal-panel max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-xl">
-            <p className="text-sm font-medium text-[var(--text-primary)]">Διαγραφή αυτής της συνομιλίας;</p>
-            <div className="mt-4 flex justify-end gap-2">
+        <CenteredModal
+          open={!!toDelete}
+          onClose={() => setToDelete(null)}
+          title="Διαγραφή συνομιλίας"
+          ariaLabel="Επιβεβαίωση διαγραφής συνομιλίας"
+          className="!max-w-sm"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setToDelete(null)}
@@ -950,9 +951,11 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
               >
                 Διαγραφή
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="text-sm font-medium text-[var(--text-primary)]">Διαγραφή αυτής της συνομιλίας;</p>
+        </CenteredModal>
       )}
     </div>
   );
