@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { CheckSquare, Inbox, Plus, Sparkles, UserPlus, X } from "lucide-react";
+import { CheckSquare, Inbox, Plus, UserPlus, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -14,14 +14,14 @@ type Props = {
 
 const bottomOffsetMobile = "calc(5rem + env(safe-area-inset-bottom, 0px))";
 
-function FabButton({
+const goldGradientStyle = { background: "linear-gradient(135deg, #C9A84C, #8B6914)" } as const;
+
+function MobileFabButton({
   open,
   onToggle,
-  className,
 }: {
   open: boolean;
   onToggle: () => void;
-  className?: string;
 }) {
   return (
     <button
@@ -30,22 +30,64 @@ function FabButton({
       aria-haspopup="menu"
       aria-label={open ? "Κλείσιμο γρήγορων ενεργειών" : "Γρήγορες ενέργειες"}
       onClick={onToggle}
-      className={[
-        "pointer-events-auto relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-amber-300/70 text-[var(--text-badge-on-gold)] shadow-[0_8px_24px_rgba(201,168,76,0.4)] transition hq-press-mobile",
-        "bg-gradient-to-br from-amber-400 to-amber-600",
-        className ?? "",
-      ].join(" ")}
-      style={{
-        transform: open ? "rotate(45deg)" : undefined,
-      }}
+      className="pointer-events-auto relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#C9A84C]/55 text-[var(--text-badge-on-gold)] shadow-[0_8px_24px_rgba(201,168,76,0.4)] transition hq-press-mobile"
+      style={goldGradientStyle}
     >
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-2xl">
-        <span className="absolute inset-0 animate-ping rounded-2xl border border-amber-400/45" aria-hidden />
+        <span className="absolute inset-0 animate-ping rounded-2xl border border-[#C9A84C]/45" aria-hidden />
       </div>
       {open ? (
         <X className="relative z-0 h-6 w-6" strokeWidth={2.2} aria-hidden />
       ) : (
         <Plus className="relative z-0 h-7 w-7 text-2xl font-thin" strokeWidth={1.8} aria-hidden />
+      )}
+    </button>
+  );
+}
+
+function DesktopMergedFabButton({
+  open,
+  isManager,
+  canAlex,
+  onToggleDial,
+  onAlexClick,
+}: {
+  open: boolean;
+  isManager: boolean;
+  canAlex: boolean;
+  onToggleDial: () => void;
+  onAlexClick: () => void;
+}) {
+  if (!isManager && !canAlex) return null;
+
+  const handleClick = () => {
+    if (isManager) {
+      onToggleDial();
+    } else if (canAlex) {
+      onAlexClick();
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      aria-expanded={isManager ? open : undefined}
+      aria-haspopup={isManager ? "menu" : undefined}
+      aria-label={open && isManager ? "Κλείσιμο γρήγορων ενεργειών" : "Αλεξάνδρα — γρήγορες ενέργειες"}
+      onClick={handleClick}
+      className="pointer-events-auto flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(201,168,76,0.4)] transition"
+      style={goldGradientStyle}
+    >
+      {open && isManager ? (
+        <X className="h-5 w-5 shrink-0" strokeWidth={2.2} aria-hidden />
+      ) : (
+        <>
+          <span className="text-base leading-none text-white/95" aria-hidden>
+            ✦
+          </span>
+          <span className="text-sm font-semibold text-white">Αλεξάνδρα</span>
+          <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-xs font-bold text-white/90">AI</span>
+        </>
       )}
     </button>
   );
@@ -79,33 +121,8 @@ function SpeedDialItems({
   );
 }
 
-function AlexandraLaunchButton({ onClick }: { onClick: () => void }) {
-  return (
-    <div className="pointer-events-auto relative">
-      <div
-        className="pointer-events-none absolute -inset-1 rounded-2xl bg-[radial-gradient(circle,rgba(201,168,76,0.35)_0%,transparent_72%)] opacity-90"
-        aria-hidden
-      />
-      <button
-        type="button"
-        onClick={onClick}
-        title="Άνοιγμα Αλεξάνδρα (μίνι παράθυρο)"
-        aria-label="Άνοιγμα Αλεξάνδρα (μίνι παράθυρο)"
-        className="relative flex items-center gap-2 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-700 px-4 py-3 text-white shadow-[0_8px_32px_rgba(201,168,76,0.4),0_2px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.3)] transition duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-105 hover:shadow-[0_12px_40px_rgba(201,168,76,0.5)] active:scale-[0.97] hq-press-mobile"
-      >
-        <span className="text-base leading-none text-white/95" aria-hidden>
-          ✦
-        </span>
-        <Sparkles className="h-5 w-5 shrink-0 text-white" strokeWidth={2.2} aria-hidden />
-        <span className="text-xs font-semibold tracking-wide text-white sm:text-sm">Αλεξάνδρα</span>
-        <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-[10px] font-bold text-white/90">AI</span>
-      </button>
-    </div>
-  );
-}
-
 /**
- * Unified FAB speed dial + desktop Alexandra launcher (single mount in AppFrame).
+ * Unified FAB: mobile = circular + speed dial; desktop = gold Αλεξάνδρα pill (merged) + speed dial.
  */
 export function FloatingActions({ role }: Props) {
   const router = useRouter();
@@ -185,14 +202,20 @@ export function FloatingActions({ role }: Props) {
                   style={{ bottom: bottomOffsetMobile }}
                 >
                   {open ? <SpeedDialItems items={dialItems} onPick={() => setOpen(false)} /> : null}
-                  <FabButton open={open} onToggle={() => setOpen((o) => !o)} />
+                  <MobileFabButton open={open} onToggle={() => setOpen((o) => !o)} />
                 </div>
               ) : null}
 
+              {/* Desktop: dial items sit above fixed merged button; button is fixed so it matches spec */}
               <div className="pointer-events-none absolute bottom-6 right-6 hidden flex-col items-end gap-3 md:flex">
                 {isManager && open ? <SpeedDialItems items={dialItems} onPick={() => setOpen(false)} /> : null}
-                {isManager ? <FabButton open={open} onToggle={() => setOpen((o) => !o)} /> : null}
-                {canAlex ? <AlexandraLaunchButton onClick={onAlexClick} /> : null}
+                <DesktopMergedFabButton
+                  open={open}
+                  isManager={isManager}
+                  canAlex={canAlex}
+                  onToggleDial={() => setOpen((o) => !o)}
+                  onAlexClick={onAlexClick}
+                />
               </div>
             </div>
           </>,
