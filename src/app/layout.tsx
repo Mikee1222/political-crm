@@ -69,19 +69,21 @@ export default function RootLayout({
         <Script id="crm-theme-init" strategy="beforeInteractive">
           {`(function(){try{var t=localStorage.getItem('crm-theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`}
         </Script>
-        <PwaServiceWorkerRegister />
-        <ThemeProvider>
-          <FormToastProvider>
-            <ProfileProvider>
-              <ThemeProfileSync />
-              <AlexandraPageProvider>
-                <AlexandraChatProvider>
-                  <AppFrame>{children}</AppFrame>
-                </AlexandraChatProvider>
-              </AlexandraPageProvider>
-            </ProfileProvider>
-          </FormToastProvider>
-        </ThemeProvider>
+        <div className="overflow-x-hidden max-w-full w-full">
+          <PwaServiceWorkerRegister />
+          <ThemeProvider>
+            <FormToastProvider>
+              <ProfileProvider>
+                <ThemeProfileSync />
+                <AlexandraPageProvider>
+                  <AlexandraChatProvider>
+                    <AppFrame>{children}</AppFrame>
+                  </AlexandraChatProvider>
+                </AlexandraPageProvider>
+              </ProfileProvider>
+            </FormToastProvider>
+          </ThemeProvider>
+        </div>
       </body>
     </html>
   );

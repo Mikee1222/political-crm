@@ -419,7 +419,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="flex min-h-[-webkit-fill-available] min-h-dvh min-w-0 flex-col bg-[#FAFBFC] text-[#1A1A2E] antialiased [color-scheme:light]"
+      className="flex min-h-[-webkit-fill-available] min-h-dvh min-w-0 w-full max-w-full overflow-x-hidden flex-col bg-[#FAFBFC] text-[#1A1A2E] antialiased [color-scheme:light]"
       data-theme="light"
     >
       <PortalHeader
@@ -431,7 +431,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         onInstall={() => void triggerInstall()}
       />
       {installable && !installed && !installBannerDismissed && (
-        <div className="border-b border-[#C9A84C]/40 bg-gradient-to-r from-[#C9A84C]/20 via-[#C9A84C]/10 to-transparent px-4 py-2 sm:px-6">
+        <div className="w-full max-w-full border-b border-[#C9A84C]/40 bg-gradient-to-r from-[#C9A84C]/20 via-[#C9A84C]/10 to-transparent px-4 py-2 sm:px-6">
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
             <p className="text-sm font-semibold text-[#1A1A2E]">Εγκαταστήστε το Καραγκούνης CRM</p>
             <div className="flex items-center gap-2">

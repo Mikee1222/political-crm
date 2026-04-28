@@ -994,7 +994,7 @@ function ContactsPage() {
   };
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6 pb-24 md:pb-6">
+    <div className="w-full max-w-full px-4 overflow-x-hidden space-y-6 pb-24 md:px-0 md:pb-6">
       {f.nameday_today && (
         <div
           className="flex w-full min-w-0 max-w-full flex-col gap-2 rounded-2xl border-2 border-[var(--accent-gold)]/45 bg-gradient-to-r from-[rgba(201,168,76,0.12)] to-[var(--bg-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
@@ -1029,7 +1029,7 @@ function ContactsPage() {
         title="Επαφές"
         subtitle="Διαχείριση εκλογικής βάσης — αναζήτηση, φίλτρα, εξαγωγή και μαζικές ενέργειες."
         actions={
-          <div className="flex w-full min-w-0 max-w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <button
               type="button"
               onClick={() => {
@@ -1037,7 +1037,7 @@ function ContactsPage() {
                 openMiniFromBubble();
                 setMiniWindowMinimized(false);
               }}
-              className="hq-contacts-alex-launch relative z-0 inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-left text-[13px] font-bold tracking-tight"
+              className="hq-contacts-alex-launch relative z-0 inline-flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3.5 py-2 text-left text-[13px] font-bold tracking-tight sm:w-auto"
             >
               <span className="relative z-[1] flex items-center gap-2">
                 <Sparkles className="h-4 w-4 shrink-0 opacity-95" aria-hidden />
@@ -1051,7 +1051,7 @@ function ContactsPage() {
               <button
                 type="button"
                 onClick={() => setExportOpen((o) => !o)}
-                className={lux.btnSecondary + " !py-2 text-sm inline-flex items-center gap-1"}
+                className={lux.btnSecondary + " !py-2 text-sm inline-flex w-full items-center justify-center gap-1 sm:w-auto"}
                 aria-expanded={exportOpen}
               >
                 <Download className="h-4 w-4" />
@@ -1091,13 +1091,13 @@ function ContactsPage() {
             </div>
             {canManage && (
               <>
-                <a href="/api/contacts/import-template" className={lux.btnSecondary + " !py-2 text-sm"}>
+                <a href="/api/contacts/import-template" className={lux.btnSecondary + " !py-2 text-sm w-full sm:w-auto"}>
                   CSV Template
                 </a>
                 <button
                   type="button"
                   onClick={() => setOpenCreate(true)}
-                  className={lux.btnPrimary + " hq-shimmer-gold !rounded-full !py-2.5 text-sm !font-bold text-[var(--text-badge-on-gold)]"}
+                  className={lux.btnPrimary + " hq-shimmer-gold !rounded-full !py-2.5 w-full text-sm !font-bold text-[var(--text-badge-on-gold)] sm:w-auto"}
                 >
                   <Plus className="h-4 w-4" />
                   Νέα Επαφή
@@ -1107,14 +1107,14 @@ function ContactsPage() {
           </div>
         }
         metrics={
-          <div className="grid w-full max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-            <div className="flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
+          <div className="grid grid-cols-2 gap-3 w-full">
+            <div className="w-full flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
               <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--text-metric-value)]">
                 {warStats ? warStats.total : "—"}
               </span>
               <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Σύνολο</span>
             </div>
-            <div className="flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
+            <div className="w-full flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
               <span
                 className="font-mono text-2xl font-bold tabular-nums tracking-tight"
                 style={{ color: "var(--status-positive-text, var(--success))" }}
@@ -1123,13 +1123,13 @@ function ContactsPage() {
               </span>
               <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Θετικοί</span>
             </div>
-            <div className="flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
+            <div className="w-full flex flex-col gap-1 border-b border-[var(--border)] pb-3 text-center sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:text-left">
               <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--warning)]">
                 {warStats ? warStats.pending : "—"}
               </span>
               <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Αναμονή</span>
             </div>
-            <div className="flex flex-col gap-1 pt-0.5 text-center sm:pt-0 sm:text-left">
+            <div className="w-full flex flex-col gap-1 pt-0.5 text-center sm:pt-0 sm:text-left">
               <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--text-metric-value)]">
                 {warStats ? warStats.this_month : "—"}
               </span>
