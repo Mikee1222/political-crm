@@ -43,6 +43,15 @@ export default function LoginPage() {
       setError(mapAuthErrorToGreek(authError.message));
       return;
     }
+    const { data: pData, error: pErr } = await supabase
+      .from("profiles")
+      .select("is_portal")
+      .maybeSingle();
+    if (!pErr && pData?.is_portal === true) {
+      await supabase.auth.signOut();
+      setError("Δεν έχετε πρόσβαση στο σύστημα διαχείρισης");
+      return;
+    }
     router.replace("/dashboard");
     router.refresh();
   };

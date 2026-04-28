@@ -89,6 +89,10 @@ function isPortalAppPath(pathname: string) {
   return pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/");
 }
 
+function portalDashboardRedirectUrl(): URL {
+  return new URL("/portal/dashboard", "https://kkaragkounis.com");
+}
+
 export async function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") || "";
   const host = hostname.split(":")[0]?.toLowerCase() ?? "";
@@ -183,7 +187,10 @@ export async function middleware(request: NextRequest) {
 
   if (isLoggedIn && authUser) {
     if (isCrmLoginPage) {
-      return redirectWithSession(request, isPortalUser ? "/portal/dashboard" : "/dashboard", sessionResponse);
+      if (isPortalUser) {
+        return NextResponse.redirect(portalDashboardRedirectUrl());
+      }
+      return redirectWithSession(request, "/dashboard", sessionResponse);
     }
     if (isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
       return redirectWithSession(request, "/portal/dashboard", sessionResponse);
@@ -212,6 +219,44 @@ export async function middleware(request: NextRequest) {
 
     if (isPortalUser) {
       // Block all non-portal app routes (/dashboard, /, /contacts, etc.); /api/CRM 403 above.
+      const blockedCrmPages =
+        pathname === "/" ||
+        pathname === "/login" ||
+        pathname === "/dashboard" ||
+        pathname === "/contacts" ||
+        pathname === "/requests" ||
+        pathname === "/campaigns" ||
+        pathname === "/tasks" ||
+        pathname === "/settings" ||
+        pathname === "/analytics" ||
+        pathname === "/events" ||
+        pathname === "/volunteers" ||
+        pathname === "/documents" ||
+        pathname === "/content" ||
+        pathname === "/polls" ||
+        pathname === "/schedule" ||
+        pathname === "/namedays" ||
+        pathname === "/heatmap" ||
+        pathname === "/alexandra" ||
+        pathname.startsWith("/dashboard/") ||
+        pathname.startsWith("/contacts/") ||
+        pathname.startsWith("/requests/") ||
+        pathname.startsWith("/campaigns/") ||
+        pathname.startsWith("/tasks/") ||
+        pathname.startsWith("/settings/") ||
+        pathname.startsWith("/analytics/") ||
+        pathname.startsWith("/events/") ||
+        pathname.startsWith("/volunteers/") ||
+        pathname.startsWith("/documents/") ||
+        pathname.startsWith("/content/") ||
+        pathname.startsWith("/polls/") ||
+        pathname.startsWith("/schedule/") ||
+        pathname.startsWith("/namedays/") ||
+        pathname.startsWith("/heatmap/") ||
+        pathname.startsWith("/alexandra/");
+      if (blockedCrmPages) {
+        return NextResponse.redirect(portalDashboardRedirectUrl());
+      }
       if (isPortalAppPath(pathname)) {
         // ok
       } else if (isNextStaticOrAsset(pathname)) {
@@ -219,7 +264,7 @@ export async function middleware(request: NextRequest) {
       } else if (pathname.startsWith("/api/")) {
         // handled
       } else {
-        return redirectWithSession(request, "/portal/dashboard", sessionResponse);
+        return NextResponse.redirect(portalDashboardRedirectUrl());
       }
     }
   }

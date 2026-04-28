@@ -48,6 +48,14 @@ export async function checkCRMAccess(
 }
 
 /**
+ * Canonical guard for CRM-only API routes.
+ * Portal users always receive 403, authenticated CRM users pass through.
+ */
+export async function requireCRMAccess(request?: Request): Promise<CrmAccessResult> {
+  return checkCRMAccess(request);
+}
+
+/**
  * Optional-auth routes: only block session users who are portal-only. Call with `void _request` if needed.
  */
 export async function forbidCrmForPortalUserIfSignedIn(

@@ -1,4 +1,4 @@
-import { checkCRMAccess } from "@/lib/crm-api-access";
+import { requireCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -9,6 +9,7 @@ type Row = {
   id: string;
   full_name: string | null;
   role: string;
+  is_portal: boolean;
   created_at: string | undefined;
   email: string;
   joined_at: string;
@@ -16,7 +17,7 @@ type Row = {
 };
 
 export async function GET() {
-  const crm = await checkCRMAccess();
+  const crm = await requireCRMAccess();
   if (!crm.allowed) return crm.response;
   const { profile } = crm;
   if (profile?.role !== "admin") return forbidden();
@@ -27,30 +28,33 @@ export async function GET() {
     if (listErr) {
       return NextResponse.json({ error: listErr.message }, { status: 400 });
     }
-    const { data: prows } = await admin.from("profiles").select("id, full_name, role, created_at");
+    const { data: prows } = await admin.from("profiles").select("id, full_name, role, created_at, is_portal");
     const pmap = new Map(
       (prows ?? []).map(
         (p) =>
           [p.id, p] as [
             string,
-            { id: string; full_name: string | null; role: string; created_at: string },
+            { id: string; full_name: string | null; role: string; created_at: string; is_portal: boolean | null },
           ],
       ),
     );
-    const users: Row[] = (listData?.users ?? []).map((u) => {
+    const users: Row[] = (listData?.users ?? [])
+      .map((u) => {
       const p = pmap.get(u.id) as
-        | { id: string; full_name: string | null; role: string; created_at: string }
+        | { id: string; full_name: string | null; role: string; created_at: string; is_portal: boolean | null }
         | undefined;
       return {
         id: u.id,
         email: u.email ?? "",
         full_name: p?.full_name ?? (u.user_metadata as { full_name?: string })?.full_name ?? null,
         role: (p?.role as UserProfile["role"]) ?? "caller",
+        is_portal: p?.is_portal === true,
         created_at: p?.created_at,
         joined_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at ?? null,
       };
-    });
+    })
+      .filter((u) => !u.is_portal);
     return NextResponse.json({ users });
   } catch (e) {
     const err = e as Error;
