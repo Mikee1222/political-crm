@@ -3,7 +3,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import type { Tool } from "@anthropic-ai/sdk/resources/messages/messages";
 import Anthropic from "@anthropic-ai/sdk";
 import Papa from "papaparse";
-import { hasMinRole, type Role } from "@/lib/roles";
+import { hasMinRole } from "@/lib/roles";
 import type { UserProfile } from "@/lib/auth-helpers";
 import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
 import { greekTitleCaseWords, parseGreekPhoneFieldsFromText } from "@/lib/greek-contact-import";

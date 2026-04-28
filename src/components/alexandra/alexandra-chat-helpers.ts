@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { el } from "date-fns/locale";
-import { hasMinRole, type Role } from "@/lib/roles";
+import { hasMinRole } from "@/lib/roles";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 
 import type { LucideIcon } from "lucide-react";

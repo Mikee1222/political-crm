@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Menu, Send, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { hasMinRole, type Role } from "@/lib/roles";
+import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 import { fetchWithTimeout } from "@/lib/client-fetch";

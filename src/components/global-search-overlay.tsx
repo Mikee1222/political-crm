@@ -5,7 +5,7 @@ import { Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
-import { hasMinRole, type Role } from "@/lib/roles";
+import { hasMinRole } from "@/lib/roles";
 
 type SContact = {
   id: string;
