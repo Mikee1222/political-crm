@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getPortalServiceOrAnon } from "@/lib/supabase/portal-service";
 import { createClient } from "@/lib/supabase/server";
 import { PortalSocialSection } from "@/components/portal/portal-social-section";
+import { PwaInstallSteps } from "@/components/pwa-install-guide";
 import { ArrowDown, ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -290,6 +291,16 @@ export default async function PortalHomePage() {
       </section>
 
       <PortalSocialSection />
+
+      <section className="border-b border-[#E2E8F0] bg-[#F8FAFC] py-10 sm:py-12">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <PwaInstallSteps
+            title="Εγκαταστήστε την εφαρμογή"
+            subtitle="Ακολουθήστε τα βήματα για Android (Chrome) ή iPhone (Safari)."
+            className="bg-white"
+          />
+        </div>
+      </section>
 
       {/* CTA */}
       <section

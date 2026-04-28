@@ -28,6 +28,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { PageHeader } from "@/components/ui/page-header";
 import { useCountUp } from "@/hooks/use-count-up";
 import { MetricSparkline } from "@/components/ui/metric-sparkline";
+import { PwaInstallSteps } from "@/components/pwa-install-guide";
 
 type DashboardData = {
   totalContacts: number;
@@ -194,6 +195,24 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>(EMPTY_DASH);
   const [briefing, setBriefing] = useState<Briefing>(EMPTY_BRIEF);
   const [acts, setActs] = useState<Act[]>([]);
+  const [showInstallTutorial, setShowInstallTutorial] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = "crm-install-tutorial-dismissed";
+    const dismissed = window.localStorage.getItem(key) === "1";
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setShowInstallTutorial(!dismissed && !standalone);
+  }, []);
+
+  const dismissInstallTutorial = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("crm-install-tutorial-dismissed", "1");
+    }
+    setShowInstallTutorial(false);
+  };
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -239,6 +258,27 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {showInstallTutorial ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 shadow-[var(--card-shadow)]">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-[var(--text-primary)]">Εγκαταστήστε το CRM ως εφαρμογή</p>
+            <button
+              type="button"
+              onClick={dismissInstallTutorial}
+              className="rounded px-1 text-sm font-bold text-[var(--text-muted)]"
+              aria-label="Κλείσιμο"
+            >
+              ×
+            </button>
+          </div>
+          <PwaInstallSteps
+            title="Εγκαταστήστε το CRM ως εφαρμογή"
+            subtitle="Οδηγίες ανά συσκευή/φυλλομετρητή."
+            compact
+            className="!border-0 !bg-transparent !p-0 !shadow-none"
+          />
+        </div>
+      ) : null}
       <PageHeader
         title="Dashboard"
         subtitle="Κέντρο εντολών — εικόνα της ημέρας, ειδοποιήσεις και γρήγορες ενέργειες."

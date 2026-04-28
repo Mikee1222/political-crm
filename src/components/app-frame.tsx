@@ -24,6 +24,7 @@ import {
   ChevronsDown,
   ChevronsLeft,
   ChevronsRight,
+  Download,
   HeartHandshake,
   User,
   X,
@@ -459,6 +460,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const [avatarImgErr, setAvatarImgErr] = useState(false);
   const [mobileGlassHeaderHidden, setMobileGlassHeaderHidden] = useState(false);
   const [mobilePageEnter, setMobilePageEnter] = useState<"left" | "right" | "">("");
+  const [installable, setInstallable] = useState(false);
+  const [installed, setInstalled] = useState(false);
+  const [promptEvent, setPromptEvent] = useState<Event | null>(null);
+  const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
   const mainScrollRef = useRef<HTMLDivElement>(null);
   const lastMainScrollY = useRef(0);
   const prevPathForMobileAnim = useRef<string | null>(null);
@@ -567,6 +572,45 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setAvatarImgErr(false);
   }, [profile?.avatar_url]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setInstalled(Boolean(standalone));
+    const onBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setPromptEvent(e);
+      setInstallable(true);
+      setInstallBannerDismissed(false);
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setInstallable(false);
+      setPromptEvent(null);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const triggerInstallPrompt = useCallback(async () => {
+    const ev = promptEvent as (Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome?: string }> }) | null;
+    if (!ev?.prompt) return;
+    await ev.prompt();
+    try {
+      const choice = await ev.userChoice;
+      if (choice?.outcome === "accepted") {
+        setInstallable(false);
+      }
+    } catch {
+      // ignore
+    }
+  }, [promptEvent]);
 
   useEffect(() => {
     setMobileGlassHeaderHidden(false);
@@ -771,7 +815,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[-webkit-fill-available] min-h-screen w-full max-w-full overflow-x-hidden bg-[var(--bg-primary)]" style={shellStyle}>
       <aside
-        className="app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 flex h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)] px-2 py-3 pb-2"
+        className="app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 hidden h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)] px-2 py-3 pb-2 lg:flex"
         style={{ background: "var(--sidebar-bg)" }}
         aria-label="Πλοήγηση"
       >
@@ -899,7 +943,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </>
       )}
 
-      <div className="app-main-shell box-border flex min-h-0 min-w-0 flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
+      <div className="app-main-shell ml-0 box-border flex min-h-0 min-w-0 flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
         <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-[max(0px,env(safe-area-inset-top,0px))] backdrop-blur-lg [background:var(--topbar-bg)]">
           <MobileGlassHeader
             firstName={mobileFirstName}
@@ -915,6 +959,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             onOpenSearch={() => setSearchOpen(true)}
             requestsHref={hasMinRole(role, "manager") ? "/requests" : undefined}
             hidden={mobileGlassHeaderHidden}
+            canInstall={installable && !installed}
+            onInstallClick={() => void triggerInstallPrompt()}
           />
           <div className="hidden h-[60px] w-full min-w-0 max-w-full items-center justify-between gap-2 px-6 lg:flex lg:px-8">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -948,6 +994,16 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 </span>
               )}
               <ThemeToggle />
+              {installable && !installed ? (
+                <button
+                  type="button"
+                  onClick={() => void triggerInstallPrompt()}
+                  className="inline-flex h-9 shrink-0 items-center gap-1 rounded-md border border-[var(--accent-gold)]/45 bg-[color-mix(in_srgb,var(--accent-gold)_18%,var(--bg-elevated))] px-2.5 text-xs font-bold text-[var(--text-primary)]"
+                  title="Εγκατάσταση εφαρμογής"
+                >
+                  Εγκατάσταση ↓
+                </button>
+              ) : null}
               <div className="relative shrink-0" ref={userMenuRef}>
                 <button
                   type="button"
@@ -997,6 +1053,29 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           onScroll={onMainScroll}
           className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] p-3 max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] max-lg:pt-2 sm:p-6 md:p-8"
         >
+          {installable && !installed && !installBannerDismissed ? (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-card))] px-3 py-2">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Εγκαταστήστε το Καραγκούνης CRM</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void triggerInstallPrompt()}
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--accent-gold)] px-2.5 py-1.5 text-xs font-bold text-[var(--text-badge-on-gold)]"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Install
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInstallBannerDismissed(true)}
+                  className="rounded px-1 text-sm font-bold text-[var(--text-muted)]"
+                  aria-label="Κλείσιμο"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ) : null}
           <MobilePullToRefresh enabled={pullRefreshEnabled} />
           <div
             key={pathname}

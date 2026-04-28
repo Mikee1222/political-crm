@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Facebook, Instagram, Menu, X } from "lucide-react";
+import { Download, Facebook, Instagram, Menu, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { portalDisplayFirstName } from "@/lib/portal-display";
 import { PORTAL_SOCIAL } from "@/lib/portal-social-urls";
 import { PortalOfficeMapsSection } from "@/components/portal/portal-office-maps-section";
+import { PwaInstallSteps } from "@/components/pwa-install-guide";
 
 const ND = "#003476";
 
@@ -30,11 +31,15 @@ function PortalHeader({
   firstName,
   mobileOpen,
   setMobileOpen,
+  canInstall,
+  onInstall,
 }: {
   signedIn: boolean;
   firstName: string | null;
   mobileOpen: boolean;
   setMobileOpen: (v: boolean) => void;
+  canInstall: boolean;
+  onInstall: () => void;
 }) {
   const pathname = usePathname() ?? "";
 
@@ -89,6 +94,15 @@ function PortalHeader({
         </nav>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {canInstall && (
+            <button
+              type="button"
+              onClick={onInstall}
+              className="hidden rounded-lg border border-[#C9A84C]/50 bg-gradient-to-b from-[#C9A84C] to-[#8B6914] px-2.5 py-2 text-xs font-bold text-[#0f172a] shadow-sm sm:inline-flex"
+            >
+              Εγκατάσταση ↓
+            </button>
+          )}
           {signedIn && firstName && (
             <span className="hidden max-w-[8rem] truncate text-sm text-[#64748B] lg:inline">
               Γεια, {firstName}
@@ -121,6 +135,15 @@ function PortalHeader({
               aria-label={mobileOpen ? "Κλείσιμο μενού" : "Μενού"}
             >
               {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          )}
+          {canInstall && (
+            <button
+              type="button"
+              onClick={onInstall}
+              className="rounded-lg border border-[#C9A84C]/45 bg-gradient-to-b from-[#C9A84C] to-[#8B6914] px-2 py-1.5 text-[10px] font-bold text-[#0f172a] sm:hidden"
+            >
+              Εγκατάσταση ↓
             </button>
           )}
         </div>
@@ -306,6 +329,47 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
   const [me, setMe] = useState<{ first: string } | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [installable, setInstallable] = useState(false);
+  const [installed, setInstalled] = useState(false);
+  const [promptEvent, setPromptEvent] = useState<Event | null>(null);
+  const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setInstalled(Boolean(standalone));
+    const onBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setPromptEvent(e);
+      setInstallable(true);
+      setInstallBannerDismissed(false);
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setInstallable(false);
+      setPromptEvent(null);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const triggerInstall = async () => {
+    const ev = promptEvent as (Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome?: string }> }) | null;
+    if (!ev?.prompt) return;
+    await ev.prompt();
+    try {
+      const choice = await ev.userChoice;
+      if (choice?.outcome === "accepted") {
+        setInstallable(false);
+      }
+    } catch {
+      // ignore user cancellation
+    }
+  };
 
   useEffect(() => {
     if (isAuthPage(pathname)) {
@@ -363,8 +427,45 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         firstName={me?.first ?? null}
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
+        canInstall={installable && !installed}
+        onInstall={() => void triggerInstall()}
       />
+      {installable && !installed && !installBannerDismissed && (
+        <div className="border-b border-[#C9A84C]/40 bg-gradient-to-r from-[#C9A84C]/20 via-[#C9A84C]/10 to-transparent px-4 py-2 sm:px-6">
+          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-[#1A1A2E]">Εγκαταστήστε το Καραγκούνης CRM</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void triggerInstall()}
+                className="inline-flex items-center gap-1 rounded-lg bg-[#003476] px-3 py-1.5 text-xs font-bold text-white"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Εγκατάσταση
+              </button>
+              <button
+                type="button"
+                onClick={() => setInstallBannerDismissed(true)}
+                className="text-xs font-bold text-[#475569]"
+                aria-label="Κλείσιμο"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="min-h-0 min-w-0 flex-1 bg-[#FAFBFC]">{children}</div>
+      {pathname === "/portal" && (
+        <div className="fixed bottom-3 left-1/2 z-[80] w-[min(94vw,520px)] -translate-x-1/2 px-2 sm:bottom-4 sm:px-0">
+          <PwaInstallSteps
+            title="Εγκαταστήστε την εφαρμογή"
+            subtitle="Οδηγίες για γρήγορη πρόσβαση από την αρχική οθόνη."
+            compact
+            className="bg-white/95 shadow-[0_12px_30px_rgba(0,0,0,0.14)] backdrop-blur"
+          />
+        </div>
+      )}
       <PortalFooter signedIn={Boolean(me)} />
     </div>
   );

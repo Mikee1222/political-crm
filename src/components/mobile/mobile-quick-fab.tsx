@@ -2,7 +2,8 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { CheckSquare, Inbox, Plus, UserPlus } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { hasMinRole } from "@/lib/roles";
 
 type Props = {
@@ -12,12 +13,14 @@ type Props = {
 const bottomOffset = "calc(5rem + env(safe-area-inset-bottom, 0px))";
 
 /**
- * Gold FAB + radial quick actions (managers, &lt; lg only).
+ * Gold FAB + quick actions (managers, &lt; lg only). Menu is portaled to
+ * `document.body` with z-index 9999 so it always stacks above page content.
  */
 export function MobileQuickFab({ role }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const can = hasMinRole(role, "manager");
@@ -26,6 +29,10 @@ export function MobileQuickFab({ role }: Props) {
     pathname === "/login" ||
     pathname === "/portal" ||
     pathname.startsWith("/portal/");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -56,55 +63,72 @@ export function MobileQuickFab({ role }: Props) {
     {
       label: "Νέα Επαφή",
       icon: UserPlus,
-      style: { "--fab-dx": "0px", "--fab-dy": "-88px" } as CSSProperties,
       onClick: () => go("/contacts?new=1"),
     },
     {
       label: "Νέο Αίτημα",
       icon: Inbox,
-      style: { "--fab-dx": "-76px", "--fab-dy": "-44px" } as CSSProperties,
       onClick: () => go("/requests?new=1"),
     },
     {
       label: "Νέα Εργασία",
       icon: CheckSquare,
-      style: { "--fab-dx": "76px", "--fab-dy": "-44px" } as CSSProperties,
       onClick: () => go("/tasks?new=1"),
     },
   ];
 
-  return (
-    <div ref={rootRef} className="pointer-events-none fixed right-4 z-[48] lg:hidden" style={{ bottom: bottomOffset }}>
-      {open && (
-        <div className="pointer-events-auto absolute bottom-[4.25rem] right-0 flex h-40 w-44 items-end justify-center">
-          {items.map((it, i) => (
-            <button
-              key={it.label}
-              type="button"
-              style={{ ...it.style, animationDelay: `${i * 45}ms` }}
-              className="hq-fab-radial-item absolute bottom-0 right-0 flex h-12 min-h-12 w-[10.5rem] items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-left text-sm font-semibold text-[var(--text-primary)] shadow-xl backdrop-blur-md hq-press-mobile"
-              onClick={it.onClick}
+  const portal =
+    mounted && typeof document !== "undefined"
+      ? createPortal(
+          <>
+            {open ? (
+              <button
+                type="button"
+                className="fixed inset-0 z-[9998] cursor-default border-0 bg-[var(--overlay-scrim)] backdrop-blur-[2px]"
+                aria-label="Κλείσιμο γρήγορων ενεργειών"
+                onClick={() => setOpen(false)}
+              />
+            ) : null}
+            <div
+              ref={rootRef}
+              className="pointer-events-none fixed z-[9999] flex flex-col items-end gap-2"
+              style={{ right: 24, bottom: bottomOffset, left: "auto", top: "auto" }}
             >
-              <it.icon className="h-5 w-5 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-              {it.label}
-            </button>
-          ))}
-        </div>
-      )}
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={open ? "Κλείσιμο γρήγορων ενεργειών" : "Γρήγορες ενέργειες"}
-        onClick={() => setOpen((o) => !o)}
-        className="pointer-events-auto flex h-14 w-14 min-h-14 min-w-14 items-center justify-center rounded-full border-2 border-[#8B6914] text-[#0A1628] shadow-[0_10px_40px_rgba(201,168,76,0.45)] transition hq-press-mobile"
-        style={{
-          background: "linear-gradient(145deg, #e8c96b 0%, #c9a84c 40%, #8b6914 100%)",
-          transform: open ? "rotate(45deg)" : undefined,
-        }}
-      >
-        <Plus className="h-7 w-7" strokeWidth={2.5} />
-      </button>
-    </div>
-  );
+              {open ? (
+                <div className="pointer-events-auto mb-1 flex w-full min-w-0 flex-col items-stretch gap-2">
+                  {items.map((it, i) => (
+                    <button
+                      key={it.label}
+                      type="button"
+                      style={{ animationDelay: `${i * 45}ms` }}
+                      className="hq-fab-radial-item flex h-12 min-h-12 w-[10.5rem] max-w-[min(10.5rem,calc(100vw-48px))] shrink-0 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-left text-sm font-semibold text-[var(--text-primary)] shadow-xl backdrop-blur-md hq-press-mobile"
+                      onClick={it.onClick}
+                    >
+                      <it.icon className="h-5 w-5 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                      {it.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-haspopup="menu"
+                aria-label={open ? "Κλείσιμο γρήγορων ενεργειών" : "Γρήγορες ενέργειες"}
+                onClick={() => setOpen((o) => !o)}
+                className="pointer-events-auto flex h-14 w-14 min-h-14 min-w-14 items-center justify-center rounded-full border-2 border-[color-mix(in_srgb,var(--accent-gold)_85%,var(--bg-primary))] text-[var(--text-badge-on-gold)] shadow-[0_10px_40px_color-mix(in_srgb,var(--accent-gold)_42%,transparent)] transition hq-press-mobile"
+                style={{
+                  background: "linear-gradient(145deg, var(--accent-gold-light) 0%, var(--accent-gold) 40%, color-mix(in srgb, var(--accent-gold) 72%, var(--bg-primary)) 100%)",
+                  transform: open ? "rotate(45deg)" : undefined,
+                }}
+              >
+                <Plus className="h-7 w-7" strokeWidth={2.5} />
+              </button>
+            </div>
+          </>,
+          document.body,
+        )
+      : null;
+
+  return <>{portal}</>;
 }

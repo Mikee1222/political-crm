@@ -18,6 +18,8 @@ type MobileGlassHeaderProps = {
   /** Requests hub as “notifications” for managers */
   requestsHref?: string;
   hidden: boolean;
+  canInstall?: boolean;
+  onInstallClick?: () => void;
 };
 
 /**
@@ -37,6 +39,8 @@ export function MobileGlassHeader({
   onOpenSearch,
   requestsHref,
   hidden,
+  canInstall = false,
+  onInstallClick,
 }: MobileGlassHeaderProps) {
   return (
     <div
@@ -112,6 +116,15 @@ export function MobileGlassHeader({
               <Search className="h-[1.15rem] w-[1.15rem]" strokeWidth={2.1} />
             </Link>
           )}
+          {canInstall ? (
+            <button
+              type="button"
+              onClick={onInstallClick}
+              className="hq-press-mobile inline-flex h-8 items-center justify-center rounded-md border border-[var(--accent-gold)]/45 bg-[color-mix(in_srgb,var(--accent-gold)_22%,var(--bg-elevated))] px-2 text-[10px] font-bold text-[var(--text-primary)]"
+            >
+              Εγκατάσταση ↓
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
