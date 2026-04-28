@@ -188,9 +188,25 @@ export async function sendResendEmail(params: {
   }
 }
 
-export function getPublicBaseUrl(): string {
+/** CRM app (managers): e.g. https://crm.kkaragkounis.com */
+export function getCrmBaseUrl(): string {
   const u = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (u) return u.replace(/\/$/, "");
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`.replace(/\/$/, "");
   return "http://localhost:3000";
+}
+
+/**
+ * Public portal (πολίτες): e.g. https://kkaragkounis.com — `/portal/*`, επαλήθευση email, προσκλήσεις.
+ * Falls back to CRM base if unset (single-host deploys).
+ */
+export function getPortalBaseUrl(): string {
+  const u = process.env.NEXT_PUBLIC_PORTAL_URL?.trim();
+  if (u) return u.replace(/\/$/, "");
+  return getCrmBaseUrl();
+}
+
+/** @deprecated Use `getCrmBaseUrl()` — kept for callers that mean «δημόσιο URL του CRM». */
+export function getPublicBaseUrl(): string {
+  return getCrmBaseUrl();
 }

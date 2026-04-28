@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/admin";
-import { EmailTemplates, getPublicBaseUrl, sendResendEmail } from "@/lib/email";
+import { EmailTemplates, getPortalBaseUrl, sendResendEmail } from "@/lib/email";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { sendWebPushToSubscription } from "@/lib/push-server";
 import type webpush from "web-push";
@@ -28,7 +28,7 @@ export async function notifyRequestStatusToCitizen(input: {
 
   const full = `${(contact as { first_name?: string }).first_name ?? ""} ${(contact as { last_name?: string }).last_name ?? ""}`.trim();
   const greet = firstNameFromFull(full) || (contact as { first_name?: string }).first_name || "πολίτη";
-  const base = getPublicBaseUrl();
+  const base = getPortalBaseUrl();
   const t = EmailTemplates.requestStatusUpdate(
     greet,
     input.requestCode,

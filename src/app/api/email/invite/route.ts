@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireManagerEmail } from "@/lib/email-api-auth";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { EmailTemplates, getPublicBaseUrl, sendResendEmail } from "@/lib/email";
+import { EmailTemplates, getPortalBaseUrl, sendResendEmail } from "@/lib/email";
 import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (upE) {
       return NextResponse.json({ error: upE.message }, { status: 400 });
     }
-    const url = `${getPublicBaseUrl()}/portal/register?invite=${encodeURIComponent(token)}`;
+    const url = `${getPortalBaseUrl()}/portal/register?invite=${encodeURIComponent(token)}`;
     const t = EmailTemplates.portalInvitation(url);
     const r = await sendResendEmail({
       to: email,

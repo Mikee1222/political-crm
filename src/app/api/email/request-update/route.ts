@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireManagerEmail } from "@/lib/email-api-auth";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { EmailTemplates, getPublicBaseUrl, sendResendEmail } from "@/lib/email";
+import { EmailTemplates, getPortalBaseUrl, sendResendEmail } from "@/lib/email";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
 
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       String((req as { request_code: string }).request_code ?? ""),
       "—",
       String((req as { status: string | null }).status ?? "—"),
-      getPublicBaseUrl(),
+      getPortalBaseUrl(),
     );
     const r = await sendResendEmail({
       to: email,

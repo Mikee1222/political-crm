@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nextPaddedCode } from "@/lib/codes";
 import { inferRequestCategoryFromDescription } from "@/lib/request-auto-category";
 import { addDaysYmd, computeSlaStatus } from "@/lib/request-sla";
-import { EmailTemplates, getPublicBaseUrl, sendResendEmail } from "@/lib/email";
+import { EmailTemplates, getPortalBaseUrl, sendResendEmail } from "@/lib/email";
 
 export { slugifyNews } from "@/lib/slugify";
 
@@ -129,7 +129,7 @@ export async function registerPortalCitizen(input: {
     { onConflict: "id" },
   );
 
-  const u = EmailTemplates.verifyEmail(`${getPublicBaseUrl()}/portal/verify?token=${encodeURIComponent(verifyToken)}`);
+  const u = EmailTemplates.verifyEmail(`${getPortalBaseUrl()}/portal/verify?token=${encodeURIComponent(verifyToken)}`);
   void sendResendEmail({
     to: email,
     subject: u.subj,

@@ -21,8 +21,10 @@ npm install
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (ρόλος διακομιστή — για admin APIs)
+- `NEXT_PUBLIC_APP_URL` — βάση **CRM** (production: `https://crm.kkaragkounis.com`)
+- `NEXT_PUBLIC_PORTAL_URL` — βάση **portal πολιτών** (production: `https://kkaragkounis.com`; αν κενό, χρησιμοποιείται το CRM URL)
 - `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_FROM_NUMBER`
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (ίδιο URL με το Google Cloud Console)
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (ίδιο URL με το Google Cloud Console — production: `https://crm.kkaragkounis.com/api/auth/google/callback`)
 
 3. Τρέξε το SQL schema στο Supabase SQL Editor:
 
