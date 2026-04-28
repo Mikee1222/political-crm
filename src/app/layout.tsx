@@ -60,16 +60,16 @@ export default function RootLayout({
       lang="el"
       data-theme="dark"
       suppressHydrationWarning
-      className={`${inter.variable} ${geistMono.variable} h-full min-h-full min-h-[100dvh] w-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full min-h-full min-h-[100dvh] w-full min-w-full max-w-none antialiased`}
     >
       <body
-        className="m-0 flex min-h-full min-h-screen min-h-[100dvh] min-h-[-webkit-fill-available] w-full max-w-full flex-col overflow-x-hidden p-0 text-[var(--text-primary)] leading-[1.6]"
+        className="m-0 flex min-h-full min-h-screen min-h-[100dvh] min-h-[-webkit-fill-available] w-full min-w-full flex-col overflow-x-hidden p-0 text-[var(--text-primary)] leading-[1.6]"
         suppressHydrationWarning
       >
         <Script id="crm-theme-init" strategy="beforeInteractive">
           {`(function(){try{var t=localStorage.getItem('crm-theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`}
         </Script>
-        <div className="flex min-h-screen min-h-[100dvh] w-full max-w-full min-w-0 flex-1 flex-col overflow-x-hidden bg-[#080D1A]">
+        <div className="crm-root flex min-h-screen min-h-[100dvh] w-full min-w-full max-w-none flex-1 flex-col overflow-x-hidden bg-[#080D1A]">
           <PwaServiceWorkerRegister />
           <ThemeProvider>
             <FormToastProvider>
