@@ -1,7 +1,7 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import type { MessageParam, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
+import type { MessageParam, Tool, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import { type UserProfile } from "@/lib/auth-helpers";
 import {
   ALEX_TOOLS,
@@ -41,6 +41,12 @@ const bodySchema = z.object({
 });
 
 const MODEL = "claude-sonnet-4-6";
+
+/** Anthropic server-side web search (no extra API key; executed by Anthropic). */
+const ALEX_WEB_SEARCH_TOOL: Tool = {
+  type: "web_search_20250305",
+  name: "web_search",
+};
 
 type AssistantActionBlob = {
   findResults?: FindRow[];
@@ -248,7 +254,7 @@ export async function POST(request: NextRequest) {
             max_tokens: 4096,
             system: systemPrompt,
             messages,
-            tools: ALEX_TOOLS,
+            tools: [...ALEX_TOOLS, ALEX_WEB_SEARCH_TOOL],
           });
           s.on("text", (d) => {
             fullTextParts.push(d);
@@ -260,10 +266,16 @@ export async function POST(request: NextRequest) {
           const final = await s.finalMessage();
           const reason = final.stop_reason;
 
+          if (reason === "pause_turn") {
+            messages = [...messages, { role: "assistant", content: final.content }];
+            continue;
+          }
+
           if (reason === "tool_use") {
             const toolResultBlocks: ToolResultBlockParam[] = [];
             for (const block of final.content) {
               if (block.type !== "tool_use") continue;
+              if (block.name === "web_search") continue;
               const tr = await runAlexTool(
                 block.name,
                 block.input as Record<string, unknown>,
@@ -299,7 +311,8 @@ export async function POST(request: NextRequest) {
               });
             }
             if (toolResultBlocks.length === 0) {
-              break;
+              messages = [...messages, { role: "assistant", content: final.content }];
+              continue;
             }
             messages = [
               ...messages,
