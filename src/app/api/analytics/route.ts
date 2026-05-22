@@ -11,13 +11,7 @@ import { activityGreekLine, firstNameFromFull, formatTimeAgo } from "@/lib/activ
 
 export const dynamic = "force-dynamic";
 
-function ageBucket(age: number | null | undefined): string {
-  if (age == null || !Number.isFinite(age)) return "Άγνωστο";
-  if (age < 30) return "<30";
-  if (age <= 45) return "30–45";
-  if (age <= 60) return "45–60";
-  return "60+";
-}
+const NIL_GROUP_UUID = "00000000-0000-0000-0000-000000000000";
 
 type Trend = "up" | "down" | "flat";
 
@@ -40,105 +34,141 @@ export async function GET() {
     const d0 = startOfDay(now);
     const from60 = startOfDay(subDays(d0, 60));
     const from30d = startOfDay(subDays(d0, 30));
-
-    const { data: allContacts, error: cErr } = await supabase
-      .from("contacts")
-      .select("municipality, political_stance, call_status, age, created_at");
-    if (cErr) return NextResponse.json({ error: cErr.message }, { status: 400 });
-
-    type CRow = {
-      municipality?: string | null;
-      political_stance?: string | null;
-      call_status?: string | null;
-      age?: number | null;
-      created_at?: string | null;
-    };
-
-    const rows = (allContacts ?? []) as CRow[];
-    let total = 0;
-    let positive = 0;
-    let new30 = 0;
-    let newPrev30 = 0;
-    let oldCohortPos = 0;
-    let oldCohortTot = 0;
-
-    const muni: Record<string, number> = {};
-    const muniPos: Record<string, number> = {};
-    const stance: Record<string, number> = {};
-    const callSt: Record<string, number> = {};
-    const ages: Record<string, number> = { "<30": 0, "30–45": 0, "45–60": 0, "60+": 0, Άγνωστο: 0 };
+    const from30Iso = from30d.toISOString();
+    const from60Iso = from60.toISOString();
 
     const monday0 = startOfWeek(d0, { weekStartsOn: 1 });
     const weekOrder: string[] = [];
-    const weekCounts: Record<string, number> = {};
     for (let i = 11; i >= 0; i -= 1) {
       const wstart = addWeeks(monday0, -i);
-      const id = format(wstart, "yyyy-MM-dd");
-      weekOrder.push(id);
-      weekCounts[id] = 0;
+      weekOrder.push(format(wstart, "yyyy-MM-dd"));
+    }
+    const twelveWeeksSince = addWeeks(monday0, -11).toISOString();
+
+    const { data: posGroup } = await supabase
+      .from("contact_groups")
+      .select("id")
+      .ilike("name", "ΘΕΤΙΚΟΣ%")
+      .single();
+
+    const posGroupId = posGroup?.id ?? NIL_GROUP_UUID;
+
+    const [
+      totalR,
+      positiveR,
+      new30R,
+      newPrev30R,
+      oldCohortTotR,
+      oldCohortPosR,
+      municipalityRes,
+      callStatusRes,
+      groupRes,
+      ageRes,
+      muniPosRes,
+      weeklyRes,
+    ] = await Promise.all([
+      supabase.from("contacts").select("*", { count: "exact", head: true }),
+      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("group_id", posGroupId),
+      supabase.from("contacts").select("*", { count: "exact", head: true }).gte("created_at", from30Iso),
+      supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", from60Iso)
+        .lt("created_at", from30Iso),
+      supabase.from("contacts").select("*", { count: "exact", head: true }).lt("created_at", from30Iso),
+      supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .lt("created_at", from30Iso)
+        .eq("group_id", posGroupId),
+      supabase.rpc("get_municipality_contact_counts"),
+      supabase.rpc("get_call_status_distribution"),
+      supabase.rpc("get_group_distribution"),
+      supabase.rpc("get_age_group_distribution"),
+      supabase.rpc("get_municipality_positive_breakdown"),
+      supabase.rpc("get_contacts_created_weekly_counts", { since_ts: twelveWeeksSince }),
+    ]);
+
+    const contactErr =
+      totalR.error ??
+      positiveR.error ??
+      new30R.error ??
+      newPrev30R.error ??
+      oldCohortTotR.error ??
+      oldCohortPosR.error ??
+      municipalityRes.error ??
+      callStatusRes.error ??
+      groupRes.error ??
+      ageRes.error ??
+      muniPosRes.error ??
+      weeklyRes.error;
+
+    if (contactErr) {
+      return NextResponse.json({ error: contactErr.message }, { status: 400 });
     }
 
-    for (const r of rows) {
-      total += 1;
-      const cs = (r.call_status ?? "").trim();
-      if (cs === "Positive") positive += 1;
-
-      const cr = r.created_at;
-      if (cr) {
-        const t = new Date(cr);
-        if (t >= from30d) new30 += 1;
-        else if (t >= from60 && t < from30d) newPrev30 += 1;
-        if (t < from30d) {
-          oldCohortTot += 1;
-          if (cs === "Positive") oldCohortPos += 1;
-        }
-      }
-
-      const mu = r.municipality?.trim() || "Άνευ δήμου";
-      muni[mu] = (muni[mu] ?? 0) + 1;
-      if (cs === "Positive") muniPos[mu] = (muniPos[mu] ?? 0) + 1;
-
-      const ps = r.political_stance?.trim() || "Άγνωστο";
-      stance[ps] = (stance[ps] ?? 0) + 1;
-      const cst = cs || "Άγνωστο";
-      callSt[cst] = (callSt[cst] ?? 0) + 1;
-      const b = ageBucket(r.age ?? null);
-      ages[b] = (ages[b] ?? 0) + 1;
-
-      if (cr) {
-        try {
-          const ws = format(startOfWeek(parseISO(String(cr).slice(0, 10)), { weekStartsOn: 1 }), "yyyy-MM-dd");
-          if (weekCounts[ws] !== undefined) weekCounts[ws] += 1;
-        } catch {
-          // ignore bad dates
-        }
-      }
-    }
+    const total = totalR.count ?? 0;
+    const positive = positiveR.count ?? 0;
+    const new30 = new30R.count ?? 0;
+    const newPrev30 = newPrev30R.count ?? 0;
+    const oldCohortTot = oldCohortTotR.count ?? 0;
+    const oldCohortPos = oldCohortPosR.count ?? 0;
 
     const positivePercent = total > 0 ? Math.round((positive / total) * 1000) / 10 : 0;
-    const oldRate = oldCohortTot > 0 ? (oldCohortPos / oldCohortTot) * 100 : positivePercent;
-    const positiveTrend = trendDir(positivePercent, Math.round(oldRate * 10) / 10, 0.3);
+    const oldRate = oldCohortTot > 0 ? Math.round((oldCohortPos / oldCohortTot) * 1000) / 10 : positivePercent;
+    const positiveTrend = trendDir(positivePercent, oldRate, 0.3);
+    const newContactsTrend = trendDir(new30, newPrev30, 0.01);
 
-    const topMunicipalities = Object.entries(muni)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([name, value]) => ({ name, value }));
+    const municipalityRows = (municipalityRes.data ?? []) as Array<{ municipality: string; count: number }>;
+    const topMunicipalities = municipalityRows.map((r) => ({
+      name: r.municipality,
+      value: Number(r.count),
+    }));
+    const top10Municipalities = topMunicipalities.slice(0, 10);
 
-    const top10Municipalities = Object.entries(muni)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, value]) => ({ name, value }));
+    const byCallStatus = ((callStatusRes.data ?? []) as Array<{ call_status: string; count: number }>).map(
+      (r) => ({
+        name: r.call_status,
+        value: Number(r.count),
+      }),
+    );
 
-    const muniPositiveRows = Object.keys(muni)
-      .map((name) => {
-        const tot = muni[name] ?? 0;
-        const pos = muniPos[name] ?? 0;
-        const rate = tot > 0 ? Math.round((pos / tot) * 1000) / 10 : 0;
-        return { name, total: tot, positive: pos, rate };
-      })
-      .filter((x) => x.total >= 2 && x.positive > 0)
-      .sort((a, b) => b.rate - a.rate)
-      .slice(0, 12);
+    const byPoliticalStance = ((groupRes.data ?? []) as Array<{ group_name: string; count: number }>)
+      .filter((r) => Number(r.count) > 0)
+      .map((r) => ({
+        name: r.group_name,
+        value: Number(r.count),
+      }));
+
+    const byAgeGroup = ((ageRes.data ?? []) as Array<{ age_group: string; count: number }>)
+      .filter((r) => Number(r.count) > 0)
+      .map((r) => ({
+        name: r.age_group,
+        value: Number(r.count),
+      }));
+
+    const muniPositiveRows = ((muniPosRes.data ?? []) as Array<{
+      municipality: string;
+      total: number;
+      positive: number;
+    }>).map((r) => {
+      const tot = Number(r.total);
+      const pos = Number(r.positive);
+      const rate = tot > 0 ? Math.round((pos / tot) * 1000) / 10 : 0;
+      return { name: r.municipality, total: tot, positive: pos, rate };
+    });
+
+    const weekMap = new Map<string, number>();
+    for (const id of weekOrder) weekMap.set(id, 0);
+    for (const row of (weeklyRes.data ?? []) as Array<{ week_start: string; count: number }>) {
+      const key = String(row.week_start).slice(0, 10);
+      if (weekMap.has(key)) weekMap.set(key, Number(row.count));
+    }
+    const contactsPerWeek = weekOrder.map((id) => ({
+      weekStart: id,
+      label: format(parseISO(id), "d MMM", { locale: el }),
+      count: weekMap.get(id) ?? 0,
+    }));
 
     const from = startOfDay(subDays(new Date(), 30)).toISOString();
     const { data: calls30, error: callErr } = await supabase
@@ -200,7 +230,6 @@ export async function GET() {
       .map(([name, value]) => ({ name, value }));
 
     const completedTrend = trendDir(completedLast30, completedPrev30, 0.01);
-    const newContactsTrend = trendDir(new30, newPrev30, 0.01);
 
     const { data: actRows } = await supabase
       .from("activity_log")
@@ -236,12 +265,6 @@ export async function GET() {
       return { id: r.id, text, timeAgo: formatTimeAgo(r.created_at) };
     });
 
-    const contactsPerWeek = weekOrder.map((id) => ({
-      weekStart: id,
-      label: format(parseISO(id), "d MMM", { locale: el }),
-      count: weekCounts[id] ?? 0,
-    }));
-
     return NextResponse.json({
       kpis: {
         totalContacts: total,
@@ -254,11 +277,9 @@ export async function GET() {
       },
       byMunicipality: topMunicipalities,
       top10Municipalities,
-      byPoliticalStance: Object.entries(stance).map(([name, value]) => ({ name, value })),
-      byCallStatus: Object.entries(callSt).map(([name, value]) => ({ name, value })),
-      byAgeGroup: Object.entries(ages)
-        .filter(([, v]) => v > 0)
-        .map(([name, value]) => ({ name, value })),
+      byPoliticalStance,
+      byCallStatus,
+      byAgeGroup,
       callsOverTime,
       campaignSuccess,
       contactsPerWeek,
