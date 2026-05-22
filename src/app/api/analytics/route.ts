@@ -45,6 +45,8 @@ export async function GET() {
     }
     const twelveWeeksSince = addWeeks(monday0, -11).toISOString();
 
+    // Run `NOTIFY pgrst, 'reload schema';` in Supabase SQL editor if RPC calls fail (schema cache).
+
     const { data: posGroup } = await supabase
       .from("contact_groups")
       .select("id")
@@ -81,11 +83,11 @@ export async function GET() {
         .select("*", { count: "exact", head: true })
         .lt("created_at", from30Iso)
         .eq("group_id", posGroupId),
-      supabase.rpc("get_municipality_contact_counts"),
-      supabase.rpc("get_call_status_distribution"),
-      supabase.rpc("get_group_distribution"),
-      supabase.rpc("get_age_group_distribution"),
-      supabase.rpc("get_municipality_positive_breakdown"),
+      supabase.rpc("get_municipality_contact_counts", {}),
+      supabase.rpc("get_call_status_distribution", {}),
+      supabase.rpc("get_group_distribution", {}),
+      supabase.rpc("get_age_group_distribution", {}),
+      supabase.rpc("get_municipality_positive_breakdown", {}),
       supabase.rpc("get_contacts_created_weekly_counts", { since_ts: twelveWeeksSince }),
     ]);
 
