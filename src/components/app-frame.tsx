@@ -432,7 +432,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { profile, loading: profileLoading, sessionResolved } = useProfile();
   const isPortal = pathname === "/portal" || pathname.startsWith("/portal/");
-  const isCrmLoginPublic = pathname === "/login";
+  const isCrmLoginPublic = pathname === "/login" || pathname === "/enter-code";
   const [openRequestsCount, setOpenRequestsCount] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);

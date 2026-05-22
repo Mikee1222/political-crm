@@ -59,6 +59,13 @@ function isPollPublicPath(pathname: string) {
   return false;
 }
 
+function isAccessCodeExemptPath(pathname: string) {
+  if (pathname === "/enter-code") return true;
+  if (pathname === "/login") return true;
+  if (pathname === "/api/access-code/verify") return true;
+  return false;
+}
+
 function jsonWithSession(
   _request: NextRequest,
   message: string,
@@ -293,6 +300,36 @@ export async function middleware(request: NextRequest) {
       } else {
         return NextResponse.redirect(portalDashboardRedirectUrl());
       }
+    }
+  }
+
+  if (
+    isLoggedIn &&
+    !isPortalUser &&
+    !isPortalAppPath(pathname) &&
+    !isAccessCodeExemptPath(pathname) &&
+    role !== "admin"
+  ) {
+    const { data: grant } = await supabase
+      .from("access_code_grants")
+      .select("expires_at")
+      .eq("user_id", authUser!.id)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+
+    if (!grant) {
+      if (pathname.startsWith("/api/")) {
+        if (pathname === "/api/access-code/verify") {
+          return sessionResponse;
+        }
+        return jsonWithSession(
+          request,
+          "Απαιτείται κλειδαριθμός πρόσβασης. Μεταβείτε στη σελίδα εισαγωγής κωδικού.",
+          403,
+          sessionResponse,
+        );
+      }
+      return redirectWithSession(request, "/enter-code", sessionResponse);
     }
   }
 
