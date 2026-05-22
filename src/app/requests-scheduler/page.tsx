@@ -23,6 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutGrid,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   RefreshCw,
   XCircle,
@@ -193,6 +195,7 @@ export default function RequestsSchedulerPage() {
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("queue");
   const [scheduleOpenId, setScheduleOpenId] = useState<string | null>(null);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
+  const [queueOpen, setQueueOpen] = useState(true);
   const [queueSearch, setQueueSearch] = useState("");
   const [kanbanSearch, setKanbanSearch] = useState("");
   const [kanbanCategory, setKanbanCategory] = useState("");
@@ -535,54 +538,91 @@ export default function RequestsSchedulerPage() {
         )}
       >
         {showQueuePanel ? (
-          <section
+          <div
             className={cn(
-              "flex w-80 max-w-full shrink-0 flex-col rounded-2xl border border-border bg-card shadow-[var(--card-shadow)]",
+              "flex shrink-0 overflow-hidden transition-all duration-300",
               mobilePanel === "view" ? "hidden lg:flex" : "flex",
+              "max-lg:w-full max-lg:max-w-full",
+              queueOpen ? "lg:w-80" : "lg:w-10",
             )}
-            aria-label="Ουρά αιτημάτων"
           >
-            <div className="border-b border-border px-4 py-3">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-[var(--accent-gold)]">
-                Ουρά ({filteredQueue.length})
-              </h2>
-              <p className="mt-1 text-xs text-muted-foreground">Χωρίς προγραμματισμένη ημερομηνία</p>
-              <input
-                type="search"
-                value={queueSearch}
-                onChange={(e) => setQueueSearch(e.target.value)}
-                placeholder="Αναζήτηση..."
-                className="mb-0 mt-3 w-full rounded-lg border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_50%,var(--bg-card))] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {loading && filteredQueue.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">Φόρτωση…</p>
-              ) : filteredQueue.length === 0 ? (
-                <EmptyState
-                  title="Κενή ουρά"
-                  subtitle="Όλα τα ενεργά αιτήματα έχουν προγραμματιστεί ή δεν υπάρχουν ανοιχτά."
-                  className="!py-8"
-                />
-              ) : (
-                <ul className="space-y-3">
-                  {filteredQueue.map((r) => (
-                    <QueueCard
-                      key={r.id}
-                      request={r}
-                      scheduleOpen={scheduleOpenId === r.id}
-                      scheduling={schedulingId === r.id}
-                      onToggleSchedule={() =>
-                        setScheduleOpenId((id) => (id === r.id ? null : r.id))
-                      }
-                      onSchedule={(date) => void scheduleRequest(r.id, date)}
-                      onReject={() => void handleReject(r.id)}
+            {!queueOpen ? (
+              <button
+                type="button"
+                onClick={() => setQueueOpen(true)}
+                className="hidden h-full min-h-[calc(100vh-220px)] w-10 flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card text-muted-foreground shadow-[var(--card-shadow)] transition-colors hover:text-foreground lg:flex"
+                aria-label="Άνοιγμα ουράς"
+              >
+                <PanelLeftOpen className="h-4 w-4" />
+                <span className="text-[10px] uppercase tracking-widest [writing-mode:vertical-lr] rotate-180">
+                  Ουρά
+                </span>
+              </button>
+            ) : null}
+            {queueOpen ? (
+              <section
+                className="flex min-h-[calc(100vh-220px)] w-full max-w-full flex-col rounded-2xl border border-border bg-card shadow-[var(--card-shadow)] lg:w-80"
+                aria-label="Ουρά αιτημάτων"
+              >
+                <div className="border-b border-border px-4 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-xs font-bold uppercase tracking-widest text-[var(--accent-gold)]">
+                        Ουρά ({filteredQueue.length})
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-foreground">Χωρίς προγραμματισμένη ημερομηνία</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setQueueOpen((p) => !p)}
+                      className="hidden shrink-0 items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground lg:flex"
+                    >
+                      {queueOpen ? (
+                        <PanelLeftClose className="h-4 w-4" />
+                      ) : (
+                        <PanelLeftOpen className="h-4 w-4" />
+                      )}
+                      {queueOpen ? "Σύμπτυξη" : "Ουρά"}
+                    </button>
+                  </div>
+                  <input
+                    type="search"
+                    value={queueSearch}
+                    onChange={(e) => setQueueSearch(e.target.value)}
+                    placeholder="Αναζήτηση..."
+                    className="mb-0 mt-3 w-full rounded-lg border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_50%,var(--bg-card))] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  {loading && filteredQueue.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">Φόρτωση…</p>
+                  ) : filteredQueue.length === 0 ? (
+                    <EmptyState
+                      title="Κενή ουρά"
+                      subtitle="Όλα τα ενεργά αιτήματα έχουν προγραμματιστεί ή δεν υπάρχουν ανοιχτά."
+                      className="!py-8"
                     />
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
+                  ) : (
+                    <ul className="space-y-3">
+                      {filteredQueue.map((r) => (
+                        <QueueCard
+                          key={r.id}
+                          request={r}
+                          scheduleOpen={scheduleOpenId === r.id}
+                          scheduling={schedulingId === r.id}
+                          onToggleSchedule={() =>
+                            setScheduleOpenId((id) => (id === r.id ? null : r.id))
+                          }
+                          onSchedule={(date) => void scheduleRequest(r.id, date)}
+                          onReject={() => void handleReject(r.id)}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </section>
+            ) : null}
+          </div>
         ) : null}
 
         <section
@@ -799,8 +839,8 @@ export default function RequestsSchedulerPage() {
               </div>
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-x-auto p-3">
-              <div className="flex min-h-96 gap-2">
+            <div className="min-h-0 flex-1 overflow-x-auto overflow-y-visible p-3">
+              <div className="flex min-h-96 gap-2 overflow-visible">
                 {days.map((ymd) => {
                   const d = parseISO(ymd);
                   const items = scheduledByDay.get(ymd) ?? [];
@@ -809,7 +849,7 @@ export default function RequestsSchedulerPage() {
                     <div
                       key={ymd}
                       className={cn(
-                        "flex min-h-96 min-w-0 flex-1 flex-col rounded-xl border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_35%,var(--bg-card))]",
+                        "flex min-h-96 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_35%,var(--bg-card))]",
                         today && "ring-1 ring-[var(--accent-gold)]/50",
                       )}
                     >
@@ -828,7 +868,7 @@ export default function RequestsSchedulerPage() {
                       </div>
                       <ul
                         className={cn(
-                          "flex flex-1 flex-col gap-2 overflow-y-auto p-2",
+                          "flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto p-2",
                           items.length > 0 ? "max-h-80" : "",
                         )}
                       >
@@ -1084,7 +1124,7 @@ function CalendarCard({
               <CheckCircle2 className="h-5 w-5 text-[var(--success)]" />
             </button>
             {confirmOpen ? (
-              <div className="absolute right-0 top-9 z-50 w-48 rounded-lg border border-border bg-card p-2 shadow-lg">
+              <div className="absolute right-0 top-8 z-[100] w-44 rounded-lg border border-border bg-card p-3 shadow-xl">
                 <p className="text-[10px] text-foreground">Να επισημανθεί ως Ολοκληρώθηκε;</p>
                 <div className="mt-2 flex gap-1">
                   <button
