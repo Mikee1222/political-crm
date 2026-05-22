@@ -7,6 +7,7 @@ export type ActivityAction =
   | "call_made"
   | "request_created"
   | "request_updated"
+  | "request_scheduled"
   | "request_note_added"
   | "campaign_started"
   | "task_updated";
