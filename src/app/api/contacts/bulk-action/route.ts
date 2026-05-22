@@ -9,11 +9,14 @@ import { sendWhatsAppMessage, isWhatsAppConfigured } from "@/lib/whatsapp";
 export const dynamic = 'force-dynamic';
 const schema = z.object({
   contact_ids: z.array(z.string()).min(1),
-  action: z.enum(["update_status", "add_to_campaign", "delete", "send_whatsapp"]),
+  action: z.enum(["update_status", "add_to_campaign", "delete", "send_whatsapp", "update_field"]),
   value: z.string().optional(),
+  field: z.string().optional(),
 });
 
 const STATUSES = new Set(["Pending", "Positive", "Negative", "No Answer"]);
+const PRIORITIES = new Set(["Low", "Medium", "High", "Urgent"]);
+const UPDATE_FIELDS = new Set(["call_status", "group_id", "priority"]);
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +31,31 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Άκυρα δεδομένα" }, { status: 400 });
   }
-  const { contact_ids, action, value } = parsed.data;
+  const { contact_ids, action, value, field } = parsed.data;
+
+  if (action === "update_field") {
+    const f = field?.trim();
+    if (!f || !UPDATE_FIELDS.has(f)) {
+      return NextResponse.json({ error: "Άκυρο πεδίο" }, { status: 400 });
+    }
+    const v = value ?? "";
+    if (f === "call_status") {
+      if (!STATUSES.has(v)) {
+        return NextResponse.json({ error: "Άκυρη κατάσταση" }, { status: 400 });
+      }
+    } else if (f === "priority") {
+      if (!PRIORITIES.has(v)) {
+        return NextResponse.json({ error: "Άκυρη προτεραιότητα" }, { status: 400 });
+      }
+    } else if (f === "group_id" && v) {
+      const { data: g, error: ge } = await supabase.from("contact_groups").select("id").eq("id", v).maybeSingle();
+      if (ge || !g) return NextResponse.json({ error: "Η ομάδα δεν βρέθηκε" }, { status: 400 });
+    }
+    const patch: Record<string, string | null> = { [f]: f === "group_id" && !v ? null : v };
+    const { error } = await supabase.from("contacts").update(patch).in("id", contact_ids);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, updated: contact_ids.length });
+  }
 
   if (action === "update_status") {
     if (!value || !STATUSES.has(value)) {

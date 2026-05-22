@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState, type ReactNode } from "react";
-import { Copy, Download, Phone, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Check, Copy, Download, ExternalLink, Pencil, Phone, Sparkles, Trash2, X } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
+import { cn } from "@/lib/utils";
+import type { ContactGroupRow } from "@/lib/contact-groups";
 import { useProfile } from "@/contexts/profile-context";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -23,6 +25,18 @@ type C = {
 type DupPair = { contactA: C; contactB: C; score: number; reasons: string[] };
 
 type ToolId = "dup" | "phone" | "predict" | "export";
+
+type PhoneIssue = "missing" | "invalid" | "duplicate";
+
+type SelectableRow = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  municipality: string | null;
+  contact_code?: string | null;
+  issue?: PhoneIssue;
+};
 
 const GOLD_ICON =
   "flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#E8C96B] via-[#C9A84C] to-[#8b6914] text-[#0A1628] shadow-[0_8px_28px_rgba(201,168,76,0.35)] ring-2 ring-white/10";
@@ -61,6 +75,163 @@ export default function DataToolsPage() {
   const { showToast } = useFormToast();
   const [scoring, setScoring] = useState(false);
   const [scoreMsg, setScoreMsg] = useState<string | null>(null);
+  const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkEditField, setBulkEditField] = useState("call_status");
+  const [bulkEditValue, setBulkEditValue] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkEditBusy, setBulkEditBusy] = useState(false);
+  const [groups, setGroups] = useState<ContactGroupRow[]>([]);
+
+  useEffect(() => {
+    setSelectedContacts(new Set());
+  }, [activeTool]);
+
+  useEffect(() => {
+    void fetchWithTimeout("/api/groups")
+      .then(async (r) => {
+        if (!r.ok) return;
+        const d = (await r.json()) as { groups?: ContactGroupRow[] };
+        setGroups(d.groups ?? []);
+      })
+      .catch(() => setGroups([]));
+  }, []);
+
+  const phoneResults = useMemo((): SelectableRow[] => {
+    if (!phoneAudit) return [];
+    const rows: SelectableRow[] = [];
+    for (const c of phoneAudit.empty) {
+      rows.push({
+        id: c.id,
+        first_name: c.first_name,
+        last_name: c.last_name,
+        phone: c.phone,
+        municipality: c.municipality,
+        issue: "missing",
+      });
+    }
+    for (const c of phoneAudit.invalid) {
+      rows.push({
+        id: c.id,
+        first_name: c.first_name,
+        last_name: c.last_name,
+        phone: c.phone,
+        municipality: c.municipality,
+        issue: "invalid",
+      });
+    }
+    for (const g of phoneAudit.phoneDuplicates) {
+      for (const c of g.contacts) {
+        rows.push({
+          id: c.id,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          phone: c.phone,
+          municipality: c.municipality,
+          issue: "duplicate",
+        });
+      }
+    }
+    return rows;
+  }, [phoneAudit]);
+
+  const dupContactIds = useMemo(() => {
+    if (!dups?.length) return [];
+    return [...new Set(dups.flatMap((p) => [p.contactA.id, p.contactB.id]))];
+  }, [dups]);
+
+  const predictIds = useMemo(() => (predList ?? []).map((r) => r.contact_id), [predList]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedContacts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (ids: string[]) => {
+    if (ids.length > 0 && ids.every((id) => selectedContacts.has(id))) {
+      setSelectedContacts(new Set());
+    } else {
+      setSelectedContacts(new Set(ids));
+    }
+  };
+
+  const pruneSelectionFromResults = () => {
+    const sel = selectedContacts;
+    setPhoneAudit((prev) => {
+      if (!prev) return prev;
+      return {
+        empty: prev.empty.filter((c) => !sel.has(c.id)),
+        invalid: prev.invalid.filter((c) => !sel.has(c.id)),
+        phoneDuplicates: prev.phoneDuplicates
+          .map((g) => ({ ...g, contacts: g.contacts.filter((c) => !sel.has(c.id)) }))
+          .filter((g) => g.contacts.length > 0),
+      };
+    });
+    setDups((prev) =>
+      (prev ?? []).filter((p) => !sel.has(p.contactA.id) && !sel.has(p.contactB.id)),
+    );
+    setPredList((prev) => (prev ?? []).filter((r) => !sel.has(r.contact_id)));
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedContacts.size === 0) return;
+    if (!confirm(`Να διαγραφούν ${selectedContacts.size} επαφές; Η ενέργεια δεν αναιρείται.`)) return;
+    setBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedContacts);
+      const res = await fetchWithTimeout("/api/contacts/manager-bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_confirmed: true, contact_ids: ids }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; deleted?: number };
+      if (!res.ok) {
+        showToast(j.error ?? "Σφάλμα διαγραφής", "error");
+        return;
+      }
+      pruneSelectionFromResults();
+      setSelectedContacts(new Set());
+      showToast(`Διαγράφηκαν ${j.deleted ?? ids.length} επαφές.`, "success");
+    } catch {
+      showToast("Σφάλμα δικτύου", "error");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleBulkEdit = async () => {
+    if (!bulkEditValue || selectedContacts.size === 0) return;
+    setBulkEditBusy(true);
+    try {
+      const res = await fetchWithTimeout("/api/contacts/bulk-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_field",
+          contact_ids: Array.from(selectedContacts),
+          field: bulkEditField,
+          value: bulkEditValue,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Σφάλμα ενημέρωσης", "error");
+        return;
+      }
+      setShowBulkEdit(false);
+      setBulkEditValue("");
+      setSelectedContacts(new Set());
+      showToast("Οι επαφές ενημερώθηκαν.", "success");
+    } catch {
+      showToast("Σφάλμα δικτύου", "error");
+    } finally {
+      setBulkEditBusy(false);
+    }
+  };
 
   const runDup = useCallback(async () => {
     setActiveTool("dup");
@@ -262,12 +433,34 @@ export default function DataToolsPage() {
 
         {resultsOpen && (
           <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
+            {(activeTool === "dup" || activeTool === "phone" || activeTool === "predict") && (
+              <BulkActionBar
+                count={selectedContacts.size}
+                onEdit={() => {
+                  setBulkEditField("call_status");
+                  setBulkEditValue("");
+                  setShowBulkEdit(true);
+                }}
+                onDelete={() => void handleBulkDelete()}
+                onClear={() => setSelectedContacts(new Set())}
+                deleting={bulkDeleting}
+              />
+            )}
+
             {activeTool === "dup" && (
               <div className="space-y-4">
                 {dups === null && (
                   <p className="text-sm text-[var(--text-secondary)]">Πατήστε «Έλεγχος διπλοτύπων» στο παραπάνω κουτί.</p>
                 )}
                 {dups && dups.length === 0 && <p className="text-sm text-[#16A34A]">Δεν βρέθηκαν ύποπτα ζεύγη.</p>}
+                {dups && dups.length > 0 && (
+                  <SelectAllHeader
+                    ids={dupContactIds}
+                    count={dupContactIds.length}
+                    selected={selectedContacts}
+                    onToggleAll={toggleSelectAll}
+                  />
+                )}
                 {dups &&
                   dups.length > 0 &&
                   dups.map((p) => (
@@ -277,11 +470,19 @@ export default function DataToolsPage() {
                     >
                       <div>
                         <p className="mb-2 text-xs font-semibold uppercase text-[var(--text-secondary)]">Επαφή Α</p>
-                        <CardSide c={p.contactA} />
+                        <DupContactPick
+                          c={p.contactA}
+                          selected={selectedContacts.has(p.contactA.id)}
+                          onToggle={() => toggleSelect(p.contactA.id)}
+                        />
                       </div>
                       <div>
                         <p className="mb-2 text-xs font-semibold uppercase text-[var(--text-secondary)]">Επαφή Β</p>
-                        <CardSide c={p.contactB} />
+                        <DupContactPick
+                          c={p.contactB}
+                          selected={selectedContacts.has(p.contactB.id)}
+                          onToggle={() => toggleSelect(p.contactB.id)}
+                        />
                       </div>
                       <div className="flex flex-col gap-2 border-t border-[var(--border)] pt-3 md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2">
@@ -324,68 +525,27 @@ export default function DataToolsPage() {
                   <p className="text-sm text-[var(--text-secondary)]">Πατήστε «Έλεγχος τηλεφώνων» στο παραπάνω κουτί.</p>
                 )}
                 {phoneAudit && (
-                  <div className="space-y-6">
-                    {phoneAudit.empty.length > 0 && (
-                      <div className={lux.card + " !shadow-sm"}>
-                        <h2 className={lux.sectionTitle + " mb-3"}>Κενός αριθμός</h2>
-                        <ul className="space-y-2">
-                          {phoneAudit.empty.map((c) => (
-                            <li
-                              key={c.id}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3"
-                            >
-                              <span>
-                                {c.first_name} {c.last_name}
-                              </span>
-                              <Link href={`/contacts/${c.id}`} className={lux.btnSecondary + " !py-1.5 !text-xs"}>
-                                Επεξεργασία
-                              </Link>
-                            </li>
+                  <div className="space-y-4">
+                    {phoneResults.length > 0 ? (
+                      <>
+                        <SelectAllHeader
+                          ids={phoneResults.map((c) => c.id)}
+                          count={phoneResults.length}
+                          selected={selectedContacts}
+                          onToggleAll={toggleSelectAll}
+                        />
+                        <div className="space-y-2">
+                          {phoneResults.map((c) => (
+                            <SelectableContactRow
+                              key={`${c.id}-${c.issue}`}
+                              contact={c}
+                              selected={selectedContacts.has(c.id)}
+                              onToggle={() => toggleSelect(c.id)}
+                            />
                           ))}
-                        </ul>
-                      </div>
-                    )}
-                    {phoneAudit.invalid.length > 0 && (
-                      <div className={lux.card + " !shadow-sm"}>
-                        <h2 className={lux.sectionTitle + " mb-3"}>Μη έγκυρα τηλέφωνα</h2>
-                        <ul className="space-y-2">
-                          {phoneAudit.invalid.map((c) => (
-                            <li
-                              key={c.id}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-[#E2E8F0]"
-                            >
-                              <span>
-                                {c.first_name} {c.last_name} — <em>{c.problem}</em>
-                              </span>
-                              <Link href={`/contacts/${c.id}`} className={lux.btnSecondary + " !py-1.5 !text-xs"}>
-                                Επεξεργασία
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {phoneAudit.phoneDuplicates.length > 0 && (
-                      <div className={lux.card + " !shadow-sm"}>
-                        <h2 className={lux.sectionTitle + " mb-3"}>Ίδιος αριθμός (2+ επαφές)</h2>
-                        {phoneAudit.phoneDuplicates.map((g) => (
-                          <div key={g.normalized} className="mb-4 last:mb-0">
-                            <p className="mb-2 text-xs text-[var(--text-secondary)]">Νούμερο: {g.normalized}</p>
-                            <ul className="space-y-1">
-                              {g.contacts.map((c) => (
-                                <li key={c.id} className="flex items-center justify-between gap-2 rounded border border-[var(--border)] px-2 py-1.5">
-                                  {c.first_name} {c.last_name}
-                                  <Link href={`/contacts/${c.id}`} className="text-xs font-medium text-[#003476] hover:underline dark:text-[#93C5FD]">
-                                    Άνοιγμα
-                                  </Link>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {phoneAudit.empty.length === 0 && phoneAudit.invalid.length === 0 && phoneAudit.phoneDuplicates.length === 0 && (
+                        </div>
+                      </>
+                    ) : (
                       <p className="text-sm text-[#16A34A]">Δεν βρέθηκαν προβλήματα τηλεφώνου.</p>
                     )}
                   </div>
@@ -439,50 +599,90 @@ export default function DataToolsPage() {
                   </button>
                 </div>
                 {predList && predList.length > 0 ? (
-                  <ul className="space-y-3">
-                    {predList.map((row) => (
-                      <li key={row.contact_id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/20 p-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-medium text-[var(--text-primary)]">
-                            #{row.rank} {row.first_name} {row.last_name} · {row.phone ?? "—"} · {row.municipality ?? "—"}
-                          </span>
-                          <span className="text-[var(--accent-gold)]">Σκορ: {row.score}</span>
-                        </div>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">
-                          {row.breakdown.map((b) => `${b.reason} (${b.points > 0 ? "+" : ""}${b.points})`).join(" · ")}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className={lux.btnPrimary + " !py-1.5 !text-xs"}
-                            onClick={() =>
-                              void fetchWithTimeout("/api/retell/call", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ contact_id: row.contact_id }),
-                              })
-                            }
+                  <>
+                    <SelectAllHeader
+                      ids={predictIds}
+                      count={predList.length}
+                      selected={selectedContacts}
+                      onToggleAll={toggleSelectAll}
+                    />
+                    <ul className="space-y-2">
+                      {predList.map((row) => (
+                        <li key={row.contact_id}>
+                          <div
+                            className={cn(
+                              "rounded-xl border p-3 text-sm transition-colors",
+                              selectedContacts.has(row.contact_id)
+                                ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))]"
+                                : "border-border bg-card hover:bg-[color-mix(in_srgb,var(--bg-elevated)_50%,var(--bg-card))]",
+                            )}
                           >
-                            Κλήση
-                          </button>
-                          <button
-                            type="button"
-                            className={lux.btnSecondary + " !py-1.5 !text-xs"}
-                            onClick={async () => {
-                              await fetchWithTimeout("/api/data-tools/predictive-list/skip", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ contact_id: row.contact_id }),
-                              });
-                              setPredList((p) => (p ?? []).filter((x) => x.contact_id !== row.contact_id));
-                            }}
-                          >
-                            Παράλειψη
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                            <div className="flex items-start gap-3">
+                              <CheckboxMark
+                                checked={selectedContacts.has(row.contact_id)}
+                                onToggle={() => toggleSelect(row.contact_id)}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="font-medium text-foreground">
+                                    #{row.rank} {row.first_name} {row.last_name} · {row.phone ?? "—"} ·{" "}
+                                    {row.municipality ?? "—"}
+                                  </span>
+                                  <span className="text-[var(--accent-gold)]">Σκορ: {row.score}</span>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {row.breakdown
+                                    .map((b) => `${b.reason} (${b.points > 0 ? "+" : ""}${b.points})`)
+                                    .join(" · ")}
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className={lux.btnPrimary + " !py-1.5 !text-xs"}
+                                    onClick={() =>
+                                      void fetchWithTimeout("/api/retell/call", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ contact_id: row.contact_id }),
+                                      })
+                                    }
+                                  >
+                                    Κλήση
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={lux.btnSecondary + " !py-1.5 !text-xs"}
+                                    onClick={async () => {
+                                      await fetchWithTimeout("/api/data-tools/predictive-list/skip", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ contact_id: row.contact_id }),
+                                      });
+                                      setPredList((p) => (p ?? []).filter((x) => x.contact_id !== row.contact_id));
+                                      setSelectedContacts((prev) => {
+                                        const next = new Set(prev);
+                                        next.delete(row.contact_id);
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    Παράλειψη
+                                  </button>
+                                </div>
+                              </div>
+                              <Link
+                                href={`/contacts/${row.contact_id}`}
+                                className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
+                                aria-label="Άνοιγμα επαφής"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Link>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">Καμία λίστα — πατήστε δημιουργία ή φόρτωση.</p>
                 )}
@@ -510,6 +710,98 @@ export default function DataToolsPage() {
           </div>
         )}
       </section>
+
+      {showBulkEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <h3 className="mb-4 font-semibold text-foreground">
+              Μαζική Επεξεργασία ({selectedContacts.size} επαφές)
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                  Πεδίο
+                </label>
+                <select
+                  value={bulkEditField}
+                  onChange={(e) => {
+                    setBulkEditField(e.target.value);
+                    setBulkEditValue("");
+                  }}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground"
+                >
+                  <option value="call_status">Κατάσταση Κλήσης</option>
+                  <option value="group_id">Ομάδα</option>
+                  <option value="priority">Προτεραιότητα</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                  Τιμή
+                </label>
+                {bulkEditField === "call_status" && (
+                  <select
+                    value={bulkEditValue}
+                    onChange={(e) => setBulkEditValue(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground"
+                  >
+                    <option value="">Επιλέξτε...</option>
+                    <option value="Positive">Θετική</option>
+                    <option value="Negative">Αρνητική</option>
+                    <option value="No Answer">Δεν απαντά</option>
+                    <option value="Pending">Σε αναμονή</option>
+                  </select>
+                )}
+                {bulkEditField === "group_id" && (
+                  <select
+                    value={bulkEditValue}
+                    onChange={(e) => setBulkEditValue(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground"
+                  >
+                    <option value="">Επιλέξτε...</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {bulkEditField === "priority" && (
+                  <select
+                    value={bulkEditValue}
+                    onChange={(e) => setBulkEditValue(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground"
+                  >
+                    <option value="">Επιλέξτε...</option>
+                    <option value="Low">Χαμηλή</option>
+                    <option value="Medium">Μεσαία</option>
+                    <option value="High">Υψηλή</option>
+                    <option value="Urgent">Επείγον</option>
+                  </select>
+                )}
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkEdit(false)}
+                className="flex-1 rounded-xl border border-border py-2.5 text-sm text-foreground"
+                disabled={bulkEditBusy}
+              >
+                Άκυρο
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkEdit()}
+                disabled={!bulkEditValue || bulkEditBusy}
+                className="flex-1 rounded-xl bg-[var(--accent-gold)] py-2.5 text-sm font-semibold text-[var(--text-badge-on-gold)] disabled:opacity-50"
+              >
+                {bulkEditBusy ? "…" : "Εφαρμογή"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CenteredModal
         open={!!mergeTarget}
@@ -601,15 +893,212 @@ function ToolCard({
   );
 }
 
-function CardSide({ c }: { c: C }) {
+function CheckboxMark({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] p-3 text-sm">
-      <p className="font-semibold text-[var(--text-primary)]">
-        {c.first_name} {c.last_name}
-      </p>
-      <p className="mt-1 font-mono text-[var(--text-secondary)]">{c.phone ?? "—"}</p>
-      <p className="text-[var(--text-secondary)]">Περιοχή: {c.area ?? "—"}</p>
-      <p className="text-[var(--text-secondary)]">Δήμος: {c.municipality ?? "—"}</p>
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      className={cn(
+        "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
+        checked ? "border-[var(--accent-gold)] bg-[var(--accent-gold)]" : "border-border hover:border-[var(--accent-gold)]/60",
+      )}
+      aria-pressed={checked}
+    >
+      {checked ? <Check className="h-3 w-3 text-[var(--text-badge-on-gold)]" aria-hidden /> : null}
+    </button>
+  );
+}
+
+function SelectAllHeader({
+  ids,
+  count,
+  selected,
+  onToggleAll,
+}: {
+  ids: string[];
+  count: number;
+  selected: Set<string>;
+  onToggleAll: (ids: string[]) => void;
+}) {
+  const allSelected = ids.length > 0 && ids.every((id) => selected.has(id));
+  return (
+    <div className="mb-2 flex items-center gap-2 px-1">
+      <button
+        type="button"
+        onClick={() => onToggleAll(ids)}
+        className={cn(
+          "flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border-2 transition-colors",
+          allSelected ? "border-[var(--accent-gold)] bg-[var(--accent-gold)]" : "border-border hover:border-[var(--accent-gold)]/60",
+        )}
+        aria-label={allSelected ? "Αποεπιλογή όλων" : "Επιλογή όλων"}
+      >
+        {allSelected ? <Check className="h-3 w-3 text-[var(--text-badge-on-gold)]" aria-hidden /> : null}
+      </button>
+      <span className="text-xs text-muted-foreground">Επιλογή όλων ({count})</span>
+    </div>
+  );
+}
+
+function BulkActionBar({
+  count,
+  onEdit,
+  onDelete,
+  onClear,
+  deleting,
+}: {
+  count: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  onClear: () => void;
+  deleting: boolean;
+}) {
+  if (count <= 0) return null;
+  return (
+    <div className="sticky top-0 z-10 mb-3 flex items-center gap-3 rounded-xl border border-[color-mix(in_srgb,var(--accent-gold)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_10%,var(--bg-card))] px-4 py-3">
+      <div className="flex flex-1 items-center gap-2">
+        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent-gold)]">
+          <span className="text-[10px] font-bold text-[var(--text-badge-on-gold)]">{count}</span>
+        </div>
+        <span className="text-sm font-medium text-foreground">{count} επαφές επιλεγμένες</span>
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden />
+          Επεξεργασία
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:opacity-50 dark:text-red-400"
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          {deleting ? "…" : "Διαγραφή"}
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
+          aria-label="Καθαρισμός επιλογής"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SelectableContactRow({
+  contact,
+  selected,
+  onToggle,
+}: {
+  contact: SelectableRow;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
+        selected
+          ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))]"
+          : "border-border bg-card hover:bg-[color-mix(in_srgb,var(--bg-elevated)_50%,var(--bg-card))]",
+      )}
+    >
+      <CheckboxMark checked={selected} onToggle={onToggle} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">
+            {contact.first_name} {contact.last_name}
+          </span>
+          {contact.contact_code ? (
+            <span className="font-mono text-[10px] text-muted-foreground">{contact.contact_code}</span>
+          ) : null}
+        </div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          {contact.phone || "Χωρίς τηλέφωνο"} · {contact.municipality ?? "—"}
+        </div>
+        {contact.issue ? (
+          <div className="mt-1">
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                contact.issue === "missing" && "bg-red-500/10 text-red-600 dark:text-red-400",
+                contact.issue === "invalid" && "bg-orange-500/10 text-orange-700 dark:text-orange-300",
+                contact.issue === "duplicate" && "bg-yellow-500/10 text-yellow-800 dark:text-yellow-300",
+              )}
+            >
+              {contact.issue === "missing" && "Χωρίς τηλέφωνο"}
+              {contact.issue === "invalid" && "Μη έγκυρο"}
+              {contact.issue === "duplicate" && "Διπλό νούμερο"}
+            </span>
+          </div>
+        ) : null}
+      </div>
+      <Link
+        href={`/contacts/${contact.id}`}
+        onClick={(e) => e.stopPropagation()}
+        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
+        aria-label="Άνοιγμα επαφής"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+function DupContactPick({
+  c,
+  selected,
+  onToggle,
+}: {
+  c: C;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-lg border p-3 text-sm transition-colors",
+        selected
+          ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_8%,transparent)]"
+          : "border-[var(--border)] bg-[var(--bg-card)]/50",
+      )}
+    >
+      <CheckboxMark checked={selected} onToggle={onToggle} />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-[var(--text-primary)]">
+          {c.first_name} {c.last_name}
+        </p>
+        <p className="mt-1 font-mono text-[var(--text-secondary)]">{c.phone ?? "—"}</p>
+        <p className="text-[var(--text-secondary)]">Περιοχή: {c.area ?? "—"}</p>
+        <p className="text-[var(--text-secondary)]">Δήμος: {c.municipality ?? "—"}</p>
+      </div>
+      <Link
+        href={`/contacts/${c.id}`}
+        onClick={(e) => e.stopPropagation()}
+        className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:text-[var(--accent-gold)]"
+        aria-label="Άνοιγμα επαφής"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+      </Link>
     </div>
   );
 }
