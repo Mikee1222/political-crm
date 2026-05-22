@@ -25,6 +25,7 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
+import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 
 type RequestRow = {
   id: string;
@@ -611,6 +612,12 @@ function RequestCard({
   const showQuickTick = canQuickComplete && !isCompleted && !isRejected;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const confirmMenu = usePortalDropdown({
+    open: confirmOpen,
+    setOpen: setConfirmOpen,
+    align: "right",
+    minWidth: 224,
+  });
 
   const confirmComplete = async () => {
     setCompleting(true);
@@ -644,21 +651,26 @@ function RequestCard({
           ) : showQuickTick ? (
             <div className="relative">
               <button
+                ref={(el) => {
+                  confirmMenu.triggerRef.current = el;
+                }}
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setConfirmOpen((v) => !v);
+                  confirmMenu.toggle();
                 }}
                 className="flex h-10 w-10 touch-manipulation items-center justify-center rounded-full shadow-[0_0_8px_2px_rgba(34,197,94,0.3)] transition-transform hover:bg-green-500/10 active:scale-95 sm:shadow-none"
                 aria-label="Ολοκλήρωση αιτήματος"
               >
                 <CheckCircle2 className="h-7 w-7 text-green-500 hover:text-green-400" />
               </button>
-              {confirmOpen ? (
-                <div
-                  className="absolute right-0 top-12 z-50 w-56 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg sm:top-full sm:mt-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
+              <PortalDropdownPanel
+                open={confirmOpen}
+                pos={confirmMenu.pos}
+                panelRef={confirmMenu.panelRef}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg"
+              >
+                <div onClick={(e) => e.stopPropagation()}>
                   <p className="text-xs text-[var(--text-primary)]">Να επισημανθεί ως Ολοκληρώθηκε;</p>
                   <div className="mt-2 flex gap-2">
                     <button
@@ -679,7 +691,7 @@ function RequestCard({
                     </button>
                   </div>
                 </div>
-              ) : null}
+              </PortalDropdownPanel>
             </div>
           ) : null}
           <button

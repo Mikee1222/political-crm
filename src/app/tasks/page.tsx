@@ -31,6 +31,7 @@ import { useFormToast } from "@/contexts/form-toast-context";
 import { ymdToNextMonth, ymdToPrevMonth } from "@/lib/task-filters";
 import type { TaskTabFilter } from "@/lib/task-filters";
 import { PageHeader } from "@/components/ui/page-header";
+import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 
 type TaskT = {
   id: string;
@@ -524,6 +525,12 @@ function TaskCard({
   });
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Partial<TaskT["contacts"] & { id: string; phone: string }>[]>([]);
+  const contactHitsMenu = usePortalDropdown({
+    open: hits.length > 0,
+    setOpen: (next) => {
+      if (!next) setHits([]);
+    },
+  });
   const [saving, setSaving] = useState(false);
   const [dErr, setDErr] = useState<string | null>(null);
 
@@ -739,17 +746,23 @@ function TaskCard({
               <label className={clsx(lux.label)}>Ώρα επαφής (αναζήτηση)</label>
               <div className="relative">
                 <input
+                  ref={(el) => {
+                    contactHitsMenu.triggerRef.current = el;
+                  }}
                   className={clsx(lux.input, "w-full !pl-8 !text-base !min-h-11")}
                   placeholder="Όνομα, τηλ…"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                 />
                 <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-                {hits.length > 0 && (
-                  <ul
-                    className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm shadow-2xl"
-                    role="listbox"
-                  >
+                <PortalDropdownPanel
+                  open={hits.length > 0}
+                  pos={contactHitsMenu.pos}
+                  panelRef={contactHitsMenu.panelRef}
+                  role="listbox"
+                  className="max-h-44 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-0 text-sm shadow-2xl"
+                >
+                  <ul className="m-0 list-none p-0">
                     {hits.map((h) => h && h.id && (
                       <li key={h.id}>
                         <button
@@ -766,7 +779,7 @@ function TaskCard({
                       </li>
                     ))}
                   </ul>
-                )}
+                </PortalDropdownPanel>
               </div>
               <p className="mt-1 text-[10px] text-[var(--text-muted)]">Ενεργό ID: {edit.contact_id.slice(0, 8)}…</p>
             </div>
@@ -876,6 +889,12 @@ function NewTaskModal({
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<{ id: string; first_name: string; last_name: string; phone: string }[]>([]);
   const [cLabel, setCLabel] = useState("");
+  const contactHitsMenu = usePortalDropdown({
+    open: hits.length > 0,
+    setOpen: (next) => {
+      if (!next) setHits([]);
+    },
+  });
 
   useEffect(() => {
     if (q.length < 1) {
@@ -1046,6 +1065,9 @@ function NewTaskModal({
               </label>
               <div className="relative">
                 <input
+                  ref={(el) => {
+                    contactHitsMenu.triggerRef.current = el;
+                  }}
                   className={clsx(lux.input, "w-full !min-h-11 !pl-9 !text-base", contactErr && lux.inputError)}
                   value={cLabel}
                   aria-invalid={contactErr ? true : undefined}
@@ -1063,8 +1085,14 @@ function NewTaskModal({
                   placeholder="Όνομα, τηλέφωνο…"
                 />
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-                {hits.length > 0 && (
-                  <ul className="absolute z-[10020] mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0 shadow-2xl">
+                <PortalDropdownPanel
+                  open={hits.length > 0}
+                  pos={contactHitsMenu.pos}
+                  panelRef={contactHitsMenu.panelRef}
+                  role="listbox"
+                  className="max-h-40 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0 shadow-2xl"
+                >
+                  <ul className="m-0 list-none p-0">
                     {hits.map((h) => (
                       <li key={h.id}>
                         <button
@@ -1083,7 +1111,7 @@ function NewTaskModal({
                       </li>
                     ))}
                   </ul>
-                )}
+                </PortalDropdownPanel>
               </div>
               {contactErr && (
                 <p className={lux.fieldError} role="alert">

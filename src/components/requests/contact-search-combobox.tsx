@@ -1,9 +1,10 @@
 "use client";
 
 import clsx from "clsx";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 
 type ContactRow = { id: string; first_name: string; last_name: string; phone: string | null };
 
@@ -36,14 +37,13 @@ export function ContactSearchCombobox({
   error,
   onBlurValidate,
 }: Props) {
-  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   const [list, setList] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState("");
   const listId = useId();
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const { triggerRef, panelRef, open, setOpen, pos } = usePortalDropdown();
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q), DEBOUNCE_MS);
@@ -102,17 +102,12 @@ export function ContactSearchCombobox({
     void load(debounced);
   }, [open, debounced, load]);
 
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("click", h);
-    return () => document.removeEventListener("click", h);
-  }, [open]);
+  const bindTriggerRef = (el: HTMLInputElement | null) => {
+    triggerRef.current = el;
+  };
 
   return (
-    <div className="relative" ref={wrapRef}>
+    <div className="relative">
       <label className={lux.label} htmlFor={listId + "in"}>
         {label}
         {required && <span className="ml-0.5 text-red-400">*</span>}
@@ -143,6 +138,7 @@ export function ContactSearchCombobox({
         <>
           <input
             id={listId + "in"}
+            ref={bindTriggerRef}
             className={clsx(lux.input, error && lux.inputError)}
             placeholder={placeholder}
             value={q}
@@ -158,11 +154,8 @@ export function ContactSearchCombobox({
             aria-controls={listId + "list"}
             aria-invalid={error ? true : undefined}
           />
-          {open && (
-            <ul
-              id={listId + "list"}
-              className="absolute z-[60] mt-1 max-h-52 w-full overflow-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] py-1 text-sm shadow-xl"
-            >
+          <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} className="max-h-52 py-1 text-sm shadow-xl">
+            <ul id={listId + "list"} className="m-0 list-none p-0">
               {loading && (
                 <li className="px-3 py-2.5 text-xs text-[var(--text-muted)]">Φόρτωση…</li>
               )}
@@ -178,7 +171,7 @@ export function ContactSearchCombobox({
                   <li key={c.id}>
                     <button
                       type="button"
-                      className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+                      className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
                       onClick={() => {
                         onChange(c.id, displayName(c));
                         setSelectedLabel(displayName(c));
@@ -194,7 +187,7 @@ export function ContactSearchCombobox({
                 );
               })}
             </ul>
-          )}
+          </PortalDropdownPanel>
         </>
       )}
       {error ? (

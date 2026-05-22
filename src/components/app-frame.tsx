@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Calendar,
   CalendarClock,
@@ -43,6 +53,7 @@ import { MobileGlassHeader } from "@/components/mobile/mobile-glass-header";
 import { MobilePullToRefresh } from "@/components/mobile/mobile-pull-to-refresh";
 import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { useProfile } from "@/contexts/profile-context";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -457,7 +468,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [alexVoiceToast, setAlexVoiceToast] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenu = usePortalDropdown({ align: "right", minWidth: 224 });
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [avatarImgErr, setAvatarImgErr] = useState(false);
@@ -471,7 +482,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const lastMainScrollY = useRef(0);
   const prevPathForMobileAnim = useRef<string | null>(null);
   const skipNextMobileRouteAnim = useRef(true);
-  const userMenuRef = useRef<HTMLDivElement>(null);
   const gNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gPendingRef = useRef(false);
   const isLg = useMediaQuery("(min-width: 1024px)", false);
@@ -637,17 +647,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   const mobileFirstName = profile?.full_name?.trim().split(/\s+/).filter(Boolean)[0] ?? "Φίλε";
   const pullRefreshEnabled = !isLg && (pathname.startsWith("/contacts") || pathname.startsWith("/requests"));
-
-  useEffect(() => {
-    if (!userMenuOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [userMenuOpen]);
 
   useEffect(() => {
     if (isCrmLoginPublic || isPortal) return;
@@ -1017,13 +1016,14 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   Εγκατάσταση ↓
                 </button>
               ) : null}
-              <div className="relative shrink-0" ref={userMenuRef}>
+              <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => setUserMenuOpen((o) => !o)}
+                  ref={userMenu.triggerRef as RefObject<HTMLButtonElement>}
+                  onClick={userMenu.toggle}
                   className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/40 text-[10px] font-bold text-foreground shadow-sm sm:text-xs"
                   title={profile?.full_name ?? "Χρήστης"}
-                  aria-expanded={userMenuOpen}
+                  aria-expanded={userMenu.open}
                   aria-haspopup="menu"
                 >
                   {profileLoading ? (
@@ -1040,22 +1040,23 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                     initials(profile?.full_name ?? null, "ΚΚ")
                   )}
                 </button>
-                {userMenuOpen && (
-                  <div
-                    className="absolute right-0 top-full z-[250] mt-1.5 min-w-[14rem] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1.5 shadow-xl"
-                    role="menu"
+                <PortalDropdownPanel
+                  open={userMenu.open}
+                  pos={userMenu.pos}
+                  panelRef={userMenu.panelRef}
+                  role="menu"
+                  className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1.5 shadow-xl"
+                >
+                  <Link
+                    href="/profile"
+                    className="flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                    onClick={() => userMenu.setOpen(false)}
+                    role="menuitem"
                   >
-                    <Link
-                      href="/profile"
-                      className="flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--text-primary)] transition hover:bg-[var(--bg-elevated)]"
-                      onClick={() => setUserMenuOpen(false)}
-                      role="menuitem"
-                    >
-                      <User className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden />
-                      Το προφίλ μου
-                    </Link>
-                  </div>
-                )}
+                    <User className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                    Το προφίλ μου
+                  </Link>
+                </PortalDropdownPanel>
               </div>
               <LogoutButton variant="icon" className="shrink-0" />
             </div>

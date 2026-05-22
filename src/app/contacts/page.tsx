@@ -13,6 +13,7 @@ import {
   useState,
   startTransition,
   type CSSProperties,
+  type RefObject,
 } from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
@@ -33,6 +34,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { callStatusLabel, lux } from "@/lib/luxury-styles";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
+import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -640,16 +642,7 @@ function GroupMultiSelect({
   onChange: (v: string[]) => void;
   emptyLabel: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  const { triggerRef, panelRef, open, setOpen, pos, toggle } = usePortalDropdown();
   const selected = groups.filter((g) => value.includes(g.id));
   const labelText =
     selected.length === 0
@@ -657,20 +650,21 @@ function GroupMultiSelect({
       : selected.length === 1
         ? selected[0]!.name
         : `${selected.length} επιλογές`;
-  const toggle = (idG: string) => {
+  const toggleGroup = (idG: string) => {
     if (value.includes(idG)) onChange(value.filter((x) => x !== idG));
     else onChange([...value, idG]);
   };
   return (
-    <div className="relative w-full min-w-0 max-w-full" ref={ref}>
+    <div className="relative w-full min-w-0 max-w-full">
       <span className={lux.label} id={id + "-label"}>
         {label}
       </span>
       <button
         type="button"
         id={id}
+        ref={triggerRef as RefObject<HTMLButtonElement>}
         className={lux.select + " mt-1 flex w-full min-w-0 items-center justify-between gap-2 text-left"}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-expanded={open}
         aria-labelledby={id + "-label"}
         aria-haspopup="listbox"
@@ -678,20 +672,16 @@ function GroupMultiSelect({
         <span className="min-w-0 flex-1 truncate text-left text-[var(--text-primary)]">{labelText}</span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
-      {open && (
-        <ul
-          className="absolute left-0 right-0 z-40 mt-1 max-h-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-[var(--card-shadow)]"
-          role="listbox"
-          aria-multiselectable
-        >
+      <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} role="listbox">
+        <ul className="m-0 list-none p-0" aria-multiselectable>
           {groups.map((g) => {
             const on = value.includes(g.id);
             return (
               <li key={g.id}>
                 <button
                   type="button"
-                  className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-                  onClick={() => toggle(g.id)}
+                  className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                  onClick={() => toggleGroup(g.id)}
                 >
                   <span
                     className={
@@ -716,7 +706,7 @@ function GroupMultiSelect({
             );
           })}
         </ul>
-      )}
+      </PortalDropdownPanel>
     </div>
   );
 }
@@ -728,54 +718,43 @@ function CallStatusMultiSelect({
   value: string[];
   onChange: (v: string[]) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  const { triggerRef, panelRef, open, setOpen, pos, toggle } = usePortalDropdown({ minWidth: 176 });
   const labelText =
     value.length === 0
       ? "Όλες"
       : value.length === 1
         ? CALL_STATUS_OPTS.find((o) => o.v === value[0])?.l ?? value[0]!
         : `${value.length} status`;
-  const toggle = (s: string) => {
+  const toggleStatus = (s: string) => {
     if (value.includes(s)) onChange(value.filter((x) => x !== s));
     else onChange([...value, s]);
   };
   return (
-    <div className="relative min-w-0 max-w-full" ref={ref}>
+    <div className="relative min-w-0 max-w-full">
       <label className={lux.label} htmlFor="f-call-m">
         Κατάσταση
       </label>
       <button
         type="button"
         id="f-call-m"
+        ref={triggerRef as RefObject<HTMLButtonElement>}
         className={lux.select + " flex w-full min-w-0 items-center justify-between gap-2 text-left"}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-expanded={open}
       >
         <span className="min-w-0 flex-1 truncate text-left text-[var(--text-primary)]">{labelText}</span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
-      {open && (
-        <ul
-          className="absolute z-30 mt-1 max-h-48 min-w-[11rem] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-[var(--card-shadow)]"
-          role="listbox"
-        >
+      <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} role="listbox">
+        <ul className="m-0 list-none p-0">
           {CALL_STATUS_OPTS.map((o) => {
             const on = value.includes(o.v);
             return (
               <li key={o.v}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-elevated)]"
-                  onClick={() => toggle(o.v)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                  onClick={() => toggleStatus(o.v)}
                 >
                   <span
                     className={
@@ -791,7 +770,7 @@ function CallStatusMultiSelect({
             );
           })}
         </ul>
-      )}
+      </PortalDropdownPanel>
     </div>
   );
 }
@@ -825,7 +804,7 @@ function ContactsPage() {
   const [savedFilters, setSavedFilters] = useState<SavedFilterApi[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [exportOpen, setExportOpen] = useState(false);
+  const exportMenu = usePortalDropdown({ align: "right", minWidth: 220 });
   const [bulkStatus, setBulkStatus] = useState("Pending");
   const [bulkCampaign, setBulkCampaign] = useState("");
   const [campaigns, setCampaigns] = useState<Camp[]>([]);
@@ -1086,44 +1065,49 @@ function ContactsPage() {
             <div className="relative w-full max-w-full sm:w-auto">
               <button
                 type="button"
-                onClick={() => setExportOpen((o) => !o)}
+                ref={exportMenu.triggerRef as RefObject<HTMLButtonElement>}
+                onClick={exportMenu.toggle}
                 className={lux.btnSecondary + " !py-2 text-sm inline-flex w-full items-center justify-center gap-1 sm:w-auto"}
-                aria-expanded={exportOpen}
+                aria-expanded={exportMenu.open}
               >
                 <Download className="h-4 w-4" />
                 Εξαγωγή
                 <ChevronDown className="h-4 w-4 opacity-60" />
               </button>
-              {exportOpen && (
-                <div
-                  className="absolute right-0 top-full z-20 mt-1 w-full max-w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-xl sm:min-w-[220px] sm:w-auto"
-                  role="menu"
+              <PortalDropdownPanel
+                open={exportMenu.open}
+                pos={exportMenu.pos}
+                panelRef={exportMenu.panelRef}
+                role="menu"
+                className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-xl"
+              >
+                {canManage && (
+                  <a
+                    className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                    href="/api/contacts/export"
+                    onClick={() => exportMenu.setOpen(false)}
+                  >
+                    Εξαγωγή όλων
+                  </a>
+                )}
+                <a
+                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                  href={`/api/contacts/export?${contactFiltersToExportParams(f).toString()}`}
+                  onClick={() => exportMenu.setOpen(false)}
                 >
-                  {canManage && (
-                    <a
-                      className="block px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-                      href="/api/contacts/export"
-                    >
-                      Εξαγωγή όλων
-                    </a>
-                  )}
-                  <a
-                    className="block px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-                    href={`/api/contacts/export?${contactFiltersToExportParams(f).toString()}`}
-                  >
-                    Εξαγωγή φίλτρων
-                  </a>
-                  <a
-                    className="block px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-                    href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
-                    onClick={(e) => {
-                      if (!selectedIds.length) e.preventDefault();
-                    }}
-                  >
-                    Εξαγωγή επιλεγμένων
-                  </a>
-                </div>
-              )}
+                  Εξαγωγή φίλτρων
+                </a>
+                <a
+                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                  href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
+                  onClick={(e) => {
+                    if (!selectedIds.length) e.preventDefault();
+                    else exportMenu.setOpen(false);
+                  }}
+                >
+                  Εξαγωγή επιλεγμένων
+                </a>
+              </PortalDropdownPanel>
             </div>
             {canManage && (
               <>
@@ -1175,7 +1159,7 @@ function ContactsPage() {
         }
       />
 
-      <div className={lux.card + " !py-4 w-full min-w-0 max-w-full"}>
+      <div className={lux.card + " !py-4 w-full min-w-0 max-w-full overflow-visible"}>
         <div className="mb-3 min-w-0 max-w-full sm:max-w-md">
           <label className={lux.label} htmlFor="f-saved-m">
             Αποθηκευμένα φίλτρα

@@ -16,7 +16,7 @@ import {
 import { el } from "date-fns/locale";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Calendar,
@@ -39,6 +39,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
+import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
@@ -1054,6 +1055,12 @@ function QueueCard({
 }) {
   const minDate = format(new Date(), "yyyy-MM-dd");
   const pri = r.priority === "High" || r.priority === "Low" || r.priority === "Urgent" || r.priority === "Medium" ? r.priority : "Medium";
+  const scheduleMenu = usePortalDropdown({
+    open: scheduleOpen,
+    setOpen: (next) => {
+      if (next !== scheduleOpen) onToggleSchedule();
+    },
+  });
 
   return (
     <li
@@ -1080,6 +1087,7 @@ function QueueCard({
         <button
           type="button"
           disabled={scheduling}
+          ref={scheduleMenu.triggerRef as RefObject<HTMLButtonElement>}
           onClick={onToggleSchedule}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card px-2 py-2 text-xs font-semibold text-foreground transition hover:border-[var(--accent-gold)]/60 hover:bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))] disabled:opacity-50"
         >
@@ -1116,11 +1124,13 @@ function QueueCard({
             {aiSummary}
           </div>
         ) : null}
-        {scheduleOpen ? (
-          <div
-            className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-border bg-card p-2 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <PortalDropdownPanel
+          open={scheduleOpen}
+          pos={scheduleMenu.pos}
+          panelRef={scheduleMenu.panelRef}
+          className="rounded-lg border border-border bg-card p-2 shadow-lg"
+        >
+          <div onClick={(e) => e.stopPropagation()}>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Ημερομηνία
             </label>
@@ -1129,7 +1139,7 @@ function QueueCard({
               min={minDate}
               className={
                 lux.dateInput +
-                " !h-9 !text-xs [color-scheme:dark] [data-theme='light']:[color-scheme:light]"
+                " !h-9 w-full !text-xs [color-scheme:dark] [data-theme='light']:[color-scheme:light]"
               }
               disabled={scheduling}
               onChange={(e) => {
@@ -1138,7 +1148,7 @@ function QueueCard({
               }}
             />
           </div>
-        ) : null}
+        </PortalDropdownPanel>
       </div>
     </li>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import {
   MUNICIPALITIES,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/aitoloakarnania-data";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
 import type { ElectoralDistrictRow } from "@/app/api/geo/electoral-districts/route";
 import type { ToponymRow } from "@/app/api/geo/toponyms/route";
@@ -55,9 +56,8 @@ function SearchableSelect({
   required,
   emptyMessage = "Δεν βρέθηκαν",
 }: SearchableSelectProps) {
-  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
+  const { triggerRef, panelRef, open, setOpen, pos, toggle } = usePortalDropdown();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -70,17 +70,6 @@ function SearchableSelect({
   const displayLabel = value;
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQ("");
-      }
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
-
-  useEffect(() => {
     if (open) {
       setQ(inList ? value : "");
       const t = requestAnimationFrame(() => inputRef.current?.focus());
@@ -89,7 +78,7 @@ function SearchableSelect({
   }, [open, value, inList]);
 
   return (
-    <div ref={ref} className="relative min-w-0">
+    <div className="relative min-w-0">
       <label htmlFor={id} className={lux.label}>
         {label}
         {required && <span className="ml-0.5 text-[var(--danger)]">*</span>}
@@ -99,7 +88,8 @@ function SearchableSelect({
           type="button"
           id={id}
           disabled={disabled}
-          onClick={() => !disabled && setOpen((o) => !o)}
+          ref={triggerRef as RefObject<HTMLButtonElement>}
+          onClick={() => !disabled && toggle()}
           className={[
             "flex w-full min-h-[42px] items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-left text-sm",
             "text-[var(--text-primary)] transition-all duration-150",
@@ -117,52 +107,53 @@ function SearchableSelect({
             className={["h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform", open ? "rotate-180" : ""].join(" ")}
           />
         </button>
-        {open && !disabled && (
-          <div
-            className="absolute left-0 right-0 z-[60] mt-1 overflow-hidden rounded-lg border-2 border-[var(--accent-gold)]/40 bg-[var(--bg-card)] shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
-            role="listbox"
-          >
-            <div className="flex items-center gap-2 border-b border-[var(--border)] px-2 py-1.5">
-              <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
-              <input
-                ref={inputRef}
-                className="m-0 min-w-0 flex-1 border-0 bg-transparent py-1 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-0"
-                placeholder="Φιλτράρισμα…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.stopPropagation();
+        <PortalDropdownPanel
+          open={open && !disabled}
+          pos={pos}
+          panelRef={panelRef}
+          role="listbox"
+          className="overflow-hidden rounded-lg border-2 border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-[var(--bg-card)] p-0 shadow-[var(--card-shadow)]"
+        >
+          <div className="flex items-center gap-2 border-b border-[var(--border)] px-2 py-1.5">
+            <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
+            <input
+              ref={inputRef}
+              className="m-0 min-w-0 flex-1 border-0 bg-transparent py-1 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-0"
+              placeholder="Φιλτράρισμα…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setOpen(false);
+                  setQ("");
+                }
+              }}
+              autoComplete="off"
+              aria-label={`Αναζήτηση: ${label}`}
+            />
+          </div>
+          <ul className="m-0 max-h-44 list-none overflow-y-auto p-0.5">
+            {filtered.length === 0 && <li className="px-2 py-2.5 text-xs text-[var(--text-muted)]">{emptyMessage}</li>}
+            {filtered.map((opt) => (
+              <li key={opt}>
+                <button
+                  type="button"
+                  className="w-full rounded-md px-2.5 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)]"
+                  onClick={() => {
+                    onChange(opt);
                     setOpen(false);
                     setQ("");
-                  }
-                }}
-                autoComplete="off"
-                aria-label={`Αναζήτηση: ${label}`}
-              />
-            </div>
-            <ul className="max-h-44 overflow-y-auto p-0.5">
-              {filtered.length === 0 && <li className="px-2 py-2.5 text-xs text-[var(--text-muted)]">{emptyMessage}</li>}
-              {filtered.map((opt) => (
-                <li key={opt}>
-                  <button
-                    type="button"
-                    className="w-full rounded-md px-2.5 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[rgba(201,168,76,0.12)]"
-                    onClick={() => {
-                      onChange(opt);
-                      setOpen(false);
-                      setQ("");
-                    }}
-                    role="option"
-                    aria-selected={value === opt}
-                  >
-                    {opt}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+                  }}
+                  role="option"
+                  aria-selected={value === opt}
+                >
+                  {opt}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </PortalDropdownPanel>
       </div>
       {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
     </div>
