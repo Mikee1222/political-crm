@@ -99,7 +99,14 @@ async function fetchRequestsPage(
   query = applyRequestFilters(query, f, { withSearchEmbed: Boolean(f.search) });
   query = query.range(from, to);
 
-  let { data, error, count } = await query;
+  let data: any[] | null = null;
+  let error: any = null;
+  let count: number | null = null;
+
+  const first = await query;
+  data = first.data;
+  error = first.error;
+  count = first.count;
 
   if (error && f.search) {
     let q2 = supabase
