@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Phone } from "lucide-react";
+import { ArrowLeft, Loader2, Phone, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
@@ -219,10 +219,13 @@ export default function RequestDetailPage() {
   const [sending, setSending] = useState(false);
   const [portalMsg, setPortalMsg] = useState("");
   const [savingMsg, setSavingMsg] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     setErr("");
+    setAiSummary(null);
     try {
       const [rRes, nRes] = await Promise.all([
         fetchWithTimeout(`/api/requests/${id}`),
@@ -248,6 +251,28 @@ export default function RequestDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handleAiSummary = async () => {
+    if (!data) return;
+    if (aiSummary) {
+      setAiSummary(null);
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const res = await fetchWithTimeout("/api/requests-scheduler/ai-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: data.id }),
+      });
+      const json = (await res.json()) as { summary?: string };
+      setAiSummary(json.summary ?? "Δεν ήταν δυνατή η δημιουργία σύνοψης.");
+    } catch {
+      setAiSummary("Σφάλμα σύνδεσης.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   if (err && !data) {
     return (
@@ -296,6 +321,32 @@ export default function RequestDetailPage() {
             <PriorityBadge p={data.priority} />
           </div>
         </div>
+        {canManage && (
+          <>
+            <button
+              type="button"
+              onClick={() => void handleAiSummary()}
+              disabled={aiLoading}
+              className="mt-3 flex touch-manipulation items-center gap-2 rounded-xl border border-primary/30 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+            >
+              {aiLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Sparkles className="h-4 w-4" aria-hidden />
+              )}
+              {aiSummary ? "Απόκρυψη σύνοψης" : "Σύνοψη AI"}
+            </button>
+            {aiSummary && (
+              <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <div className="mb-2 flex items-center gap-2 text-primary">
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                  <span className="text-xs font-semibold uppercase tracking-widest">Σύνοψη Alexandra</span>
+                </div>
+                <p className="text-sm leading-relaxed text-foreground">{aiSummary}</p>
+              </div>
+            )}
+          </>
+        )}
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
