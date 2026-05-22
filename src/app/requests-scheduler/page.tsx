@@ -27,10 +27,12 @@ import {
   ChevronRight,
   Circle,
   LayoutGrid,
+  Loader2,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
   RefreshCw,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -212,6 +214,8 @@ export default function RequestsSchedulerPage() {
     kanbanFromStatus?: string;
   } | null>(null);
   const confirmPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({});
+  const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [queueSearch, setQueueSearch] = useState("");
   const [kanbanSearch, setKanbanSearch] = useState("");
   const [kanbanCategory, setKanbanCategory] = useState("");
@@ -409,6 +413,41 @@ export default function RequestsSchedulerPage() {
       showToast("Σφάλμα δικτύου", "error");
     } finally {
       setSchedulingId(null);
+    }
+  };
+
+  const handleAiSummary = async (request: SchedulerRequest) => {
+    if (aiSummaries[request.id]) {
+      setAiSummaries((prev) => {
+        const n = { ...prev };
+        delete n[request.id];
+        return n;
+      });
+      return;
+    }
+    setAiLoading((prev) => ({ ...prev, [request.id]: true }));
+    try {
+      const res = await fetchWithTimeout("/api/requests-scheduler/ai-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: request.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { summary?: string; error?: string };
+      if (!res.ok) {
+        setAiSummaries((prev) => ({
+          ...prev,
+          [request.id]: data.error ?? "Σφάλμα κατά τη δημιουργία σύνοψης.",
+        }));
+        return;
+      }
+      setAiSummaries((prev) => ({ ...prev, [request.id]: data.summary ?? "" }));
+    } catch {
+      setAiSummaries((prev) => ({
+        ...prev,
+        [request.id]: "Σφάλμα κατά τη δημιουργία σύνοψης.",
+      }));
+    } finally {
+      setAiLoading((prev) => ({ ...prev, [request.id]: false }));
     }
   };
 
@@ -666,11 +705,14 @@ export default function RequestsSchedulerPage() {
                           request={r}
                           scheduleOpen={scheduleOpenId === r.id}
                           scheduling={schedulingId === r.id}
+                          aiLoading={!!aiLoading[r.id]}
+                          aiSummary={aiSummaries[r.id]}
                           onToggleSchedule={() =>
                             setScheduleOpenId((id) => (id === r.id ? null : r.id))
                           }
                           onSchedule={(date) => void scheduleRequest(r.id, date)}
                           onReject={() => void handleReject(r.id)}
+                          onAiSummary={() => void handleAiSummary(r)}
                         />
                       ))}
                     </ul>
@@ -997,16 +1039,22 @@ function QueueCard({
   request: r,
   scheduleOpen,
   scheduling,
+  aiLoading,
+  aiSummary,
   onToggleSchedule,
   onSchedule,
   onReject,
+  onAiSummary,
 }: {
   request: SchedulerRequest;
   scheduleOpen: boolean;
   scheduling: boolean;
+  aiLoading: boolean;
+  aiSummary?: string;
   onToggleSchedule: () => void;
   onSchedule: (ymd: string) => void;
   onReject: () => void;
+  onAiSummary: () => void;
 }) {
   const minDate = format(new Date(), "yyyy-MM-dd");
   const pri = r.priority === "High" || r.priority === "Low" || r.priority === "Urgent" || r.priority === "Medium" ? r.priority : "Medium";
@@ -1050,6 +1098,28 @@ function QueueCard({
           <XCircle className="h-4 w-4" />
           Δεν μπορεί να πραγματοποιηθεί
         </button>
+        <button
+          type="button"
+          onClick={onAiSummary}
+          disabled={aiLoading}
+          className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--accent-gold)_35%,var(--border))] px-3 py-2 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_10%,transparent)] disabled:opacity-50"
+        >
+          {aiLoading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          )}
+          Σύνοψη AI
+        </button>
+        {aiSummary ? (
+          <div className="mt-0 rounded-lg border border-[color-mix(in_srgb,var(--accent-gold)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_6%,var(--bg-card))] p-3 text-xs leading-relaxed text-foreground">
+            <div className="mb-1.5 flex items-center gap-1.5 font-medium text-[var(--accent-gold)]">
+              <Sparkles className="h-3 w-3" aria-hidden />
+              Σύνοψη Alexandra
+            </div>
+            {aiSummary}
+          </div>
+        ) : null}
         {scheduleOpen ? (
           <div
             className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-border bg-card p-2 shadow-lg"
