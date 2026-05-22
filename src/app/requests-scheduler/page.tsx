@@ -101,7 +101,112 @@ function appendCalFilterParams(params: URLSearchParams, calFilter: CalFilter) {
   if (calFilter.assignedTo) params.set("assigned_to", calFilter.assignedTo);
 }
 
-function SchedulerFilterBar({
+function appendQueueFilterParams(params: URLSearchParams, queueFilter: CalFilter) {
+  if (queueFilter.q.trim()) params.set("queue_q", queueFilter.q.trim());
+  if (queueFilter.category) params.set("queue_category", queueFilter.category);
+  if (queueFilter.priority) params.set("queue_priority", queueFilter.priority);
+  if (queueFilter.status) params.set("queue_status", queueFilter.status);
+  if (queueFilter.assignedTo) params.set("queue_assigned_to", queueFilter.assignedTo);
+}
+
+function SchedulerFiltersPanel({
+  filter,
+  setFilter,
+  categories,
+  staffUsers,
+}: {
+  filter: CalFilter;
+  setFilter: Dispatch<SetStateAction<CalFilter>>;
+  categories: string[];
+  staffUsers: StaffUser[];
+}) {
+  const hasActive = Boolean(
+    filter.q || filter.category || filter.priority || filter.status || filter.assignedTo,
+  );
+
+  return (
+    <div className="mb-3 space-y-2">
+      <div className="relative">
+        <Search
+          className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <input
+          type="text"
+          placeholder="Τίτλος ή τηλέφωνο..."
+          value={filter.q}
+          onChange={(e) => setFilter((p) => ({ ...p, q: e.target.value }))}
+          className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        />
+      </div>
+      <select
+        value={filter.category}
+        onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
+        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
+        aria-label="Κατηγορία"
+      >
+        <option value="">Όλες οι κατηγορίες</option>
+        {categories.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          value={filter.priority}
+          onChange={(e) => setFilter((p) => ({ ...p, priority: e.target.value }))}
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
+          aria-label="Προτεραιότητα"
+        >
+          <option value="">Προτεραιότητα</option>
+          <option value="Urgent">Επείγον</option>
+          <option value="High">Υψηλή</option>
+          <option value="Medium">Μεσαία</option>
+          <option value="Low">Χαμηλή</option>
+        </select>
+        <select
+          value={filter.status}
+          onChange={(e) => setFilter((p) => ({ ...p, status: e.target.value }))}
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
+          aria-label="Κατάσταση"
+        >
+          <option value="">Κατάσταση</option>
+          <option value="Νέο">Νέο</option>
+          <option value="Σε εξέλιξη">Σε εξέλιξη</option>
+          <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
+          <option value="Απορρίφθηκε">Απορρίφθηκε</option>
+        </select>
+      </div>
+      <select
+        value={filter.assignedTo}
+        onChange={(e) => setFilter((p) => ({ ...p, assignedTo: e.target.value }))}
+        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
+        aria-label="Ανάθεση"
+      >
+        <option value="">Όλοι οι υπάλληλοι</option>
+        {staffUsers.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.full_name || u.email}
+            {u.role ? ` (${u.role})` : ""}
+          </option>
+        ))}
+      </select>
+      {hasActive ? (
+        <button
+          type="button"
+          onClick={() => setFilter(EMPTY_CAL_FILTER)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted"
+        >
+          <X className="h-3 w-3" aria-hidden />
+          Καθαρισμός φίλτρων
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function SchedulerCalendarFilterBar({
   calFilter,
   setCalFilter,
   categories,
@@ -118,106 +223,44 @@ function SchedulerFilterBar({
   filtersOpen: boolean;
   onToggleFilters: () => void;
 }) {
-  const hasActive =
-    Boolean(calFilter.q || calFilter.category || calFilter.priority || calFilter.status || calFilter.assignedTo);
-
-  const fields = (
-    <div className="flex flex-wrap gap-2">
-      <div className="relative min-w-40 flex-1">
-        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <input
-          type="text"
-          placeholder="Τίτλος ή τηλέφωνο..."
-          value={calFilter.q}
-          onChange={(e) => setCalFilter((p) => ({ ...p, q: e.target.value }))}
-          className="w-full rounded-lg border border-border bg-card py-2 pl-8 pr-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/40"
-        />
-      </div>
-      <select
-        value={calFilter.category}
-        onChange={(e) => setCalFilter((p) => ({ ...p, category: e.target.value }))}
-        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
-        aria-label="Κατηγορία"
-      >
-        <option value="">Κατηγορία</option>
-        {categories.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
-      <select
-        value={calFilter.priority}
-        onChange={(e) => setCalFilter((p) => ({ ...p, priority: e.target.value }))}
-        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
-        aria-label="Προτεραιότητα"
-      >
-        <option value="">Προτεραιότητα</option>
-        <option value="Urgent">Επείγον</option>
-        <option value="High">Υψηλή</option>
-        <option value="Medium">Μεσαία</option>
-        <option value="Low">Χαμηλή</option>
-      </select>
-      <select
-        value={calFilter.status}
-        onChange={(e) => setCalFilter((p) => ({ ...p, status: e.target.value }))}
-        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
-        aria-label="Κατάσταση"
-      >
-        <option value="">Κατάσταση</option>
-        <option value="Νέο">Νέο</option>
-        <option value="Σε εξέλιξη">Σε εξέλιξη</option>
-        <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
-        <option value="Απορρίφθηκε">Απορρίφθηκε</option>
-      </select>
-      <select
-        value={calFilter.assignedTo}
-        onChange={(e) => setCalFilter((p) => ({ ...p, assignedTo: e.target.value }))}
-        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
-        aria-label="Ανάθεση"
-      >
-        <option value="">Ανάθεση</option>
-        {staffUsers.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.full_name?.trim() || u.email || `Χρήστης ${u.id.slice(0, 8)}…`}
-          </option>
-        ))}
-      </select>
-      {hasActive ? (
-        <button
-          type="button"
-          onClick={() => setCalFilter(EMPTY_CAL_FILTER)}
-          className="flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
-        >
-          <X className="h-3 w-3" aria-hidden />
-          Καθαρισμός
-        </button>
-      ) : null}
-    </div>
+  const hasActive = Boolean(
+    calFilter.q || calFilter.category || calFilter.priority || calFilter.status || calFilter.assignedTo,
   );
 
+  if (isMobile) {
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={onToggleFilters}
+          className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card py-2 text-sm font-semibold text-foreground"
+        >
+          Φίλτρα
+          {hasActive ? (
+            <span className="rounded-full bg-[var(--accent-gold)]/20 px-2 py-0.5 text-[10px] font-bold text-[var(--accent-gold)]">
+              Ενεργά
+            </span>
+          ) : null}
+        </button>
+        {filtersOpen ? (
+          <SchedulerFiltersPanel
+            filter={calFilter}
+            setFilter={setCalFilter}
+            categories={categories}
+            staffUsers={staffUsers}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div className="mb-4">
-      {isMobile ? (
-        <>
-          <button
-            type="button"
-            onClick={onToggleFilters}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card py-2 text-sm font-semibold text-foreground"
-          >
-            Φίλτρα
-            {hasActive ? (
-              <span className="rounded-full bg-[var(--accent-gold)]/20 px-2 py-0.5 text-[10px] font-bold text-[var(--accent-gold)]">
-                Ενεργά
-              </span>
-            ) : null}
-          </button>
-          {filtersOpen ? fields : null}
-        </>
-      ) : (
-        fields
-      )}
-    </div>
+    <SchedulerFiltersPanel
+      filter={calFilter}
+      setFilter={setCalFilter}
+      categories={categories}
+      staffUsers={staffUsers}
+    />
   );
 }
 
@@ -376,8 +419,9 @@ export default function RequestsSchedulerPage() {
   const confirmPopoverRef = useRef<HTMLDivElement | null>(null);
   const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+  const [queueFilter, setQueueFilter] = useState<CalFilter>(EMPTY_CAL_FILTER);
   const [calFilter, setCalFilter] = useState<CalFilter>(EMPTY_CAL_FILTER);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [calFiltersOpen, setCalFiltersOpen] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
 
@@ -423,6 +467,7 @@ export default function RequestsSchedulerPage() {
       } else {
         params.set("week", weekStart);
       }
+      appendQueueFilterParams(params, queueFilter);
       appendCalFilterParams(params, calFilter);
       const res = await fetchWithTimeout(`/api/requests/scheduler?${params.toString()}`);
       const j = (await res.json().catch(() => ({}))) as {
@@ -445,7 +490,7 @@ export default function RequestsSchedulerPage() {
     } finally {
       setLoading(false);
     }
-  }, [weekStart, monthStartYmd, monthEndYmd, viewMode, calFilter]);
+  }, [weekStart, monthStartYmd, monthEndYmd, viewMode, queueFilter, calFilter]);
 
   const loadKanban = useCallback(async () => {
     setKanbanLoading(true);
@@ -491,13 +536,13 @@ export default function RequestsSchedulerPage() {
         raw.map((c) => (typeof c === "string" ? c : c.name)).filter(Boolean),
       );
     });
-    void fetchWithTimeout("/api/team/assignees").then(async (res) => {
-      if (!res.ok) return;
-      const j = (await res.json()) as { assignees?: StaffUser[] };
-      setStaffUsers(
-        (j.assignees ?? []).filter((a) => hasMinRole(a.role, "caller")),
-      );
-    });
+    void fetchWithTimeout("/api/admin/users")
+      .then((r) => r.json())
+      .then((d: { users?: StaffUser[] } | StaffUser[]) => {
+        const users = Array.isArray(d) ? d : (d.users ?? []);
+        setStaffUsers(users);
+      })
+      .catch(() => {});
   }, [canManage]);
 
   useEffect(() => {
@@ -871,14 +916,11 @@ export default function RequestsSchedulerPage() {
                       {queueOpen ? "Σύμπτυξη" : "Ουρά"}
                     </button>
                   </div>
-                  <SchedulerFilterBar
-                    calFilter={calFilter}
-                    setCalFilter={setCalFilter}
+                  <SchedulerFiltersPanel
+                    filter={queueFilter}
+                    setFilter={setQueueFilter}
                     categories={categoryOptions}
                     staffUsers={staffUsers}
-                    isMobile={isMobile}
-                    filtersOpen={filtersOpen}
-                    onToggleFilters={() => setFiltersOpen((o) => !o)}
                   />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -996,14 +1038,14 @@ export default function RequestsSchedulerPage() {
           </div>
 
           <div className="border-b border-border px-4 py-3">
-            <SchedulerFilterBar
+            <SchedulerCalendarFilterBar
               calFilter={calFilter}
               setCalFilter={setCalFilter}
               categories={categoryOptions}
               staffUsers={staffUsers}
               isMobile={isMobile}
-              filtersOpen={filtersOpen}
-              onToggleFilters={() => setFiltersOpen((o) => !o)}
+              filtersOpen={calFiltersOpen}
+              onToggleFilters={() => setCalFiltersOpen((o) => !o)}
             />
           </div>
 

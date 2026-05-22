@@ -68,13 +68,17 @@ async function resolvePhoneContactIds(supabase: SupabaseClient, q: string): Prom
   return (phoneMatches ?? []).map((c) => (c as { id: string }).id);
 }
 
-function filtersFromParams(sp: URLSearchParams, contactIdsFromPhone: string[]): SchedulerFilters {
+function filtersFromParams(
+  sp: URLSearchParams,
+  prefix: string,
+  contactIdsFromPhone: string[],
+): SchedulerFilters {
   return {
-    q: sp.get("q")?.trim() ?? "",
-    category: sp.get("category")?.trim() ?? "",
-    priority: sp.get("priority")?.trim() ?? "",
-    status: sp.get("status")?.trim() ?? "",
-    assigned_to: sp.get("assigned_to")?.trim() ?? "",
+    q: sp.get(`${prefix}q`)?.trim() ?? "",
+    category: sp.get(`${prefix}category`)?.trim() ?? "",
+    priority: sp.get(`${prefix}priority`)?.trim() ?? "",
+    status: sp.get(`${prefix}status`)?.trim() ?? "",
+    assigned_to: sp.get(`${prefix}assigned_to`)?.trim() ?? "",
     contactIdsFromPhone,
   };
 }
@@ -108,9 +112,12 @@ export async function GET(request: NextRequest) {
 
     const sp = request.nextUrl.searchParams;
     const { weekStart, weekEnd } = rangeBounds(sp);
-    const qParam = sp.get("q")?.trim() ?? "";
-    const contactIdsFromPhone = qParam ? await resolvePhoneContactIds(supabase, qParam) : [];
-    const filters = filtersFromParams(sp, contactIdsFromPhone);
+    const queueQ = sp.get("queue_q")?.trim() ?? "";
+    const scheduledQ = sp.get("q")?.trim() ?? "";
+    const queuePhoneIds = queueQ ? await resolvePhoneContactIds(supabase, queueQ) : [];
+    const scheduledPhoneIds = scheduledQ ? await resolvePhoneContactIds(supabase, scheduledQ) : [];
+    const queueFilters = filtersFromParams(sp, "queue_", queuePhoneIds);
+    const scheduledFilters = filtersFromParams(sp, "", scheduledPhoneIds);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let queueQuery: any = supabase
@@ -120,12 +127,12 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (filters.status) {
-      queueQuery = queueQuery.eq("status", filters.status);
+    if (queueFilters.status) {
+      queueQuery = queueQuery.eq("status", queueFilters.status);
     } else {
       queueQuery = queueQuery.in("status", [...QUEUE_STATUSES]);
     }
-    queueQuery = applySchedulerFilters(queueQuery, filters);
+    queueQuery = applySchedulerFilters(queueQuery, queueFilters);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let scheduledQuery: any = supabase
@@ -137,7 +144,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(500);
 
-    scheduledQuery = applySchedulerFilters(scheduledQuery, filters);
+    scheduledQuery = applySchedulerFilters(scheduledQuery, scheduledFilters);
 
     let [queueRes, scheduledRes] = await Promise.all([queueQuery, scheduledQuery]);
 
@@ -165,12 +172,12 @@ export async function GET(request: NextRequest) {
         .is("scheduled_date", null)
         .order("created_at", { ascending: false })
         .limit(200);
-      if (filters.status) {
-        queueFallback = queueFallback.eq("status", filters.status);
+      if (queueFilters.status) {
+        queueFallback = queueFallback.eq("status", queueFilters.status);
       } else {
         queueFallback = queueFallback.in("status", [...QUEUE_STATUSES]);
       }
-      queueFallback = applySchedulerFilters(queueFallback, filters);
+      queueFallback = applySchedulerFilters(queueFallback, queueFilters);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let scheduledFallback: any = supabase
@@ -181,7 +188,7 @@ export async function GET(request: NextRequest) {
         .order("scheduled_date", { ascending: true })
         .order("created_at", { ascending: false })
         .limit(500);
-      scheduledFallback = applySchedulerFilters(scheduledFallback, filters);
+      scheduledFallback = applySchedulerFilters(scheduledFallback, scheduledFilters);
 
       [queueRes, scheduledRes] = await Promise.all([queueFallback, scheduledFallback]);
     }

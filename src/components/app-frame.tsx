@@ -63,13 +63,13 @@ import type { LucideIcon } from "lucide-react";
 const STORAGE_SIDEBAR = "crm-sidebar-expanded";
 const STORAGE_NAV_GROUPS = "crm-nav-groups";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; minRole: Role; badge?: "requests" };
+type NavItem = { href: string; label: string; icon: LucideIcon; minRole: Role };
 
 const NAV_CONFIG: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: ChartColumnBig, minRole: "manager" },
   { href: "/contacts", label: "Επαφές", icon: Users, minRole: "caller" },
   { href: "/map", label: "Χάρτης", icon: MapIcon, minRole: "manager" },
-  { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager", badge: "requests" },
+  { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager" },
   { href: "/requests-scheduler", label: "Πρόγραμμα Αιτημάτων", icon: CalendarClock, minRole: "manager" },
   { href: "/campaigns", label: "Καμπάνιες", icon: Megaphone, minRole: "manager" },
   { href: "/events", label: "Εκδηλώσεις", icon: CalendarCheck, minRole: "manager" },
@@ -199,15 +199,11 @@ function flatOrderedNavItems(role: string | null | undefined) {
 function NavItemRow({
   item,
   pathname,
-  role,
-  openRequestsCount,
   onNavigate,
   showLabels,
 }: {
   item: NavItem;
   pathname: string;
-  role: string;
-  openRequestsCount: number;
   onNavigate?: () => void;
   showLabels: boolean;
 }) {
@@ -229,23 +225,7 @@ function NavItemRow({
         className={["h-5 w-5 shrink-0 transition-colors duration-200 ease-out", active ? navItemIconActive : navItemIconInactive].join(" ")}
       />
       {showLabels && (
-        <span className="flex min-w-0 flex-1 items-center justify-between gap-2 text-[14px] font-medium">
-          <span className="truncate">{item.label}</span>
-          {item.badge === "requests" && openRequestsCount > 0 && hasMinRole(role, "manager") && (
-            <span
-              className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-              style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}
-            >
-              {openRequestsCount}
-            </span>
-          )}
-        </span>
-      )}
-      {item.badge === "requests" && !showLabels && openRequestsCount > 0 && hasMinRole(role, "manager") && (
-        <span
-          className="absolute right-0.5 top-1.5 h-1.5 min-w-[0.4rem] rounded-full px-0.5"
-          style={{ background: "var(--nav-badge-bg)" }}
-        />
+        <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{item.label}</span>
       )}
     </Link>
   );
@@ -322,7 +302,6 @@ function GroupBlock({
   onToggleGroup,
   pathname,
   role,
-  openRequestsCount,
   onNavigate,
   showLabels,
   showGroupHeaders,
@@ -332,7 +311,6 @@ function GroupBlock({
   onToggleGroup: () => void;
   pathname: string;
   role: string;
-  openRequestsCount: number;
   onNavigate?: () => void;
   showLabels: boolean;
   showGroupHeaders: boolean;
@@ -361,8 +339,6 @@ function GroupBlock({
                 key={item.href}
                 item={item}
                 pathname={pathname}
-                role={role}
-                openRequestsCount={openRequestsCount}
                 onNavigate={onNavigate}
                 showLabels={showLabels}
               />
@@ -379,8 +355,6 @@ function GroupBlock({
           key={item.href}
           item={item}
           pathname={pathname}
-          role={role}
-          openRequestsCount={openRequestsCount}
           onNavigate={onNavigate}
           showLabels={showLabels}
         />
@@ -392,7 +366,6 @@ function GroupBlock({
 type SidebarContentProps = {
   pathname: string;
   role: string;
-  openRequestsCount: number;
   onNavigate?: () => void;
   showLabels: boolean;
   showGroupHeaders: boolean;
@@ -405,7 +378,6 @@ type SidebarContentProps = {
 function SidebarContent({
   pathname,
   role,
-  openRequestsCount,
   onNavigate,
   showLabels,
   showGroupHeaders,
@@ -424,8 +396,6 @@ function SidebarContent({
               key={item.href}
               item={item}
               pathname={pathname}
-              role={role}
-              openRequestsCount={openRequestsCount}
               onNavigate={onNavigate}
               showLabels={false}
             />
@@ -446,7 +416,6 @@ function SidebarContent({
             onToggleGroup={() => onToggleGroup(g.id)}
             pathname={pathname}
             role={role}
-            openRequestsCount={openRequestsCount}
             onNavigate={onNavigate}
             showLabels={showLabels}
             showGroupHeaders={showGroupHeaders}
@@ -787,8 +756,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <NavItemRow
           item={settingsItem}
           pathname={pathname}
-          role={role}
-          openRequestsCount={openRequestsCount}
           onNavigate={opts.onNavigate}
           showLabels={opts.showLabels}
         />
@@ -863,7 +830,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <SidebarContent
               pathname={pathname}
               role={role}
-              openRequestsCount={openRequestsCount}
               onNavigate={undefined}
               showLabels={showLabels}
               showGroupHeaders={showGroupHeaders}
@@ -939,7 +905,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <SidebarContent
                 pathname={pathname}
                 role={role}
-                openRequestsCount={openRequestsCount}
                 onNavigate={() => setMobileNavOpen(false)}
                 showLabels
                 showGroupHeaders
