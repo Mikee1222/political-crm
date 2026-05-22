@@ -2,8 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
 import { isPortalOnlyUser } from "@/lib/portal-user-status";
 
-const CRM_ACCESS_COOKIE = "crm_access_granted";
-
 const CALLER_BLOCKED_PREFIXES = [
   "/dashboard",
   "/campaigns",
@@ -59,67 +57,6 @@ function isPollPublicPath(pathname: string) {
   if (pathname.startsWith("/poll/")) return true;
   if (pathname.startsWith("/api/public/polls/")) return true;
   return false;
-}
-
-const ACCESS_CODE_SKIP_PATHS = [
-  "/enter-code",
-  "/login",
-  "/api/access-code",
-  "/api/auth",
-  "/portal",
-  "/_next",
-  "/favicon.ico",
-  "/manifest.json",
-  "/sw.js",
-] as const;
-
-function isAccessCodeExcluded(pathname: string) {
-  return ACCESS_CODE_SKIP_PATHS.some((p) => pathname.startsWith(p));
-}
-
-type ProfileGateRow = { role?: string | null; is_portal?: boolean | null } | null;
-
-/** Returns a redirect/JSON response if non-admin must enter access code; null if allowed. */
-function enforceCrmAccessCode(
-  request: NextRequest,
-  profile: ProfileGateRow,
-  pathname: string,
-  sessionResponse: NextResponse,
-): NextResponse | null {
-  if (isAccessCodeExcluded(pathname)) {
-    console.log("[middleware] access code check skipped (excluded path):", pathname);
-    return null;
-  }
-
-  if (profile === null) {
-    console.log("[middleware] profile null — treating as non-admin, checking cookie");
-  }
-
-  const isAdmin = profile?.role === "admin";
-  console.log("[middleware] profile role:", profile?.role, "isAdmin:", isAdmin);
-
-  const cookie = request.cookies.get(CRM_ACCESS_COOKIE)?.value;
-  console.log("[middleware] accessGranted cookie:", cookie);
-
-  if (!isAdmin) {
-    console.log("[middleware] non-admin, cookie:", cookie);
-    if (cookie !== "1") {
-      console.log("[middleware] REDIRECTING to /enter-code");
-      if (pathname.startsWith("/api/")) {
-        return jsonWithSession(
-          request,
-          "Απαιτείται κλειδαριθμός πρόσβασης. Μεταβείτε στη σελίδα εισαγωγής κωδικού.",
-          403,
-          sessionResponse,
-        );
-      }
-      const url = new URL("/enter-code", request.url);
-      url.searchParams.set("next", pathname);
-      return redirectWithSession(request, url.pathname + url.search, sessionResponse);
-    }
-  }
-
-  return null;
 }
 
 function jsonWithSession(
@@ -225,8 +162,6 @@ export async function middleware(request: NextRequest) {
   const isLoggedIn = Boolean(authUser);
   const isCrmLoginPage = pathname === "/login";
 
-  console.log("[middleware] user:", authUser?.id, "path:", pathname);
-
   if (!isLoggedIn) {
     if (isCrmLoginPage) return sessionResponse;
     if (isPortalPublicPath(pathname)) return sessionResponse;
@@ -257,7 +192,6 @@ export async function middleware(request: NextRequest) {
 
   let isPortalUser = false;
   let role: string = "caller";
-  let profileRow: ProfileGateRow = null;
   if (isLoggedIn && authUser) {
     let portalFromService = false;
     let serviceResolved = false;
@@ -267,27 +201,15 @@ export async function middleware(request: NextRequest) {
     } catch (e) {
       console.error("[middleware] isPortalOnlyUser (service role) failed; falling back to RLS profile", e);
     }
-    const { data: pRow, error: profileErr } = await supabase
+    const { data: pRow } = await supabase
       .from("profiles")
       .select("is_portal, role")
       .eq("id", authUser.id)
       .maybeSingle();
-    profileRow = pRow as ProfileGateRow;
-    if (profileErr) {
-      console.log("[middleware] profile query error:", profileErr.message);
-    }
     role = (pRow?.role as string) ?? "caller";
     isPortalUser = serviceResolved
       ? portalFromService
       : Boolean((pRow as { is_portal?: boolean } | null)?.is_portal);
-    console.log(
-      "[middleware] profile role:",
-      pRow?.role,
-      "isAdmin:",
-      pRow?.role === "admin",
-      "isPortalUser:",
-      isPortalUser,
-    );
   }
 
   if (isLoggedIn && authUser) {
@@ -295,8 +217,6 @@ export async function middleware(request: NextRequest) {
       if (isPortalUser) {
         return NextResponse.redirect(portalDashboardRedirectUrl());
       }
-      const gate = enforceCrmAccessCode(request, profileRow, "/dashboard", sessionResponse);
-      if (gate) return gate;
       return redirectWithSession(request, "/dashboard", sessionResponse);
     }
     if (isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
@@ -376,19 +296,6 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (isLoggedIn && authUser && !isPortalUser && !isPortalAppPath(pathname)) {
-    const gate = enforceCrmAccessCode(request, profileRow, pathname, sessionResponse);
-    if (gate) return gate;
-  } else if (isLoggedIn && authUser) {
-    console.log(
-      "[middleware] access gate skipped:",
-      "isPortalUser=",
-      isPortalUser,
-      "isPortalAppPath=",
-      isPortalAppPath(pathname),
-    );
-  }
-
   if (isLoggedIn && !isCrmLoginPage && !isRetellPublic(pathname) && !isPortalUser) {
     let navTier: "caller" | "manager" | "admin" =
       role === "admin" ? "admin" : role === "manager" ? "manager" : "caller";
@@ -412,5 +319,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons/).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

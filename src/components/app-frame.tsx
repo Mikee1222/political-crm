@@ -526,6 +526,31 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    if (isPortal || isCrmLoginPublic) return;
+    if (!sessionResolved || profileLoading || !profile) return;
+    if (profile.role === "admin") return;
+
+    let cancelled = false;
+    void fetchWithTimeout("/api/access-code/check")
+      .then((r) => r.json())
+      .then((data: { granted?: boolean }) => {
+        if (cancelled) return;
+        if (!data.granted) {
+          router.push(`/enter-code?next=${encodeURIComponent(pathname)}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          router.push(`/enter-code?next=${encodeURIComponent(pathname)}`);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, profileLoading, sessionResolved, pathname, router, isPortal, isCrmLoginPublic]);
+
+  useEffect(() => {
     if (isLg) return;
     const prev = prevPathForMobileAnim.current;
     if (skipNextMobileRouteAnim.current) {
