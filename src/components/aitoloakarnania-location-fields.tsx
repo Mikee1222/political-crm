@@ -230,7 +230,7 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
     if (top && !inSettlementList) return top;
     if (otherPicked) return OTHER_SETTLEMENT_LABEL;
     return "";
-  }, [muniData, dist, top, inSettlementList, otherPicked]);
+  }, [muniData, top, inSettlementList, otherPicked]);
 
   const showToponymCustomInput = Boolean(
     muniData && settlementList.length > 0 && (otherPicked || (top.length > 0 && !inSettlementList)),
@@ -411,7 +411,7 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
     if (top && !inTopList) return top;
     if (otherPicked) return OTHER_SETTLEMENT_LABEL;
     return "";
-  }, [muniInDb, dist, top, inTopList, otherPicked]);
+  }, [muniInDb, top, inTopList, otherPicked]);
 
   const showToponymCustom = Boolean(
     muniInDb && settlementList.length > 0 && (otherPicked || (top.length > 0 && !inTopList)),

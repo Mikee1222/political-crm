@@ -642,7 +642,7 @@ function GroupMultiSelect({
   onChange: (v: string[]) => void;
   emptyLabel: string;
 }) {
-  const { triggerRef, panelRef, open, setOpen, pos, toggle } = usePortalDropdown();
+  const { triggerRef, panelRef, open, pos, toggle } = usePortalDropdown();
   const selected = groups.filter((g) => value.includes(g.id));
   const labelText =
     selected.length === 0
@@ -673,7 +673,7 @@ function GroupMultiSelect({
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
       <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} role="listbox">
-        <ul className="m-0 list-none p-0" aria-multiselectable>
+        <ul className="m-0 list-none p-0">
           {groups.map((g) => {
             const on = value.includes(g.id);
             return (
@@ -718,7 +718,7 @@ function CallStatusMultiSelect({
   value: string[];
   onChange: (v: string[]) => void;
 }) {
-  const { triggerRef, panelRef, open, setOpen, pos, toggle } = usePortalDropdown({ minWidth: 176 });
+  const { triggerRef, panelRef, open, pos, toggle } = usePortalDropdown({ minWidth: 176 });
   const labelText =
     value.length === 0
       ? "Όλες"

@@ -904,29 +904,6 @@ function AlertCard({
   );
 }
 
-function BriefRow({
-  icon: Icon,
-  title,
-  value,
-  sub,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  title: string;
-  value: string;
-  sub: string;
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center gap-2 text-[var(--accent-gold)]">
-        <Icon className="h-4 w-4 shrink-0" />
-        <span className="text-xs font-semibold uppercase tracking-wider">{title}</span>
-      </div>
-      <p className="text-lg font-bold text-[var(--text-briefing)]">{value}</p>
-      <p className="mt-1 line-clamp-2 text-xs text-[var(--text-briefing)]">{sub}</p>
-    </div>
-  );
-}
-
 function Stat({
   title,
   value,

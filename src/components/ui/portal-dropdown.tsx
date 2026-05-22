@@ -8,7 +8,6 @@ import {
   useState,
   type MutableRefObject,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 
