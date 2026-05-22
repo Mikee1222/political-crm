@@ -17,6 +17,13 @@ import {
   contactFiltersToSearchParams,
   getDefaultContactFilters,
 } from "@/lib/contacts-filters";
+import { buildAlexandraPdf } from "@/lib/alexandra-pdf";
+import { storeAlexandraExport } from "@/lib/alexandra-storage";
+import { buildAlexandraExcel, buildAlexandraCsv } from "@/lib/alexandra-files";
+import { runAlexandraAnalysis } from "@/lib/alexandra-analysis";
+import { scrapePublicUrl } from "@/lib/alexandra-scrape";
+import { fetchWeatherForCity } from "@/lib/alexandra-weather";
+import { fetchNews, fetchSports } from "@/lib/alexandra-news";
 
 /** Fields allowed when merging spreadsheet row into existing contact (no phone change here). */
 const ALEX_BULK_UPDATE_FIELDS = new Set<string>([
@@ -412,6 +419,17 @@ export const ALEX_TOOLS: Tool[] = [
     input_schema: { type: "object" as const, properties: {} },
   },
   {
+    name: "forget_memory",
+    description: "Διέγραψε αποθηκευμένη μνήμη με βάση το key (όταν ο χρήστης ζητά να ξεχάσεις κάτι).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        key: { type: "string" as const, description: "Το key της μνήμης προς διαγραφή" },
+      },
+      required: ["key"],
+    },
+  },
+  {
     name: "schedule_reminder",
     description:
       "Πρόσθεσε υπενθύμιση: δημιουργεί task με title = message και due_date από ημερομηνία. Προαιρετικό contact_id· αλλιώς χρησιμοποίησε την επαφή της τρέχουσας σελίδας. datetime σε ISO 8601.",
@@ -735,6 +753,94 @@ export const ALEX_TOOLS: Tool[] = [
         status: { type: "string" as const, enum: ["Pending", "Positive", "Negative", "No Answer"] as const },
       },
       required: ["contact_ids", "status"],
+    },
+  },
+  {
+    name: "generate_pdf",
+    description: "Δημιουργία PDF για λήψη (signed URL). title + content κείμενο.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string" as const },
+        content: { type: "string" as const },
+        type: { type: "string" as const, description: "Τύπος εγγράφου, προαιρετικό" },
+      },
+      required: ["title", "content"],
+    },
+  },
+  {
+    name: "generate_excel",
+    description: "Δημιουργία Excel (.xlsx) από πίνακα αντικειμένων — επιστρέφει download_url.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        data: { type: "array" as const, items: { type: "object" as const } },
+        filename: { type: "string" as const },
+      },
+      required: ["data", "filename"],
+    },
+  },
+  {
+    name: "generate_csv",
+    description: "Δημιουργία CSV από πίνακα αντικειμένων — επιστρέφει download_url.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        data: { type: "array" as const, items: { type: "object" as const } },
+        filename: { type: "string" as const },
+      },
+      required: ["data", "filename"],
+    },
+  },
+  {
+    name: "run_analysis",
+    description:
+      "Προκαθορισμένη ανάλυση CRM (χωρίς arbitrary code): contacts_by_call_status, contacts_by_municipality, contacts_by_priority, contact_age_distribution, requests_by_status.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        type: { type: "string" as const },
+        data: { type: "array" as const, items: { type: "object" as const }, description: "Προαιρετικά δεδομένα αντί για DB" },
+      },
+      required: ["type"],
+    },
+  },
+  {
+    name: "get_weather",
+    description: "Τρέχων καιρός πόλης (Open-Meteo).",
+    input_schema: {
+      type: "object" as const,
+      properties: { city: { type: "string" as const } },
+      required: ["city"],
+    },
+  },
+  {
+    name: "get_sports",
+    description: "Αθλητικά νέα/αποτελέσματα από RSS (Google News).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        sport: { type: "string" as const },
+        query: { type: "string" as const },
+      },
+    },
+  },
+  {
+    name: "get_news",
+    description: "Τρέχοντα νέα από RSS (Google News) για όρο αναζήτησης.",
+    input_schema: {
+      type: "object" as const,
+      properties: { query: { type: "string" as const } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "scrape_url",
+    description: "Ανάγνωση δημόσιου URL (HTML → κείμενο). Μόνο http/https, όχι εσωτερικά δίκτυα.",
+    input_schema: {
+      type: "object" as const,
+      properties: { url: { type: "string" as const } },
+      required: ["url"],
     },
   },
 ];
@@ -1953,6 +2059,7 @@ export async function runAlexTool(
     const { data, error } = await ctx.supabase
       .from("alexandra_memory")
       .select("key, value, updated_at")
+      .eq("user_id", ctx.userId)
       .order("updated_at", { ascending: false })
       .limit(50);
     if (error) return { content: JSON.stringify({ error: error.message }), showExecutedTag: false };
@@ -1960,6 +2067,23 @@ export async function runAlexTool(
       content: JSON.stringify({ ok: true, memories: data ?? [] }),
       executedToolName: "get_memories",
       showExecutedTag: false,
+    };
+  }
+
+  if (name === "forget_memory") {
+    const key = String(raw.key ?? "").trim().slice(0, 200);
+    if (!key) {
+      return { content: JSON.stringify({ error: "Χρειάζεται key" }), showExecutedTag: false };
+    }
+    const { error } = await ctx.supabase
+      .from("alexandra_memory")
+      .delete()
+      .eq("user_id", ctx.userId)
+      .eq("key", key);
+    if (error) return { content: JSON.stringify({ error: error.message }), showExecutedTag: false };
+    return {
+      content: JSON.stringify({ ok: true, message: "Η μνήμη διαγράφηκε." }),
+      executedToolName: "forget_memory",
     };
   }
 
@@ -2629,6 +2753,106 @@ export async function runAlexTool(
     };
   }
 
+  if (name === "generate_pdf") {
+    const title = String(raw.title ?? "").trim() || "Έγγραφο";
+    const content = String(raw.content ?? "");
+    const docType = raw.type != null ? String(raw.type).trim() : undefined;
+    try {
+      const buf = await buildAlexandraPdf(title, content, docType);
+      const safeTitle = title.replace(/[^\w.\- ()\u0370-\u03FF]+/g, "_").slice(0, 80) || "document";
+      const stored = await storeAlexandraExport(ctx.userId, `${safeTitle}.pdf`, buf, "application/pdf");
+      return {
+        content: JSON.stringify({ ok: true, download_url: stored.download_url, path: stored.path }),
+        executedToolName: "generate_pdf",
+      };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα PDF" }) };
+    }
+  }
+
+  if (name === "generate_excel") {
+    const filename = String(raw.filename ?? "export").trim() || "export";
+    try {
+      const stored = await buildAlexandraExcel(ctx.userId, raw.data, filename);
+      return {
+        content: JSON.stringify({ ok: true, download_url: stored.download_url, path: stored.path }),
+        executedToolName: "generate_excel",
+      };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα Excel" }) };
+    }
+  }
+
+  if (name === "generate_csv") {
+    const filename = String(raw.filename ?? "export").trim() || "export";
+    try {
+      const stored = await buildAlexandraCsv(ctx.userId, raw.data, filename);
+      return {
+        content: JSON.stringify({ ok: true, download_url: stored.download_url, path: stored.path }),
+        executedToolName: "generate_csv",
+      };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα CSV" }) };
+    }
+  }
+
+  if (name === "run_analysis") {
+    const type = String(raw.type ?? "").trim();
+    if (!type) {
+      return { content: JSON.stringify({ error: "Χρειάζεται type" }) };
+    }
+    try {
+      const result = await runAlexandraAnalysis(ctx.supabase, type, raw.data);
+      return { content: JSON.stringify(result), executedToolName: "run_analysis" };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα ανάλυσης" }) };
+    }
+  }
+
+  if (name === "get_weather") {
+    const city = String(raw.city ?? "").trim();
+    try {
+      const result = await fetchWeatherForCity(city);
+      return { content: JSON.stringify(result), executedToolName: "get_weather" };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα καιρού" }) };
+    }
+  }
+
+  if (name === "get_news") {
+    const query = String(raw.query ?? "").trim();
+    try {
+      const result = await fetchNews(query);
+      return { content: JSON.stringify(result), executedToolName: "get_news" };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα νέων" }) };
+    }
+  }
+
+  if (name === "get_sports") {
+    const sport = String(raw.sport ?? "").trim();
+    const query = String(raw.query ?? "").trim();
+    try {
+      const result = await fetchSports(sport, query);
+      return { content: JSON.stringify(result), executedToolName: "get_sports" };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα αθλητικών" }) };
+    }
+  }
+
+  if (name === "scrape_url") {
+    const url = String(raw.url ?? "").trim();
+    if (!url) {
+      return { content: JSON.stringify({ error: "Χρειάζεται url" }) };
+    }
+    try {
+      const result = await scrapePublicUrl(url);
+      return { content: JSON.stringify({ ok: true, ...result }), executedToolName: "scrape_url" };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα URL" }) };
+    }
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
@@ -2650,6 +2874,10 @@ export function buildSystemPrompt({
 Μιλάς ΠΑΝΤΑ Ελληνικά. Ποτέ Αγγλικά.
 Είσαι σύντομη και συγκεκριμένη. Max 3 προτάσεις ανά απάντηση εκτός αν ζητηθεί περισσότερο.
 
+Έχεις μνήμη — θυμάσαι πληροφορίες από προηγούμενες συνομιλίες. Αν σου πουν να θυμηθείς κάτι, σώσε το (save_memory). Αν ζητήσουν να ξεχάσεις, χρησιμοποίησε forget_memory. Μπορείς επίσης να μπαίνεις σε websites και να διαβάζεις το περιεχόμενό τους (scrape_url, web search).
+
+Μπορείς να: δημιουργείς PDF/Excel αρχεία για κατέβασμα, να αναλύεις δεδομένα, να ψάχνεις στο internet, να φέρνεις real-time πληροφορίες (καιρό, νέα, αθλητικά).
+
 ΔΙΑΔΙΚΤΥΟ (WEB SEARCH):
 Έχεις πρόσβαση στο internet μέσω web search. Χρησιμοποίησε το για οτιδήποτε χρειάζεσαι — νέα, αθλητικά, καιρό, αποτελέσματα, τιμές, οποιαδήποτε τρέχουσα πληροφορία. Ψάξε πάντα όταν ρωτιέσαι για κάτι που μπορεί να έχει αλλάξει.
 
@@ -2665,7 +2893,7 @@ export function buildSystemPrompt({
 - SLA αιτημάτων: sla_due_date, ένδειξη on_track / at_risk / overdue
 - predicted_score: ακέραιο 0–100 (πειθω/πειθωτικότητα) — χαμηλό 0–33, μέτριο 34–66, υψηλό 67–100. Υπολογισμός από Εργαλεία δεδομένων ή εργαλείο calculate_scores.
 - Σελίδες: /documents, /content, /analytics, /events (εκδηλώσεις, RSVP), /volunteers (εθελοντές), /contacts (γλώσσα επαφής language, εθελοντικά πεδία).
-- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, search_media, add_event_rsvp, get_volunteer_list, get_contact_summary, get_todays_call_list, get_analytics, create_event, get_events, create_poll, get_poll_results, start_campaign, export_contacts, get_documents, bulk_update_status
+- Εργαλεία: get_saved_filters, add_calendar_event, get_calendar_events, analyze_contacts, generate_letter, generate_press_release, generate_social_post, bulk_send_nameday_wishes, send_nameday_wishes, find_contacts_not_called, analyze_document, morning_briefing, calculate_scores, generate_content, translate_text, search_media, add_event_rsvp, get_volunteer_list, get_contact_summary, get_todays_call_list, get_analytics, create_event, get_events, create_poll, get_poll_results, start_campaign, export_contacts, get_documents, bulk_update_status, generate_pdf, generate_excel, generate_csv, run_analysis, get_weather, get_sports, get_news, scrape_url (+ web search)
 
 ΝΕΕΣ ΔΥΝΑΤΟΤΗΤΕΣ:
 - Διαχείριση εκδηλώσεων (δημιουργία, επεξεργασία, RSVP)
@@ -2693,7 +2921,7 @@ EXCEL/CSV, διπλότυπα, μαζικές ενέργειες: ίδιο με 
 ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ/ΠΛΗΡΟΦΟΡΙΕΣ:
 ${pageContextBlock}
 
-ΑΠΟΘΗΚΕΥΜΕΝΗ ΜΝΗΜΗ (για προσωποποίηση — μην την επαναλέγεις αδικαιολόγητα):
+ΜΝΗΜΗ:
 ${memoriesBlock}
 `;
 }

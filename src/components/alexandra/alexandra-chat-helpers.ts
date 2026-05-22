@@ -90,6 +90,7 @@ export function greekToolLabel(t: string) {
     write_letter: "Επιστολή",
     save_memory: "Μνήμη",
     get_memories: "Φόρτωση μνημών",
+    forget_memory: "Διαγραφή μνήμης",
     schedule_reminder: "Υπενθύμιση",
     add_calendar_event: "Ημερολόγιο (νέο event)",
     get_calendar_events: "Ημερολόγιο (πρόγραμμα)",

@@ -10,6 +10,7 @@ import {
   Sparkles,
   User,
 } from "lucide-react";
+import { PortalAboutCareerOrbit } from "@/components/portal/portal-about-career-orbit";
 
 export const dynamic = "force-dynamic";
 
@@ -142,39 +143,10 @@ export default function PortalAboutPage() {
                 Πολιτική καριέρα
               </h2>
             </div>
-            <div className="relative pl-0">
-              <div
-                className="absolute bottom-0 left-3 top-1 w-0.5 rounded-full sm:left-3.5"
-                style={{ background: "linear-gradient(180deg, #C9A84C, rgba(0, 52, 118, 0.15))" }}
-                aria-hidden
-              />
-              <ul className="space-y-0">
-                {[
-                  { y: "2009", t: "Βουλευτής ΝΔ, Αιτωλοακαρνανία" },
-                  { y: "2012", t: "Αναπληρωτής Υπουργός Δικαιοσύνης (κυβέρνηση Σαμαρά)" },
-                  { y: "2015", t: "Εκπρόσωπος Τύπου ΝΔ" },
-                  { y: "2015", t: "Πρόεδρος, Κοινοβουλευτική Ομάδα φιλίας Ελλάδας–Ισραήλ" },
-                ].map((row) => (
-                  <li key={row.y + row.t} className="relative flex gap-3 pb-9 pl-0 last:pb-0 sm:gap-4">
-                    <div className="z-[1] flex w-7 shrink-0 justify-center sm:w-8" aria-hidden>
-                      <div
-                        className="h-2.5 w-2.5 self-start rounded-full ring-2 ring-amber-100 sm:h-3 sm:w-3"
-                        style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)", marginTop: "0.4rem" }}
-                      />
-                    </div>
-                    <div className="min-w-0 pt-0">
-                      <p
-                        className="font-mono text-sm font-extrabold"
-                        style={{ color: ND }}
-                      >
-                        {row.y}
-                      </p>
-                      <p className="mt-1.5 text-sm font-medium text-[#334155] sm:text-base">{row.t}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <p className="mb-4 text-sm text-[#64748B]">
+              Πατήστε κάθε κόμβο για λεπτομέρειες — οι συνδεδεμένοι κόμβοι επισημαίνονται αυτόματα.
+            </p>
+            <PortalAboutCareerOrbit />
           </section>
 
           {/* Personal */}

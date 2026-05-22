@@ -1,7 +1,11 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import type { MessageParam, Tool, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
+import type {
+  MessageParam,
+  ToolResultBlockParam,
+  WebSearchTool20250305,
+} from "@anthropic-ai/sdk/resources/messages";
 import { type UserProfile } from "@/lib/auth-helpers";
 import {
   ALEX_TOOLS,
@@ -43,7 +47,7 @@ const bodySchema = z.object({
 const MODEL = "claude-sonnet-4-6";
 
 /** Anthropic server-side web search (no extra API key; executed by Anthropic). */
-const ALEX_WEB_SEARCH_TOOL: Tool = {
+const ALEX_WEB_SEARCH_TOOL: WebSearchTool20250305 = {
   type: "web_search_20250305",
   name: "web_search",
 };
@@ -195,6 +199,7 @@ export async function POST(request: NextRequest) {
   const { data: memRows, error: memErr } = await supabase
     .from("alexandra_memory")
     .select("key, value, updated_at")
+    .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(50);
   if (memErr) {
