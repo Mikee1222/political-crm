@@ -79,7 +79,7 @@ function mapRequestRows(data: unknown[]) {
     const c = r0.contacts;
     const contact = Array.isArray(c) ? c[0] : c;
     const slaUi = computeSlaStatus(r0.sla_due_date ?? null, r0.status ?? null);
-    return { ...row, contacts: contact ?? null, slaUi };
+    return { ...(row as Record<string, unknown>), contacts: contact ?? null, slaUi };
   });
 }
 
