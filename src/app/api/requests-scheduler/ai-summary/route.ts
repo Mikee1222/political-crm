@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { anthropicComplete } from "@/lib/anthropic-once";
-import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +12,39 @@ const SELECT_WITH_CONTACT =
 const SELECT_FALLBACK =
   "id, request_code, title, description, category, status, priority, created_at, sla_due_date, contact_id, contacts!contact_id(first_name,last_name,phone,address,area,municipality,political_stance,call_status,occupation,age)";
 
+type ContactRow = {
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  area?: string | null;
+  municipality?: string | null;
+  political_stance?: string | null;
+  call_status?: string | null;
+  occupation?: string | null;
+  age?: number | null;
+  contact_groups?: { name?: string } | { name?: string }[] | null;
+};
+
+function resolveContact(contacts: unknown): ContactRow | null {
+  if (!contacts) return null;
+  if (Array.isArray(contacts)) return (contacts[0] as ContactRow) ?? null;
+  return contacts as ContactRow;
+}
+
+function resolveGroupName(contact: ContactRow | null): string {
+  const groups = contact?.contact_groups;
+  if (Array.isArray(groups)) return groups[0]?.name ?? "Καμία";
+  if (groups && typeof groups === "object" && "name" in groups) {
+    return (groups as { name?: string }).name ?? "Καμία";
+  }
+  return "Καμία";
+}
+
 export async function POST(req: NextRequest) {
   try {
+    console.log("[ai-summary] API key exists:", !!process.env.ANTHROPIC_API_KEY);
+
     const crm = await checkCRMAccess(req);
     if (!crm.allowed) return crm.response;
     const { profile, supabase } = crm;
@@ -41,15 +71,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (reqErr || !requestRow) {
-      return NextResponse.json({ error: reqErr?.message ?? "Δεν βρέθηκε το αίτημα" }, { status: 404 });
+      console.error("[ai-summary] request fetch failed:", reqErr);
+      return NextResponse.json(
+        { error: reqErr?.message ?? "Δεν βρέθηκε το αίτημα" },
+        { status: 404 },
+      );
     }
 
-    const { data: notes } = await supabase
+    const { data: notes, error: notesErr } = await supabase
       .from("request_notes")
       .select("content, created_at")
       .eq("request_id", requestId)
       .order("created_at", { ascending: true })
       .limit(10);
+
+    if (notesErr) {
+      console.error("[ai-summary] notes fetch failed:", notesErr);
+    }
 
     const row = requestRow as {
       request_code?: string | null;
@@ -63,31 +101,11 @@ export async function POST(req: NextRequest) {
       contacts?: unknown;
     };
 
-    const rawC = row.contacts;
-    const contact = (Array.isArray(rawC) ? rawC[0] : rawC) as {
-      first_name?: string | null;
-      last_name?: string | null;
-      phone?: string | null;
-      address?: string | null;
-      area?: string | null;
-      municipality?: string | null;
-      political_stance?: string | null;
-      call_status?: string | null;
-      occupation?: string | null;
-      age?: number | null;
-      contact_groups?: { name?: string } | { name?: string }[] | null;
-    } | null;
-
+    const contact = resolveContact(row.contacts);
     const contactName = contact
       ? `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || "Άγνωστος"
       : "Άγνωστος";
-
-    const groupRaw = contact?.contact_groups;
-    const groupName = Array.isArray(groupRaw)
-      ? groupRaw[0]?.name
-      : groupRaw && typeof groupRaw === "object" && "name" in groupRaw
-        ? (groupRaw as { name?: string }).name
-        : null;
+    const groupName = resolveGroupName(contact);
 
     const notesText =
       notes && notes.length > 0
@@ -123,7 +141,7 @@ SLA: ${row.sla_due_date ?? "—"}
 ΕΠΑΓΓΕΛΜΑ: ${contact?.occupation ?? "Άγνωστο"}
 ΠΟΛΙΤΙΚΗ ΣΤΑΣΗ: ${contact?.political_stance ?? "—"}
 ΚΑΤΑΣΤΑΣΗ ΚΛΗΣΗΣ: ${contact?.call_status ?? "—"}
-ΟΜΑΔΑ: ${groupName ?? "Καμία"}
+ΟΜΑΔΑ: ${groupName}
 
 ΙΣΤΟΡΙΚΟ ΣΗΜΕΙΩΣΕΩΝ:
 ${notesText}
@@ -133,15 +151,30 @@ ${notesText}
     const out = await anthropicComplete(
       "Είσαι βοηθός για βουλευτή. Απαντάς μόνο στα ελληνικά, 3-5 προτάσεις, χωρίς τίτλο ή markdown.",
       prompt,
+      { model: "claude-sonnet-4-5", maxTokens: 300 },
     );
 
     if (!out.ok) {
-      return NextResponse.json({ error: out.error }, { status: 503 });
+      console.error("[ai-summary] Anthropic failed:", out.error);
+      return NextResponse.json(
+        {
+          error: out.error,
+          summary: `Σφάλμα: ${out.error}`,
+        },
+        { status: 503 },
+      );
     }
 
     return NextResponse.json({ summary: out.text.trim() });
-  } catch (e) {
-    console.error("[api/requests-scheduler/ai-summary POST]", e);
-    return nextJsonError();
+  } catch (err) {
+    console.error("AI Summary error:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      {
+        error: message,
+        summary: `Σφάλμα: ${message}`,
+      },
+      { status: 500 },
+    );
   }
 }
