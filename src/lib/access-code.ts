@@ -26,7 +26,7 @@ export function minutesUntil(until: Date): number {
   return Math.max(0, Math.ceil((until.getTime() - Date.now()) / 60_000));
 }
 
-export const ACCESS_GRANT_HOURS = 8;
+export const ACCESS_GRANT_HOURS = 2;
 
 export function accessGrantExpiresAt(from: Date = new Date()): Date {
   return new Date(from.getTime() + ACCESS_GRANT_HOURS * 60 * 60 * 1000);

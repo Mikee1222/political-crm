@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { lux } from "@/lib/luxury-styles";
+import { fetchWithTimeout } from "@/lib/client-fetch";
 
 export function LogoutButton({
   className = "",
@@ -15,6 +16,11 @@ export function LogoutButton({
   const router = useRouter();
 
   const onLogout = async () => {
+    try {
+      await fetchWithTimeout("/api/access-code/revoke", { method: "POST" });
+    } catch {
+      /* ignore — still sign out */
+    }
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");

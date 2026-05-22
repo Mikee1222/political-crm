@@ -11,6 +11,12 @@ export default function EnterCodePage() {
   const [error, setError] = useState("");
   const router = useRouter();
 
+  const nextPath = () => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+    return "/dashboard";
+  };
+
   const handleSubmit = async () => {
     if (code.length !== 6) return;
     setLoading(true);
@@ -23,7 +29,7 @@ export default function EnterCodePage() {
       });
       const data = (await res.json()) as { error?: string };
       if (res.ok) {
-        router.push("/dashboard");
+        router.push(nextPath());
         router.refresh();
       } else {
         setError(data.error ?? "Λάθος κωδικός.");
@@ -71,7 +77,7 @@ export default function EnterCodePage() {
             Είσοδος
           </button>
           <p className="text-xs text-[var(--text-muted)]">
-            Ο κωδικός αλλάζει κάθε ώρα. Η πρόσβαση ισχύει για 8 ώρες.
+            Ο κωδικός αλλάζει κάθε ώρα. Η πρόσβαση ισχύει για 2 ώρες.
           </p>
         </div>
       </div>

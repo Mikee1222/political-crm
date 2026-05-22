@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
 import { isPortalOnlyUser } from "@/lib/portal-user-status";
+import { createServiceClient } from "@/lib/supabase/admin";
 
 const CALLER_BLOCKED_PREFIXES = [
   "/dashboard",
@@ -59,11 +60,70 @@ function isPollPublicPath(pathname: string) {
   return false;
 }
 
-function isAccessCodeExemptPath(pathname: string) {
-  if (pathname === "/enter-code") return true;
-  if (pathname === "/login") return true;
-  if (pathname === "/api/access-code/verify") return true;
-  return false;
+const ACCESS_CODE_EXCLUDED_PREFIXES = [
+  "/enter-code",
+  "/api/access-code",
+  "/login",
+  "/portal",
+  "/_next",
+  "/favicon",
+  "/api/auth",
+] as const;
+
+function isAccessCodeExcluded(pathname: string) {
+  return ACCESS_CODE_EXCLUDED_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+async function userHasValidAccessGrant(userId: string): Promise<boolean> {
+  const adminDb = createServiceClient();
+  const { data: grant } = await adminDb
+    .from("access_code_grants")
+    .select("expires_at")
+    .eq("user_id", userId)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  return Boolean(grant);
+}
+
+async function isCrmAdminUser(userId: string): Promise<boolean> {
+  const adminDb = createServiceClient();
+  const { data: profile } = await adminDb
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+  return profile?.role === "admin";
+}
+
+/** Returns a redirect/JSON response if non-admin must enter access code; null if allowed. */
+async function enforceCrmAccessCode(
+  request: NextRequest,
+  userId: string,
+  pathname: string,
+  sessionResponse: NextResponse,
+): Promise<NextResponse | null> {
+  if (isAccessCodeExcluded(pathname)) return null;
+
+  const isAdmin = await isCrmAdminUser(userId);
+  if (isAdmin) return null;
+
+  const hasGrant = await userHasValidAccessGrant(userId);
+  if (hasGrant) return null;
+
+  if (pathname.startsWith("/api/")) {
+    return jsonWithSession(
+      request,
+      "Απαιτείται κλειδαριθμός πρόσβασης. Μεταβείτε στη σελίδα εισαγωγής κωδικού.",
+      403,
+      sessionResponse,
+    );
+  }
+
+  const enterCodeUrl = new URL("/enter-code", request.url);
+  if (pathname !== "/enter-code") {
+    enterCodeUrl.searchParams.set("next", pathname);
+  }
+  return redirectWithSession(request, enterCodeUrl.pathname + enterCodeUrl.search, sessionResponse);
 }
 
 function jsonWithSession(
@@ -224,6 +284,8 @@ export async function middleware(request: NextRequest) {
       if (isPortalUser) {
         return NextResponse.redirect(portalDashboardRedirectUrl());
       }
+      const gate = await enforceCrmAccessCode(request, authUser.id, "/dashboard", sessionResponse);
+      if (gate) return gate;
       return redirectWithSession(request, "/dashboard", sessionResponse);
     }
     if (isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
@@ -303,34 +365,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (
-    isLoggedIn &&
-    !isPortalUser &&
-    !isPortalAppPath(pathname) &&
-    !isAccessCodeExemptPath(pathname) &&
-    role !== "admin"
-  ) {
-    const { data: grant } = await supabase
-      .from("access_code_grants")
-      .select("expires_at")
-      .eq("user_id", authUser!.id)
-      .gt("expires_at", new Date().toISOString())
-      .maybeSingle();
-
-    if (!grant) {
-      if (pathname.startsWith("/api/")) {
-        if (pathname === "/api/access-code/verify") {
-          return sessionResponse;
-        }
-        return jsonWithSession(
-          request,
-          "Απαιτείται κλειδαριθμός πρόσβασης. Μεταβείτε στη σελίδα εισαγωγής κωδικού.",
-          403,
-          sessionResponse,
-        );
-      }
-      return redirectWithSession(request, "/enter-code", sessionResponse);
-    }
+  if (isLoggedIn && authUser && !isPortalUser && !isPortalAppPath(pathname)) {
+    const gate = await enforceCrmAccessCode(request, authUser.id, pathname, sessionResponse);
+    if (gate) return gate;
   }
 
   if (isLoggedIn && !isCrmLoginPage && !isRetellPublic(pathname) && !isPortalUser) {

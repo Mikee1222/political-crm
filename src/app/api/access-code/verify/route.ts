@@ -6,7 +6,7 @@ import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
 
-/** POST { code } — verify hourly code and grant CRM access for 8 hours. */
+/** POST { code } — verify hourly code and grant CRM access for 2 hours. */
 export async function POST(req: NextRequest) {
   try {
     const crm = await checkCRMAccess(req);
