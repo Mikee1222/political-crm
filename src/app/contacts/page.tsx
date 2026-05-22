@@ -155,21 +155,24 @@ function countActiveContactFilters(filters: ContactListFilters): number {
   return n;
 }
 
+function contactTelHref(c: Contact): string | null {
+  const raw = (c.phone ?? "").trim();
+  if (!raw) return null;
+  return `tel:${raw.replace(/\s/g, "")}`;
+}
+
 function ContactDesktopRowCard({
   c,
   selected,
   onToggleSelected,
-  canManage,
   onRowNavigate,
-  onTriggerCall,
 }: {
   c: Contact;
   selected: boolean;
   onToggleSelected: () => void;
-  canManage: boolean;
   onRowNavigate: () => void;
-  onTriggerCall: (e: React.MouseEvent) => void;
 }) {
+  const tel = contactTelHref(c);
   const nameDay = formatNameDayGreek(c.name_day);
   const nameDayGold = isNameDayTodayOrThisWeek(c.name_day);
   const initials = `${(c.first_name[0] ?? "?").toUpperCase()}${(c.last_name[0] ?? "?").toUpperCase()}`;
@@ -275,16 +278,28 @@ function ContactDesktopRowCard({
           ) : null}
         </div>
         <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover/contact-card:opacity-100">
-          <button
-            type="button"
-            className="rounded-lg p-2 text-[var(--text-primary)] shadow-[0_6px_18px_color-mix(in_srgb,var(--success)_35%,transparent)] transition-[filter,opacity] duration-200 hover:brightness-110 disabled:pointer-events-none disabled:opacity-40"
-            style={{ background: "var(--success)" }}
-            title={canManage ? "Κλήση (Retell)" : "Μόνο managers"}
-            disabled={!canManage}
-            onClick={onTriggerCall}
-          >
-            <Phone className="h-4 w-4" />
-          </button>
+          {tel ? (
+            <a
+              href={tel}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-lg p-2 text-[var(--text-primary)] shadow-[0_6px_18px_color-mix(in_srgb,var(--success)_35%,transparent)] transition-[filter,opacity] duration-200 hover:brightness-110"
+              style={{ background: "var(--success)" }}
+              title="Κλήση"
+              aria-label="Κλήση τηλεφώνου"
+            >
+              <Phone className="h-4 w-4" />
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="rounded-lg p-2 text-[var(--text-primary)] shadow-[0_6px_18px_color-mix(in_srgb,var(--success)_35%,transparent)] transition-[filter,opacity] duration-200 disabled:pointer-events-none disabled:opacity-40"
+              style={{ background: "var(--success)" }}
+              title="Χωρίς τηλέφωνο"
+              disabled
+            >
+              <Phone className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             className="rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--border))] p-2 text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent-gold)_14%,var(--bg-elevated))]"
@@ -320,19 +335,16 @@ function ContactsMobileSkeleton() {
 
 function ContactSwipeCard({
   c,
-  onCall,
   onOpenDetail,
-  canCall,
   isAdmin,
   onDeleted,
 }: {
   c: Contact;
-  onCall: () => void;
   onOpenDetail: () => void;
-  canCall: boolean;
   isAdmin: boolean;
   onDeleted: () => void;
 }) {
+  const tel = contactTelHref(c);
   const pr = c.priority ?? "Medium";
   const pageCtx = useOptionalAlexandraPageContact();
   const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
@@ -382,24 +394,41 @@ function ContactSwipeCard({
           <span className="text-[9px] font-bold uppercase leading-tight text-[var(--accent-gold)]">Αλεξάνδρα</span>
         </button>
         <div className="min-w-0 flex-1 bg-[var(--bg-secondary)]/40" />
-        <button
-          type="button"
-          className="hq-press-mobile flex shrink-0 flex-col items-center justify-center gap-0.5 text-[var(--text-primary)] disabled:opacity-40"
-          style={{
-            width: SW_CALL,
-            background:
-              "linear-gradient(to bottom left, color-mix(in srgb, var(--accent-blue-bright) 88%, var(--bg-card)), var(--accent-blue))",
-          }}
-          disabled={!canCall}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (canCall) onCall();
-            setTx(0);
-          }}
-        >
-          <Phone className="h-5 w-5" />
-          <span className="text-[9px] font-bold uppercase">Κλήση</span>
-        </button>
+        {tel ? (
+          <a
+            href={tel}
+            onClick={(e) => {
+              e.stopPropagation();
+              setTx(0);
+            }}
+            className="hq-press-mobile flex shrink-0 flex-col items-center justify-center gap-0.5 text-[var(--text-primary)]"
+            style={{
+              width: SW_CALL,
+              background:
+                "linear-gradient(to bottom left, color-mix(in srgb, var(--accent-blue-bright) 88%, var(--bg-card)), var(--accent-blue))",
+            }}
+            title="Κλήση"
+            aria-label="Κλήση τηλεφώνου"
+          >
+            <Phone className="h-5 w-5" />
+            <span className="text-[9px] font-bold uppercase">Κλήση</span>
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="hq-press-mobile flex shrink-0 flex-col items-center justify-center gap-0.5 text-[var(--text-primary)] disabled:opacity-40"
+            style={{
+              width: SW_CALL,
+              background:
+                "linear-gradient(to bottom left, color-mix(in srgb, var(--accent-blue-bright) 88%, var(--bg-card)), var(--accent-blue))",
+            }}
+            disabled
+            title="Χωρίς τηλέφωνο"
+          >
+            <Phone className="h-5 w-5" />
+            <span className="text-[9px] font-bold uppercase">Κλήση</span>
+          </button>
+        )}
         {isAdmin ? (
           <button
             type="button"
@@ -531,19 +560,28 @@ function ContactSwipeCard({
                 </div>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="hq-press-mobile ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full text-[var(--text-primary)] shadow-[0_8px_22px_color-mix(in_srgb,var(--success)_38%,transparent)] disabled:pointer-events-none disabled:opacity-35"
-              style={{ background: "var(--success)" }}
-              title={canCall ? "Κλήση" : "Μόνο managers"}
-              disabled={!canCall}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (canCall) onCall();
-              }}
-            >
-              <Phone className="h-5 w-5" />
-            </button>
+            {tel ? (
+              <a
+                href={tel}
+                onClick={(e) => e.stopPropagation()}
+                className="hq-press-mobile ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full text-[var(--text-primary)] shadow-[0_8px_22px_color-mix(in_srgb,var(--success)_38%,transparent)]"
+                style={{ background: "var(--success)" }}
+                title="Κλήση"
+                aria-label="Κλήση τηλεφώνου"
+              >
+                <Phone className="h-5 w-5" />
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="hq-press-mobile ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full text-[var(--text-primary)] shadow-[0_8px_22px_color-mix(in_srgb,var(--success)_38%,transparent)] disabled:pointer-events-none disabled:opacity-35"
+                style={{ background: "var(--success)" }}
+                title="Χωρίς τηλέφωνο"
+                disabled
+              >
+                <Phone className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -920,41 +958,6 @@ function ContactsPage() {
   const allChecked = contacts.length > 0 && contacts.every((c) => selected.has(c.id));
 
   const activeFilterPillCount = useMemo(() => countActiveContactFilters(f), [f]);
-
-  const triggerCall = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (!canManage) return;
-    setRetellCallMsg(null);
-    const res = await fetchWithTimeout("/api/retell/call", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contact_id: id }),
-    });
-    const j = (await res.json().catch(() => ({}))) as { error?: string; success?: boolean };
-    if (!res.ok) {
-      setRetellCallMsg({ type: "err", text: j.error ?? "Η κλήση απέτυχε" });
-      return;
-    }
-    setRetellCallMsg({ type: "ok", text: "Η κλήση ξεκίνησε (Retell)." });
-    await load();
-  };
-
-  const triggerCallById = async (id: string) => {
-    if (!canManage) return;
-    setRetellCallMsg(null);
-    const res = await fetchWithTimeout("/api/retell/call", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contact_id: id }),
-    });
-    const j = (await res.json().catch(() => ({}))) as { error?: string; success?: boolean };
-    if (!res.ok) {
-      setRetellCallMsg({ type: "err", text: j.error ?? "Η κλήση απέτυχε" });
-      return;
-    }
-    setRetellCallMsg({ type: "ok", text: "Η κλήση ξεκίνησε (Retell)." });
-    await load();
-  };
 
   const postBulk = async (
     action: "update_status" | "add_to_campaign" | "delete" | "send_whatsapp",
@@ -1367,9 +1370,7 @@ function ContactsPage() {
               <li key={c.id}>
                 <ContactSwipeCard
                   c={c}
-                  canCall={canManage}
                   isAdmin={isAdmin}
-                  onCall={() => void triggerCallById(c.id)}
                   onOpenDetail={() => router.push(`/contacts/${c.id}`)}
                   onDeleted={() => void load()}
                 />
@@ -1435,9 +1436,7 @@ function ContactsPage() {
                   return n;
                 })
               }
-              canManage={canManage}
               onRowNavigate={() => router.push(`/contacts/${c.id}`)}
-              onTriggerCall={(e) => void triggerCall(e, c.id)}
             />
           ))}
         </div>
