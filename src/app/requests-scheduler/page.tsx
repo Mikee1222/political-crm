@@ -15,6 +15,7 @@ import {
 } from "date-fns";
 import { el } from "date-fns/locale";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -60,7 +61,7 @@ type SchedulerRequest = {
   contacts: { first_name: string; last_name: string } | null;
 };
 
-type MobilePanel = "queue" | "view";
+type MobilePanel = "queue" | "calendar";
 
 const KANBAN_COLUMNS: {
   status: string;
@@ -357,8 +358,44 @@ export default function RequestsSchedulerPage() {
   }, [canManage, viewMode, loadKanban, loadScheduler]);
 
   useEffect(() => {
-    if (viewMode === "kanban") setMobilePanel("view");
+    if (viewMode === "kanban") setMobilePanel("calendar");
   }, [viewMode]);
+
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const weekDayColumns = useMemo(
+    () =>
+      days.map((ymd) => {
+        const d = parseISO(ymd);
+        return {
+          date: ymd,
+          dayName: format(d, "EEE", { locale: el }).toUpperCase(),
+          dayNum: format(d, "d"),
+          requests: scheduledByDay.get(ymd) ?? [],
+          today: isToday(d),
+        };
+      }),
+    [days, scheduledByDay],
+  );
+
+  useEffect(() => {
+    if (viewMode !== "week" || !isMobile) return;
+    const t = window.setTimeout(() => {
+      document.getElementById("today-col")?.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [weekStart, viewMode, mobilePanel, isMobile]);
 
   const shiftWeek = (delta: number) => {
     const d = parseISO(weekStart);
@@ -373,7 +410,7 @@ export default function RequestsSchedulerPage() {
     const d = parseISO(ymd);
     setWeekStart(format(startOfWeek(d, { weekStartsOn: 1 }), "yyyy-MM-dd"));
     setViewMode("week");
-    setMobilePanel("view");
+    setMobilePanel("calendar");
   };
 
   const scheduleRequest = async (requestId: string, scheduledDate: string) => {
@@ -407,7 +444,7 @@ export default function RequestsSchedulerPage() {
         setScheduled((s) => s.map((r) => (r.id === requestId ? { ...r, ...j.request } : r)));
       }
       showToast(`Αίτημα προγραμματίστηκε για ${formatScheduleToastDate(scheduledDate)}`, "success");
-      if (mobilePanel === "queue") setMobilePanel("view");
+      if (mobilePanel === "queue") setMobilePanel("calendar");
     } catch {
       setQueue(prevQueue);
       setScheduled(prevScheduled);
@@ -544,7 +581,7 @@ export default function RequestsSchedulerPage() {
   };
 
   useEffect(() => {
-    if (!confirmPopover) return;
+    if (!confirmPopover || isMobile) return;
     const close = (ev: Event) => {
       const target = ev.target as Node;
       if (confirmPopoverRef.current?.contains(target)) return;
@@ -557,7 +594,7 @@ export default function RequestsSchedulerPage() {
       window.clearTimeout(t);
       window.removeEventListener("click", close);
     };
-  }, [confirmPopover]);
+  }, [confirmPopover, isMobile]);
 
   if (!canManage) {
     return (
@@ -604,22 +641,27 @@ export default function RequestsSchedulerPage() {
       ) : null}
 
       {showQueuePanel ? (
-        <div className="flex gap-2 lg:hidden">
-          {(["queue", "view"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setMobilePanel(tab)}
-              className={cn(
-                "flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold transition",
-                mobilePanel === tab
-                  ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_14%,var(--bg-card))] text-foreground"
-                  : "border-border bg-card text-muted-foreground",
-              )}
-            >
-              {tab === "queue" ? "Ουρά" : "Προβολή"}
-            </button>
-          ))}
+        <div className="mb-4 flex gap-1 overflow-hidden rounded-xl border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_55%,var(--bg-card))] p-1 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobilePanel("queue")}
+            className={cn(
+              "flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors",
+              mobilePanel === "queue" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Ουρά ({filteredQueue.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobilePanel("calendar")}
+            className={cn(
+              "flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors",
+              mobilePanel === "calendar" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Ημερολόγιο
+          </button>
         </div>
       ) : null}
 
@@ -633,7 +675,7 @@ export default function RequestsSchedulerPage() {
           <div
             className={cn(
               "flex shrink-0 overflow-hidden transition-all duration-300",
-              mobilePanel === "view" ? "hidden lg:flex" : "flex",
+              mobilePanel === "calendar" ? "hidden lg:flex" : "flex",
               "max-lg:w-full max-lg:max-w-full",
               queueOpen ? "lg:w-80" : "lg:w-10",
             )}
@@ -745,20 +787,36 @@ export default function RequestsSchedulerPage() {
             <div className="flex flex-wrap items-center gap-2">
               {viewMode === "week" ? (
                 <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => shiftWeek(-1)} className={lux.btnIcon} aria-label="Προηγούμενη εβδομάδα">
-                    <ChevronLeft className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(-1)}
+                    className={cn(
+                      lux.btnIcon,
+                      "max-lg:flex max-lg:h-10 max-lg:w-10 max-lg:items-center max-lg:justify-center max-lg:rounded-xl max-lg:border max-lg:border-border max-lg:touch-manipulation",
+                    )}
+                    aria-label="Προηγούμενη εβδομάδα"
+                  >
+                    <ChevronLeft className="h-4 w-4 max-lg:h-5 max-lg:w-5" />
                   </button>
                   <button
                     type="button"
                     onClick={() =>
                       setWeekStart(format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd"))
                     }
-                    className={lux.btnSecondary + " !px-3 !py-1.5 !text-xs"}
+                    className={lux.btnSecondary + " !px-3 !py-1.5 !text-xs max-lg:!min-h-10"}
                   >
                     Σήμερα
                   </button>
-                  <button type="button" onClick={() => shiftWeek(1)} className={lux.btnIcon} aria-label="Επόμενη εβδομάδα">
-                    <ChevronRight className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(1)}
+                    className={cn(
+                      lux.btnIcon,
+                      "max-lg:flex max-lg:h-10 max-lg:w-10 max-lg:items-center max-lg:justify-center max-lg:rounded-xl max-lg:border max-lg:border-border max-lg:touch-manipulation",
+                    )}
+                    aria-label="Επόμενη εβδομάδα"
+                  >
+                    <ChevronRight className="h-4 w-4 max-lg:h-5 max-lg:w-5" />
                   </button>
                 </div>
               ) : null}
@@ -935,96 +993,179 @@ export default function RequestsSchedulerPage() {
               </div>
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-x-auto overflow-y-visible p-3">
-              <div className="flex min-h-96 gap-2 overflow-visible">
-                {days.map((ymd) => {
-                  const d = parseISO(ymd);
-                  const items = scheduledByDay.get(ymd) ?? [];
-                  const today = isToday(d);
-                  return (
-                    <div
-                      key={ymd}
-                      className={cn(
-                        "flex min-h-96 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_35%,var(--bg-card))]",
-                        today && "ring-1 ring-[var(--accent-gold)]/50",
-                      )}
-                    >
+            <>
+              <div className="min-h-0 flex-1 overflow-x-auto overflow-y-visible p-3 lg:hidden">
+                <div className="-mx-1 overflow-x-auto px-1">
+                  <div className="flex min-w-max gap-2 pb-2">
+                    {weekDayColumns.map((day) => (
                       <div
+                        key={day.date}
+                        id={day.today ? "today-col" : undefined}
                         className={cn(
-                          "border-b border-border px-2 py-2 text-center",
-                          today && "bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)]",
+                          "w-[140px] shrink-0 rounded-xl border-2 p-2",
+                          day.today
+                            ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))]"
+                            : "border-border bg-card",
                         )}
                       >
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:hidden">
-                          {format(d, "EEE", { locale: el })} {format(d, "d/M", { locale: el })}
-                        </p>
-                        <p className="hidden text-xs font-bold uppercase tracking-wide text-foreground lg:block">
-                          {format(d, "EEEE d/M", { locale: el })}
-                        </p>
+                        <div
+                          className={cn(
+                            "mb-2 border-b border-border pb-2 text-center",
+                            day.today ? "text-[var(--accent-gold)]" : "text-muted-foreground",
+                          )}
+                        >
+                          <div className="text-[10px] font-semibold uppercase tracking-widest">{day.dayName}</div>
+                          <div
+                            className={cn(
+                              "mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-lg font-bold",
+                              day.today && "bg-[var(--accent-gold)] text-[var(--text-badge-on-gold)]",
+                            )}
+                          >
+                            {day.dayNum}
+                          </div>
+                        </div>
+                        <div className="min-h-[120px] space-y-1.5">
+                          {day.requests.length === 0 ? (
+                            <p className="pt-4 text-center text-[10px] text-muted-foreground">Χωρίς αιτήματα</p>
+                          ) : (
+                            day.requests.map((r) => (
+                              <MobileCalendarCard
+                                key={r.id}
+                                request={r}
+                                onTickClick={(e) => handleTickClick(e, r.id)}
+                              />
+                            ))
+                          )}
+                        </div>
                       </div>
-                      <ul
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="hidden min-h-0 flex-1 overflow-x-auto overflow-y-visible p-3 lg:block">
+                <div className="flex min-h-96 gap-2 overflow-visible">
+                  {days.map((ymd) => {
+                    const d = parseISO(ymd);
+                    const items = scheduledByDay.get(ymd) ?? [];
+                    const today = isToday(d);
+                    return (
+                      <div
+                        key={ymd}
                         className={cn(
-                          "flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto p-2",
-                          items.length > 0 ? "max-h-80" : "",
+                          "flex min-h-96 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_35%,var(--bg-card))]",
+                          today && "ring-1 ring-[var(--accent-gold)]/50",
                         )}
                       >
-                        {items.length === 0 ? (
-                          <li className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border py-6 text-center text-[10px] text-muted-foreground">
-                            Χωρίς αιτήματα
-                          </li>
-                        ) : (
-                          items.map((r) => (
-                            <CalendarCard
-                              key={r.id}
-                              request={r}
-                              onTickClick={(e) => handleTickClick(e, r.id)}
-                            />
-                          ))
-                        )}
-                      </ul>
-                    </div>
-                  );
-                })}
+                        <div
+                          className={cn(
+                            "border-b border-border px-2 py-2 text-center",
+                            today && "bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)]",
+                          )}
+                        >
+                          <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                            {format(d, "EEEE d/M", { locale: el })}
+                          </p>
+                        </div>
+                        <ul
+                          className={cn(
+                            "flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto p-2",
+                            items.length > 0 ? "max-h-80" : "",
+                          )}
+                        >
+                          {items.length === 0 ? (
+                            <li className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border py-6 text-center text-[10px] text-muted-foreground">
+                              Χωρίς αιτήματα
+                            </li>
+                          ) : (
+                            items.map((r) => (
+                              <CalendarCard
+                                key={r.id}
+                                request={r}
+                                onTickClick={(e) => handleTickClick(e, r.id)}
+                              />
+                            ))
+                          )}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </section>
       </div>
 
       {confirmPopover && typeof document !== "undefined"
         ? createPortal(
-            <div
-              ref={confirmPopoverRef}
-              style={{
-                position: "fixed",
-                left: confirmPopover.x,
-                top: confirmPopover.y,
-                zIndex: 9999,
-              }}
-              className="w-52 rounded-xl border border-border bg-card p-4 shadow-2xl"
-              role="dialog"
-              aria-label="Επιβεβαίωση ολοκλήρωσης"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <p className="mb-3 text-sm font-medium text-foreground">Να ολοκληρωθεί το αίτημα;</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleCompleteFromPopover(confirmPopover.requestId)}
-                  className="flex-1 rounded-lg bg-[var(--success)] py-1.5 text-sm font-medium text-white transition-colors hover:brightness-110"
-                >
-                  Ναι
-                </button>
-                <button
-                  type="button"
+            isMobile ? (
+              <>
+                <div
+                  className="fixed inset-0 z-[9998] bg-black/40"
+                  aria-hidden
                   onClick={() => setConfirmPopover(null)}
-                  className="flex-1 rounded-lg border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_55%,var(--bg-card))] py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))]"
+                />
+                <div
+                  className="fixed bottom-0 left-0 right-0 z-[9999] rounded-t-2xl bg-card p-6 shadow-2xl"
+                  role="dialog"
+                  aria-label="Επιβεβαίωση ολοκλήρωσης"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  Άκυρο
-                </button>
+                  <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+                  <p className="mb-4 text-center text-base font-semibold text-foreground">Να ολοκληρωθεί το αίτημα;</p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmPopover(null)}
+                      className="flex-1 rounded-xl border border-border py-3 text-sm font-medium text-foreground"
+                    >
+                      Άκυρο
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCompleteFromPopover(confirmPopover.requestId)}
+                      className="flex-1 rounded-xl bg-[var(--success)] py-3 text-sm font-semibold text-white"
+                    >
+                      Ναι, ολοκλήρωση
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div
+                ref={confirmPopoverRef}
+                style={{
+                  position: "fixed",
+                  left: confirmPopover.x,
+                  top: confirmPopover.y,
+                  zIndex: 9999,
+                }}
+                className="w-52 rounded-xl border border-border bg-card p-4 shadow-2xl"
+                role="dialog"
+                aria-label="Επιβεβαίωση ολοκλήρωσης"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <p className="mb-3 text-sm font-medium text-foreground">Να ολοκληρωθεί το αίτημα;</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleCompleteFromPopover(confirmPopover.requestId)}
+                    className="flex-1 rounded-lg bg-[var(--success)] py-1.5 text-sm font-medium text-white transition-colors hover:brightness-110"
+                  >
+                    Ναι
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmPopover(null)}
+                    className="flex-1 rounded-lg border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_55%,var(--bg-card))] py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))]"
+                  >
+                    Άκυρο
+                  </button>
+                </div>
               </div>
-            </div>,
+            ),
             document.body,
           )
         : null}
@@ -1200,6 +1341,60 @@ function KanbanCard({
         </Link>
       </div>
     </li>
+  );
+}
+
+function MobileCalendarCard({
+  request: r,
+  onTickClick,
+}: {
+  request: SchedulerRequest;
+  onTickClick: (e: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  const router = useRouter();
+  const isCompleted = r.status === "Ολοκληρώθηκε";
+  const isRejected = r.status === "Απορρίφθηκε";
+  const showTick = !isCompleted && !isRejected;
+
+  return (
+    <div
+      className={cn(
+        "cursor-pointer rounded-lg border border-border border-l-4 bg-background p-2 transition-transform active:scale-95",
+        priorityLeftBorder(r.priority),
+        isCompleted && "opacity-80",
+      )}
+      onClick={() => router.push(`/requests/${r.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          router.push(`/requests/${r.id}`);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <p
+        className={cn(
+          "line-clamp-2 text-xs font-semibold leading-tight text-foreground",
+          isCompleted && "line-through",
+        )}
+      >
+        {r.title}
+      </p>
+      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{contactLabel(r.contacts)}</p>
+      {showTick ? (
+        <button
+          type="button"
+          onClick={onTickClick}
+          className="mt-1.5 flex w-full touch-manipulation items-center justify-center gap-1 rounded-md bg-green-500/10 py-1 text-[10px] font-medium text-green-600 dark:text-green-400"
+        >
+          <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+          Ολοκλήρωση
+        </button>
+      ) : isCompleted ? (
+        <p className="mt-1.5 text-center text-[10px] font-medium text-[var(--success)]">Ολοκληρώθηκε</p>
+      ) : null}
+    </div>
   );
 }
 
