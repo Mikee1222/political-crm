@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpDown, Cake, Check, ChevronDown, Download, Phone, Plus, Search, Sparkles, Trash2, User, X } from "lucide-react";
+import { ArrowUpDown, Bell, Cake, Check, ChevronDown, Download, Phone, Plus, Search, Sparkles, Trash2, User, X } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -39,6 +39,7 @@ import { useFormToast } from "@/contexts/form-toast-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 
 type Contact = {
   id: string;
@@ -57,8 +58,32 @@ type Contact = {
   predicted_score?: number | null;
   father_name?: string | null;
   name_day?: string | null;
+  birthday?: string | null;
+  age?: number | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
 };
+
+function ContactAgeInline({ c }: { c: Pick<Contact, "birthday" | "age"> }) {
+  const age = getAgeFromBirthday(c.birthday) ?? c.age;
+  const daysUntil = getDaysUntilBirthday(c.birthday);
+  const isToday = daysUntil === 0;
+  const isSoon = daysUntil !== null && daysUntil <= 7 && daysUntil > 0;
+  if (age == null && !c.birthday) return null;
+  return (
+    <span
+      className={
+        "inline-flex items-center gap-1 text-[11px] " +
+        (isToday ? "font-semibold text-[var(--accent-gold)]" : isSoon ? "text-[var(--warning)]" : "text-[var(--text-muted)]")
+      }
+    >
+      {age != null ? `${age} ετών` : "—"}
+      {isToday ? <Cake className="ml-0.5 inline h-3 w-3 shrink-0 text-[var(--accent-gold)]" aria-hidden /> : null}
+      {isSoon && !isToday ? (
+        <Bell className="ml-0.5 inline h-3 w-3 shrink-0 text-[var(--warning)]" aria-hidden />
+      ) : null}
+    </span>
+  );
+}
 
 /** e.g. "23 Απρ" for recurring name_day (YYYY-MM-DD) */
 function formatNameDayGreek(iso: string | null | undefined): string | null {
@@ -256,6 +281,7 @@ function ContactDesktopRowCard({
                 {nameDay}
               </span>
             ) : null}
+            <ContactAgeInline c={c} />
           </div>
           {(c.contact_groups || c.father_name?.trim()) && (
             <div className="mt-1.5 line-clamp-1 text-[11px] text-[var(--text-muted)]">
@@ -548,17 +574,20 @@ function ContactSwipeCard({
                   <span className="mt-1 inline-block max-w-full truncate text-[13px] text-[var(--text-muted)]">{c.municipality}</span>
                 ) : null}
               </p>
-              {nd ? (
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  <span
-                    className={
-                      "inline-flex items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)] " +
-                      (ndGold ? "ring-1 ring-[color-mix(in_srgb,var(--accent-gold)_48%,transparent)]" : "")
-                    }
-                  >
-                    <Cake className="h-3 w-3 shrink-0" aria-hidden />
-                    {nd}
-                  </span>
+              {(nd || c.birthday || c.age != null) ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {nd ? (
+                    <span
+                      className={
+                        "inline-flex items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)] " +
+                        (ndGold ? "ring-1 ring-[color-mix(in_srgb,var(--accent-gold)_48%,transparent)]" : "")
+                      }
+                    >
+                      <Cake className="h-3 w-3 shrink-0" aria-hidden />
+                      {nd}
+                    </span>
+                  ) : null}
+                  <ContactAgeInline c={c} />
                 </div>
               ) : null}
             </div>

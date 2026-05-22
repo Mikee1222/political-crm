@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Building2, Check, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
+import { ArrowLeft, Bell, Building2, Cake, Check, Clipboard, Gift, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -16,6 +16,7 @@ import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { HqSelect } from "@/components/ui/hq-select";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 
 const card =
   "contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm";
@@ -991,8 +992,6 @@ function ContactDetailPage() {
                     { k: "mother_name" as const, l: "Μητρώνυμο" },
                     { k: "spouse_name" as const, l: "Όνομα Συζύγου" },
                     { k: "name_day" as const, l: "Γιορτή", date: true },
-                    { k: "birthday" as const, l: "Γενέθλια", date: true },
-                    { k: "age" as const, l: "Ηλικία", num: true },
                     { k: "gender" as const, l: "Φύλο" },
                     { k: "occupation" as const, l: "Επάγγελμα" },
                   ] as const
@@ -1047,6 +1046,71 @@ function ContactDetailPage() {
                   </div>
                 );
                 })}
+                <div className="sm:col-span-2">
+                  {canManage && editing === "personal" && w ? (
+                    <div className={fieldGap}>
+                      <span className={lbl}>Γενέθλια</span>
+                      <input
+                        className={inputSm}
+                        type="date"
+                        value={((w.birthday as string) ?? "").slice(0, 10)}
+                        onChange={(e) =>
+                          setBuf({ ...w, birthday: e.target.value || null } as Contact)
+                        }
+                      />
+                      <span className={lbl}>Ηλικία (χειροκίνητη, αν δεν υπάρχουν γενέθλια)</span>
+                      <input
+                        className={inputSm}
+                        type="number"
+                        value={w.age != null ? String(w.age) : ""}
+                        onChange={(e) =>
+                          setBuf({ ...w, age: e.target.value ? Number(e.target.value) : null })
+                        }
+                      />
+                    </div>
+                  ) : (
+                    (() => {
+                      const realAge = getAgeFromBirthday(c.birthday) ?? c.age;
+                      const daysUntil = getDaysUntilBirthday(c.birthday);
+                      const isToday = daysUntil === 0;
+                      const isSoon = daysUntil !== null && daysUntil <= 7 && daysUntil > 0;
+                      const birthDate = c.birthday
+                        ? new Date(c.birthday).toLocaleDateString("el-GR", {
+                            day: "numeric",
+                            month: "long",
+                          })
+                        : null;
+                      return (
+                        <div className="flex items-start gap-2.5 py-2.5">
+                          <Cake className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                          <div className="min-w-0 flex flex-col gap-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                              Γενέθλια
+                            </p>
+                            <span className="text-sm text-[var(--text-primary)]">
+                              {birthDate ?? "Άγνωστα γενέθλια"}
+                              {realAge !== null && (
+                                <span className="ml-1.5 text-[var(--text-muted)]">({realAge} ετών)</span>
+                              )}
+                            </span>
+                            {isToday && (
+                              <span className="flex items-center gap-1 text-xs font-semibold text-[var(--accent-gold)]">
+                                <Gift className="h-3 w-3 shrink-0" aria-hidden />
+                                Σήμερα είναι τα γενέθλιά του/της!
+                              </span>
+                            )}
+                            {isSoon && !isToday && (
+                              <span className="flex items-center gap-1 text-xs text-[var(--warning)]">
+                                <Bell className="h-3 w-3 shrink-0" aria-hidden />
+                                Γενέθλια σε {daysUntil} μέρες
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
                 <div className="sm:col-span-2">
                   <div className={fieldGap}>
                     <span className={lbl}>Ετικέτες</span>
