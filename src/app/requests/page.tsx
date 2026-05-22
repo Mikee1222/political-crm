@@ -114,7 +114,8 @@ export default function RequestsPage() {
   const [listLoading, setListLoading] = useState(true);
   const [listTotal, setListTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [inProgressCount, setInProgressCount] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<Array<{ status: string; count: number }>>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
@@ -181,13 +182,15 @@ export default function RequestsPage() {
         requests?: RequestRow[];
         count?: number;
         total_pages?: number;
-        in_progress_count?: number;
+        statusCounts?: Array<{ status: string; count: number }>;
+        totalCount?: number;
       };
       const list = data.data ?? data.requests ?? [];
       setRows(list);
       setListTotal(typeof data.count === "number" ? data.count : list.length);
       setTotalPages(Math.max(1, data.total_pages ?? 1));
-      setInProgressCount(typeof data.in_progress_count === "number" ? data.in_progress_count : 0);
+      setStatusCounts(Array.isArray(data.statusCounts) ? data.statusCounts : []);
+      setTotalCount(typeof data.totalCount === "number" ? data.totalCount : 0);
     } finally {
       setListLoading(false);
     }
@@ -251,7 +254,15 @@ export default function RequestsPage() {
             : r,
         ),
       );
-      setInProgressCount((n) => Math.max(0, n - 1));
+      setStatusCounts((prev) =>
+        prev.map((row) => {
+          if (row.status === "Ολοκληρώθηκε") return { ...row, count: row.count + 1 };
+          if (row.status === "Σε εξέλιξη" || row.status === "Σε αναμονή" || row.status === "Νέο") {
+            return { ...row, count: Math.max(0, row.count - 1) };
+          }
+          return row;
+        }),
+      );
     },
     [],
   );
@@ -265,23 +276,61 @@ export default function RequestsPage() {
         title="Αιτήματα"
         subtitle="Φιλτράρισμα και διαχείριση αιτημάτων πολιτών — κάρτες με SLA και κατάσταση."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {inProgressCount > 0 ? (
-              <span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--status-req-prog-ring)_55%,var(--border))] bg-[var(--status-req-prog-bg)] px-3 py-1 text-xs font-semibold text-[var(--status-req-prog-fg)]">
-                {inProgressCount} σε εξέλιξη
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className={lux.btnGold + " hq-shimmer-gold !rounded-full !px-5 !py-2.5 !text-sm"}
-            >
-              <Inbox className="h-4 w-4" />
-              Νέο αίτημα
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className={lux.btnGold + " hq-shimmer-gold !rounded-full !px-5 !py-2.5 !text-sm"}
+          >
+            <Inbox className="h-4 w-4" />
+            Νέο αίτημα
+          </button>
         }
       />
+
+      {statusCounts.length > 0 ? (
+        <div className="-mx-1 flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {statusCounts.map(({ status, count }) => {
+            const active = f.status === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                onClick={() => patch({ status })}
+                className={[
+                  "flex shrink-0 flex-col items-center rounded-xl border px-4 py-2 text-sm font-medium transition-colors",
+                  active
+                    ? "border-[var(--accent-gold)] bg-[var(--accent-gold)] text-[var(--text-badge-on-gold)] shadow-sm"
+                    : "border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))]",
+                ].join(" ")}
+              >
+                <span className="text-lg font-bold tabular-nums">{count.toLocaleString("el-GR")}</span>
+                <span
+                  className={
+                    active ? "text-xs opacity-90" : "text-xs text-[var(--text-muted)]"
+                  }
+                >
+                  {status}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => patch({ status: "" })}
+            className={[
+              "flex shrink-0 flex-col items-center rounded-xl border px-4 py-2 text-sm font-medium transition-colors",
+              !f.status
+                ? "border-[var(--accent-gold)] bg-[var(--accent-gold)] text-[var(--text-badge-on-gold)] shadow-sm"
+                : "border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))]",
+            ].join(" ")}
+          >
+            <span className="text-lg font-bold tabular-nums">{totalCount.toLocaleString("el-GR")}</span>
+            <span className={!f.status ? "text-xs opacity-90" : "text-xs text-[var(--text-muted)]"}>
+              Σύνολο
+            </span>
+          </button>
+        </div>
+      ) : null}
 
       <div className={lux.card + " !p-4 sm:!p-5"}>
         <div className="mb-4">

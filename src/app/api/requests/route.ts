@@ -12,6 +12,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const REQUEST_STATUSES = ["Νέο", "Σε αναμονή", "Σε εξέλιξη", "Ολοκληρώθηκε", "Απορρίφθηκε"] as const;
+
 const BASE_SELECT =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, contacts!contact_id(first_name,last_name,phone)";
 
@@ -163,19 +165,18 @@ export async function GET(request: NextRequest) {
       Math.max(1, parseInt(sp.get("page_size") || "50", 10) || 50),
     );
 
-    const [{ data, error, count }, inProgressR] = await Promise.all([
+    const [{ data, error, count }, statusCounts, totalAllR] = await Promise.all([
       fetchRequestsPage(supabase, f, page, pageSize),
-      (() => {
-        let q = supabase
-          .from("requests")
-          .select("id", { count: "exact", head: true })
-          .in("status", ["Νέο", "Σε εξέλιξη", "Σε αναμονή"]);
-        q = applyRequestFilters(q, f, { withSearchEmbed: false });
-        if (f.search) {
-          q = q.ilike("title", `%${escapeIlike(f.search)}%`);
-        }
-        return q;
-      })(),
+      Promise.all(
+        REQUEST_STATUSES.map(async (s) => {
+          const { count: c } = await supabase
+            .from("requests")
+            .select("*", { count: "exact", head: true })
+            .eq("status", s);
+          return { status: s, count: c ?? 0 };
+        }),
+      ),
+      supabase.from("requests").select("*", { count: "exact", head: true }),
     ]);
 
     if (error) {
@@ -186,7 +187,8 @@ export async function GET(request: NextRequest) {
         page,
         page_size: pageSize,
         total_pages: 0,
-        in_progress_count: 0,
+        statusCounts: REQUEST_STATUSES.map((s) => ({ status: s, count: 0 })),
+        totalCount: 0,
       });
     }
 
@@ -199,7 +201,8 @@ export async function GET(request: NextRequest) {
       page,
       page_size: pageSize,
       total_pages,
-      in_progress_count: inProgressR.count ?? 0,
+      statusCounts,
+      totalCount: totalAllR.count ?? 0,
       requests: mapRequestRows((data ?? []) as unknown[]),
     });
   } catch (e) {
