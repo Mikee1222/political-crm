@@ -1,7 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Bell, Building2, Cake, Check, Clipboard, Gift, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  Building2,
+  Cake,
+  Check,
+  ChevronRight,
+  Clipboard,
+  Gift,
+  Pencil,
+  Phone,
+  Plus,
+  Sparkles,
+  User,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -61,6 +76,7 @@ type Call = {
 type Task = { id: string; title: string; due_date: string | null; completed: boolean };
 type RequestItem = {
   id: string;
+  request_code?: string | null;
   title: string;
   description: string | null;
   category: string | null;
@@ -223,17 +239,24 @@ function OutcomeBadge({ o }: { o: string | null | undefined }) {
 function ReqStatus({ s }: { s: string | null | undefined }) {
   const t = s ?? "Νέο";
   const map: Record<string, string> = {
-    "Νέο": "bg-sky-500/20 text-sky-200 ring-1 ring-sky-500/30",
-    "Σε εξέλιξη": "bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30",
-    "Ολοκληρώθηκε": "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30",
-    "Απορρίφθηκε": "bg-red-500/15 text-red-200 ring-1 ring-red-500/30",
+    "Νέο": "bg-sky-500/15 text-sky-800 ring-1 ring-sky-500/25 dark:text-sky-200",
+    "Σε εξέλιξη": "bg-amber-500/15 text-amber-900 ring-1 ring-amber-500/25 dark:text-amber-200",
+    "Ολοκληρώθηκε": "bg-emerald-500/15 text-emerald-800 ring-1 ring-emerald-500/25 dark:text-emerald-200",
+    "Απορρίφθηκε": "bg-red-500/15 text-red-800 ring-1 ring-red-500/25 dark:text-red-200",
   };
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[t] ?? "bg-slate-500/20 text-[#E2E8F0]"}`}>
+    <span
+      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[t] ?? "bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))] text-muted-foreground ring-1 ring-border"}`}
+    >
       {t}
     </span>
   );
 }
+
+const inlineFormLabel =
+  "mb-1 block text-[11px] font-medium uppercase tracking-widest text-muted-foreground";
+const inlineFormControl =
+  "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/40 max-md:min-h-[44px] max-md:text-base";
 
 type Section = "personal" | "electoral" | "comm" | null;
 
@@ -1737,67 +1760,124 @@ function ContactDetailPage() {
               <div {...animDelay(5)} className={card}>
                 <h2 className={cardTitle}>Αιτήματα</h2>
                 <ul className="mb-3 space-y-2">
-                  {requests.length === 0 && <li className="text-xs text-[var(--text-muted)]">Κανένα αίτημα.</li>}
+                  {requests.length === 0 && <li className="text-xs text-muted-foreground">Κανένα αίτημα.</li>}
                   {requests.map((r) => (
-                    <li
-                      key={r.id}
-                      className="flex items-start justify-between gap-2 border-b border-[var(--border)] pb-2 last:border-0"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">{r.title}</p>
-                        <p className="text-[11px] text-[var(--text-muted)]">
-                          {r.created_at
-                            ? new Date(r.created_at).toLocaleDateString("el-GR")
-                            : "—"}
-                        </p>
-                      </div>
-                      <ReqStatus s={r.status} />
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/requests/${r.id}`)}
+                        className="flex w-full cursor-pointer items-start justify-between gap-2 rounded-xl border border-border bg-background p-3 text-left transition-colors hover:border-[color-mix(in_srgb,var(--accent-gold)_35%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent-gold)_4%,var(--bg-card))]"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              {r.request_code ?? "—"}
+                            </span>
+                            <ReqStatus s={r.status} />
+                          </div>
+                          <p className="truncate text-sm font-semibold text-foreground">{r.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {r.category ?? "—"} ·{" "}
+                            {r.created_at ? new Date(r.created_at).toLocaleDateString("el-GR") : "—"}
+                          </p>
+                        </div>
+                        <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      </button>
                     </li>
                   ))}
                 </ul>
                 {openReq ? (
-                  <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3">
-                    <input
-                      className={inputSm}
-                      placeholder="Τίτλος *"
-                      value={newRequest.title}
-                      onChange={(e) => setNewRequest({ ...newRequest, title: e.target.value })}
-                    />
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <HqSelect className={inputSm + " !pr-9"} value={newRequest.category} onChange={(e) => setNewRequest({ ...newRequest, category: e.target.value })}>
-                        <option>Υγεία</option>
-                        <option>Εκπαίδευση</option>
-                        <option>Εργασία</option>
-                        <option>Υποδομές</option>
-                        <option>Άλλο</option>
-                      </HqSelect>
-                      <HqSelect className={inputSm + " !pr-9"} value={newRequest.status} onChange={(e) => setNewRequest({ ...newRequest, status: e.target.value })}>
-                        <option>Νέο</option>
-                        <option>Σε εξέλιξη</option>
-                        <option>Ολοκληρώθηκε</option>
-                        <option>Απορρίφθηκε</option>
-                      </HqSelect>
+                  <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent-gold)]">
+                          Νέο Αίτημα
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          Καταχώρηση αιτήματος για αυτή την επαφή
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOpenReq(false)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))]"
+                        aria-label="Κλείσιμο φόρμας"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
                     </div>
-                    <input
-                      className={inputSm}
-                      placeholder="Ανάθεση σε"
-                      value={newRequest.assigned_to}
-                      onChange={(e) => setNewRequest({ ...newRequest, assigned_to: e.target.value })}
-                    />
-                    <textarea
-                      className="min-h-[64px] w-full rounded-lg border border-[var(--border)] p-2 text-sm"
-                      placeholder="Περιγραφή"
-                      value={newRequest.description}
-                      onChange={(e) => setNewRequest({ ...newRequest, description: e.target.value })}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button type="button" className="text-xs text-[var(--text-secondary)]" onClick={() => setOpenReq(false)}>
+                    <div className="h-px bg-border" />
+                    <div>
+                      <label className={inlineFormLabel}>Τίτλος *</label>
+                      <input
+                        type="text"
+                        className={inlineFormControl}
+                        placeholder="Περιγράψτε σύντομα το αίτημα..."
+                        value={newRequest.title}
+                        onChange={(e) => setNewRequest({ ...newRequest, title: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className={inlineFormLabel}>Κατηγορία</label>
+                        <HqSelect
+                          className={inlineFormControl + " !pr-9"}
+                          value={newRequest.category}
+                          onChange={(e) => setNewRequest({ ...newRequest, category: e.target.value })}
+                        >
+                          <option>Υγεία</option>
+                          <option>Εκπαίδευση</option>
+                          <option>Εργασία</option>
+                          <option>Υποδομές</option>
+                          <option>Άλλο</option>
+                        </HqSelect>
+                      </div>
+                      <div>
+                        <label className={inlineFormLabel}>Κατάσταση</label>
+                        <HqSelect
+                          className={inlineFormControl + " !pr-9"}
+                          value={newRequest.status}
+                          onChange={(e) => setNewRequest({ ...newRequest, status: e.target.value })}
+                        >
+                          <option>Νέο</option>
+                          <option>Σε εξέλιξη</option>
+                          <option>Ολοκληρώθηκε</option>
+                          <option>Απορρίφθηκε</option>
+                        </HqSelect>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={inlineFormLabel}>Ανάθεση σε</label>
+                      <input
+                        type="text"
+                        className={inlineFormControl}
+                        placeholder="Ανάθεση σε"
+                        value={newRequest.assigned_to}
+                        onChange={(e) => setNewRequest({ ...newRequest, assigned_to: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className={inlineFormLabel}>Περιγραφή</label>
+                      <textarea
+                        rows={3}
+                        className={inlineFormControl + " resize-none"}
+                        placeholder="Λεπτομέρειες αιτήματος..."
+                        value={newRequest.description}
+                        onChange={(e) => setNewRequest({ ...newRequest, description: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setOpenReq(false)}
+                        className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
+                      >
                         Άκυρο
                       </button>
                       <button
                         type="button"
                         onClick={() => void addRequest()}
-                        className="h-8 rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white"
+                        className="flex-1 rounded-xl bg-[var(--accent-gold)] py-2.5 text-sm font-semibold text-[var(--text-badge-on-gold)] transition-colors hover:brightness-95"
                       >
                         Αποθήκευση
                       </button>
@@ -1807,9 +1887,10 @@ function ContactDetailPage() {
                   <button
                     type="button"
                     onClick={() => setOpenReq(true)}
-                    className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--border)] py-2 text-xs font-semibold text-[#003476] hover:bg-[var(--bg-elevated)]"
+                    className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_6%,var(--bg-card))]"
                   >
-                    <Plus className="h-3.5 w-3.5" />+ Νέο αίτημα
+                    <Plus className="h-3.5 w-3.5" />
+                    Νέο αίτημα
                   </button>
                 )}
               </div>
@@ -1852,22 +1933,54 @@ function ContactDetailPage() {
                   ))}
                 </ul>
                 {openTask ? (
-                  <div className="mt-1 space-y-2 rounded-lg border border-[var(--border)] p-2">
-                    <input
-                      className={inputSm}
-                      placeholder="Τίτλος εργασίας *"
-                      value={newTask.title}
-                      onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                    />
-                    <input className={inputSm} type="date" value={newTask.due_date} onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })} />
-                    <div className="flex justify-end gap-2">
-                      <button type="button" className="text-xs" onClick={() => setOpenTask(false)}>
+                  <div className="mt-1 space-y-3 rounded-2xl border border-border bg-card p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent-gold)]">
+                          Νέα Εργασία
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOpenTask(false)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))]"
+                        aria-label="Κλείσιμο φόρμας"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                    <div className="h-px bg-border" />
+                    <div>
+                      <label className={inlineFormLabel}>Τίτλος Εργασίας *</label>
+                      <input
+                        type="text"
+                        className={inlineFormControl}
+                        placeholder="Τι πρέπει να γίνει..."
+                        value={newTask.title}
+                        onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className={inlineFormLabel}>Προθεσμία</label>
+                      <input
+                        type="date"
+                        className={inlineFormControl + " [color-scheme:light] dark:[color-scheme:dark]"}
+                        value={newTask.due_date}
+                        onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setOpenTask(false)}
+                        className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
+                      >
                         Άκυρο
                       </button>
                       <button
                         type="button"
-                        className="h-7 rounded bg-[#003476] px-2 text-xs text-white"
                         onClick={() => void addTask()}
+                        className="flex-1 rounded-xl bg-[var(--accent-gold)] py-2.5 text-sm font-semibold text-[var(--text-badge-on-gold)] transition-colors hover:brightness-95"
                       >
                         Αποθήκευση
                       </button>
@@ -1877,9 +1990,10 @@ function ContactDetailPage() {
                   <button
                     type="button"
                     onClick={() => setOpenTask(true)}
-                    className="inline-flex w-full items-center justify-center gap-1 border border-dashed border-[var(--border)] py-1.5 text-xs font-semibold text-[#003476]"
+                    className="inline-flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_6%,var(--bg-card))]"
                   >
-                    <Plus className="h-3 w-3" />+ Νέα εργασία
+                    <Plus className="h-3.5 w-3.5" />
+                    Νέα εργασία
                   </button>
                 )}
               </div>
