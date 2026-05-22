@@ -22,8 +22,10 @@ function mapRow(row: unknown) {
   return { ...(row as Record<string, unknown>), contacts: contact ?? null };
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 function weekBounds(weekParam: string | null) {
-  const base = weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam) ? parseISO(weekParam) : new Date();
+  const base = weekParam && DATE_RE.test(weekParam) ? parseISO(weekParam) : new Date();
   const start = startOfWeek(base, { weekStartsOn: 1 });
   const end = addDays(start, 6);
   return {
@@ -32,7 +34,16 @@ function weekBounds(weekParam: string | null) {
   };
 }
 
-/** GET ?week=YYYY-MM-DD (Monday of week) → { queue, scheduled, weekStart, weekEnd } */
+function rangeBounds(sp: URLSearchParams) {
+  const ws = sp.get("week_start")?.trim() ?? "";
+  const we = sp.get("week_end")?.trim() ?? "";
+  if (DATE_RE.test(ws) && DATE_RE.test(we) && ws <= we) {
+    return { weekStart: ws, weekEnd: we };
+  }
+  return weekBounds(sp.get("week"));
+}
+
+/** GET ?week=YYYY-MM-DD or ?week_start=&week_end= → { queue, scheduled, weekStart, weekEnd } */
 export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
@@ -42,8 +53,7 @@ export async function GET(request: NextRequest) {
       return forbidden();
     }
 
-    const weekParam = request.nextUrl.searchParams.get("week");
-    const { weekStart, weekEnd } = weekBounds(weekParam);
+    const { weekStart, weekEnd } = rangeBounds(request.nextUrl.searchParams);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let queueQuery: any = supabase
