@@ -1,9 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { FileText, Inbox, Pencil, Stethoscope, Wrench, HelpCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  FileText,
+  Inbox,
+  Pencil,
+  Stethoscope,
+  Wrench,
+  HelpCircle,
+} from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { NewRequestModal } from "@/components/requests/new-request-modal";
@@ -14,6 +22,8 @@ import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { useProfile } from "@/contexts/profile-context";
+import { hasMinRole } from "@/lib/roles";
 
 type RequestRow = {
   id: string;
@@ -32,11 +42,60 @@ type RequestRow = {
   contacts: { first_name: string; last_name: string; phone?: string | null } | null;
 };
 
+type Assignee = { id: string; full_name: string | null; role: string };
+
+type RequestFilters = {
+  status: string;
+  category: string;
+  priority: string;
+  range: string;
+  assigned: string;
+  search: string;
+  page: string;
+};
+
+const DEFAULT_FILTERS: RequestFilters = {
+  status: "",
+  category: "",
+  priority: "",
+  range: "",
+  assigned: "",
+  search: "",
+  page: "1",
+};
+
+function filtersFromSearchParams(sp: URLSearchParams): RequestFilters {
+  return {
+    status: sp.get("status") ?? "",
+    category: sp.get("category") ?? "",
+    priority: sp.get("priority") ?? "",
+    range: sp.get("range") ?? "",
+    assigned: sp.get("assigned") ?? "",
+    search: sp.get("search") ?? "",
+    page: sp.get("page") ?? "1",
+  };
+}
+
+function filtersToSearchParams(f: RequestFilters): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.status) p.set("status", f.status);
+  if (f.category) p.set("category", f.category);
+  if (f.priority) p.set("priority", f.priority);
+  if (f.range) p.set("range", f.range);
+  if (f.assigned) p.set("assigned", f.assigned);
+  if (f.search.trim()) p.set("search", f.search.trim());
+  if (f.page && f.page !== "1") p.set("page", f.page);
+  return p;
+}
+
 function RequestsMobileSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden>
       {Array.from({ length: 6 }, (_, i) => (
-        <div key={i} className="hq-skeleton-shimmer h-52 rounded-[20px] border border-[var(--border)]/40 shadow-[var(--card-shadow)]" />
+        <div
+          key={i}
+          className="hq-skeleton-shimmer h-52 rounded-[20px] border border-[var(--border)]/40 shadow-[var(--card-shadow)]"
+        />
       ))}
     </div>
   );
@@ -46,28 +105,102 @@ export default function RequestsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { profile } = useProfile();
+  const canQuickComplete = hasMinRole(profile?.role, "manager");
+
+  const [f, setF] = useState<RequestFilters>(DEFAULT_FILTERS);
   const [rows, setRows] = useState<RequestRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
-  const [status, setStatus] = useState("");
-  const [category, setCategory] = useState("");
+  const [listTotal, setListTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [inProgressCount, setInProgressCount] = useState(0);
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const filtersUrlKeyRef = useRef<string | null>(null);
+  const pageSize = 50;
+
+  const searchKey = useMemo(() => searchParams.toString(), [searchParams]);
+
+  useLayoutEffect(() => {
+    if (filtersUrlKeyRef.current === searchKey) return;
+    filtersUrlKeyRef.current = searchKey;
+    setF(filtersFromSearchParams(new URLSearchParams(searchKey)));
+  }, [searchKey]);
+
+  const patch = useCallback(
+    (p: Partial<RequestFilters>, opts?: { resetPage?: boolean }) => {
+      setF((prev) => {
+        const next = { ...prev, ...p };
+        if (opts?.resetPage !== false) {
+          next.page = "1";
+        }
+        const q = filtersToSearchParams(next).toString();
+        startTransition(() => {
+          router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+        });
+        return next;
+      });
+    },
+    [router, pathname],
+  );
+
+  const currentPage = Math.max(1, parseInt(f.page || "1", 10) || 1);
 
   const load = useCallback(async () => {
-    const q = new URLSearchParams({ status, category });
+    const q = new URLSearchParams();
+    if (f.status) q.set("status", f.status);
+    if (f.category) q.set("category", f.category);
+    if (f.priority) q.set("priority", f.priority);
+    if (f.range) q.set("range", f.range);
+    if (f.assigned) q.set("assigned", f.assigned);
+    if (f.search.trim()) q.set("search", f.search.trim());
+    q.set("page", String(currentPage));
+    q.set("page_size", String(pageSize));
+
     setListLoading(true);
     try {
       const res = await fetchWithTimeout(`/api/requests?${q.toString()}`);
-      const data = await res.json();
-      setRows(data.requests ?? []);
+      const data = (await res.json()) as {
+        data?: RequestRow[];
+        requests?: RequestRow[];
+        count?: number;
+        total_pages?: number;
+        in_progress_count?: number;
+      };
+      const list = data.data ?? data.requests ?? [];
+      setRows(list);
+      setListTotal(typeof data.count === "number" ? data.count : list.length);
+      setTotalPages(Math.max(1, data.total_pages ?? 1));
+      setInProgressCount(typeof data.in_progress_count === "number" ? data.in_progress_count : 0);
     } finally {
       setListLoading(false);
     }
-  }, [status, category]);
+  }, [f.status, f.category, f.priority, f.range, f.assigned, f.search, currentPage]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      const [catRes, teamRes] = await Promise.all([
+        fetchWithTimeout("/api/request-categories"),
+        fetchWithTimeout("/api/team/assignees"),
+      ]);
+      if (catRes.ok) {
+        const j = (await catRes.json()) as { categories?: RequestCategoryRow[] };
+        setCategoryOptions((j.categories ?? []).map((c) => c.name));
+      }
+      if (teamRes.ok) {
+        const j = (await teamRes.json()) as { assignees?: Assignee[] };
+        setAssignees(
+          (j.assignees ?? []).filter((a) => a.full_name && hasMinRole(a.role, "caller")),
+        );
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
@@ -78,9 +211,39 @@ export default function RequestsPage() {
     startTransition(() => router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false }));
   }, [searchParams, router, pathname]);
 
-  const categories = useMemo(() => {
-    return Array.from(new Set(rows.map((r) => r.category).filter(Boolean))) as string[];
-  }, [rows]);
+  const goToPage = (page: number) => {
+    const p = Math.max(1, Math.min(totalPages, page));
+    patch({ page: String(p) }, { resetPage: false });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleQuickComplete = useCallback(
+    async (id: string) => {
+      const res = await fetchWithTimeout(`/api/requests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Ολοκληρώθηκε" }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Σφάλμα");
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                status: "Ολοκληρώθηκε",
+                slaUi: "on_track",
+              }
+            : r,
+        ),
+      );
+      setInProgressCount((n) => Math.max(0, n - 1));
+    },
+    [],
+  );
+
+  const rangeFrom = listTotal === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeTo = Math.min(currentPage * pageSize, listTotal);
 
   return (
     <div className="space-y-6">
@@ -88,27 +251,40 @@ export default function RequestsPage() {
         title="Αιτήματα"
         subtitle="Φιλτράρισμα και διαχείριση αιτημάτων πολιτών — κάρτες με SLA και κατάσταση."
         actions={
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className={lux.btnGold + " hq-shimmer-gold !rounded-full !px-5 !py-2.5 !text-sm"}
-          >
-            <Inbox className="h-4 w-4" />
-            Νέο αίτημα
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {inProgressCount > 0 ? (
+              <span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--status-req-prog-ring)_55%,var(--border))] bg-[var(--status-req-prog-bg)] px-3 py-1 text-xs font-semibold text-[var(--status-req-prog-fg)]">
+                {inProgressCount} σε εξέλιξη
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className={lux.btnGold + " hq-shimmer-gold !rounded-full !px-5 !py-2.5 !text-sm"}
+            >
+              <Inbox className="h-4 w-4" />
+              Νέο αίτημα
+            </button>
+          </div>
         }
       />
 
       <div className={lux.card + " !p-4 sm:!p-5"}>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className={lux.label} htmlFor="r-st">
               Κατάσταση
             </label>
-            <HqSelect id="r-st" className="hq-input-elevated" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <HqSelect
+              id="r-st"
+              className="hq-input-elevated"
+              value={f.status}
+              onChange={(e) => patch({ status: e.target.value })}
+            >
               <option value="">Όλες οι καταστάσεις</option>
               <option value="Νέο">Νέο</option>
               <option value="Σε εξέλιξη">Σε εξέλιξη</option>
+              <option value="Σε αναμονή">Σε αναμονή</option>
               <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
               <option value="Απορρίφθηκε">Απορρίφθηκε</option>
             </HqSelect>
@@ -117,14 +293,84 @@ export default function RequestsPage() {
             <label className={lux.label} htmlFor="r-cat">
               Κατηγορία
             </label>
-            <HqSelect id="r-cat" className="hq-input-elevated" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <HqSelect
+              id="r-cat"
+              className="hq-input-elevated"
+              value={f.category}
+              onChange={(e) => patch({ category: e.target.value })}
+            >
               <option value="">Όλες οι κατηγορίες</option>
-              {categories.map((c) => (
+              {categoryOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </HqSelect>
+          </div>
+          <div>
+            <label className={lux.label} htmlFor="r-priority">
+              Προτεραιότητα
+            </label>
+            <HqSelect
+              id="r-priority"
+              className="hq-input-elevated"
+              value={f.priority}
+              onChange={(e) => patch({ priority: e.target.value })}
+            >
+              <option value="">Όλες</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Urgent">Urgent</option>
+            </HqSelect>
+          </div>
+          <div>
+            <label className={lux.label} htmlFor="r-range">
+              Χρονικό διάστημα
+            </label>
+            <HqSelect
+              id="r-range"
+              className="hq-input-elevated"
+              value={f.range}
+              onChange={(e) => patch({ range: e.target.value })}
+            >
+              <option value="">Όλα</option>
+              <option value="today">Σήμερα</option>
+              <option value="7d">Τελευταίες 7 μέρες</option>
+              <option value="30d">Τελευταίες 30 μέρες</option>
+              <option value="90d">Τελευταίες 90 μέρες</option>
+            </HqSelect>
+          </div>
+          <div>
+            <label className={lux.label} htmlFor="r-assigned">
+              Ανάθεση
+            </label>
+            <HqSelect
+              id="r-assigned"
+              className="hq-input-elevated"
+              value={f.assigned}
+              onChange={(e) => patch({ assigned: e.target.value })}
+            >
+              <option value="">Όλα</option>
+              {assignees.map((a) => (
+                <option key={a.id} value={a.full_name ?? ""}>
+                  {a.full_name}
+                </option>
+              ))}
+            </HqSelect>
+          </div>
+          <div>
+            <label className={lux.label} htmlFor="r-search">
+              Αναζήτηση
+            </label>
+            <input
+              id="r-search"
+              type="search"
+              className={lux.input + " hq-input-elevated"}
+              placeholder="Τίτλος ή όνομα επαφής…"
+              value={f.search}
+              onChange={(e) => patch({ search: e.target.value })}
+            />
           </div>
         </div>
       </div>
@@ -143,25 +389,60 @@ export default function RequestsPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((r, i) => (
-            <div
-              key={r.id}
-              className="hq-stagger-item"
-              style={{ ["--stagger" as string]: String(i) }}
-            >
-              <RequestCard
-                r={r}
-                onOpen={() => router.push(`/requests/${r.id}`)}
-                onEdit={() => setSelected(r)}
-              />
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {rows.map((r, i) => (
+              <div
+                key={r.id}
+                className="hq-stagger-item"
+                style={{ ["--stagger" as string]: String(i) }}
+              >
+                <RequestCard
+                  r={r}
+                  canQuickComplete={canQuickComplete}
+                  onOpen={() => router.push(`/requests/${r.id}`)}
+                  onEdit={() => setSelected(r)}
+                  onQuickComplete={handleQuickComplete}
+                />
+              </div>
+            ))}
+          </div>
+
+          {totalPages > 1 ? (
+            <div className="flex flex-col items-center justify-between gap-3 border-t border-[var(--border)] pt-4 sm:flex-row">
+              <p className="text-xs text-[var(--text-muted)]">
+                {rangeFrom}–{rangeTo} από {listTotal}
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  className={lux.btnSecondary + " !py-2 text-xs"}
+                  disabled={currentPage <= 1}
+                  onClick={() => goToPage(currentPage - 1)}
+                >
+                  Προηγούμενη
+                </button>
+                <span className="px-2 text-sm font-medium text-[var(--text-secondary)]">
+                  Σελίδα {currentPage} από {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className={lux.btnSecondary + " !py-2 text-xs"}
+                  disabled={currentPage >= totalPages}
+                  onClick={() => goToPage(currentPage + 1)}
+                >
+                  Επόμενη
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
+          ) : null}
+        </>
       )}
 
       <NewRequestModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
-      {selected && <EditRequestModal request={selected} onClose={() => setSelected(null)} onSaved={load} />}
+      {selected && (
+        <EditRequestModal request={selected} onClose={() => setSelected(null)} onSaved={load} />
+      )}
     </div>
   );
 }
@@ -240,36 +521,109 @@ function SlaDonut({ daysLeft, max = 14 }: { daysLeft: number | null; max?: numbe
 
 function RequestCard({
   r,
+  canQuickComplete,
   onOpen,
   onEdit,
+  onQuickComplete,
 }: {
   r: RequestRow;
+  canQuickComplete: boolean;
   onOpen: () => void;
   onEdit: () => void;
+  onQuickComplete: (id: string) => Promise<void>;
 }) {
+  const { showToast } = useFormToast();
   const st = categoryStyle(r.category);
   const Icon = st.Icon;
   const days = daysLeftSla(r.sla_due_date, r.status ?? "Νέο");
+  const status = r.status ?? "Νέο";
+  const isCompleted = status === "Ολοκληρώθηκε";
+  const isRejected = status === "Απορρίφθηκε";
+  const showQuickTick = canQuickComplete && !isCompleted && !isRejected;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [completing, setCompleting] = useState(false);
+
+  const confirmComplete = async () => {
+    setCompleting(true);
+    try {
+      await onQuickComplete(r.id);
+      setConfirmOpen(false);
+      showToast("Το αίτημα ολοκληρώθηκε.", "success");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Σφάλμα", "error");
+    } finally {
+      setCompleting(false);
+    }
+  };
+
   return (
     <article
-      className={`hq-table-row-interactive group flex min-h-[180px] cursor-pointer flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm transition duration-200 hover:shadow-md ${st.left}`}
+      className={`hq-table-row-interactive group relative flex min-h-[180px] cursor-pointer flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm transition duration-200 hover:shadow-md ${st.left}`}
       onClick={onOpen}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 pr-16">
           <Icon className={`h-5 w-5 shrink-0 ${st.iconClass}`} aria-hidden />
           <span className="font-mono text-[11px] text-[var(--text-muted)]">{r.request_code ?? "—"}</span>
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className={lux.btnIcon}
-        >
-          <Pencil className="h-4 w-4" />
-        </button>
+        <div className="absolute right-3 top-3 flex items-center gap-1">
+          {isCompleted ? (
+            <CheckCircle2
+              className="h-6 w-6 shrink-0 fill-green-500 text-white"
+              aria-label="Ολοκληρώθηκε"
+            />
+          ) : showQuickTick ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmOpen((v) => !v);
+                }}
+                className="rounded-full p-0.5 text-green-500 transition hover:text-green-400"
+                aria-label="Ολοκλήρωση αιτήματος"
+              >
+                <CheckCircle2 className="h-6 w-6" />
+              </button>
+              {confirmOpen ? (
+                <div
+                  className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="text-xs text-[var(--text-primary)]">Να επισημανθεί ως Ολοκληρώθηκε;</p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      className={lux.btnPrimary + " !py-1 !text-xs flex-1"}
+                      disabled={completing}
+                      onClick={() => void confirmComplete()}
+                    >
+                      Ναι
+                    </button>
+                    <button
+                      type="button"
+                      className={lux.btnSecondary + " !py-1 !text-xs flex-1"}
+                      disabled={completing}
+                      onClick={() => setConfirmOpen(false)}
+                    >
+                      Άκυρο
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className={lux.btnIcon}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <h2 className="line-clamp-2 flex-1 text-base font-bold leading-snug text-[var(--text-primary)]">{r.title}</h2>
       <div className="flex items-center justify-between gap-3">
@@ -284,7 +638,7 @@ function RequestCard({
         <SlaDonut daysLeft={days} />
       </div>
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--border)]/60 pt-2">
-        <StatusBadge status={r.status ?? "Νέο"} withDot />
+        <StatusBadge status={status} withDot />
         <PriorityPill p={r.priority} />
         <span className="ml-auto text-[10px] text-[var(--text-muted)]">
           {r.created_at ? new Date(r.created_at).toLocaleDateString("el-GR") : ""}
@@ -295,7 +649,8 @@ function RequestCard({
 }
 
 function PriorityPill({ p }: { p: string | null | undefined }) {
-  const k = p === "High" || p === "Low" || p === "Medium" ? p : "Medium";
+  const k =
+    p === "High" || p === "Low" || p === "Medium" || p === "Urgent" ? p : "Medium";
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -310,9 +665,14 @@ function PriorityPill({ p }: { p: string | null | undefined }) {
 function StatusBadge({ status, withDot }: { status: string; withDot?: boolean }) {
   const styles: Record<string, string> = {
     "Νέο": "bg-[var(--status-req-new-bg)] text-[var(--status-req-new-fg)] ring-1 ring-inset ring-[var(--status-req-new-ring)]",
-    "Σε εξέλιξη": "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
-    "Ολοκληρώθηκε": "bg-[var(--status-req-done-bg)] text-[var(--status-req-done-fg)] ring-1 ring-inset ring-[var(--status-req-done-ring)]",
-    "Απορρίφθηκε": "bg-[var(--status-req-rej-bg)] text-[var(--status-req-rej-fg)] ring-1 ring-inset ring-[var(--status-req-rej-ring)]",
+    "Σε εξέλιξη":
+      "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
+    "Σε αναμονή":
+      "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
+    "Ολοκληρώθηκε":
+      "bg-[var(--status-req-done-bg)] text-[var(--status-req-done-fg)] ring-1 ring-inset ring-[var(--status-req-done-ring)]",
+    "Απορρίφθηκε":
+      "bg-[var(--status-req-rej-bg)] text-[var(--status-req-rej-fg)] ring-1 ring-inset ring-[var(--status-req-rej-ring)]",
   };
   const s = status || "Νέο";
   return (
@@ -348,10 +708,11 @@ function EditRequestModal({
     description: request.description ?? "",
     category: request.category ?? "Άλλο",
     status: request.status ?? "Νέο",
-    priority: (request.priority === "High" || request.priority === "Low" ? request.priority : "Medium") as
-      | "High"
-      | "Medium"
-      | "Low",
+    priority: (request.priority === "High" ||
+    request.priority === "Low" ||
+    request.priority === "Urgent"
+      ? request.priority
+      : "Medium") as "High" | "Medium" | "Low" | "Urgent",
     assigned_to: request.assigned_to ?? "",
   });
   const [saving, setSaving] = useState(false);
@@ -427,84 +788,91 @@ function EditRequestModal({
         </>
       }
     >
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
-            {request.request_code ?? "—"}
-          </span>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
+          {request.request_code ?? "—"}
+        </span>
+      </div>
+      <p className="line-clamp-2 text-sm text-[var(--text-secondary)]">{request.title}</p>
+      <div className="mt-4 grid max-w-[640px] gap-4">
+        <div>
+          <label className={lux.label}>Τίτλος</label>
+          <input
+            className={lux.input}
+            value={form.title}
+            placeholder="Τίτλος αιτήματος"
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
         </div>
-        <p className="line-clamp-2 text-sm text-[var(--text-secondary)]">{request.title}</p>
-        <div className="mt-4 grid max-w-[640px] gap-4">
-          <div>
-            <label className={lux.label}>Τίτλος</label>
-            <input
-              className={lux.input}
-              value={form.title}
-              placeholder="Τίτλος αιτήματος"
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className={lux.label}>Περιγραφή</label>
-            <textarea
-              className={lux.textarea}
-              value={form.description}
-              placeholder="Περιγραφή…"
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className={lux.label}>Κατηγορία</label>
-            <HqSelect value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              {categories.length === 0
-                ? ["Άλλο", "Υγεία", "Εκπαίδευση", "Υποδομές", "Δημόσια υπηρεσία"].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))
-                : categories.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-            </HqSelect>
-          </div>
-          <div>
-            <label className={lux.label}>Κατάσταση</label>
-            <HqSelect value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              <option>Νέο</option>
-              <option>Σε εξέλιξη</option>
-              <option>Ολοκληρώθηκε</option>
-              <option>Απορρίφθηκε</option>
-            </HqSelect>
-          </div>
-          <div>
-            <label className={lux.label}>Priority</label>
-            <HqSelect
-              value={form.priority}
-              onChange={(e) =>
-                setForm({ ...form, priority: e.target.value as "High" | "Medium" | "Low" })
-              }
-            >
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </HqSelect>
-          </div>
-          <div>
-            <label className={lux.label}>Ανάθεση</label>
-            <input
-              className={lux.input}
-              value={form.assigned_to}
-              placeholder="Όνομα υπευθύνου"
-              onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
-            />
-          </div>
+        <div>
+          <label className={lux.label}>Περιγραφή</label>
+          <textarea
+            className={lux.textarea}
+            value={form.description}
+            placeholder="Περιγραφή…"
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
         </div>
-        <div className="mt-6 border-t border-[var(--border)] pt-4">
-          <button type="button" onClick={() => void remove()} className="text-sm font-medium text-[#DC2626] hover:underline" disabled={saving}>
-            Διαγραφή αιτήματος
-          </button>
+        <div>
+          <label className={lux.label}>Κατηγορία</label>
+          <HqSelect value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            {categories.length === 0
+              ? ["Άλλο", "Υγεία", "Εκπαίδευση", "Υποδομές", "Δημόσια υπηρεσία"].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))
+              : categories.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+          </HqSelect>
         </div>
+        <div>
+          <label className={lux.label}>Κατάσταση</label>
+          <HqSelect value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+            <option>Νέο</option>
+            <option>Σε εξέλιξη</option>
+            <option>Σε αναμονή</option>
+            <option>Ολοκληρώθηκε</option>
+            <option>Απορρίφθηκε</option>
+          </HqSelect>
+        </div>
+        <div>
+          <label className={lux.label}>Priority</label>
+          <HqSelect
+            value={form.priority}
+            onChange={(e) =>
+              setForm({ ...form, priority: e.target.value as "High" | "Medium" | "Low" | "Urgent" })
+            }
+          >
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+            <option value="Urgent">Urgent</option>
+          </HqSelect>
+        </div>
+        <div>
+          <label className={lux.label}>Ανάθεση</label>
+          <input
+            className={lux.input}
+            value={form.assigned_to}
+            placeholder="Όνομα υπευθύνου"
+            onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
+          />
+        </div>
+      </div>
+      <div className="mt-6 border-t border-[var(--border)] pt-4">
+        <button
+          type="button"
+          onClick={() => void remove()}
+          className="text-sm font-medium text-[#DC2626] hover:underline"
+          disabled={saving}
+        >
+          Διαγραφή αιτήματος
+        </button>
+      </div>
     </CenteredModal>
   );
 }

@@ -56,6 +56,10 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   }
 }
 
+export async function PATCH(request: NextRequest, ctx: { params: { id: string } }) {
+  return PUT(request, ctx);
+}
+
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
   const crm = await checkCRMAccess();

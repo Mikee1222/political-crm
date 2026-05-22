@@ -59,6 +59,7 @@ export const callStatusPill: Record<string, string> = {
 
 export const priorityPill: Record<string, string> = {
   High: "bg-red-500/15 text-[var(--status-negative-text)] ring-1 ring-inset ring-red-500/30",
+  Urgent: "bg-red-600/20 text-red-300 ring-1 ring-inset ring-red-500/40",
   Medium: "bg-[var(--status-noanswer-bg)] text-[var(--status-noanswer-text)] ring-1 ring-inset ring-amber-500/25",
   Low: "bg-[var(--status-waiting-bg)] text-[var(--status-waiting-text)] ring-1 ring-inset ring-slate-500/20",
 };
