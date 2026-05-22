@@ -17,6 +17,7 @@ import { HqSelect } from "@/components/ui/hq-select";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
+import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
 
 const card =
   "contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm";
@@ -129,12 +130,7 @@ type ContactNoteItem = {
   author_full_name: string;
 };
 
-const CALL_OPTS = [
-  { value: "Pending", label: "Αναμονή" },
-  { value: "Positive", label: "Θετικός" },
-  { value: "Negative", label: "Αρνητικός" },
-  { value: "No Answer", label: "Δεν απάντησε" },
-] as const;
+const CALL_OPTS = CONTACT_CALL_STATUS_OPTIONS;
 
 function disp(v: string | null | undefined) {
   if (v == null || String(v).trim() === "") return "—";
@@ -1277,7 +1273,11 @@ function ContactDetailPage() {
                     <span className={lbl}>{row.l}</span>
                     {canManage && editing === "electoral" && w ? (
                       <input
-                        className={inputSm}
+                        type="text"
+                        className={
+                          inputSm +
+                          " w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                        }
                         value={String((w as Record<string, unknown>)[row.k] ?? "")}
                         onChange={(e) =>
                           setBuf({ ...w, [row.k]: e.target.value || null } as Contact)

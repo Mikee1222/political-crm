@@ -66,10 +66,10 @@ export const priorityPill: Record<string, string> = {
 
 export function callStatusLabel(key: string | null | undefined): string {
   const m: Record<string, string> = {
-    Pending: "Αναμονή",
-    Positive: "Θετικός",
-    Negative: "Αρνητικός",
-    "No Answer": "Δεν Απάντησε",
+    Pending: "Νέα",
+    Positive: "Θετική",
+    Negative: "Αρνητική",
+    "No Answer": "Δεν απαντά",
   };
   return m[key ?? "Pending"] ?? (key || "—");
 }

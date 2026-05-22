@@ -15,6 +15,8 @@ import {
   type CSSProperties,
 } from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
+import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
+import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
 import {
   getDefaultContactFilters,
   searchParamsToFilters,
@@ -174,6 +176,7 @@ function countActiveContactFilters(filters: ContactListFilters): number {
   if (filters.is_volunteer) n += 1;
   if (filters.nameday_today) n += 1;
   if (filters.age_min || filters.age_max) n += 1;
+  if (filters.gender) n += 1;
   if (filters.birth_year_from || filters.birth_year_to) n += 1;
   if (filters.volunteer_area) n += 1;
   if (filters.limit) n += 1;
@@ -620,12 +623,7 @@ function ContactSwipeCard({
   );
 }
 
-const CALL_STATUS_OPTS: { v: string; l: string }[] = [
-  { v: "Pending", l: "Αναμονή" },
-  { v: "Positive", l: "Θετικός" },
-  { v: "Negative", l: "Αρνητικός" },
-  { v: "No Answer", l: "Δεν απάντησε" },
-];
+const CALL_STATUS_OPTS = CONTACT_CALL_STATUS_OPTIONS.map((o) => ({ v: o.value, l: o.label }));
 
 function GroupMultiSelect({
   id,
@@ -821,6 +819,9 @@ function ContactsPage() {
   const [listTotal, setListTotal] = useState(0);
   const pageSize = 50;
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
+  const [filterMunicipalities, setFilterMunicipalities] = useState<string[]>(() =>
+    MUNICIPALITIES.map((m) => m.name),
+  );
   const [savedFilters, setSavedFilters] = useState<SavedFilterApi[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -909,6 +910,20 @@ function ContactsPage() {
       .then((r) => r.json())
       .then((d: { groups?: ContactGroupRow[] }) => setGroups(d.groups ?? []))
       .catch(() => setGroups([]));
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetchWithTimeout("/api/geo/municipalities");
+        if (!r.ok) return;
+        const d = (await r.json()) as { municipalities?: MunicipalityRow[] };
+        const names = (d.municipalities ?? []).map((m) => m.name).filter(Boolean);
+        if (names.length) setFilterMunicipalities(names);
+      } catch {
+        /* keep static fallback */
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -1269,11 +1284,49 @@ function ContactsPage() {
             </label>
             <HqSelect id="f-muni" value={f.municipality} onChange={(e) => patch({ municipality: e.target.value })}>
               <option value="">Όλοι</option>
-              {MUNICIPALITIES.map((m) => (
-                <option key={m.name} value={m.name}>
-                  {m.name}
+              {filterMunicipalities.map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
+            </HqSelect>
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-age-from">
+              Ηλικία
+            </label>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                id="f-age-from"
+                type="number"
+                placeholder="Από"
+                min={18}
+                max={100}
+                value={f.age_min}
+                onChange={(e) => patch({ age_min: e.target.value.replace(/[^\d]/g, "") })}
+                className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--text-input)]"
+              />
+              <span className="text-[var(--text-muted)]">—</span>
+              <input
+                id="f-age-to"
+                type="number"
+                placeholder="Έως"
+                min={18}
+                max={100}
+                value={f.age_max}
+                onChange={(e) => patch({ age_max: e.target.value.replace(/[^\d]/g, "") })}
+                className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--text-input)]"
+              />
+            </div>
+          </div>
+          <div className="min-w-0 max-w-full">
+            <label className={lux.label} htmlFor="f-gender">
+              Φύλο
+            </label>
+            <HqSelect id="f-gender" value={f.gender} onChange={(e) => patch({ gender: e.target.value })}>
+              <option value="">Όλα</option>
+              <option value="Άνδρας">Άνδρας</option>
+              <option value="Γυναίκα">Γυναίκα</option>
             </HqSelect>
           </div>
           <div className="min-w-0 max-w-full">
@@ -1538,10 +1591,11 @@ function ContactsPage() {
                         value={bulkStatus}
                         onChange={(e) => setBulkStatus(e.target.value)}
                       >
-                        <option value="Pending">Αναμονή</option>
-                        <option value="Positive">Θετικός</option>
-                        <option value="Negative">Αρνητικός</option>
-                        <option value="No Answer">Δεν απάντησε</option>
+                        {CONTACT_CALL_STATUS_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
                       </HqSelect>
                       <button
                         type="button"

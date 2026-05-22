@@ -32,7 +32,8 @@ export function applyContactListFiltersToBuilder(query: any, f: ContactListFilte
     query = query.in("call_status", callStatuses);
   }
   if (f.area) query = query.eq("area", f.area);
-  if (f.municipality) query = query.ilike("municipality", `%${f.municipality}%`);
+  if (f.municipality) query = query.eq("municipality", f.municipality);
+  if (f.gender) query = query.eq("gender", f.gender);
   if (f.priority) query = query.eq("priority", f.priority);
   if (f.tag) query = query.contains("tags", [f.tag]);
   if (f.political_stance) query = query.eq("political_stance", f.political_stance);

@@ -224,3 +224,14 @@ export function getSettlements(muniName: string | null | undefined, districtName
   const d = m.districts.find((x) => x.name === districtName);
   return d ? [...d.settlements] : [] as string[];
 }
+
+/** All settlements in a municipality (when electoral district not chosen yet). */
+export function getAllSettlementsForMuni(muniName: string | null | undefined) {
+  const m = getMuniByName(muniName);
+  if (!m) return [] as string[];
+  const seen = new Set<string>();
+  for (const d of m.districts) {
+    for (const s of d.settlements) seen.add(s);
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b, "el"));
+}

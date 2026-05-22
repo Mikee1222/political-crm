@@ -24,6 +24,7 @@ export type ContactListFilters = {
   birth_year_from: string;
   birth_year_to: string;
   volunteer_area: string;
+  gender: string;
   limit: string;
   /** 1-based page for list (50 per page when not using `limit` combobox mode) */
   page: string;
@@ -74,6 +75,7 @@ export function searchParamsToFilters(sp: URLSearchParams, prev?: Partial<Contac
     birth_year_from: sp.get("birth_year_from") ?? prev?.birth_year_from ?? "",
     birth_year_to: sp.get("birth_year_to") ?? prev?.birth_year_to ?? "",
     volunteer_area: sp.get("volunteer_area") ?? prev?.volunteer_area ?? "",
+    gender: sp.get("gender") ?? prev?.gender ?? "",
     limit: sp.get("limit") ?? prev?.limit ?? "",
     page: sp.get("page") ?? prev?.page ?? "1",
   };
@@ -112,6 +114,7 @@ export function contactFiltersToSearchParams(f: ContactListFilters, opts?: { for
   pushIf(p, "birth_year_from", f.birth_year_from);
   pushIf(p, "birth_year_to", f.birth_year_to);
   pushIf(p, "volunteer_area", f.volunteer_area);
+  pushIf(p, "gender", f.gender);
   pushIf(p, "limit", f.limit);
   if (f.page && f.page !== "1") p.set("page", f.page);
   if (opts?.forPage) p.set("vf", "1");
@@ -148,6 +151,7 @@ const DEFAULT_FILTERS: ContactListFilters = {
   birth_year_from: "",
   birth_year_to: "",
   volunteer_area: "",
+  gender: "",
   limit: "",
   page: "1",
 };
@@ -213,6 +217,7 @@ export function applySavedFilterJson(
   }
   if (typeof o.volunteer_area === "string") base.volunteer_area = o.volunteer_area;
   if (o.nameday_today === true) base.nameday_today = true;
+  if (typeof o.gender === "string") base.gender = o.gender;
   return base;
 }
 
@@ -266,16 +271,17 @@ export function applyFindContactsToolInput(
   if (raw.is_volunteer === true) o.is_volunteer = true;
   if (s("volunteer_area")) o.volunteer_area = s("volunteer_area");
   if (raw.nameday_today === true) o.nameday_today = true;
+  if (s("gender")) o.gender = s("gender");
   if (s("group_id") && !o.group_ids.length) o.group_id = s("group_id");
   if (nstr("limit")) o.limit = nstr("limit");
   return o;
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  Pending: "Αναμονή",
-  Positive: "Θετικός",
-  Negative: "Αρνητικός",
-  "No Answer": "Δεν απάντησε",
+  Pending: "Νέα",
+  Positive: "Θετική",
+  Negative: "Αρνητική",
+  "No Answer": "Δεν απαντά",
 };
 
 export function summarizeContactFilters(f: ContactListFilters, groupNames: Map<string, string>): string {
@@ -301,6 +307,7 @@ export function summarizeContactFilters(f: ContactListFilters, groupNames: Map<s
   if (f.not_contacted_days) parts.push(`Χωρίς κλήση ${f.not_contacted_days}ημ.`);
   if (f.score_tier) parts.push(`Σκορ: ${f.score_tier}`);
   if (f.is_volunteer) parts.push("Μόνο εθελοντές");
+  if (f.gender) parts.push(`Φύλο: ${f.gender}`);
   return parts.length ? parts.join(" · ") : "—";
 }
 
