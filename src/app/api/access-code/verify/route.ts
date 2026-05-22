@@ -6,7 +6,10 @@ import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
 
-/** POST { code } — verify hourly code and grant CRM access for 2 hours. */
+const ACCESS_COOKIE = "crm_access_granted";
+const ACCESS_MAX_AGE = 60 * 60 * 2;
+
+/** POST { code } — verify hourly code; grant via cookie (+ DB audit). */
 export async function POST(req: NextRequest) {
   try {
     const crm = await checkCRMAccess(req);
@@ -35,10 +38,18 @@ export async function POST(req: NextRequest) {
       { onConflict: "user_id" },
     );
     if (grantErr) {
-      return NextResponse.json({ error: grantErr.message }, { status: 400 });
+      console.error("[access-code/verify] grant upsert", grantErr.message);
     }
 
-    return NextResponse.json({ success: true, expires_at: expiresAt.toISOString() });
+    const response = NextResponse.json({ success: true, expires_at: expiresAt.toISOString() });
+    response.cookies.set(ACCESS_COOKIE, "1", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: ACCESS_MAX_AGE,
+      path: "/",
+    });
+    return response;
   } catch (e) {
     console.error("[api/access-code/verify POST]", e);
     return nextJsonError();

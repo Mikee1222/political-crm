@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Shield } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 
@@ -9,7 +8,6 @@ export default function EnterCodePage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const router = useRouter();
 
   const nextPath = () => {
     const next = new URLSearchParams(window.location.search).get("next");
@@ -29,8 +27,8 @@ export default function EnterCodePage() {
       });
       const data = (await res.json()) as { error?: string };
       if (res.ok) {
-        router.push(nextPath());
-        router.refresh();
+        window.location.href = nextPath();
+        return;
       } else {
         setError(data.error ?? "Λάθος κωδικός.");
       }

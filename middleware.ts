@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
 import { isPortalOnlyUser } from "@/lib/portal-user-status";
-import { createServiceClient } from "@/lib/supabase/admin";
+
+const CRM_ACCESS_COOKIE = "crm_access_granted";
 
 const CALLER_BLOCKED_PREFIXES = [
   "/dashboard",
@@ -60,55 +61,34 @@ function isPollPublicPath(pathname: string) {
   return false;
 }
 
-const ACCESS_CODE_EXCLUDED_PREFIXES = [
+const ACCESS_CODE_SKIP_PATHS = [
   "/enter-code",
-  "/api/access-code",
   "/login",
+  "/api/access-code",
+  "/api/auth",
   "/portal",
   "/_next",
-  "/favicon",
-  "/api/auth",
+  "/favicon.ico",
+  "/manifest.json",
+  "/sw.js",
 ] as const;
 
 function isAccessCodeExcluded(pathname: string) {
-  return ACCESS_CODE_EXCLUDED_PREFIXES.some((p) => pathname.startsWith(p));
-}
-
-async function userHasValidAccessGrant(userId: string): Promise<boolean> {
-  const adminDb = createServiceClient();
-  const { data: grant } = await adminDb
-    .from("access_code_grants")
-    .select("expires_at")
-    .eq("user_id", userId)
-    .gt("expires_at", new Date().toISOString())
-    .maybeSingle();
-  return Boolean(grant);
-}
-
-async function isCrmAdminUser(userId: string): Promise<boolean> {
-  const adminDb = createServiceClient();
-  const { data: profile } = await adminDb
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .maybeSingle();
-  return profile?.role === "admin";
+  return ACCESS_CODE_SKIP_PATHS.some((p) => pathname.startsWith(p));
 }
 
 /** Returns a redirect/JSON response if non-admin must enter access code; null if allowed. */
-async function enforceCrmAccessCode(
+function enforceCrmAccessCode(
   request: NextRequest,
-  userId: string,
+  role: string,
   pathname: string,
   sessionResponse: NextResponse,
-): Promise<NextResponse | null> {
+): NextResponse | null {
   if (isAccessCodeExcluded(pathname)) return null;
+  if (role === "admin") return null;
 
-  const isAdmin = await isCrmAdminUser(userId);
-  if (isAdmin) return null;
-
-  const hasGrant = await userHasValidAccessGrant(userId);
-  if (hasGrant) return null;
+  const accessGranted = request.cookies.get(CRM_ACCESS_COOKIE)?.value === "1";
+  if (accessGranted) return null;
 
   if (pathname.startsWith("/api/")) {
     return jsonWithSession(
@@ -284,7 +264,7 @@ export async function middleware(request: NextRequest) {
       if (isPortalUser) {
         return NextResponse.redirect(portalDashboardRedirectUrl());
       }
-      const gate = await enforceCrmAccessCode(request, authUser.id, "/dashboard", sessionResponse);
+      const gate = enforceCrmAccessCode(request, role, "/dashboard", sessionResponse);
       if (gate) return gate;
       return redirectWithSession(request, "/dashboard", sessionResponse);
     }
@@ -366,7 +346,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isLoggedIn && authUser && !isPortalUser && !isPortalAppPath(pathname)) {
-    const gate = await enforceCrmAccessCode(request, authUser.id, pathname, sessionResponse);
+    const gate = enforceCrmAccessCode(request, role, pathname, sessionResponse);
     if (gate) return gate;
   }
 
@@ -394,6 +374,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons/).*)",
   ],
 };

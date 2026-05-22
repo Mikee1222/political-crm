@@ -5,18 +5,26 @@ import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
 
-/** POST — clear access grant on logout. */
+const ACCESS_COOKIE = "crm_access_granted";
+
+/** POST — clear access grant cookie (and DB row) on logout. */
 export async function POST(req: NextRequest) {
   try {
     const crm = await checkCRMAccess(req);
-    if (!crm.allowed) {
-      return NextResponse.json({ ok: true });
+    if (crm.allowed) {
+      const admin = createServiceClient();
+      await admin.from("access_code_grants").delete().eq("user_id", crm.user.id);
     }
 
-    const admin = createServiceClient();
-    await admin.from("access_code_grants").delete().eq("user_id", crm.user.id);
-
-    return NextResponse.json({ ok: true });
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(ACCESS_COOKIE, "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
+    return response;
   } catch (e) {
     console.error("[api/access-code/revoke POST]", e);
     return nextJsonError();
