@@ -25,7 +25,21 @@ function startOfWeekMonday(d: Date) {
 
 export type BriefingTodayData = {
   namedays: { names: string[]; matchingContactsCount: number; contactNames: string[] };
-  namedayContacts: Array<{ name: string; phone: string }>;
+  namedayContacts: Array<{ id: string; name: string; phone: string }>;
+  overdueTop5: Array<{
+    id: string;
+    request_code: string | null;
+    title: string | null;
+    created_at: string;
+    status: string | null;
+  }>;
+  birthdayContacts: Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    phone: string | null;
+    birthday: string | null;
+  }>;
   tasksDueToday: Array<{ id: string; title: string; contact: string }>;
   pendingTasksCount: number;
   openRequestsCount: number;
@@ -44,6 +58,8 @@ export type BriefingTodayData = {
 const empty: BriefingTodayData = {
   namedays: { names: [], matchingContactsCount: 0, contactNames: [] },
   namedayContacts: [],
+  overdueTop5: [],
+  birthdayContacts: [],
   tasksDueToday: [],
   pendingTasksCount: 0,
   openRequestsCount: 0,
@@ -78,7 +94,9 @@ export async function fetchBriefingTodayData(
   const weekAgo = new Date(now);
   weekAgo.setDate(weekAgo.getDate() - 7);
 
-  const [nameDayRes, allContacts, reqOpenRes, stalledReqRes, tasksRes, pendingTasksRes, weekRes, campaignsRes, callsYest] =
+  const birthdayPattern = `%-${m}-${d}`;
+
+  const [nameDayRes, allContacts, reqOpenRes, stalledReqRes, overdueTop5Res, birthdayRes, tasksRes, pendingTasksRes, weekRes, campaignsRes, callsYest] =
     await Promise.all([
       supabase.from("name_days").select("names").eq("month", month).eq("day", day).maybeSingle(),
       supabase.from("contacts").select("id, first_name, last_name, nickname, phone, created_at"),
@@ -91,6 +109,19 @@ export async function fetchBriefingTodayData(
         .select("id", { count: "exact", head: true })
         .in("status", ["Νέο", "Σε εξέλιξη"])
         .lt("created_at", weekAgo.toISOString()),
+      supabase
+        .from("requests")
+        .select("id, request_code, title, created_at, status")
+        .in("status", ["Νέο", "Σε εξέλιξη"])
+        .lt("created_at", weekAgo.toISOString())
+        .order("created_at", { ascending: true })
+        .limit(5),
+      supabase
+        .from("contacts")
+        .select("id, first_name, last_name, phone, birthday")
+        .not("birthday", "is", null)
+        .ilike("birthday", birthdayPattern)
+        .limit(10),
       supabase
         .from("tasks")
         .select("id, title, due_date, contact_id, completed, contacts(first_name, last_name)")
@@ -114,6 +145,8 @@ export async function fetchBriefingTodayData(
     allContacts.error ||
     reqOpenRes.error ||
     stalledReqRes.error ||
+    overdueTop5Res.error ||
+    birthdayRes.error ||
     tasksRes.error ||
     pendingTasksRes.error ||
     weekRes.error ||
@@ -155,10 +188,14 @@ export async function fetchBriefingTodayData(
   const contactNames = contacts.map((c) => `${c.first_name} ${c.last_name}`.trim());
   const namedayContacts = contacts
     .map((c) => ({
+      id: c.id as string,
       name: `${c.first_name} ${c.last_name}`.trim(),
       phone: (c as { phone?: string | null }).phone ?? "—",
     }))
     .slice(0, 50);
+
+  const overdueTop5 = (overdueTop5Res.data ?? []) as BriefingTodayData["overdueTop5"];
+  const birthdayContacts = (birthdayRes.data ?? []) as BriefingTodayData["birthdayContacts"];
 
   const yCalls = (callsYest.data ?? []) as Array<{ outcome: string | null }>;
   const yTally = tallyOutcomes(yCalls.map((c) => ({ outcome: c.outcome })));
@@ -207,6 +244,8 @@ export async function fetchBriefingTodayData(
       contactNames: contactNames.slice(0, 20),
     },
     namedayContacts,
+    overdueTop5,
+    birthdayContacts,
     tasksDueToday,
     pendingTasksCount: pendingTasksRes.count ?? 0,
     openRequestsCount: reqOpenRes.count ?? 0,

@@ -8,7 +8,21 @@ export const dynamic = "force-dynamic";
 
 const emptyBriefing = {
   namedays: { names: [] as string[], matchingContactsCount: 0, contactNames: [] as string[] },
-  namedayContacts: [] as Array<{ name: string; phone: string }>,
+  namedayContacts: [] as Array<{ id: string; name: string; phone: string }>,
+  overdueTop5: [] as Array<{
+    id: string;
+    request_code: string | null;
+    title: string | null;
+    created_at: string;
+    status: string | null;
+  }>,
+  birthdayContacts: [] as Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    phone: string | null;
+    birthday: string | null;
+  }>,
   tasksDueToday: [] as Array<{ id: string; title: string; contact: string }>,
   pendingTasksCount: 0,
   openRequestsCount: 0,
@@ -34,6 +48,8 @@ export async function GET() {
         return NextResponse.json({
           namedays: data.namedays,
           namedayContacts: data.namedayContacts,
+          overdueTop5: data.overdueTop5,
+          birthdayContacts: data.birthdayContacts,
           tasksDueToday: data.tasksDueToday,
           pendingTasksCount: data.pendingTasksCount,
           openRequestsCount: data.openRequestsCount,

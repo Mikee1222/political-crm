@@ -2,16 +2,18 @@
 
 import {
   AlertTriangle,
-  BarChart3,
   Calendar,
-  CalendarClock,
+  CalendarCheck,
   CheckCircle2,
+  CheckSquare,
+  ChevronRight,
   Clock3,
   Euro,
   Inbox,
   Megaphone,
   HandHeart,
   ListTodo,
+  Phone,
   PhoneCall,
   PhoneOff,
   ArrowRight,
@@ -30,6 +32,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useCountUp } from "@/hooks/use-count-up";
 import { MetricSparkline } from "@/components/ui/metric-sparkline";
 import { PwaInstallSteps } from "@/components/pwa-install-guide";
+import { getAgeFromBirthday } from "@/lib/contact-birthday";
 
 type DashboardData = {
   totalContacts: number;
@@ -46,13 +49,29 @@ type DashboardData = {
 
 type Briefing = {
   namedays: { names: string[]; matchingContactsCount: number; contactNames: string[] };
-  namedayContacts: Array<{ name: string; phone: string }>;
+  namedayContacts: Array<{ id: string; name: string; phone: string }>;
   tasksDueToday: Array<{ id: string; title: string; contact: string }>;
+  pendingTasksCount: number;
   openRequestsCount: number;
   contactsAddedThisWeek: number;
   campaigns: Array<{ id: string; name: string; started_at: string | null; callsTotal: number; positive: number }>;
   calendar: { connected: boolean; events: Array<{ title: string | null; start: string | null; end: string | null }> };
   stalledOpenRequestCount: number;
+  overdueRequestCount: number;
+  overdueTop5: Array<{
+    id: string;
+    request_code: string | null;
+    title: string | null;
+    created_at: string;
+    status: string | null;
+  }>;
+  birthdayContacts: Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    phone: string | null;
+    birthday: string | null;
+  }>;
   callsYesterday: { total: number; positive: number; negative: number; noAnswer: number };
 };
 
@@ -75,13 +94,41 @@ const EMPTY_BRIEF: Briefing = {
   namedays: { names: [], matchingContactsCount: 0, contactNames: [] },
   namedayContacts: [],
   tasksDueToday: [],
+  pendingTasksCount: 0,
   openRequestsCount: 0,
   contactsAddedThisWeek: 0,
   campaigns: [],
   calendar: { connected: false, events: [] },
   stalledOpenRequestCount: 0,
+  overdueRequestCount: 0,
+  overdueTop5: [],
+  birthdayContacts: [],
   callsYesterday: { total: 0, positive: 0, negative: 0, noAnswer: 0 },
 };
+
+const BRIEF_CARD = "rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-[var(--card-shadow)]";
+const BRIEF_SECTION = "text-xs font-semibold uppercase tracking-widest text-[var(--accent-gold)] mb-3";
+
+function daysSinceCreated(iso: string): number {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, Math.floor((Date.now() - t) / (1000 * 60 * 60 * 24)));
+}
+
+function formatCalendarTime(start: string | null): string {
+  if (!start) return "—";
+  const d = new Date(start);
+  if (Number.isNaN(d.getTime())) return start.slice(11, 16) || "—";
+  return d.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" });
+}
+
+const CAL_EVENT_COLORS = [
+  "var(--accent-gold)",
+  "var(--accent-blue)",
+  "var(--success)",
+  "var(--warning)",
+  "var(--danger)",
+];
 
 function parseDashboard(raw: unknown): DashboardData {
   if (!raw || typeof raw !== "object") return EMPTY_DASH;
@@ -146,6 +193,10 @@ function parseBriefing(raw: unknown): Briefing {
       ? (o as { namedayContacts: Briefing["namedayContacts"] }).namedayContacts
       : [],
     tasksDueToday: Array.isArray(o.tasksDueToday) ? (o.tasksDueToday as Briefing["tasksDueToday"]) : [],
+    pendingTasksCount:
+      typeof (o as { pendingTasksCount?: number }).pendingTasksCount === "number"
+        ? (o as { pendingTasksCount: number }).pendingTasksCount
+        : 0,
     openRequestsCount: typeof o.openRequestsCount === "number" ? o.openRequestsCount : 0,
     contactsAddedThisWeek: typeof o.contactsAddedThisWeek === "number" ? o.contactsAddedThisWeek : 0,
     campaigns: Array.isArray(o.campaigns) ? (o.campaigns as Briefing["campaigns"]) : [],
@@ -154,6 +205,16 @@ function parseBriefing(raw: unknown): Briefing {
       typeof (o as { stalledOpenRequestCount?: number }).stalledOpenRequestCount === "number"
         ? (o as { stalledOpenRequestCount: number }).stalledOpenRequestCount
         : 0,
+    overdueRequestCount:
+      typeof (o as { overdueRequestCount?: number }).overdueRequestCount === "number"
+        ? (o as { overdueRequestCount: number }).overdueRequestCount
+        : 0,
+    overdueTop5: Array.isArray((o as { overdueTop5?: unknown }).overdueTop5)
+      ? ((o as { overdueTop5: Briefing["overdueTop5"] }).overdueTop5)
+      : [],
+    birthdayContacts: Array.isArray((o as { birthdayContacts?: unknown }).birthdayContacts)
+      ? ((o as { birthdayContacts: Briefing["birthdayContacts"] }).birthdayContacts)
+      : [],
     callsYesterday,
   };
 }
@@ -413,120 +474,224 @@ export default function DashboardPage() {
       <section
         className={[
           lux.cardFlat,
-          "relative !overflow-hidden border-l-[3px] !border-l-[var(--accent-gold)] !p-0",
-          "grid gap-0 md:grid-cols-2",
+          "relative !overflow-hidden border-l-[3px] !border-l-[var(--accent-gold)] space-y-4 !p-5",
         ].join(" ")}
       >
-          <div className="col-span-full border-b border-[var(--border)] bg-gradient-to-r from-[rgba(201,168,76,0.08)] to-transparent px-5 py-3">
-            <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--accent-gold)]">Ημερήσια ενημέρωση</h2>
-          </div>
-          <div className="border-b border-[var(--border)] p-5 md:border-b-0 md:border-r">
-            <BriefRow
-              icon={Sparkles}
-              title="Κοινές γιορτές"
-              value={
-                briefing.namedays.matchingContactsCount
-                  ? `${briefing.namedays.matchingContactsCount} επαφές`
-                  : "Καμία αντιστοίχιση"
-              }
-              sub={
-                briefing.namedays.names.length
-                  ? briefing.namedays.names.slice(0, 4).join(", ") + (briefing.namedays.names.length > 4 ? "…" : "")
-                  : "—"
-              }
-            />
-            {briefing.namedays.contactNames.length > 0 && (
-              <p
-                className="mt-2 line-clamp-2 text-xs text-[var(--text-briefing)]"
-                title={briefing.namedays.contactNames.join(", ")}
-              >
-                {briefing.namedays.contactNames.join(", ")}
-              </p>
-            )}
-            {briefing.namedayContacts.length > 0 && (
-              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                Τηλέφωνα:{" "}
-                {briefing.namedayContacts
-                  .slice(0, 4)
-                  .map((c) => `${c.name} ${c.phone}`)
-                  .join(" · ")}
-                {briefing.namedayContacts.length > 4 ? "…" : ""}
-              </p>
-            )}
-          </div>
-          <div className="border-b border-[var(--border)] p-5 md:border-b-0 md:border-r">
-            <BriefRow
-              icon={Calendar}
-              title="Google Calendar (σήμερα)"
-              value={briefing.calendar.connected ? `${briefing.calendar.events.length} events` : "Μη συνδεδεμένο"}
-              sub={
-                briefing.calendar.connected
-                  ? briefing.calendar.events
-                      .slice(0, 3)
-                      .map((e) => e.title ?? "—")
-                      .join(" · ") || "Καμία εγγραφή"
-                  : "Συνδέστε το λογαριασμό στις ρυθμίσεις"
-              }
-            />
-          </div>
-          <div className="border-b border-[var(--border)] p-5 md:border-b-0 md:border-r">
-            <BriefRow
-              icon={CalendarClock}
-              title="Tasks σήμερα"
-              value={`${briefing.tasksDueToday.length} εκκρεμά`}
-              sub={briefing.tasksDueToday.length ? briefing.tasksDueToday.map((t) => t.title).join(", ") : "Κανένα"}
-            />
-          </div>
-          <div className="border-b border-[var(--border)] p-5 md:border-b-0 md:border-r">
-            <BriefRow
-              icon={Inbox}
-              title="Ανοιχτά αιτήματα"
-              value={String(briefing.openRequestsCount)}
-              sub="Νέο / Σε εξέλιξη"
-            />
-          </div>
-          <div className="border-b border-[var(--border)] p-5 md:col-span-2 md:border-b-0">
-            <BriefRow
-              icon={UserPlus}
-              title="Νέες επαφές (εβδομάδα)"
-              value={String(briefing.contactsAddedThisWeek)}
-              sub="από τη Δευτέρα"
-            />
-          </div>
-          <div className="border-b border-[var(--border)] p-5 md:border-b-0 md:border-r">
-            <BriefRow
-              icon={PhoneCall}
-              title="Χθεσινές κλήσεις"
-              value={String(briefing.callsYesterday.total)}
-              sub={`+${briefing.callsYesterday.positive} θετικές · ${briefing.callsYesterday.negative} αρνητικές · ${briefing.callsYesterday.noAnswer} χωρίς απάντηση`}
-            />
-          </div>
-          <div className="border-b border-[var(--border)] p-5 md:border-b-0 md:col-span-2">
-            <BriefRow
-              icon={Inbox}
-              title="Αιτήματα σε εκκρεμότητα &gt; 7 ημ."
-              value={String(briefing.stalledOpenRequestCount)}
-              sub="Νέο/Σε εξέλιξη με ημερομηνία πριν από 1 εβδομάδα"
-            />
-          </div>
-          {briefing.campaigns.length > 0 && (
-            <div className="p-5 md:col-span-2 md:border-t md:border-[var(--border)]">
-              <div className="mb-3 flex items-center gap-2 text-[var(--accent-gold)]">
-                <BarChart3 className="h-4 w-4" />
-                <span className="hq-section-label !m-0 !mb-0 !inline !border-0 !p-0 !pb-0">Ενεργές καμπάνιες</span>
+        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--accent-gold)]">Ημερήσια ενημέρωση</h2>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className={BRIEF_CARD}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-widest text-[var(--text-muted)]">
+                Ανοιχτά Αιτήματα
+              </span>
+              <Inbox className="h-4 w-4 text-[var(--accent-gold)]" aria-hidden />
+            </div>
+            <div className="text-3xl font-bold text-[var(--text-primary)]">{briefing.openRequestsCount}</div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">Νέο / Σε εξέλιξη</div>
+            {briefing.stalledOpenRequestCount > 0 ? (
+              <div className="mt-2 flex items-center gap-1 text-xs font-medium text-[var(--danger)]">
+                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                {briefing.stalledOpenRequestCount} εκκρεμούν &gt;7 ημ.
               </div>
-              <ul className="space-y-2 text-sm text-[var(--text-primary)]">
+            ) : null}
+          </div>
+
+          <div className={BRIEF_CARD}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-widest text-[var(--text-muted)]">Tasks Σήμερα</span>
+              <CheckSquare className="h-4 w-4 text-[var(--accent-gold)]" aria-hidden />
+            </div>
+            <div className="text-3xl font-bold text-[var(--text-primary)]">{briefing.pendingTasksCount}</div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">
+              εκκρεμή
+              {briefing.tasksDueToday.length > 0
+                ? ` · ${briefing.tasksDueToday.length} με deadline σήμερα`
+                : ""}
+            </div>
+          </div>
+
+          <div className={BRIEF_CARD}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-widest text-[var(--text-muted)]">Νέες Επαφές</span>
+              <UserPlus className="h-4 w-4 text-[var(--accent-gold)]" aria-hidden />
+            </div>
+            <div className="text-3xl font-bold text-[var(--text-primary)]">{briefing.contactsAddedThisWeek}</div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">από τη Δευτέρα</div>
+          </div>
+
+          <div className={BRIEF_CARD}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-widest text-[var(--text-muted)]">Χθεσινές Κλήσεις</span>
+              <Phone className="h-4 w-4 text-[var(--accent-gold)]" aria-hidden />
+            </div>
+            <div className="text-3xl font-bold text-[var(--text-primary)]">{briefing.callsYesterday.total}</div>
+            <div className="mt-1 flex flex-wrap gap-2">
+              <span className="text-xs text-[var(--success)]">+{briefing.callsYesterday.positive} θετικές</span>
+              <span className="text-xs text-[var(--danger)]">{briefing.callsYesterday.negative} αρν.</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
+          <div className={BRIEF_CARD}>
+            <h3 className={BRIEF_SECTION}>
+              Σήμερα · {briefing.calendar.connected ? briefing.calendar.events.length : 0} γεγονότα
+            </h3>
+            {!briefing.calendar.connected ? (
+              <p className="text-sm text-[var(--text-muted)]">Μη συνδεδεμένο ημερολόγιο — ρυθμίσεις Google.</p>
+            ) : briefing.calendar.events.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-center text-sm text-[var(--text-muted)]">
+                <CalendarCheck className="h-8 w-8 text-[var(--accent-gold)]" aria-hidden />
+                Καθαρό ημερολόγιο
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {[...briefing.calendar.events]
+                  .sort((a, b) => (a.start ?? "").localeCompare(b.start ?? ""))
+                  .slice(0, 12)
+                  .map((e, i) => (
+                    <li
+                      key={`${e.start ?? ""}-${e.title ?? ""}-${i}`}
+                      className="flex items-start gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_50%,transparent)]"
+                    >
+                      <span
+                        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ background: CAL_EVENT_COLORS[i % CAL_EVENT_COLORS.length] }}
+                        aria-hidden
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium tabular-nums text-[var(--text-muted)]">
+                          {formatCalendarTime(e.start)}
+                        </p>
+                        <p className="truncate text-sm font-medium text-[var(--text-primary)]">{e.title ?? "—"}</p>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+
+          <div className={BRIEF_CARD}>
+            <h3 className={BRIEF_SECTION}>Εκκρεμή Αιτήματα &gt;7 ημέρες</h3>
+            {briefing.overdueTop5.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">Κανένα αίτημα σε εκκρεμότητα &gt;7 ημερών.</p>
+            ) : (
+              <ul className="space-y-2">
+                {briefing.overdueTop5.map((r) => {
+                  const days = daysSinceCreated(r.created_at);
+                  return (
+                    <li key={r.id}>
+                      <Link
+                        href={`/requests/${r.id}`}
+                        className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_50%,transparent)]"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                            {r.request_code ? `${r.request_code} · ` : ""}
+                            {r.title ?? "—"}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-muted)]">{r.status ?? "—"}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] px-2 py-0.5 text-xs font-medium text-[var(--danger)]">
+                          {days} ημ.
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <Link
+              href="/requests?overdue=true"
+              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent-gold)] hover:underline"
+            >
+              Προβολή όλων
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-2">
+          <div className={BRIEF_CARD}>
+            <h3 className={BRIEF_SECTION}>Ενεργές Καμπάνιες</h3>
+            {briefing.campaigns.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">Καμία ενεργή καμπάνια</p>
+            ) : (
+              <ul className="space-y-2">
                 {briefing.campaigns.map((c) => (
-                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 px-3 py-2">
-                    <span className="font-medium">{c.name}</span>
-                    <span className="text-xs text-[var(--text-briefing)]">
-                      {c.callsTotal} κλήσεις · {c.positive} θετικές
-                    </span>
+                  <li
+                    key={c.id}
+                    className="rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_40%,transparent)] px-3 py-2.5"
+                  >
+                    <p className="font-medium text-[var(--text-primary)]">{c.name}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-[var(--text-muted)]">{c.callsTotal} κλήσεις</span>
+                      <span className="rounded-full bg-[color-mix(in_srgb,var(--success)_12%,transparent)] px-2 py-0.5 font-medium text-[var(--success)]">
+                        {c.positive} θετικές
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+
+          <div className={BRIEF_CARD}>
+            <h3 className={BRIEF_SECTION}>Ονομαστικές εορτές &amp; γενέθλια</h3>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Ονομαστικές εορτές
+              {briefing.namedays.names.length > 0 ? ` · ${briefing.namedays.names.slice(0, 3).join(", ")}` : ""}
+            </p>
+            {briefing.namedayContacts.length === 0 ? (
+              <p className="mb-4 text-sm text-[var(--text-muted)]">Καμία επαφή με ονομαστική σήμερα.</p>
+            ) : (
+              <ul className="mb-4 space-y-1">
+                {briefing.namedayContacts.slice(0, 10).map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      href={`/contacts/${c.id}`}
+                      className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_50%,transparent)]"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="border-t border-[var(--border)] pt-3">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Γενέθλια σήμερα
+              </p>
+              {briefing.birthdayContacts.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)]">Κανένα γενέθλιο σήμερα.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {briefing.birthdayContacts.map((c) => {
+                    const age = getAgeFromBirthday(c.birthday);
+                    const name = `${c.first_name} ${c.last_name}`.trim();
+                    return (
+                      <li key={c.id}>
+                        <Link
+                          href={`/contacts/${c.id}`}
+                          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_50%,transparent)]"
+                        >
+                          <Cake className="h-3.5 w-3.5 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                          <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">{name}</span>
+                          {age != null ? (
+                            <span className="shrink-0 text-xs text-[var(--text-muted)]">{age} ετών</span>
+                          ) : null}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
-          )}
+          </div>
+        </div>
       </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
