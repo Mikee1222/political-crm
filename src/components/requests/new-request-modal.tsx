@@ -14,13 +14,13 @@ const PRIORITIES = ["High", "Medium", "Low"] as const;
 
 const STATUSES = ["Νέο", "Σε εξέλιξη", "Ολοκληρώθηκε", "Απορρίφθηκε"] as const;
 
-type Assignee = { id: string; full_name: string | null; role: string };
+type StaffUser = { id: string; full_name: string | null; email: string; role: string };
 
 type Props = { open: boolean; onClose: () => void; onCreated: () => void };
 
 export function NewRequestModal({ open, onClose, onCreated }: Props) {
   const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
-  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -32,17 +32,14 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("Νέο");
   const [priority, setPriority] = useState<string>("Medium");
   const [slaDate, setSlaDate] = useState(""); // yyyy-mm-dd optional
-  const [assignedTo, setAssignedTo] = useState(""); // full name text
+  const [assignedTo, setAssignedTo] = useState(""); // profile id
   const [initialNote, setInitialNote] = useState("");
   const [titleFieldErr, setTitleFieldErr] = useState<string | null>(null);
   const [contactFieldErr, setContactFieldErr] = useState<string | null>(null);
   const { showToast } = useFormToast();
 
   const loadMeta = useCallback(async () => {
-    const [cRes, aRes] = await Promise.all([
-      fetchWithTimeout("/api/request-categories"),
-      fetchWithTimeout("/api/team/assignees"),
-    ]);
+    const cRes = await fetchWithTimeout("/api/request-categories");
     if (cRes.ok) {
       const cj = (await cRes.json()) as { categories?: RequestCategoryRow[] };
       const list = cj.categories ?? [];
@@ -51,10 +48,6 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
         setCategory((cur) => (list.some((x) => x.name === cur) ? cur : list[0]!.name));
       }
     }
-    if (aRes.ok) {
-      const aj = (await aRes.json()) as { assignees?: Assignee[] };
-      setAssignees(aj.assignees ?? []);
-    }
   }, []);
 
   useEffect(() => {
@@ -62,6 +55,14 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
     setErr("");
     void loadMeta();
   }, [open, loadMeta]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((d: { users?: StaffUser[] }) => setStaffUsers(d.users ?? []))
+      .catch(() => setStaffUsers([]));
+  }, [open]);
 
   const reset = () => {
     setContactId("");
@@ -99,6 +100,10 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
     }
     setSaving(true);
     try {
+      const assignee = staffUsers.find((u) => u.id === assignedTo);
+      const assignedName = assignee
+        ? (assignee.full_name?.trim() || assignee.email || null)
+        : null;
       const body: Record<string, unknown> = {
         contact_id: contactId,
         title: title.trim(),
@@ -106,7 +111,7 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
         category: category,
         status,
         priority,
-        assigned_to: assignedTo || null,
+        assigned_to: assignedName,
         initial_note: initialNote.trim() || undefined,
       };
       if (affectedId) body.affected_contact_id = affectedId;
@@ -308,16 +313,11 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
               </label>
               <HqSelect id="nr-asg" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
                 <option value="">—</option>
-                {assignees.map((a) => {
-                  const name = a.full_name?.trim();
-                  const label = name || `Χρήστης ${a.id.slice(0, 8)}…`;
-                  return (
-                    <option key={a.id} value={name || label}>
-                      {label}
-                      {a.role ? ` (${a.role})` : ""}
-                    </option>
-                  );
-                })}
+                {staffUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name || u.email} ({u.role})
+                  </option>
+                ))}
               </HqSelect>
             </div>
           </div>

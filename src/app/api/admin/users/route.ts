@@ -1,60 +1,65 @@
 import { requireCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
+import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
-import type { UserProfile } from "@/lib/auth-helpers";
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 type Row = {
   id: string;
   full_name: string | null;
-  role: string;
-  is_portal: boolean;
-  created_at: string | undefined;
   email: string;
+  role: string;
   joined_at: string;
   last_sign_in_at: string | null;
 };
 
+/** All CRM staff profiles (non-portal). Managers+ for assignee dropdowns; settings admin UI uses same list. */
 export async function GET() {
   const crm = await requireCRMAccess();
   if (!crm.allowed) return crm.response;
   const { profile } = crm;
-  if (profile?.role !== "admin") return forbidden();
+  if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
   try {
     const admin = createServiceClient();
-    const { data: listData, error: listErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    if (listErr) {
-      return NextResponse.json({ error: listErr.message }, { status: 400 });
+    const { data: prows, error: profErr } = await admin
+      .from("profiles")
+      .select("id, full_name, role, is_portal, created_at")
+      .eq("is_portal", false)
+      .order("full_name", { ascending: true, nullsFirst: false });
+    if (profErr) {
+      return NextResponse.json({ error: profErr.message }, { status: 400 });
     }
-    const { data: prows } = await admin.from("profiles").select("id, full_name, role, created_at, is_portal");
-    const pmap = new Map(
-      (prows ?? []).map(
-        (p) =>
-          [p.id, p] as [
-            string,
-            { id: string; full_name: string | null; role: string; created_at: string; is_portal: boolean | null },
-          ],
-      ),
-    );
-    const users: Row[] = (listData?.users ?? [])
-      .map((u) => {
-      const p = pmap.get(u.id) as
-        | { id: string; full_name: string | null; role: string; created_at: string; is_portal: boolean | null }
-        | undefined;
+
+    const authById = new Map<
+      string,
+      { email: string; created_at: string; last_sign_in_at: string | null }
+    >();
+    const { data: listData, error: listErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
+    if (!listErr) {
+      for (const u of listData?.users ?? []) {
+        if (!u.id) continue;
+        authById.set(u.id, {
+          email: u.email ?? "",
+          created_at: u.created_at,
+          last_sign_in_at: u.last_sign_in_at ?? null,
+        });
+      }
+    }
+
+    const users: Row[] = (prows ?? []).map((p) => {
+      const auth = authById.get(p.id);
       return {
-        id: u.id,
-        email: u.email ?? "",
-        full_name: p?.full_name ?? (u.user_metadata as { full_name?: string })?.full_name ?? null,
-        role: (p?.role as UserProfile["role"]) ?? "caller",
-        is_portal: p?.is_portal === true,
-        created_at: p?.created_at,
-        joined_at: u.created_at,
-        last_sign_in_at: u.last_sign_in_at ?? null,
+        id: p.id,
+        full_name: p.full_name,
+        email: auth?.email ?? "",
+        role: p.role ?? "caller",
+        joined_at: auth?.created_at ?? p.created_at ?? "",
+        last_sign_in_at: auth?.last_sign_in_at ?? null,
       };
-    })
-      .filter((u) => !u.is_portal);
+    });
+
     return NextResponse.json({ users });
   } catch (e) {
     const err = e as Error;
