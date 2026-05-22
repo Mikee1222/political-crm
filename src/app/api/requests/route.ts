@@ -99,7 +99,9 @@ async function fetchRequestsPage(
   query = applyRequestFilters(query, f, { withSearchEmbed: Boolean(f.search) });
   query = query.range(from, to);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any[] | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let error: any = null;
   let count: number | null = null;
 
