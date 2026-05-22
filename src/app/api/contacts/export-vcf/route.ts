@@ -26,31 +26,50 @@ export async function GET(req: NextRequest) {
     if (!crm.allowed) return crm.response;
     if (!hasMinRole(crm.profile?.role, "manager")) return forbidden();
 
-    const supabase = createServiceClient();
+    const adminSupabase = createServiceClient();
 
-    const allContacts: ContactVcfRow[] = [];
+    let allContacts: ContactVcfRow[] = [];
     let from = 0;
-    const pageSize = 1000;
+    const pageSize = 5000;
+    let keepGoing = true;
 
-    while (true) {
-      const { data, error } = await supabase
+    while (keepGoing) {
+      const { data, error } = await adminSupabase
         .from("contacts")
         .select(
           "first_name, last_name, phone, phone2, landline, email, address, municipality, birthday, occupation",
         )
-        .or("first_name.not.is.null,last_name.not.is.null")
-        .not("first_name", "eq", "")
-        .order("created_at", { ascending: true })
-        .range(from, from + pageSize - 1);
+        .or("first_name.neq.,last_name.neq.")
+        .range(from, from + pageSize - 1)
+        .order("id");
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
+        console.error("Fetch error at range", from, error);
+        break;
       }
-      if (!data || data.length === 0) break;
-      allContacts.push(...(data as ContactVcfRow[]));
-      if (data.length < pageSize) break;
-      from += pageSize;
+
+      if (!data || data.length === 0) {
+        keepGoing = false;
+        break;
+      }
+
+      const valid = data.filter(
+        (c) =>
+          (c.first_name && c.first_name.trim() !== "") ||
+          (c.last_name && c.last_name.trim() !== ""),
+      ) as ContactVcfRow[];
+
+      allContacts = allContacts.concat(valid);
+      console.log(`Fetched ${allContacts.length} so far (page from=${from})`);
+
+      if (data.length < pageSize) {
+        keepGoing = false;
+      } else {
+        from += pageSize;
+      }
     }
+
+    console.log(`Total contacts to export: ${allContacts.length}`);
 
     const vcards = allContacts.map((c) => {
       const firstName = c.first_name ?? "";
