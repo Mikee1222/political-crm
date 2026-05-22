@@ -135,14 +135,6 @@ export default function RequestsPage() {
     setSearchQ(next.search);
   }, [searchKey]);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      if (searchQ === f.search) return;
-      patch({ search: searchQ });
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [searchQ, f.search, patch]);
-
   const patch = useCallback(
     (p: Partial<RequestFilters>, opts?: { resetPage?: boolean }) => {
       setF((prev) => {
@@ -159,6 +151,14 @@ export default function RequestsPage() {
     },
     [router, pathname],
   );
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (searchQ === f.search) return;
+      patch({ search: searchQ });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [searchQ, f.search, patch]);
 
   const currentPage = Math.max(1, parseInt(f.page || "1", 10) || 1);
 
