@@ -132,16 +132,17 @@ function initials(fullName: string | null, fallback: string) {
 const navItemBase =
   "group flex h-12 max-h-12 shrink-0 items-center gap-3 rounded-[10px] border-l-2 border-transparent px-4 text-sm transition duration-200 ease-out";
 const navItemInactive = [
-  "text-gray-400",
-  "[&>span]:text-gray-400",
-  "hover:border-transparent hover:bg-white/4 hover:text-white hover:[&>span]:text-white",
+  "text-muted-foreground",
+  "[&>span]:text-muted-foreground",
+  "hover:border-transparent hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)] hover:[&>span]:text-[var(--nav-ink-hover)]",
 ].join(" ");
-const navItemIconInactive = "text-gray-400/50 group-hover:text-white group-hover:opacity-100";
+const navItemIconInactive =
+  "text-[var(--nav-icon-inactive)] group-hover:text-[var(--nav-icon-hover)] group-hover:opacity-100";
 const navItemActive = [
-  "border-[#C9A84C] bg-gradient-to-r from-amber-500/15 to-transparent",
-  "!text-white [&>span]:!text-white font-semibold",
+  "border-[var(--nav-item-active-border)] bg-[var(--nav-item-active-bg)]",
+  "!text-[var(--nav-item-active-fg)] [&>span]:!text-[var(--nav-item-active-fg)] font-semibold",
 ].join(" ");
-const navItemIconActive = "text-amber-400";
+const navItemIconActive = "text-[var(--nav-icon-active)]";
 const groupHeaderClass = "relative flex items-center gap-2 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-amber-500/40 before:content-[''] before:h-px before:w-4 before:bg-amber-500/30";
 
 const MOBILE_TAB_ORDER = ["/dashboard", "/contacts", "/requests", "/campaigns", "/alexandra"] as const;
@@ -813,7 +814,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="crm-app-frame flex min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-full min-w-full max-w-none flex-col overflow-x-hidden bg-[#080D1A]"
+      className="crm-app-frame flex min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-full min-w-full max-w-none flex-col overflow-x-hidden bg-background"
       style={shellStyle}
     >
       <aside
@@ -829,7 +830,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         >
           <div className="flex min-w-0 items-center gap-2">
             <div
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-bold tracking-tight text-white shadow-[0_0_24px_rgba(201,168,76,0.25)]"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-bold tracking-tight text-[var(--text-badge-on-gold)] shadow-[0_0_24px_rgba(201,168,76,0.25)]"
               style={{ background: "linear-gradient(145deg, #c9a84c 0%, #8b6914 100%)" }}
             >
               ΚΚ
@@ -897,7 +898,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileNavOpen(false)}
           />
           <div
-            className="fixed left-0 top-0 z-[45] box-border h-full w-[min(100vw,280px)] max-w-full overflow-y-auto border-r border-amber-500/15 bg-[#080D1A] p-3 shadow-[0_0_32px_rgba(0,0,0,0.45)]"
+            className="fixed left-0 top-0 z-[45] box-border h-full w-[min(100vw,280px)] max-w-full overflow-y-auto border-r border-border bg-[var(--sidebar-bg)] p-3 shadow-[var(--card-shadow)]"
             style={{
               backgroundImage:
                 "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.035) 1px, transparent 0), linear-gradient(to bottom, rgba(255,255,255,0.015), transparent)",
@@ -910,19 +911,19 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <div className="mb-2 flex w-full min-w-0 items-center justify-between pl-0.5">
               <div className="flex min-w-0 items-center gap-2">
                 <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-amber-500/50 text-sm font-bold text-white"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[var(--accent-gold)]/50 text-sm font-bold text-[var(--text-badge-on-gold)]"
                   style={{ background: "linear-gradient(145deg, #c9a84c 0%, #8b6914 100%)" }}
                 >
                   ΚΚ
                 </div>
                 <div className="min-w-0">
-                  <p className="min-w-0 text-sm font-semibold text-white">Καραγκούνης</p>
-                  <p className="text-[10px] uppercase tracking-widest text-amber-400/60">Πολιτικό Γραφείο</p>
+                  <p className="min-w-0 text-sm font-semibold text-[var(--sidebar-brand-title)]">Καραγκούνης</p>
+                  <p className="text-[10px] uppercase tracking-widest text-[var(--sidebar-tagline)]">Πολιτικό Γραφείο</p>
                 </div>
               </div>
               <button
                 type="button"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-white/8 hover:text-white"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)]"
                 onClick={() => setMobileNavOpen(false)}
                 aria-label="Κλείσιμο"
               >
@@ -947,7 +948,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               />
             )}
             <div className="mt-3 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
-            <p className="pb-4 pt-2 text-center text-[10px] text-gray-600">v1.0 · Καραγκούνης CRM</p>
+            <p className="pb-4 pt-2 text-center text-[10px] text-muted-foreground">v1.0 · Καραγκούνης CRM</p>
           </div>
         </>
       )}
@@ -1017,7 +1018,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setUserMenuOpen((o) => !o)}
-                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/40 text-[10px] font-bold text-white shadow-sm sm:text-xs"
+                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/40 text-[10px] font-bold text-foreground shadow-sm sm:text-xs"
                   title={profile?.full_name ?? "Χρήστης"}
                   aria-expanded={userMenuOpen}
                   aria-haspopup="menu"
@@ -1097,7 +1098,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <AlexaMiniWindow />
         {alexVoiceToast && (
           <div
-            className="pointer-events-none fixed bottom-6 left-1/2 z-[300] max-w-[min(100%,20rem)] -translate-x-1/2 rounded-full border border-[var(--border)] bg-[#0a1628]/95 px-5 py-2.5 text-center text-sm font-medium text-[var(--accent-gold)] shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-md"
+            className="pointer-events-none fixed bottom-6 left-1/2 z-[300] max-w-[min(100%,20rem)] -translate-x-1/2 rounded-full border border-border bg-card/95 px-5 py-2.5 text-center text-sm font-medium text-[var(--accent-gold)] shadow-[var(--card-shadow)] backdrop-blur-md"
             role="status"
             aria-live="polite"
           >

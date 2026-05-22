@@ -283,20 +283,20 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         subtitle="Κέντρο εντολών — εικόνα της ημέρας, ειδοποιήσεις και γρήγορες ενέργειες."
-        className="border-l-[3px] border-l-[#C9A84C] bg-gradient-to-br from-[#0D1528] to-[#080D1A]"
+        className="border-l-[3px] border-l-[var(--accent-gold)]"
       />
       <section
-        className="hq-particles relative overflow-hidden rounded-2xl border border-amber-500/10 bg-gradient-to-br from-amber-500/8 to-transparent p-5 shadow-[var(--card-shadow)] [data-theme='light']:bg-white sm:p-6"
+        className="hq-particles relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-[var(--card-shadow)] sm:p-6"
         aria-label="Χαιρετισμός"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-lg font-bold text-[var(--text-primary)] sm:text-xl">
-              <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[#C9A84C]" aria-hidden />
+              <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent-gold)]" aria-hidden />
               {greetingForHour(now)},{" "}
               <span className="text-[var(--accent-gold)]">{firstNameFromProfile(profile?.full_name)}!</span>
             </p>
-            <p className="mt-1 text-sm capitalize leading-[1.6] text-gray-400">
+            <p className="mt-1 text-sm capitalize leading-[1.6] text-muted-foreground">
               {now.toLocaleDateString("el-GR", {
                 weekday: "long",
                 day: "numeric",
@@ -305,16 +305,16 @@ export default function DashboardPage() {
               })}
             </p>
           </div>
-          <p className="hq-metric-tabular font-mono text-3xl font-bold tabular-nums text-white">
+          <p className="hq-metric-tabular font-mono text-3xl font-bold tabular-nums text-foreground">
             {now.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </p>
         </div>
       </section>
       <section
-        className="rounded-2xl border border-white/6 bg-[var(--bg-card)] p-5 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_1px_12px_rgba(0,0,0,0.06)]"
+        className="rounded-2xl border border-border bg-card p-5 shadow-[var(--card-shadow)]"
         aria-label="Γρήγορες ενέργειες"
       >
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-amber-400">ΓΡΗΓΟΡΕΣ ΕΝΕΡΓΕΙΕΣ</h2>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-[var(--accent-gold)]">ΓΡΗΓΟΡΕΣ ΕΝΕΡΓΕΙΕΣ</h2>
         <p className="mt-3 text-sm text-[var(--text-muted)]">Συντομεύσεις στις συχνότερες εργασίες</p>
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <QuickAction
@@ -571,8 +571,8 @@ export default function DashboardPage() {
           numeric={safePendingContacts}
           hint="Χρειάζονται follow-up"
           icon={Clock3}
-          iconBg="bg-slate-500/20"
-          iconColor="text-[#E2E8F0]"
+          iconBg="bg-[color-mix(in_srgb,var(--text-muted)_25%,transparent)]"
+          iconColor="text-[var(--text-secondary)]"
           sub={<span className="text-xs font-medium text-[var(--text-subtitle)]">Αναμονή / φίλτρα</span>}
           stagger="hq-stagger-3"
         />
@@ -582,7 +582,7 @@ export default function DashboardPage() {
           numeric={safeSupporterCount}
           hint="Καταγραφές υποστήριξης"
           icon={HandHeart}
-          iconBg="bg-[#C9A84C]/15"
+          iconBg="bg-[var(--accent-gold)]/15"
           iconColor="text-[var(--accent-gold)]"
           sub={
             <span className="text-xs font-medium text-[var(--text-subtitle)]">
@@ -606,7 +606,7 @@ export default function DashboardPage() {
           hint="Άθροισμα ποσών (δωρεές κ.λπ.)"
           icon={Euro}
           iconBg="bg-emerald-500/15"
-          iconColor="text-emerald-300"
+          iconColor="text-[var(--success)]"
           sub={
             <span className="text-xs font-medium text-[var(--text-subtitle)]">Βάση supporters</span>
           }
@@ -630,7 +630,7 @@ export default function DashboardPage() {
                   style={{ ["--stagger" as string]: String(i), ["--activity-dot" as string]: dot }}
                 >
                   <div className="flex gap-3 pl-1">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/30 text-xs font-bold text-white">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-gradient-to-br from-[var(--accent-gold)]/30 to-[var(--accent-blue)]/30 text-xs font-bold text-foreground">
                       {item.avatar}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -669,7 +669,7 @@ function QuickAction({
     <Link
       href={href}
       style={{ ["--stagger" as string]: String(index) }}
-      className="hq-stagger-item group flex cursor-pointer items-center gap-3 rounded-[12px] border border-white/6 bg-white/3 p-4 transition duration-200 will-change-transform [data-theme='light']:bg-white hover:scale-[1.02] hover:bg-white/6 hover:border-[var(--accent-gold)]/70"
+      className="hq-stagger-item group flex cursor-pointer items-center gap-3 rounded-[12px] border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_50%,var(--bg-card))] p-4 transition duration-200 will-change-transform hover:scale-[1.02] hover:border-[var(--accent-gold)]/70 hover:bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))]"
     >
       <div
         className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${iconWrapClass}`}
@@ -678,10 +678,10 @@ function QuickAction({
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-white">{title}</p>
-        <p className="mt-0.5 line-clamp-2 text-xs text-gray-400">{subtitle}</p>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{subtitle}</p>
       </div>
-      <ArrowRight className="h-4 w-4 shrink-0 text-gray-600 transition-colors group-hover:text-amber-400" aria-hidden />
+      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--accent-gold)]" aria-hidden />
     </Link>
   );
 }
@@ -717,7 +717,7 @@ function AlertCard({
       <div className="flex items-start gap-3">
         <div
           className={[
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/50 [data-theme='light']:bg-white",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-card",
             iconClass,
           ].join(" ")}
         >
