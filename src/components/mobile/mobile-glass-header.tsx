@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, Bell, Menu, Search, X } from "lucide-react";
+import { ModeToggle } from "@/components/mode-toggle";
 
 type MobileGlassHeaderProps = {
   firstName: string;
@@ -44,12 +45,8 @@ export function MobileGlassHeader({
 }: MobileGlassHeaderProps) {
   return (
     <div
-      className="mobile-header hq-mobile-glass-header sticky top-0 z-[25] w-full border-b border-[var(--border)]/60 backdrop-blur-xl transition-transform duration-300 ease-out lg:hidden"
-      style={{
-        background:
-          "linear-gradient(180deg, #080d1a 0px, #080d1a calc(env(safe-area-inset-top, 0px) + 12px), color-mix(in srgb, var(--topbar-bg) 90%, #080d1a) 100%)",
-        transform: hidden ? "translateY(-108%)" : "translateY(0)",
-      }}
+      className="mobile-header hq-mobile-glass-header sticky top-0 z-[25] w-full border-b border-border bg-background text-foreground backdrop-blur-xl transition-transform duration-300 ease-out lg:hidden"
+      style={{ transform: hidden ? "translateY(-108%)" : "translateY(0)" }}
     >
       <div className="flex h-14 w-full min-w-0 items-center gap-2 px-3">
         {showBack ? (
@@ -72,7 +69,7 @@ export function MobileGlassHeader({
           </button>
         )}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-gold)]/35 to-[var(--accent-blue)]/30 text-xs font-bold text-white">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-gold)]/35 to-[var(--accent-blue)]/30 text-xs font-bold text-foreground">
             {avatarUrl && !avatarImgErr ? (
               // eslint-disable-next-line @next/next/no-img-element -- user avatar URL
               <img src={avatarUrl} alt="" className="h-full w-full object-cover" onError={onAvatarImgError} />
@@ -98,6 +95,7 @@ export function MobileGlassHeader({
               <Bell className="h-[1.15rem] w-[1.15rem]" strokeWidth={2.1} />
             </span>
           )}
+          <ModeToggle compact />
           {canGlobalSearch ? (
             <button
               type="button"

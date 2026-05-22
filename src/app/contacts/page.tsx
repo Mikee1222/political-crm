@@ -1147,7 +1147,7 @@ function ContactsPage() {
               <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--warning)]">
                 {warStats ? warStats.pending : "—"}
               </span>
-              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">Αναμονή</span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-label)]">ΣΕ ΕΞΕΛΙΞΗ</span>
             </div>
             <div className="w-full flex flex-col gap-1 pt-0.5 text-center sm:pt-0 sm:text-left">
               <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-[var(--text-metric-value)]">

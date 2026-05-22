@@ -956,7 +956,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="app-main-shell ml-0 box-border flex min-h-0 min-w-0 w-full max-w-full flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
-        <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-[var(--border)] pt-0 backdrop-blur-lg lg:[background:var(--topbar-bg)]">
+        <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-border bg-background pt-0 backdrop-blur-lg lg:[background:var(--topbar-bg)]">
           <MobileGlassHeader
             firstName={mobileFirstName}
             avatarUrl={profile?.avatar_url}
@@ -1068,8 +1068,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           className="app-main-inner hq-fade-in-up main-scroll mobile-page-transition flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] max-lg:mx-0 p-0 max-lg:pt-0 sm:p-6 md:p-8 max-lg:pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] lg:px-8 lg:pt-8 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]"
         >
           {installable && !installed && !installBannerDismissed ? (
-            <div className="mb-3 flex w-full max-w-full flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-card))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="min-w-0 text-sm font-semibold text-[var(--text-primary)]">Εγκαταστήστε το Καραγκούνης CRM</p>
+            <div className="mb-3 flex w-full max-w-full flex-col gap-2 rounded-xl border border-border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="min-w-0 text-sm font-semibold text-foreground">Εγκαταστήστε το Καραγκούνης CRM</p>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -1082,7 +1082,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setInstallBannerDismissed(true)}
-                  className="rounded px-1 text-sm font-bold text-[var(--text-muted)]"
+                  className="rounded px-1 text-sm font-bold text-muted-foreground transition-colors hover:text-foreground"
                   aria-label="Κλείσιμο"
                 >
                   ×
