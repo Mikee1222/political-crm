@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
       priority: sp.get("priority")?.trim() ?? "",
       range: sp.get("range")?.trim() ?? "",
       assigned: sp.get("assigned")?.trim() ?? "",
-      search: sp.get("search")?.trim() ?? "",
+      search: sp.get("q")?.trim() || sp.get("search")?.trim() || "",
     };
 
     const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);

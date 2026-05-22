@@ -8,6 +8,7 @@ import {
   FileText,
   Inbox,
   Pencil,
+  Search,
   Stethoscope,
   Wrench,
   HelpCircle,
@@ -71,7 +72,7 @@ function filtersFromSearchParams(sp: URLSearchParams): RequestFilters {
     priority: sp.get("priority") ?? "",
     range: sp.get("range") ?? "",
     assigned: sp.get("assigned") ?? "",
-    search: sp.get("search") ?? "",
+    search: sp.get("q") ?? sp.get("search") ?? "",
     page: sp.get("page") ?? "1",
   };
 }
@@ -83,7 +84,7 @@ function filtersToSearchParams(f: RequestFilters): URLSearchParams {
   if (f.priority) p.set("priority", f.priority);
   if (f.range) p.set("range", f.range);
   if (f.assigned) p.set("assigned", f.assigned);
-  if (f.search.trim()) p.set("search", f.search.trim());
+  if (f.search.trim()) p.set("q", f.search.trim());
   if (f.page && f.page !== "1") p.set("page", f.page);
   return p;
 }
@@ -118,6 +119,9 @@ export default function RequestsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [searchQ, setSearchQ] = useState(
+    () => searchParams.get("q") ?? searchParams.get("search") ?? "",
+  );
   const filtersUrlKeyRef = useRef<string | null>(null);
   const pageSize = 50;
 
@@ -126,8 +130,18 @@ export default function RequestsPage() {
   useLayoutEffect(() => {
     if (filtersUrlKeyRef.current === searchKey) return;
     filtersUrlKeyRef.current = searchKey;
-    setF(filtersFromSearchParams(new URLSearchParams(searchKey)));
+    const next = filtersFromSearchParams(new URLSearchParams(searchKey));
+    setF(next);
+    setSearchQ(next.search);
   }, [searchKey]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (searchQ === f.search) return;
+      patch({ search: searchQ });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [searchQ, f.search, patch]);
 
   const patch = useCallback(
     (p: Partial<RequestFilters>, opts?: { resetPage?: boolean }) => {
@@ -155,7 +169,7 @@ export default function RequestsPage() {
     if (f.priority) q.set("priority", f.priority);
     if (f.range) q.set("range", f.range);
     if (f.assigned) q.set("assigned", f.assigned);
-    if (f.search.trim()) q.set("search", f.search.trim());
+    if (f.search.trim()) q.set("q", f.search.trim());
     q.set("page", String(currentPage));
     q.set("page_size", String(pageSize));
 
@@ -270,6 +284,28 @@ export default function RequestsPage() {
       />
 
       <div className={lux.card + " !p-4 sm:!p-5"}>
+        <div className="mb-4">
+          <label className={lux.label} htmlFor="r-search">
+            Αναζήτηση
+          </label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+              aria-hidden
+            />
+            <input
+              id="r-search"
+              type="text"
+              placeholder="Αναζήτηση τίτλου ή ονόματος..."
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              className={
+                lux.input +
+                " hq-input-elevated w-full !py-2.5 !pl-9 !pr-4 text-sm focus:!ring-2 focus:!ring-[var(--accent-gold)]/40"
+              }
+            />
+          </div>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className={lux.label} htmlFor="r-st">
@@ -358,19 +394,6 @@ export default function RequestsPage() {
                 </option>
               ))}
             </HqSelect>
-          </div>
-          <div>
-            <label className={lux.label} htmlFor="r-search">
-              Αναζήτηση
-            </label>
-            <input
-              id="r-search"
-              type="search"
-              className={lux.input + " hq-input-elevated"}
-              placeholder="Τίτλος ή όνομα επαφής…"
-              value={f.search}
-              onChange={(e) => patch({ search: e.target.value })}
-            />
           </div>
         </div>
       </div>
@@ -560,14 +583,14 @@ function RequestCard({
       onClick={onOpen}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 pr-16">
+        <div className="flex min-w-0 items-center gap-2 pr-24">
           <Icon className={`h-5 w-5 shrink-0 ${st.iconClass}`} aria-hidden />
           <span className="font-mono text-[11px] text-[var(--text-muted)]">{r.request_code ?? "—"}</span>
         </div>
         <div className="absolute right-3 top-3 flex items-center gap-1">
           {isCompleted ? (
             <CheckCircle2
-              className="h-6 w-6 shrink-0 fill-green-500 text-white"
+              className="h-7 w-7 shrink-0 fill-green-500 text-white shadow-[0_0_8px_2px_rgba(34,197,94,0.3)] sm:shadow-none"
               aria-label="Ολοκληρώθηκε"
             />
           ) : showQuickTick ? (
@@ -578,14 +601,14 @@ function RequestCard({
                   e.stopPropagation();
                   setConfirmOpen((v) => !v);
                 }}
-                className="rounded-full p-0.5 text-green-500 transition hover:text-green-400"
+                className="flex h-10 w-10 touch-manipulation items-center justify-center rounded-full shadow-[0_0_8px_2px_rgba(34,197,94,0.3)] transition-transform hover:bg-green-500/10 active:scale-95 sm:shadow-none"
                 aria-label="Ολοκλήρωση αιτήματος"
               >
-                <CheckCircle2 className="h-6 w-6" />
+                <CheckCircle2 className="h-7 w-7 text-green-500 hover:text-green-400" />
               </button>
               {confirmOpen ? (
                 <div
-                  className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg"
+                  className="absolute right-0 top-12 z-50 w-56 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg sm:top-full sm:mt-1"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <p className="text-xs text-[var(--text-primary)]">Να επισημανθεί ως Ολοκληρώθηκε;</p>
