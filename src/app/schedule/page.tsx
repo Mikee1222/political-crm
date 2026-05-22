@@ -46,8 +46,8 @@ type CalEvent = {
   typeLabel?: string | null;
 };
 
-const H_START = 8;
-const H_END = 22;
+const H_START = 7;
+const H_END = 24;
 const PX_H = 44;
 const GRID_H = (H_END - H_START) * PX_H;
 const ALLDAY_STRIP_H = 40;
