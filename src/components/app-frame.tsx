@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Calendar,
+  CalendarClock,
   CalendarDays,
   ChartColumnBig,
   CheckSquare,
@@ -58,6 +59,7 @@ const NAV_CONFIG: NavItem[] = [
   { href: "/contacts", label: "Επαφές", icon: Users, minRole: "caller" },
   { href: "/map", label: "Χάρτης", icon: MapIcon, minRole: "manager" },
   { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager", badge: "requests" },
+  { href: "/requests-scheduler", label: "Πρόγραμμα Αιτημάτων", icon: CalendarClock, minRole: "manager" },
   { href: "/campaigns", label: "Καμπάνιες", icon: Megaphone, minRole: "manager" },
   { href: "/events", label: "Εκδηλώσεις", icon: CalendarCheck, minRole: "manager" },
   { href: "/tasks", label: "Εργασίες", icon: CheckSquare, minRole: "manager" },
@@ -75,7 +77,7 @@ const NAV_CONFIG: NavItem[] = [
 
 const groupDefs: { id: string; label: string; hrefs: string[] }[] = [
   { id: "kyria", label: "ΚΥΡΙΑ", hrefs: ["/dashboard", "/contacts", "/map"] },
-  { id: "politika", label: "ΠΟΛΙΤΙΚΑ", hrefs: ["/requests", "/campaigns", "/events"] },
+  { id: "politika", label: "ΠΟΛΙΤΙΚΑ", hrefs: ["/requests", "/requests-scheduler", "/campaigns", "/events"] },
   { id: "organosi", label: "ΟΡΓΑΝΩΣΗ", hrefs: ["/tasks", "/volunteers", "/analytics", "/namedays"] },
   { id: "ergaleia", label: "ΕΡΓΑΛΕΙΑ", hrefs: ["/schedule", "/data-tools", "/qrcode", "/polls", "/documents", "/content"] },
 ];
@@ -104,6 +106,7 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/events")) return "Εκδηλώσεις";
   if (pathname.startsWith("/volunteers")) return "Εθελοντές";
   if (pathname.startsWith("/analytics")) return "Αναλυτικά";
+  if (pathname.startsWith("/requests-scheduler")) return "Πρόγραμμα Αιτημάτων";
   if (pathname.startsWith("/requests")) return "Αιτήματα";
   if (pathname.startsWith("/tasks")) return "Εργασίες";
   if (pathname.startsWith("/schedule")) return "Πρόγραμμα";
