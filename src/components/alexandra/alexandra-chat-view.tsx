@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Calendar, Menu, Mic, Paperclip, Send, Phone, Sparkles, Trash2, X } from "lucide-react";
+import { Calendar, Check, Menu, Mic, Paperclip, Send, Phone, Sparkles, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { hasMinRole, type Role } from "@/lib/roles";
 import { buildImportPreviewMessage, parseSpreadsheetToRows } from "@/lib/alexandra-sheet-parse";
@@ -618,9 +618,12 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                                 {tools.map((t) => (
                                   <span
                                     key={t}
-                                    className="inline-flex items-center gap-0.5 rounded-md border border-[var(--status-positive-text)]/30 bg-[var(--status-positive-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--status-positive-text)] transition duration-200"
+                                    className="inline-flex items-center gap-1 rounded-md border border-[var(--status-positive-text)]/30 bg-[var(--status-positive-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--status-positive-text)] transition duration-200"
                                   >
-                                    ✓ Εκτελέστηκε · {greekToolLabel(t)}
+                                    <Check className="h-3 w-3 shrink-0" aria-hidden />
+                                    <span>
+                                      Εκτελέστηκε · {greekToolLabel(t)}
+                                    </span>
                                   </span>
                                 ))}
                               </div>

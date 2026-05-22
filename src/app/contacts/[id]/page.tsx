@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Building2, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
+import { ArrowLeft, Building2, Check, Clipboard, Pencil, Phone, Plus, Sparkles, User, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -275,7 +275,10 @@ function CopyClipButton({ text, "aria-label": ariaLabel }: { text: string; "aria
           className="absolute right-0 top-full z-20 mt-1.5 select-none rounded-md border border-[var(--accent-gold)]/30 bg-[var(--bg-card)] px-2 py-1 text-[10px] font-medium whitespace-nowrap text-[var(--accent-gold)] shadow-md"
           role="status"
         >
-          ✓ Αντιγράφηκε
+          <span className="inline-flex items-center gap-1">
+            <Check className="h-3 w-3" aria-hidden />
+            Αντιγράφηκε
+          </span>
         </span>
       )}
     </div>

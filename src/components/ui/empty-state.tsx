@@ -1,3 +1,4 @@
+import { ClipboardList } from "lucide-react";
 import type { ReactNode } from "react";
 
 type Props = {
@@ -9,7 +10,7 @@ type Props = {
 };
 
 /**
- * Centered empty state: large icon/emoji, CTA, primary button slot.
+ * Centered empty state: large icon, CTA, primary button slot.
  */
 export function EmptyState({ icon, title, subtitle, action, className = "" }: Props) {
   return (
@@ -20,7 +21,7 @@ export function EmptyState({ icon, title, subtitle, action, className = "" }: Pr
         className="mb-4 flex h-16 w-16 items-center justify-center text-5xl [filter:drop-shadow(0_2px_8px_rgba(0,0,0,0.2))] [data-theme='light']:drop-shadow-sm"
         aria-hidden
       >
-        {icon ?? "📋"}
+        {icon ?? <ClipboardList className="h-12 w-12 text-[var(--text-muted)]" aria-hidden />}
       </div>
       <h3 className="text-lg font-bold text-[var(--text-primary)]">{title}</h3>
       <p className="mt-2 max-w-md text-sm leading-[1.6] text-[var(--text-muted)]">{subtitle}</p>

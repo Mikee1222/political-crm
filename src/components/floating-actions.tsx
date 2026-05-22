@@ -82,9 +82,7 @@ function DesktopMergedFabButton({
         <X className="h-5 w-5 shrink-0" strokeWidth={2.2} aria-hidden />
       ) : (
         <>
-          <span className="text-base leading-none text-white/95" aria-hidden>
-            ✦
-          </span>
+          <Sparkles className="h-4 w-4 shrink-0 text-white/95" aria-hidden />
           <span className="text-sm font-semibold text-white">Αλεξάνδρα</span>
           <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-xs font-bold text-white/90">AI</span>
         </>

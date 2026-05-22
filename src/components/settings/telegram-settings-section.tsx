@@ -90,7 +90,7 @@ export function TelegramSettingsSection() {
       const res = await fetchWithTimeout("/api/telegram/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "🧪 Δοκιμαστικό μήνυμα από CRM — Καραγκούνης" }),
+        body: JSON.stringify({ text: "Δοκιμαστικό μήνυμα από CRM — Καραγκούνης" }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {

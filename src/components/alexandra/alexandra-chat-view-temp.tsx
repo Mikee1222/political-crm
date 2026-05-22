@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Send, Trash2, X } from "lucide-react";
+import { Check, Menu, Send, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { hasMinRole } from "@/lib/roles";
@@ -761,8 +761,9 @@ export function AlexandraApp() {
                               ].filter(Boolean),
                             ),
                           ).length > 0 && (
-                            <p className="mt-2 text-[10px] font-medium text-[#94A3B8]">
-                              <span className="text-[var(--accent-gold)]">✓</span> Εκτελέστηκε
+                            <p className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-[#94A3B8]">
+                              <Check className="h-3 w-3 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                              Εκτελέστηκε
                               {Array.from(
                                 new Set([
                                   ...(m.toolsExecutedFromDb ?? []),

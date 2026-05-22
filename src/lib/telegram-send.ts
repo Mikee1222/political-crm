@@ -28,13 +28,13 @@ export function formatTelegramBriefing(b: {
   overdue: number;
   callsYest: { total: number; positive: number };
 }): string {
-  return `🌅 Καλημέρα! Ημερήσια Ενημέρωση - ${b.dateLabel}
+  return `Καλημέρα! Ημερήσια Ενημέρωση - ${b.dateLabel}
 
-🎂 Γιορτάζουν σήμερα: ${b.namesLine} (${b.contactCount} επαφές)
-📅 Πρόγραμμα: ${b.calendarLine}
-✅ Tasks σήμερα: ${b.tasksLine}
-📋 Ανοιχτά αιτήματα: ${b.openRequests} (${b.overdue} εκπρόθεσμα)
-📞 Κλήσεις χθες: ${b.callsYest.total} (${b.callsYest.positive} θετικές)
+Γιορτάζουν σήμερα: ${b.namesLine} (${b.contactCount} επαφές)
+Πρόγραμμα: ${b.calendarLine}
+Tasks σήμερα: ${b.tasksLine}
+Ανοιχτά αιτήματα: ${b.openRequests} (${b.overdue} εκπρόθεσμα)
+Κλήσεις χθες: ${b.callsYest.total} (${b.callsYest.positive} θετικές)
 
-Καλή δύναμη! 💪`;
+Καλή δύναμη!`;
 }

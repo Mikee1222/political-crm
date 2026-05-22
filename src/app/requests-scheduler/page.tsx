@@ -15,13 +15,17 @@ import {
 } from "date-fns";
 import { el } from "date-fns/locale";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   Calendar,
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Circle,
   LayoutGrid,
   PanelLeftClose,
   PanelLeftOpen,
@@ -55,12 +59,17 @@ type SchedulerRequest = {
 
 type MobilePanel = "queue" | "view";
 
-const KANBAN_COLUMNS = [
-  { status: "Νέο", color: "border-blue-500", icon: "🔵" },
-  { status: "Σε εξέλιξη", color: "border-orange-500", icon: "🟠" },
-  { status: "Ολοκληρώθηκε", color: "border-green-500", icon: "🟢" },
-  { status: "Απορρίφθηκε", color: "border-red-500", icon: "🔴" },
-] as const;
+const KANBAN_COLUMNS: {
+  status: string;
+  color: string;
+  Icon: LucideIcon;
+  dotClass: string;
+}[] = [
+  { status: "Νέο", color: "border-blue-500", Icon: Circle, dotClass: "text-blue-500 fill-blue-500" },
+  { status: "Σε εξέλιξη", color: "border-orange-500", Icon: Circle, dotClass: "text-orange-500 fill-orange-500" },
+  { status: "Ολοκληρώθηκε", color: "border-green-500", Icon: Circle, dotClass: "text-green-500 fill-green-500" },
+  { status: "Απορρίφθηκε", color: "border-red-500", Icon: Circle, dotClass: "text-red-500 fill-red-500" },
+];
 
 const WEEKDAY_HEADERS = ["ΔΕΥ", "ΤΡΙ", "ΤΕΤ", "ΠΕΜ", "ΠΑΡ", "ΣΑΒ", "ΚΥΡ"] as const;
 
@@ -196,6 +205,13 @@ export default function RequestsSchedulerPage() {
   const [scheduleOpenId, setScheduleOpenId] = useState<string | null>(null);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [queueOpen, setQueueOpen] = useState(true);
+  const [confirmPopover, setConfirmPopover] = useState<{
+    requestId: string;
+    x: number;
+    y: number;
+    kanbanFromStatus?: string;
+  } | null>(null);
+  const confirmPopoverRef = useRef<HTMLDivElement | null>(null);
   const [queueSearch, setQueueSearch] = useState("");
   const [kanbanSearch, setKanbanSearch] = useState("");
   const [kanbanCategory, setKanbanCategory] = useState("");
@@ -466,6 +482,46 @@ export default function RequestsSchedulerPage() {
     if (viewMode === "kanban") void loadKanban();
     else void loadScheduler();
   };
+
+  const handleTickClick = (e: MouseEvent<HTMLButtonElement>, requestId: string, kanbanFromStatus?: string) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setConfirmPopover((prev) =>
+      prev?.requestId === requestId
+        ? null
+        : { requestId, x: rect.left, y: rect.bottom + 8, kanbanFromStatus },
+    );
+  };
+
+  const handleCompleteFromPopover = async (requestId: string) => {
+    const fromStatus = confirmPopover?.kanbanFromStatus;
+    try {
+      if (fromStatus) {
+        await completeKanbanCard(requestId, fromStatus);
+      } else {
+        await completeRequest(requestId);
+      }
+    } catch {
+      /* toast in complete* */
+    }
+    setConfirmPopover(null);
+  };
+
+  useEffect(() => {
+    if (!confirmPopover) return;
+    const close = (ev: Event) => {
+      const target = ev.target as Node;
+      if (confirmPopoverRef.current?.contains(target)) return;
+      setConfirmPopover(null);
+    };
+    const t = window.setTimeout(() => {
+      window.addEventListener("click", close);
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("click", close);
+    };
+  }, [confirmPopover]);
 
   if (!canManage) {
     return (
@@ -750,8 +806,9 @@ export default function RequestsSchedulerPage() {
                         )}
                       >
                         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-                          <span className="text-xs font-bold uppercase tracking-wide text-foreground">
-                            {col.icon} {col.status}
+                          <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-foreground">
+                            <col.Icon className={cn("h-3 w-3 shrink-0", col.dotClass)} aria-hidden />
+                            {col.status}
                           </span>
                           <span className="rounded-full bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))] px-2 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
                             {items.length}
@@ -769,7 +826,7 @@ export default function RequestsSchedulerPage() {
                               <KanbanCard
                                 key={r.id}
                                 request={r}
-                                onComplete={() => completeKanbanCard(r.id, col.status)}
+                                onTickClick={(e) => handleTickClick(e, r.id, col.status)}
                               />
                             ))
                           )}
@@ -881,7 +938,7 @@ export default function RequestsSchedulerPage() {
                             <CalendarCard
                               key={r.id}
                               request={r}
-                              onComplete={() => completeRequest(r.id)}
+                              onTickClick={(e) => handleTickClick(e, r.id)}
                             />
                           ))
                         )}
@@ -894,6 +951,44 @@ export default function RequestsSchedulerPage() {
           )}
         </section>
       </div>
+
+      {confirmPopover && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={confirmPopoverRef}
+              style={{
+                position: "fixed",
+                left: confirmPopover.x,
+                top: confirmPopover.y,
+                zIndex: 9999,
+              }}
+              className="w-52 rounded-xl border border-border bg-card p-4 shadow-2xl"
+              role="dialog"
+              aria-label="Επιβεβαίωση ολοκλήρωσης"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-3 text-sm font-medium text-foreground">Να ολοκληρωθεί το αίτημα;</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleCompleteFromPopover(confirmPopover.requestId)}
+                  className="flex-1 rounded-lg bg-[var(--success)] py-1.5 text-sm font-medium text-white transition-colors hover:brightness-110"
+                >
+                  Ναι
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmPopover(null)}
+                  className="flex-1 rounded-lg border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_55%,var(--bg-card))] py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))]"
+                >
+                  Άκυρο
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -942,9 +1037,10 @@ function QueueCard({
           type="button"
           disabled={scheduling}
           onClick={onToggleSchedule}
-          className="w-full rounded-lg border border-border bg-card px-2 py-2 text-xs font-semibold text-foreground transition hover:border-[var(--accent-gold)]/60 hover:bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))] disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card px-2 py-2 text-xs font-semibold text-foreground transition hover:border-[var(--accent-gold)]/60 hover:bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))] disabled:opacity-50"
         >
-          📅 Προγραμματισμός
+          <CalendarPlus className="h-4 w-4 shrink-0" aria-hidden />
+          Προγραμματισμός
         </button>
         <button
           type="button"
@@ -984,27 +1080,15 @@ function QueueCard({
 
 function KanbanCard({
   request: r,
-  onComplete,
+  onTickClick,
 }: {
   request: SchedulerRequest;
-  onComplete: () => Promise<void>;
+  onTickClick: (e: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const isCompleted = r.status === "Ολοκληρώθηκε";
   const isRejected = r.status === "Απορρίφθηκε";
   const showTick = !isCompleted && !isRejected;
   const pri = r.priority === "High" || r.priority === "Low" || r.priority === "Urgent" || r.priority === "Medium" ? r.priority : "Medium";
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [completing, setCompleting] = useState(false);
-
-  const confirmComplete = async () => {
-    setCompleting(true);
-    try {
-      await onComplete();
-      setConfirmOpen(false);
-    } finally {
-      setCompleting(false);
-    }
-  };
 
   return (
     <li className="rounded-lg border border-border bg-card p-2.5 shadow-sm">
@@ -1018,45 +1102,22 @@ function KanbanCard({
           {pri}
         </span>
         {r.scheduled_date ? (
-          <span className="text-[10px] text-muted-foreground">
-            📅 {formatScheduleToastDate(r.scheduled_date)}
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Calendar className="h-3 w-3 shrink-0" aria-hidden />
+            {formatScheduleToastDate(r.scheduled_date)}
           </span>
         ) : null}
       </div>
       <div className="mt-2 flex items-center justify-end gap-1 border-t border-border/60 pt-2">
         {showTick ? (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setConfirmOpen((v) => !v)}
-              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[color-mix(in_srgb,var(--success)_15%,transparent)]"
-              aria-label="Ολοκλήρωση"
-            >
-              <CheckCircle2 className="h-5 w-5 text-[var(--success)]" />
-            </button>
-            {confirmOpen ? (
-              <div className="absolute bottom-full right-0 z-50 mb-1 w-44 rounded-lg border border-border bg-card p-2 shadow-lg">
-                <p className="text-[10px] text-foreground">Να επισημανθεί ως Ολοκληρώθηκε;</p>
-                <div className="mt-2 flex gap-1">
-                  <button
-                    type="button"
-                    className={lux.btnPrimary + " !py-1 !text-[10px] flex-1"}
-                    disabled={completing}
-                    onClick={() => void confirmComplete()}
-                  >
-                    Ναι
-                  </button>
-                  <button
-                    type="button"
-                    className={lux.btnSecondary + " !py-1 !text-[10px] flex-1"}
-                    onClick={() => setConfirmOpen(false)}
-                  >
-                    Άκυρο
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            onClick={onTickClick}
+            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[color-mix(in_srgb,var(--success)_15%,transparent)]"
+            aria-label="Ολοκλήρωση"
+          >
+            <CheckCircle2 className="h-5 w-5 text-[var(--success)]" />
+          </button>
         ) : null}
         <Link href={`/requests/${r.id}`} className={lux.btnIcon + " !h-8 !w-8"} aria-label="Επεξεργασία">
           <Pencil className="h-4 w-4" />
@@ -1068,28 +1129,14 @@ function KanbanCard({
 
 function CalendarCard({
   request: r,
-  onComplete,
+  onTickClick,
 }: {
   request: SchedulerRequest;
-  onComplete: () => Promise<void>;
+  onTickClick: (e: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const isCompleted = r.status === "Ολοκληρώθηκε";
   const isRejected = r.status === "Απορρίφθηκε";
   const showTick = !isCompleted && !isRejected;
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [completing, setCompleting] = useState(false);
-
-  const confirmComplete = async () => {
-    setCompleting(true);
-    try {
-      await onComplete();
-      setConfirmOpen(false);
-    } catch {
-      /* toast handled in parent */
-    } finally {
-      setCompleting(false);
-    }
-  };
 
   return (
     <li
@@ -1114,38 +1161,14 @@ function CalendarCard({
         {isCompleted ? (
           <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--success)]" aria-hidden />
         ) : showTick ? (
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setConfirmOpen((v) => !v)}
-              className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-[color-mix(in_srgb,var(--success)_15%,transparent)]"
-              aria-label="Ολοκλήρωση αιτήματος"
-            >
-              <CheckCircle2 className="h-5 w-5 text-[var(--success)]" />
-            </button>
-            {confirmOpen ? (
-              <div className="absolute right-0 top-8 z-[100] w-44 rounded-lg border border-border bg-card p-3 shadow-xl">
-                <p className="text-[10px] text-foreground">Να επισημανθεί ως Ολοκληρώθηκε;</p>
-                <div className="mt-2 flex gap-1">
-                  <button
-                    type="button"
-                    className={lux.btnPrimary + " !py-1 !text-[10px] flex-1"}
-                    disabled={completing}
-                    onClick={() => void confirmComplete()}
-                  >
-                    Ναι
-                  </button>
-                  <button
-                    type="button"
-                    className={lux.btnSecondary + " !py-1 !text-[10px] flex-1"}
-                    onClick={() => setConfirmOpen(false)}
-                  >
-                    Άκυρο
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            onClick={onTickClick}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-[color-mix(in_srgb,var(--success)_15%,transparent)]"
+            aria-label="Ολοκλήρωση αιτήματος"
+          >
+            <CheckCircle2 className="h-5 w-5 text-[var(--success)]" />
+          </button>
         ) : null}
       </div>
     </li>

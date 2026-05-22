@@ -1043,7 +1043,7 @@ export type ToolRunResult = {
   /** /contacts?… for «Δείξε στις Επαφές» */
   filterUrl?: string;
   confirmCall?: { contact_id: string; name: string; phone: string };
-  /** For UI "✓ Εκτελέστηκε" — false for start_call (χρειάζεται Ναι/Όχι) */
+  /** For UI "Εκτελέστηκε" badge — false for start_call (χρειάζεται Ναι/Όχι) */
   executedToolName?: string;
   showExecutedTag?: boolean;
 };

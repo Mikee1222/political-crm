@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpDown, ChevronDown, Download, Phone, Plus, Search, Sparkles, Trash2, User, X } from "lucide-react";
+import { ArrowUpDown, Cake, Check, ChevronDown, Download, Phone, Plus, Search, Sparkles, Trash2, User, X } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -252,7 +252,8 @@ function ContactDesktopRowCard({
                   (nameDayGold ? " ring-1 ring-[color-mix(in_srgb,var(--accent-gold)_48%,transparent)]" : "")
                 }
               >
-                🎂 {nameDay}
+                <Cake className="mr-0.5 inline h-3.5 w-3.5 shrink-0" aria-hidden />
+                {nameDay}
               </span>
             ) : null}
           </div>
@@ -555,7 +556,8 @@ function ContactSwipeCard({
                       (ndGold ? "ring-1 ring-[color-mix(in_srgb,var(--accent-gold)_48%,transparent)]" : "")
                     }
                   >
-                    🎂 {nd}
+                    <Cake className="h-3 w-3 shrink-0" aria-hidden />
+                    {nd}
                   </span>
                 </div>
               ) : null}
@@ -671,7 +673,7 @@ function GroupMultiSelect({
                     }
                     aria-hidden
                   >
-                    {on ? "✓" : ""}
+                    {on ? <Check className="h-3 w-3 text-[var(--accent-gold)]" aria-hidden /> : null}
                   </span>
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
@@ -754,7 +756,7 @@ function CallStatusMultiSelect({
                       (on ? "border-[var(--accent-gold)] bg-[var(--accent-gold)]/20" : "border-[var(--border)]")
                     }
                   >
-                    {on ? "✓" : ""}
+                    {on ? <Check className="h-3 w-3 text-[var(--accent-gold)]" aria-hidden /> : null}
                   </span>
                   {o.l}
                 </button>
@@ -1369,7 +1371,7 @@ function ContactsPage() {
         <div className="md:hidden">
           <EmptyState
             className="border-[var(--border)] bg-[var(--bg-card)]/80 py-12"
-            icon={<span className="text-5xl">👤</span>}
+            icon={<User className="h-12 w-12 text-[var(--text-muted)]" aria-hidden />}
             title="Δεν βρέθηκαν επαφές"
             subtitle="Προσαρμόστε τα φίλτρα ή προσθέστε νέα επαφή για να ξεκινήσετε την καμπάνια σας."
             action={
