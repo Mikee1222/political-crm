@@ -10,7 +10,7 @@ import {
 import { el } from "date-fns/locale";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, XCircle } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { PageHeader } from "@/components/ui/page-header";
@@ -159,6 +159,29 @@ export default function RequestsSchedulerPage() {
     }
   };
 
+  const handleReject = async (id: string) => {
+    if (!confirm("Να απορριφθεί το αίτημα;")) return;
+    const prevQueue = queue;
+    setQueue((prev) => prev.filter((r) => r.id !== id));
+    try {
+      const res = await fetchWithTimeout(`/api/requests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Απορρίφθηκε" }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setQueue(prevQueue);
+        showToast(j.error ?? "Σφάλμα", "error");
+        return;
+      }
+      showToast("Το αίτημα απορρίφθηκε.", "success");
+    } catch {
+      setQueue(prevQueue);
+      showToast("Σφάλμα δικτύου", "error");
+    }
+  };
+
   const completeRequest = async (id: string) => {
     const prev = scheduled;
     setScheduled((s) =>
@@ -278,6 +301,7 @@ export default function RequestsSchedulerPage() {
                       setScheduleOpenId((id) => (id === r.id ? null : r.id))
                     }
                     onSchedule={(date) => void scheduleRequest(r.id, date)}
+                    onReject={() => void handleReject(r.id)}
                   />
                 ))}
               </ul>
@@ -386,12 +410,14 @@ function QueueCard({
   scheduling,
   onToggleSchedule,
   onSchedule,
+  onReject,
 }: {
   request: SchedulerRequest;
   scheduleOpen: boolean;
   scheduling: boolean;
   onToggleSchedule: () => void;
   onSchedule: (ymd: string) => void;
+  onReject: () => void;
 }) {
   const minDate = format(new Date(), "yyyy-MM-dd");
 
@@ -403,7 +429,7 @@ function QueueCard({
         <p className="mt-1 truncate text-xs text-muted-foreground">{contactLabel(r.contacts)}</p>
         <p className="mt-1 text-[10px] text-muted-foreground">{r.status ?? "Νέο"}</p>
       </Link>
-      <div className="relative mt-2">
+      <div className="relative mt-2 flex flex-col gap-2">
         <button
           type="button"
           disabled={scheduling}
@@ -411,6 +437,14 @@ function QueueCard({
           className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground transition hover:border-[var(--accent-gold)]/60 hover:bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--bg-card))] disabled:opacity-50"
         >
           📅 Προγραμματισμός
+        </button>
+        <button
+          type="button"
+          onClick={onReject}
+          className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-xs font-medium text-red-500 transition-colors hover:bg-red-500/10"
+        >
+          <XCircle className="h-4 w-4" />
+          Δεν μπορεί να πραγματοποιηθεί
         </button>
         {scheduleOpen ? (
           <div
