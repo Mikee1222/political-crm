@@ -472,7 +472,7 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
         />
       )}
 
-      {muniInDb && settlementList.length > 0 && !showDistFree && (
+      {muniInDb && settlementList.length > 0 && (
         <SearchableSelect
           id="ait-top-api"
           label="Τοπωνύμιο / χωριό"

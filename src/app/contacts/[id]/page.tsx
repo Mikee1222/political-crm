@@ -10,7 +10,7 @@ import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-conte
 import { hasMinRole } from "@/lib/roles";
 import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
+import { ContactElectoralLocationEdit } from "@/components/contact-electoral-location-edit";
 import { ContactExtraSections } from "@/components/contact-extra-sections";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { HqSelect } from "@/components/ui/hq-select";
@@ -1184,16 +1184,23 @@ function ContactDetailPage() {
               </div>
               <div className={grid2} style={{ gap: "0.5rem" }}>
                 {canManage && editing === "electoral" && w ? (
-                  <div className="col-span-1 w-full min-w-0 sm:col-span-2">
-                    <AitoloakarnaniaLocationFields
-                      values={{
-                        municipality: w.municipality,
-                        electoral_district: w.electoral_district,
-                        toponym: w.toponym,
-                      }}
-                      onChange={(v) => setBuf({ ...w, ...v } as Contact)}
-                    />
-                  </div>
+                  <ContactElectoralLocationEdit
+                    values={{
+                      municipality: w.municipality,
+                      electoral_district: w.electoral_district,
+                      toponym: w.toponym,
+                    }}
+                    onChange={(v) =>
+                      setBuf({
+                        ...w,
+                        municipality: v.municipality,
+                        electoral_district: v.electoral_district,
+                        toponym: v.toponym,
+                      } as Contact)
+                    }
+                    inputClassName={inputSm + " !pr-9"}
+                    labelClassName={lbl}
+                  />
                 ) : null}
                 {canManage && editing === "electoral" && w ? (
                   <div className="fieldGap sm:col-span-2">

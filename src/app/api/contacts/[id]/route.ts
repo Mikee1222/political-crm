@@ -144,6 +144,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   delete body.contact_code;
   delete (body as { created_by?: unknown }).created_by;
   delete (body as { updated_by?: unknown }).updated_by;
+  // Geo + electoral fields (including toponym) are persisted as sent by manager PATCH.
   if (!("name_day" in body) && body.first_name !== undefined) {
     const iso = nameDayDateStringFromFirstName(String(body.first_name));
     if (iso) body.name_day = iso;
