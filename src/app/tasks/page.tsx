@@ -294,7 +294,7 @@ export default function TasksPage() {
       {view === "list" ? (
         <div className="max-md:space-y-6 grid gap-4 md:grid-cols-2 md:items-start md:gap-6 max-md:grid-cols-1 max-md:grid-cols-1">
           <div className="min-w-0 max-md:order-1 max-md:space-y-3 order-1">
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] sm:text-xs">Σε αναμονή</h2>
+            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] sm:text-xs">Εκκρεμεί</h2>
             {pending.length === 0 && !loading && (
               <p className="text-sm text-[var(--text-muted)]">Καμία ενεργή εργασία για το φίλτρο.</p>
             )}

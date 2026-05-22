@@ -7,7 +7,7 @@ import { addDays, format, parseISO, startOfWeek } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-const QUEUE_STATUSES = ["Νέο", "Σε αναμονή", "Σε εξέλιξη"] as const;
+const QUEUE_STATUSES = ["Νέο", "Σε εξέλιξη"] as const;
 
 const SELECT_WITH_CONTACT =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, scheduled_date, contact_id, contacts!contact_id(first_name,last_name)";

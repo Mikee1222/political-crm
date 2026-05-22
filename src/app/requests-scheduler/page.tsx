@@ -55,7 +55,6 @@ type MobilePanel = "queue" | "view";
 
 const KANBAN_COLUMNS = [
   { status: "Νέο", color: "border-blue-500", icon: "🔵" },
-  { status: "Σε αναμονή", color: "border-yellow-500", icon: "🟡" },
   { status: "Σε εξέλιξη", color: "border-orange-500", icon: "🟠" },
   { status: "Ολοκληρώθηκε", color: "border-green-500", icon: "🟢" },
   { status: "Απορρίφθηκε", color: "border-red-500", icon: "🔴" },

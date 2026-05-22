@@ -566,7 +566,7 @@ export default function DashboardPage() {
           stagger="hq-stagger-2"
         />
         <Stat
-          title="Σε αναμονή"
+          title="Εκκρεμεί επαφών"
           value={safePendingContacts}
           numeric={safePendingContacts}
           hint="Χρειάζονται follow-up"

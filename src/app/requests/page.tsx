@@ -257,7 +257,7 @@ export default function RequestsPage() {
       setStatusCounts((prev) =>
         prev.map((row) => {
           if (row.status === "Ολοκληρώθηκε") return { ...row, count: row.count + 1 };
-          if (row.status === "Σε εξέλιξη" || row.status === "Σε αναμονή" || row.status === "Νέο") {
+          if (row.status === "Σε εξέλιξη" || row.status === "Νέο") {
             return { ...row, count: Math.max(0, row.count - 1) };
           }
           return row;
@@ -369,7 +369,6 @@ export default function RequestsPage() {
               <option value="">Όλες οι καταστάσεις</option>
               <option value="Νέο">Νέο</option>
               <option value="Σε εξέλιξη">Σε εξέλιξη</option>
-              <option value="Σε αναμονή">Σε αναμονή</option>
               <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
               <option value="Απορρίφθηκε">Απορρίφθηκε</option>
             </HqSelect>
@@ -737,8 +736,6 @@ function StatusBadge({ status, withDot }: { status: string; withDot?: boolean })
     "Νέο": "bg-[var(--status-req-new-bg)] text-[var(--status-req-new-fg)] ring-1 ring-inset ring-[var(--status-req-new-ring)]",
     "Σε εξέλιξη":
       "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
-    "Σε αναμονή":
-      "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
     "Ολοκληρώθηκε":
       "bg-[var(--status-req-done-bg)] text-[var(--status-req-done-fg)] ring-1 ring-inset ring-[var(--status-req-done-ring)]",
     "Απορρίφθηκε":
@@ -904,7 +901,6 @@ function EditRequestModal({
           <HqSelect value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             <option>Νέο</option>
             <option>Σε εξέλιξη</option>
-            <option>Σε αναμονή</option>
             <option>Ολοκληρώθηκε</option>
             <option>Απορρίφθηκε</option>
           </HqSelect>
