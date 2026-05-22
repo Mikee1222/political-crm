@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState, startTransition } from "react
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
+import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { hasMinRole } from "@/lib/roles";
 import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
@@ -321,6 +322,7 @@ function ContactDetailPage() {
   const router = useRouter();
   const id = typeof params?.id === "string" ? params.id : "";
   const { profile } = useProfile();
+  const { openTab } = useContactTabs();
   const isCaller = profile?.role === "caller";
   const canManage = hasMinRole(profile?.role, "manager");
   const { showToast } = useFormToast();
@@ -484,6 +486,12 @@ function ContactDetailPage() {
       ac.abort();
     };
   }, [load]);
+
+  useEffect(() => {
+    if (!contact) return;
+    const name = `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || "Επαφή";
+    openTab(contact.id, name);
+  }, [contact?.id, contact?.first_name, contact?.last_name, openTab]);
 
   const setContactPage = alexPage?.setContactPage;
   useEffect(() => {

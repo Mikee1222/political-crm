@@ -48,6 +48,7 @@ import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
 import { AlexaMiniWindow } from "@/components/alexandra/alexa-mini-window";
 import { FloatingActions } from "@/components/floating-actions";
 import { LogoutButton } from "@/components/logout-button";
+import { ContactTabsBar } from "@/components/contact-tabs-bar";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { MobileGlassHeader } from "@/components/mobile/mobile-glass-header";
 import { MobilePullToRefresh } from "@/components/mobile/mobile-pull-to-refresh";
@@ -1052,6 +1053,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+        <ContactTabsBar />
         <main
           ref={mainScrollRef}
           onScroll={onMainScroll}

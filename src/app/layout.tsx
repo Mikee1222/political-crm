@@ -10,6 +10,7 @@ import { ThemeProfileSync } from "@/components/theme-profile-sync";
 import { AlexandraChatProvider } from "@/components/alexandra/alexandra-chat-provider";
 import { AlexandraPageProvider } from "@/contexts/alexandra-page-context";
 import { FormToastProvider } from "@/contexts/form-toast-context";
+import { ContactTabsProvider } from "@/contexts/contact-tabs-context";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -77,7 +78,9 @@ export default function RootLayout({
                 <ThemeProfileSync />
                 <AlexandraPageProvider>
                   <AlexandraChatProvider>
-                    <AppFrame>{children}</AppFrame>
+                    <ContactTabsProvider>
+                      <AppFrame>{children}</AppFrame>
+                    </ContactTabsProvider>
                   </AlexandraChatProvider>
                 </AlexandraPageProvider>
               </ProfileProvider>

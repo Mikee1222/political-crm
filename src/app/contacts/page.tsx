@@ -1,6 +1,21 @@
 "use client";
 
-import { ArrowUpDown, Bell, Cake, Check, ChevronDown, Download, Phone, Plus, Search, Sparkles, Trash2, User, X } from "lucide-react";
+import {
+  ArrowUpDown,
+  Bell,
+  Cake,
+  Check,
+  ChevronDown,
+  Download,
+  LayoutPanelTop,
+  Phone,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  User,
+  X,
+} from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -28,6 +43,7 @@ import {
   type ContactListFilters,
 } from "@/lib/contacts-filters";
 import { useProfile } from "@/contexts/profile-context";
+import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { hasMinRole } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -195,12 +211,14 @@ function ContactDesktopRowCard({
   c,
   selected,
   onToggleSelected,
-  onRowNavigate,
+  onNavigate,
+  onOpenInTab,
 }: {
   c: Contact;
   selected: boolean;
   onToggleSelected: () => void;
-  onRowNavigate: () => void;
+  onNavigate: () => void;
+  onOpenInTab: () => void;
 }) {
   const tel = contactTelHref(c);
   const nameDay = formatNameDayGreek(c.name_day);
@@ -216,11 +234,24 @@ function ContactDesktopRowCard({
     <div
       role="button"
       tabIndex={0}
-      onClick={onRowNavigate}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          onOpenInTab();
+          return;
+        }
+        onNavigate();
+      }}
+      onMouseDown={(e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          onOpenInTab();
+        }
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onRowNavigate();
+          onNavigate();
         }
       }}
       className="group/contact-card relative flex w-full min-w-0 cursor-pointer items-stretch overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)] backdrop-blur-md transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-px hover:border-[color-mix(in_srgb,var(--accent-gold)_48%,var(--border))] hover:shadow-[var(--card-shadow-hover)]"
@@ -335,8 +366,22 @@ function ContactDesktopRowCard({
           <button
             type="button"
             className="rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--border))] p-2 text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent-gold)_14%,var(--bg-elevated))]"
+            title="Άνοιγμα σε tab"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenInTab();
+            }}
+          >
+            <LayoutPanelTop className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_88%,var(--border))] p-2 text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent-gold)_14%,var(--bg-elevated))]"
             title="Προφίλ"
-            onClick={onRowNavigate}
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate();
+            }}
           >
             <User className="h-4 w-4" />
           </button>
@@ -367,12 +412,12 @@ function ContactsMobileSkeleton() {
 
 function ContactSwipeCard({
   c,
-  onOpenDetail,
+  onNavigateDetail,
   isAdmin,
   onDeleted,
 }: {
   c: Contact;
-  onOpenDetail: () => void;
+  onNavigateDetail: () => void;
   isAdmin: boolean;
   onDeleted: () => void;
 }) {
@@ -526,12 +571,12 @@ function ContactSwipeCard({
             setTx(0);
             return;
           }
-          onOpenDetail();
+          onNavigateDetail();
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onOpenDetail();
+            onNavigateDetail();
           }
         }}
       >
@@ -777,12 +822,17 @@ function CallStatusMultiSelect({
 
 type SavedFilterApi = { id: string; name: string; description: string | null; filters: Record<string, unknown> };
 
+function contactDisplayName(c: Contact): string {
+  return `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Επαφή";
+}
+
 function ContactsPage() {
   const { profile } = useProfile();
   const canManage = hasMinRole(profile?.role, "manager");
   const isAdmin = profile?.role === "admin";
   const pageAlexCtx = useOptionalAlexandraPageContact();
   const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
+  const { openTab } = useContactTabs();
   const [warStats, setWarStats] = useState<{
     total: number;
     positive: number;
@@ -1426,7 +1476,7 @@ function ContactsPage() {
                 <ContactSwipeCard
                   c={c}
                   isAdmin={isAdmin}
-                  onOpenDetail={() => router.push(`/contacts/${c.id}`)}
+                  onNavigateDetail={() => router.push(`/contacts/${c.id}`)}
                   onDeleted={() => void load()}
                 />
               </li>
@@ -1491,7 +1541,8 @@ function ContactsPage() {
                   return n;
                 })
               }
-              onRowNavigate={() => router.push(`/contacts/${c.id}`)}
+              onNavigate={() => router.push(`/contacts/${c.id}`)}
+              onOpenInTab={() => openTab(c.id, contactDisplayName(c))}
             />
           ))}
         </div>
