@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
     const weekParam = request.nextUrl.searchParams.get("week");
     const { weekStart, weekEnd } = weekBounds(weekParam);
 
-    let queueQuery = supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let queueQuery: any = supabase
       .from("requests")
       .select(SELECT_WITH_CONTACT)
       .is("scheduled_date", null)
@@ -53,7 +54,8 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    let scheduledQuery = supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let scheduledQuery: any = supabase
       .from("requests")
       .select(SELECT_WITH_CONTACT)
       .gte("scheduled_date", weekStart)
