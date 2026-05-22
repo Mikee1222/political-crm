@@ -3,14 +3,8 @@ import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { contactCelebratesNameday } from "@/lib/namedays";
 export const dynamic = 'force-dynamic';
-
-function normalizeGreek(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 export async function GET() {
   try {
@@ -35,13 +29,10 @@ export async function GET() {
     ]);
 
     const names = (namedays ?? []).flatMap((x) => x.names ?? []);
-    const namesSet = new Set(names.map((n) => normalizeGreek(n)));
 
-    const celebratingByName = (contacts ?? []).filter((c) => {
-      const firstName = normalizeGreek(c.first_name ?? "");
-      const nickname = normalizeGreek(c.nickname ?? "");
-      return namesSet.has(firstName) || (nickname && namesSet.has(nickname));
-    });
+    const celebratingByName = (contacts ?? []).filter((c) =>
+      contactCelebratesNameday(c.first_name, c.nickname, names),
+    );
 
     return NextResponse.json({
       names,

@@ -3,17 +3,11 @@ import { NextResponse } from "next/server";
 import { API_RACE_MS, runWithTimeCap } from "@/lib/api-resilience";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { contactCelebratesNameday } from "@/lib/namedays";
 export const dynamic = 'force-dynamic';
 
 function monthDay(date: Date) {
   return { month: date.getMonth() + 1, day: date.getDate() };
-}
-
-function normalizeGreek(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
 }
 
 const emptyNamedays = {
@@ -61,12 +55,9 @@ export async function GET() {
   const tomorrowNames = (tomorrowRows.data ?? []).flatMap((r) => r.names ?? []);
   const dayAfterNames = (dayAfterRows.data ?? []).flatMap((r) => r.names ?? []);
 
-  const normalizedTodayNames = new Set(todayNames.map((n) => normalizeGreek(n)));
-  const contacts = (contactsRows.data ?? []).filter((c) => {
-    const fn = normalizeGreek(c.first_name ?? "");
-    const nn = normalizeGreek(c.nickname ?? "");
-    return normalizedTodayNames.has(fn) || (nn.length > 0 && normalizedTodayNames.has(nn));
-  });
+  const contacts = (contactsRows.data ?? []).filter((c) =>
+    contactCelebratesNameday(c.first_name, c.nickname, todayNames),
+  );
 
   return NextResponse.json({
     today: todayNames,

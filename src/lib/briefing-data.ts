@@ -2,17 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { athensDayRange, pad2 } from "@/lib/athens-ranges";
 import { listAllCalendarsEventsHttp } from "@/lib/google-calendar";
 import { tallyOutcomes } from "@/lib/campaign-stats";
+import { contactCelebratesNameday } from "@/lib/namedays";
 
 function monthDay(d: Date) {
   return { month: d.getMonth() + 1, day: d.getDate() };
 }
 
-export function normalizeGreekBrief(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
+export { normalizeGreekName as normalizeGreekBrief } from "@/lib/namedays";
 
 function startOfWeekMonday(d: Date) {
   const x = new Date(d);
@@ -179,12 +175,13 @@ export async function fetchBriefingTodayData(
   const overdueRequestCount = !overdueErr ? overdueCount ?? 0 : 0;
 
   const todayNames: string[] = (nameDayRes.data?.names as string[] | undefined) ?? [];
-  const normalizedTodayNames = new Set(todayNames.map((n) => normalizeGreekBrief(n)));
-  const contacts = (allContacts.data ?? []).filter((c) => {
-    const fn = normalizeGreekBrief(c.first_name ?? "");
-    const nn = normalizeGreekBrief(c.nickname ?? "");
-    return normalizedTodayNames.has(fn) || (nn.length > 0 && normalizedTodayNames.has(nn));
-  });
+  const contacts = (allContacts.data ?? []).filter((c) =>
+    contactCelebratesNameday(
+      (c as { first_name?: string }).first_name,
+      (c as { nickname?: string | null }).nickname,
+      todayNames,
+    ),
+  );
   const contactNames = contacts.map((c) => `${c.first_name} ${c.last_name}`.trim());
   const namedayContacts = contacts
     .map((c) => ({

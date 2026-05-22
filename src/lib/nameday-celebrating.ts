@@ -1,12 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { contactCelebratesNameday, normalizeGreekName } from "@/lib/namedays";
 
-export function normalizeGreek(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\u03c2/g, "\u03c3");
-}
+/** @deprecated Use `normalizeGreekName` from `@/lib/namedays`. */
+export const normalizeGreek = normalizeGreekName;
+
+export { normalizeGreekName, contactCelebratesNameday };
 
 /** UUIDs of contacts whose first name or nickname matches the Orthodox calendar for that calendar day. */
 export async function getContactIdsForNameDay(
@@ -25,7 +23,7 @@ export async function getContactIdsForNameDay(
   }
   const todayNames = (namedayRows ?? []).flatMap((r) => (r as { names?: string[] }).names ?? []);
   if (todayNames.length === 0) return [];
-  const namesSet = new Set(todayNames.map((n) => normalizeGreek(String(n))));
+
   const { data: contacts, error: ce } = await supabase.from("contacts").select("id, first_name, nickname");
   if (ce) {
     console.error("[nameday] contacts", ce.message);
@@ -33,9 +31,7 @@ export async function getContactIdsForNameDay(
   }
   const out: string[] = [];
   for (const c of (contacts ?? []) as { id: string; first_name: string; nickname: string | null }[]) {
-    const fn = normalizeGreek(c.first_name ?? "");
-    const nn = normalizeGreek(c.nickname ?? "");
-    if (namesSet.has(fn) || (nn.length > 0 && namesSet.has(nn))) {
+    if (contactCelebratesNameday(c.first_name, c.nickname, todayNames)) {
       out.push(c.id);
     }
   }
