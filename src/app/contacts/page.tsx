@@ -798,7 +798,6 @@ function ContactsPage() {
   const [bulkCampaign, setBulkCampaign] = useState("");
   const [campaigns, setCampaigns] = useState<Camp[]>([]);
   const [bulkErr, setBulkErr] = useState<string | null>(null);
-  const [retellCallMsg, setRetellCallMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bulkWaMessage, setBulkWaMessage] = useState("");
@@ -1015,18 +1014,6 @@ function ContactsPage() {
             Εμφάνιση όλων
           </button>
         </div>
-      )}
-      {retellCallMsg && (
-        <p
-          role="status"
-          className={
-            retellCallMsg.type === "ok"
-              ? "rounded-lg border border-[color-mix(in_srgb,var(--success)_45%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--bg-card))] px-3 py-2 text-sm text-[var(--text-primary)]"
-              : "rounded-lg border border-[color-mix(in_srgb,var(--danger)_45%,var(--border))] bg-[color-mix(in_srgb,var(--danger)_12%,var(--bg-card))] px-3 py-2 text-sm text-[var(--text-primary)]"
-          }
-        >
-          {retellCallMsg.text}
-        </p>
       )}
       <PageHeader
         title="Επαφές"
