@@ -17,7 +17,17 @@ import { el } from "date-fns/locale";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type MouseEvent,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Calendar,
@@ -33,7 +43,9 @@ import {
   PanelLeftOpen,
   Pencil,
   RefreshCw,
+  Search,
   Sparkles,
+  X,
   XCircle,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -62,6 +74,152 @@ type SchedulerRequest = {
 };
 
 type MobilePanel = "queue" | "calendar";
+
+type CalFilter = {
+  q: string;
+  category: string;
+  priority: string;
+  status: string;
+  assignedTo: string;
+};
+
+const EMPTY_CAL_FILTER: CalFilter = {
+  q: "",
+  category: "",
+  priority: "",
+  status: "",
+  assignedTo: "",
+};
+
+type StaffUser = { id: string; full_name: string | null; email?: string | null; role?: string };
+
+function appendCalFilterParams(params: URLSearchParams, calFilter: CalFilter) {
+  if (calFilter.q.trim()) params.set("q", calFilter.q.trim());
+  if (calFilter.category) params.set("category", calFilter.category);
+  if (calFilter.priority) params.set("priority", calFilter.priority);
+  if (calFilter.status) params.set("status", calFilter.status);
+  if (calFilter.assignedTo) params.set("assigned_to", calFilter.assignedTo);
+}
+
+function SchedulerFilterBar({
+  calFilter,
+  setCalFilter,
+  categories,
+  staffUsers,
+  isMobile,
+  filtersOpen,
+  onToggleFilters,
+}: {
+  calFilter: CalFilter;
+  setCalFilter: Dispatch<SetStateAction<CalFilter>>;
+  categories: string[];
+  staffUsers: StaffUser[];
+  isMobile: boolean;
+  filtersOpen: boolean;
+  onToggleFilters: () => void;
+}) {
+  const hasActive =
+    Boolean(calFilter.q || calFilter.category || calFilter.priority || calFilter.status || calFilter.assignedTo);
+
+  const fields = (
+    <div className="flex flex-wrap gap-2">
+      <div className="relative min-w-40 flex-1">
+        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <input
+          type="text"
+          placeholder="Τίτλος ή τηλέφωνο..."
+          value={calFilter.q}
+          onChange={(e) => setCalFilter((p) => ({ ...p, q: e.target.value }))}
+          className="w-full rounded-lg border border-border bg-card py-2 pl-8 pr-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/40"
+        />
+      </div>
+      <select
+        value={calFilter.category}
+        onChange={(e) => setCalFilter((p) => ({ ...p, category: e.target.value }))}
+        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
+        aria-label="Κατηγορία"
+      >
+        <option value="">Κατηγορία</option>
+        {categories.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+      <select
+        value={calFilter.priority}
+        onChange={(e) => setCalFilter((p) => ({ ...p, priority: e.target.value }))}
+        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
+        aria-label="Προτεραιότητα"
+      >
+        <option value="">Προτεραιότητα</option>
+        <option value="Urgent">Επείγον</option>
+        <option value="High">Υψηλή</option>
+        <option value="Medium">Μεσαία</option>
+        <option value="Low">Χαμηλή</option>
+      </select>
+      <select
+        value={calFilter.status}
+        onChange={(e) => setCalFilter((p) => ({ ...p, status: e.target.value }))}
+        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
+        aria-label="Κατάσταση"
+      >
+        <option value="">Κατάσταση</option>
+        <option value="Νέο">Νέο</option>
+        <option value="Σε εξέλιξη">Σε εξέλιξη</option>
+        <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
+        <option value="Απορρίφθηκε">Απορρίφθηκε</option>
+      </select>
+      <select
+        value={calFilter.assignedTo}
+        onChange={(e) => setCalFilter((p) => ({ ...p, assignedTo: e.target.value }))}
+        className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none"
+        aria-label="Ανάθεση"
+      >
+        <option value="">Ανάθεση</option>
+        {staffUsers.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.full_name?.trim() || u.email || `Χρήστης ${u.id.slice(0, 8)}…`}
+          </option>
+        ))}
+      </select>
+      {hasActive ? (
+        <button
+          type="button"
+          onClick={() => setCalFilter(EMPTY_CAL_FILTER)}
+          className="flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
+        >
+          <X className="h-3 w-3" aria-hidden />
+          Καθαρισμός
+        </button>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div className="mb-4">
+      {isMobile ? (
+        <>
+          <button
+            type="button"
+            onClick={onToggleFilters}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card py-2 text-sm font-semibold text-foreground"
+          >
+            Φίλτρα
+            {hasActive ? (
+              <span className="rounded-full bg-[var(--accent-gold)]/20 px-2 py-0.5 text-[10px] font-bold text-[var(--accent-gold)]">
+                Ενεργά
+              </span>
+            ) : null}
+          </button>
+          {filtersOpen ? fields : null}
+        </>
+      ) : (
+        fields
+      )}
+    </div>
+  );
+}
 
 const KANBAN_COLUMNS: {
   status: string;
@@ -218,12 +376,10 @@ export default function RequestsSchedulerPage() {
   const confirmPopoverRef = useRef<HTMLDivElement | null>(null);
   const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
-  const [queueSearch, setQueueSearch] = useState("");
-  const [kanbanSearch, setKanbanSearch] = useState("");
-  const [kanbanCategory, setKanbanCategory] = useState("");
-  const [kanbanPriority, setKanbanPriority] = useState("");
-  const [kanbanRange, setKanbanRange] = useState("");
+  const [calFilter, setCalFilter] = useState<CalFilter>(EMPTY_CAL_FILTER);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const monthStartYmd = format(startOfMonth(monthCursor), "yyyy-MM-dd");
@@ -256,33 +412,19 @@ export default function RequestsSchedulerPage() {
     return eachDayOfInterval({ start, end });
   }, [monthCursor]);
 
-  const filteredQueue = useMemo(() => {
-    const q = queueSearch.trim().toLowerCase();
-    if (!q) return queue;
-    return queue.filter((r) => {
-      const hay = [
-        r.title,
-        r.request_code,
-        r.category,
-        r.status,
-        contactLabel(r.contacts),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [queue, queueSearch]);
-
   const loadScheduler = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params =
-        viewMode === "month"
-          ? `week_start=${encodeURIComponent(monthStartYmd)}&week_end=${encodeURIComponent(monthEndYmd)}`
-          : `week=${encodeURIComponent(weekStart)}`;
-      const res = await fetchWithTimeout(`/api/requests/scheduler?${params}`);
+      const params = new URLSearchParams();
+      if (viewMode === "month") {
+        params.set("week_start", monthStartYmd);
+        params.set("week_end", monthEndYmd);
+      } else {
+        params.set("week", weekStart);
+      }
+      appendCalFilterParams(params, calFilter);
+      const res = await fetchWithTimeout(`/api/requests/scheduler?${params.toString()}`);
       const j = (await res.json().catch(() => ({}))) as {
         error?: string;
         queue?: SchedulerRequest[];
@@ -303,7 +445,7 @@ export default function RequestsSchedulerPage() {
     } finally {
       setLoading(false);
     }
-  }, [weekStart, monthStartYmd, monthEndYmd, viewMode]);
+  }, [weekStart, monthStartYmd, monthEndYmd, viewMode, calFilter]);
 
   const loadKanban = useCallback(async () => {
     setKanbanLoading(true);
@@ -311,13 +453,13 @@ export default function RequestsSchedulerPage() {
     try {
       const base = new URLSearchParams();
       base.set("page_size", "100");
-      if (kanbanSearch.trim()) base.set("q", kanbanSearch.trim());
-      if (kanbanCategory) base.set("category", kanbanCategory);
-      if (kanbanPriority) base.set("priority", kanbanPriority);
-      if (kanbanRange) base.set("range", kanbanRange);
+      appendCalFilterParams(base, calFilter);
 
       const entries = await Promise.all(
         KANBAN_COLUMNS.map(async (col) => {
+          if (calFilter.status && calFilter.status !== col.status) {
+            return [col.status, []] as const;
+          }
           const p = new URLSearchParams(base);
           p.set("status", col.status);
           const res = await fetchWithTimeout(`/api/requests?${p.toString()}`);
@@ -337,14 +479,24 @@ export default function RequestsSchedulerPage() {
     } finally {
       setKanbanLoading(false);
     }
-  }, [kanbanSearch, kanbanCategory, kanbanPriority, kanbanRange]);
+  }, [calFilter]);
 
   useEffect(() => {
     if (!canManage) return;
     void fetchWithTimeout("/api/request-categories").then(async (res) => {
       if (!res.ok) return;
-      const j = (await res.json()) as { categories?: { name: string }[] };
-      setCategoryOptions((j.categories ?? []).map((c) => c.name));
+      const j = (await res.json()) as { categories?: { name: string }[] | string[] };
+      const raw = j.categories ?? [];
+      setCategoryOptions(
+        raw.map((c) => (typeof c === "string" ? c : c.name)).filter(Boolean),
+      );
+    });
+    void fetchWithTimeout("/api/team/assignees").then(async (res) => {
+      if (!res.ok) return;
+      const j = (await res.json()) as { assignees?: StaffUser[] };
+      setStaffUsers(
+        (j.assignees ?? []).filter((a) => hasMinRole(a.role, "caller")),
+      );
     });
   }, [canManage]);
 
@@ -650,7 +802,7 @@ export default function RequestsSchedulerPage() {
               mobilePanel === "queue" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
             )}
           >
-            Ουρά ({filteredQueue.length})
+            Ουρά ({queue.length})
           </button>
           <button
             type="button"
@@ -702,7 +854,7 @@ export default function RequestsSchedulerPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-xs font-bold uppercase tracking-widest text-[var(--accent-gold)]">
-                        Ουρά ({filteredQueue.length})
+                        Ουρά ({queue.length})
                       </h2>
                       <p className="mt-1 text-xs text-muted-foreground">Χωρίς προγραμματισμένη ημερομηνία</p>
                     </div>
@@ -719,18 +871,20 @@ export default function RequestsSchedulerPage() {
                       {queueOpen ? "Σύμπτυξη" : "Ουρά"}
                     </button>
                   </div>
-                  <input
-                    type="search"
-                    value={queueSearch}
-                    onChange={(e) => setQueueSearch(e.target.value)}
-                    placeholder="Αναζήτηση..."
-                    className="mb-0 mt-3 w-full rounded-lg border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_50%,var(--bg-card))] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+                  <SchedulerFilterBar
+                    calFilter={calFilter}
+                    setCalFilter={setCalFilter}
+                    categories={categoryOptions}
+                    staffUsers={staffUsers}
+                    isMobile={isMobile}
+                    filtersOpen={filtersOpen}
+                    onToggleFilters={() => setFiltersOpen((o) => !o)}
                   />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                  {loading && filteredQueue.length === 0 ? (
+                  {loading && queue.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">Φόρτωση…</p>
-                  ) : filteredQueue.length === 0 ? (
+                  ) : queue.length === 0 ? (
                     <EmptyState
                       title="Κενή ουρά"
                       subtitle="Όλα τα ενεργά αιτήματα έχουν προγραμματιστεί ή δεν υπάρχουν ανοιχτά."
@@ -738,7 +892,7 @@ export default function RequestsSchedulerPage() {
                     />
                   ) : (
                     <ul className="space-y-3">
-                      {filteredQueue.map((r) => (
+                      {queue.map((r) => (
                         <QueueCard
                           key={r.id}
                           request={r}
@@ -841,54 +995,20 @@ export default function RequestsSchedulerPage() {
             </div>
           </div>
 
+          <div className="border-b border-border px-4 py-3">
+            <SchedulerFilterBar
+              calFilter={calFilter}
+              setCalFilter={setCalFilter}
+              categories={categoryOptions}
+              staffUsers={staffUsers}
+              isMobile={isMobile}
+              filtersOpen={filtersOpen}
+              onToggleFilters={() => setFiltersOpen((o) => !o)}
+            />
+          </div>
+
           {viewMode === "kanban" ? (
             <>
-              <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-                <input
-                  type="search"
-                  value={kanbanSearch}
-                  onChange={(e) => setKanbanSearch(e.target.value)}
-                  placeholder="Αναζήτηση..."
-                  className="min-w-[10rem] flex-1 rounded-lg border border-border bg-[color-mix(in_srgb,var(--bg-elevated)_50%,var(--bg-card))] px-3 py-2 text-sm"
-                />
-                <select
-                  value={kanbanCategory}
-                  onChange={(e) => setKanbanCategory(e.target.value)}
-                  className={lux.select + " !h-9 !w-auto min-w-[8rem] !text-xs"}
-                  aria-label="Κατηγορία"
-                >
-                  <option value="">ΚΑΤΗΓΟΡΙΑ</option>
-                  {categoryOptions.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={kanbanPriority}
-                  onChange={(e) => setKanbanPriority(e.target.value)}
-                  className={lux.select + " !h-9 !w-auto min-w-[8rem] !text-xs"}
-                  aria-label="Προτεραιότητα"
-                >
-                  <option value="">ΠΡΟΤΕΡΑΙΟΤΗΤΑ</option>
-                  <option value="Urgent">Urgent</option>
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                </select>
-                <select
-                  value={kanbanRange}
-                  onChange={(e) => setKanbanRange(e.target.value)}
-                  className={lux.select + " !h-9 !w-auto min-w-[8rem] !text-xs"}
-                  aria-label="Χρονικό διάστημα"
-                >
-                  <option value="">ΧΡΟΝΙΚΟ ΔΙΑΣΤΗΜΑ</option>
-                  <option value="today">Σήμερα</option>
-                  <option value="7d">7 ημέρες</option>
-                  <option value="30d">30 ημέρες</option>
-                  <option value="90d">90 ημέρες</option>
-                </select>
-              </div>
               <div className="min-h-0 flex-1 overflow-x-auto p-3">
                 <div className="flex min-h-[calc(100vh-280px)] gap-3">
                   {KANBAN_COLUMNS.map((col) => {

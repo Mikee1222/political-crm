@@ -52,7 +52,19 @@ type RequestFilters = {
   range: string;
   assigned: string;
   search: string;
+  contactIdsFromPhone?: string[];
 };
+
+async function resolvePhoneContactIds(supabase: SupabaseClient, search: string): Promise<string[]> {
+  const raw = search.trim();
+  if (!raw || !/^\d+/.test(raw)) return [];
+  const pat = `%${escapeIlike(raw)}%`;
+  const { data: phoneMatches } = await supabase
+    .from("contacts")
+    .select("id")
+    .or(`phone.ilike.${pat},phone2.ilike.${pat},landline.ilike.${pat}`);
+  return (phoneMatches ?? []).map((c) => (c as { id: string }).id);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyRequestFilters(query: any, f: RequestFilters, opts?: { withSearchEmbed?: boolean }) {
@@ -64,13 +76,14 @@ function applyRequestFilters(query: any, f: RequestFilters, opts?: { withSearchE
   if (f.assigned) query = query.eq("assigned_to", f.assigned);
   if (f.search) {
     const pat = `%${escapeIlike(f.search)}%`;
+    const parts = [`title.ilike.${pat}`];
     if (opts?.withSearchEmbed) {
-      query = query.or(
-        `title.ilike.${pat},contacts.first_name.ilike.${pat},contacts.last_name.ilike.${pat}`,
-      );
-    } else {
-      query = query.ilike("title", pat);
+      parts.push(`contacts.first_name.ilike.${pat}`, `contacts.last_name.ilike.${pat}`);
     }
+    if (f.contactIdsFromPhone?.length) {
+      parts.push(`contact_id.in.(${f.contactIdsFromPhone.join(",")})`);
+    }
+    query = query.or(parts.join(","));
   }
   return query;
 }
@@ -91,6 +104,9 @@ async function fetchRequestsPage(
   page: number,
   pageSize: number,
 ) {
+  const contactIdsFromPhone = f.search ? await resolvePhoneContactIds(supabase, f.search) : [];
+  const filters: RequestFilters = { ...f, contactIdsFromPhone };
+
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -98,7 +114,7 @@ async function fetchRequestsPage(
     .from("requests")
     .select(BASE_SELECT, { count: "exact" })
     .order("created_at", { ascending: false });
-  query = applyRequestFilters(query, f, { withSearchEmbed: Boolean(f.search) });
+  query = applyRequestFilters(query, filters, { withSearchEmbed: Boolean(f.search) });
   query = query.range(from, to);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,7 +133,7 @@ async function fetchRequestsPage(
       .from("requests")
       .select(FALLBACK_SELECT, { count: "exact" })
       .order("created_at", { ascending: false });
-    q2 = applyRequestFilters(q2, f, { withSearchEmbed: false });
+    q2 = applyRequestFilters(q2, filters, { withSearchEmbed: false });
     q2 = q2.range(from, to);
     const second = await q2;
     data = second.data;
@@ -129,7 +145,7 @@ async function fetchRequestsPage(
       .from("requests")
       .select(FALLBACK_SELECT, { count: "exact" })
       .order("created_at", { ascending: false });
-    q2 = applyRequestFilters(q2, f, { withSearchEmbed: false });
+    q2 = applyRequestFilters(q2, filters, { withSearchEmbed: false });
     q2 = q2.range(from, to);
     const second = await q2;
     data = second.data;

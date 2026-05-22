@@ -4,6 +4,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,19 @@ const SELECT_WITH_CONTACT =
 
 const SELECT_FALLBACK =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, scheduled_date, contact_id";
+
+function escapeIlike(q: string) {
+  return q.replace(/[%_\\,().]/g, (c) => `\\${c}`);
+}
+
+type SchedulerFilters = {
+  q: string;
+  category: string;
+  priority: string;
+  status: string;
+  assigned_to: string;
+  contactIdsFromPhone: string[];
+};
 
 function mapRow(row: unknown) {
   const r0 = row as { contacts?: unknown };
@@ -43,6 +57,45 @@ function rangeBounds(sp: URLSearchParams) {
   return weekBounds(sp.get("week"));
 }
 
+async function resolvePhoneContactIds(supabase: SupabaseClient, q: string): Promise<string[]> {
+  const raw = q.trim();
+  if (!raw || !/^\d+/.test(raw)) return [];
+  const pat = `%${escapeIlike(raw)}%`;
+  const { data: phoneMatches } = await supabase
+    .from("contacts")
+    .select("id")
+    .or(`phone.ilike.${pat},phone2.ilike.${pat},landline.ilike.${pat}`);
+  return (phoneMatches ?? []).map((c) => (c as { id: string }).id);
+}
+
+function filtersFromParams(sp: URLSearchParams, contactIdsFromPhone: string[]): SchedulerFilters {
+  return {
+    q: sp.get("q")?.trim() ?? "",
+    category: sp.get("category")?.trim() ?? "",
+    priority: sp.get("priority")?.trim() ?? "",
+    status: sp.get("status")?.trim() ?? "",
+    assigned_to: sp.get("assigned_to")?.trim() ?? "",
+    contactIdsFromPhone,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applySchedulerFilters(query: any, f: SchedulerFilters) {
+  if (f.category) query = query.eq("category", f.category);
+  if (f.priority) query = query.eq("priority", f.priority);
+  if (f.status) query = query.eq("status", f.status);
+  if (f.assigned_to) query = query.eq("assigned_to", f.assigned_to);
+  if (f.q) {
+    const pat = `%${escapeIlike(f.q)}%`;
+    const parts = [`title.ilike.${pat}`];
+    if (f.contactIdsFromPhone.length > 0) {
+      parts.push(`contact_id.in.(${f.contactIdsFromPhone.join(",")})`);
+    }
+    query = query.or(parts.join(","));
+  }
+  return query;
+}
+
 /** GET ?week=YYYY-MM-DD or ?week_start=&week_end= → { queue, scheduled, weekStart, weekEnd } */
 export async function GET(request: NextRequest) {
   try {
@@ -53,16 +106,26 @@ export async function GET(request: NextRequest) {
       return forbidden();
     }
 
-    const { weekStart, weekEnd } = rangeBounds(request.nextUrl.searchParams);
+    const sp = request.nextUrl.searchParams;
+    const { weekStart, weekEnd } = rangeBounds(sp);
+    const qParam = sp.get("q")?.trim() ?? "";
+    const contactIdsFromPhone = qParam ? await resolvePhoneContactIds(supabase, qParam) : [];
+    const filters = filtersFromParams(sp, contactIdsFromPhone);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let queueQuery: any = supabase
       .from("requests")
       .select(SELECT_WITH_CONTACT)
       .is("scheduled_date", null)
-      .in("status", [...QUEUE_STATUSES])
       .order("created_at", { ascending: false })
       .limit(200);
+
+    if (filters.status) {
+      queueQuery = queueQuery.eq("status", filters.status);
+    } else {
+      queueQuery = queueQuery.in("status", [...QUEUE_STATUSES]);
+    }
+    queueQuery = applySchedulerFilters(queueQuery, filters);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let scheduledQuery: any = supabase
@@ -74,10 +137,12 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(500);
 
+    scheduledQuery = applySchedulerFilters(scheduledQuery, filters);
+
     let [queueRes, scheduledRes] = await Promise.all([queueQuery, scheduledQuery]);
 
     const missingCol = (msg: string) =>
-      msg.includes("scheduled_date") || msg.includes("column") && msg.includes("scheduled");
+      msg.includes("scheduled_date") || (msg.includes("column") && msg.includes("scheduled"));
 
     if (queueRes.error && missingCol(queueRes.error.message)) {
       return NextResponse.json(
@@ -93,14 +158,22 @@ export async function GET(request: NextRequest) {
       (queueRes.error && queueRes.error.message.includes("contacts")) ||
       (scheduledRes.error && scheduledRes.error.message.includes("contacts"))
     ) {
-      queueQuery = supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let queueFallback: any = supabase
         .from("requests")
         .select(SELECT_FALLBACK)
         .is("scheduled_date", null)
-        .in("status", [...QUEUE_STATUSES])
         .order("created_at", { ascending: false })
         .limit(200);
-      scheduledQuery = supabase
+      if (filters.status) {
+        queueFallback = queueFallback.eq("status", filters.status);
+      } else {
+        queueFallback = queueFallback.in("status", [...QUEUE_STATUSES]);
+      }
+      queueFallback = applySchedulerFilters(queueFallback, filters);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let scheduledFallback: any = supabase
         .from("requests")
         .select(SELECT_FALLBACK)
         .gte("scheduled_date", weekStart)
@@ -108,7 +181,9 @@ export async function GET(request: NextRequest) {
         .order("scheduled_date", { ascending: true })
         .order("created_at", { ascending: false })
         .limit(500);
-      [queueRes, scheduledRes] = await Promise.all([queueQuery, scheduledQuery]);
+      scheduledFallback = applySchedulerFilters(scheduledFallback, filters);
+
+      [queueRes, scheduledRes] = await Promise.all([queueFallback, scheduledFallback]);
     }
 
     if (queueRes.error) {

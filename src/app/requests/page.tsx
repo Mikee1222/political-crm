@@ -346,7 +346,7 @@ export default function RequestsPage() {
             <input
               id="r-search"
               type="text"
-              placeholder="Αναζήτηση τίτλου ή ονόματος..."
+              placeholder="Αναζήτηση τίτλου, ονόματος ή τηλεφώνου..."
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
               className={
