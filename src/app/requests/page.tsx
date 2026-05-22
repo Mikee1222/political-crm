@@ -389,55 +389,53 @@ export default function RequestsPage() {
           }
         />
       ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {rows.map((r, i) => (
-              <div
-                key={r.id}
-                className="hq-stagger-item"
-                style={{ ["--stagger" as string]: String(i) }}
-              >
-                <RequestCard
-                  r={r}
-                  canQuickComplete={canQuickComplete}
-                  onOpen={() => router.push(`/requests/${r.id}`)}
-                  onEdit={() => setSelected(r)}
-                  onQuickComplete={handleQuickComplete}
-                />
-              </div>
-            ))}
-          </div>
-
-          {totalPages > 1 ? (
-            <div className="flex flex-col items-center justify-between gap-3 border-t border-[var(--border)] pt-4 sm:flex-row">
-              <p className="text-xs text-[var(--text-muted)]">
-                {rangeFrom}–{rangeTo} από {listTotal}
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <button
-                  type="button"
-                  className={lux.btnSecondary + " !py-2 text-xs"}
-                  disabled={currentPage <= 1}
-                  onClick={() => goToPage(currentPage - 1)}
-                >
-                  Προηγούμενη
-                </button>
-                <span className="px-2 text-sm font-medium text-[var(--text-secondary)]">
-                  Σελίδα {currentPage} από {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className={lux.btnSecondary + " !py-2 text-xs"}
-                  disabled={currentPage >= totalPages}
-                  onClick={() => goToPage(currentPage + 1)}
-                >
-                  Επόμενη
-                </button>
-              </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((r, i) => (
+            <div
+              key={r.id}
+              className="hq-stagger-item"
+              style={{ ["--stagger" as string]: String(i) }}
+            >
+              <RequestCard
+                r={r}
+                canQuickComplete={canQuickComplete}
+                onOpen={() => router.push(`/requests/${r.id}`)}
+                onEdit={() => setSelected(r)}
+                onQuickComplete={handleQuickComplete}
+              />
             </div>
-          ) : null}
-        </>
+          ))}
+        </div>
       )}
+
+      {!listLoading && rows.length > 0 && totalPages > 1 ? (
+        <div className="mb-24 flex flex-col items-center justify-between gap-3 border-t border-[var(--border)] pt-4 sm:flex-row">
+          <p className="text-xs text-[var(--text-muted)]">
+            {rangeFrom}–{rangeTo} από {listTotal}
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              className={lux.btnSecondary + " !py-2 text-xs"}
+              disabled={currentPage <= 1}
+              onClick={() => goToPage(currentPage - 1)}
+            >
+              Προηγούμενη
+            </button>
+            <span className="px-2 text-sm font-medium text-[var(--text-secondary)]">
+              Σελίδα {currentPage} από {totalPages}
+            </span>
+            <button
+              type="button"
+              className={lux.btnSecondary + " !py-2 text-xs"}
+              disabled={currentPage >= totalPages}
+              onClick={() => goToPage(currentPage + 1)}
+            >
+              Επόμενη
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <NewRequestModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
       {selected && (
