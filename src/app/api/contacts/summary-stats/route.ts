@@ -17,9 +17,18 @@ export async function GET() {
     start.setHours(0, 0, 0, 0);
     const monthStartIso = start.toISOString();
 
+    const { data: posGroup } = await supabase
+      .from("contact_groups")
+      .select("id")
+      .ilike("name", "ΘΕΤΙΚΟΣ%")
+      .single();
+
     const [totalR, positiveR, pendingR, monthR] = await Promise.all([
       supabase.from("contacts").select("id", { count: "exact", head: true }),
-      supabase.from("contacts").select("id", { count: "exact", head: true }).eq("call_status", "Positive"),
+      supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("group_id", posGroup?.id ?? "00000000-0000-0000-0000-000000000000"),
       supabase
         .from("contacts")
         .select("id", { count: "exact", head: true })
