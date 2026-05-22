@@ -427,25 +427,21 @@ export default function RequestsSchedulerPage() {
     }
     setAiLoading((prev) => ({ ...prev, [request.id]: true }));
     try {
-      const res = await fetchWithTimeout("/api/requests-scheduler/ai-summary", {
+      const res = await fetch("/api/requests-scheduler/ai-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId: request.id }),
       });
-      const data = (await res.json().catch(() => ({}))) as { summary?: string; error?: string };
-      if (!res.ok) {
-        setAiSummaries((prev) => ({
-          ...prev,
-          [request.id]: data.error ?? "Σφάλμα κατά τη δημιουργία σύνοψης.",
-        }));
-        return;
-      }
-      setAiSummaries((prev) => ({ ...prev, [request.id]: data.summary ?? "" }));
-    } catch {
-      setAiSummaries((prev) => ({
-        ...prev,
-        [request.id]: "Σφάλμα κατά τη δημιουργία σύνοψης.",
-      }));
+      const text = await res.text();
+      console.log("AI summary raw response:", text);
+      const data = JSON.parse(text) as { summary?: string; error?: string };
+      console.log("AI summary parsed:", data);
+      const summary =
+        data.summary ?? data.error ?? "Δεν ήταν δυνατή η δημιουργία σύνοψης.";
+      setAiSummaries((prev) => ({ ...prev, [request.id]: summary }));
+    } catch (err) {
+      console.error("AI summary fetch error:", err);
+      setAiSummaries((prev) => ({ ...prev, [request.id]: "Σφάλμα σύνδεσης." }));
     } finally {
       setAiLoading((prev) => ({ ...prev, [request.id]: false }));
     }
