@@ -1,0 +1,5 @@
+ALWAYS before finishing any task:
+- Run `npx tsc --noEmit` mentally — ensure no TypeScript errors
+- Never use implicit `any` without eslint-disable comment
+- Always type Supabase query builder variables as `any` with eslint-disable-next-line when they involve joins that add properties later
+- Never leave `let data` untyped when it comes from a Supabase query with embedded relations

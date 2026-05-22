@@ -263,7 +263,7 @@ export default function RequestsSchedulerPage() {
             ) : queue.length === 0 ? (
               <EmptyState
                 title="Κενή ουρά"
-                description="Όλα τα ενεργά αιτήματα έχουν προγραμματιστεί ή δεν υπάρχουν ανοιχτά."
+                subtitle="Όλα τα ενεργά αιτήματα έχουν προγραμματιστεί ή δεν υπάρχουν ανοιχτά."
                 className="!py-8"
               />
             ) : (
