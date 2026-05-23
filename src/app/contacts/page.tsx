@@ -787,6 +787,30 @@ function ContactsPage() {
   const filtersUrlKeyRef = useRef<string | null>(null);
   const { showToast: showListToast } = useFormToast();
 
+  const applyFocusModeDom = useCallback((val: boolean) => {
+    if (val) document.body.classList.add("focus-mode");
+    else document.body.classList.remove("focus-mode");
+  }, []);
+
+  const handleSetFocusMode = useCallback(
+    (val: boolean) => {
+      setFocusMode(val);
+      applyFocusModeDom(val);
+      const params = new URLSearchParams(window.location.search);
+      if (val) params.set("focus", "1");
+      else params.delete("focus");
+      const q = params.toString();
+      const path = window.location.pathname;
+      window.history.replaceState(null, "", q ? `${path}?${q}` : path);
+    },
+    [applyFocusModeDom],
+  );
+
+  const contactDetailHref = useCallback(
+    (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`),
+    [focusMode],
+  );
+
   const groupNameToId = useMemo(() => {
     const m = new Map<string, string>();
     for (const g of groups) m.set(g.name.toLowerCase(), g.id);
@@ -813,12 +837,18 @@ function ContactsPage() {
           next.page = "1";
         }
         startTransition(() => {
-          router.replace(buildContactsPageUrl(next), { scroll: false });
+          let url = buildContactsPageUrl(next);
+          if (focusMode) {
+            const u = new URL(url, window.location.origin);
+            u.searchParams.set("focus", "1");
+            url = `${u.pathname}${u.search}`;
+          }
+          router.replace(url, { scroll: false });
         });
         return next;
       });
     },
-    [router],
+    [router, focusMode],
   );
 
   const searchKey = useMemo(() => searchParams.toString(), [searchParams]);
@@ -836,6 +866,12 @@ function ContactsPage() {
     const q = p.toString();
     startTransition(() => router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false }));
   }, [searchParams, router, pathname, canManage]);
+
+  useEffect(() => {
+    const enabled = searchParams.get("focus") === "1";
+    setFocusMode(enabled);
+    applyFocusModeDom(enabled);
+  }, [searchParams, applyFocusModeDom]);
 
   const load = useCallback(async () => {
     const q = f;
@@ -935,19 +971,17 @@ function ContactsPage() {
   }, [canManage]);
 
   useEffect(() => {
-    if (focusMode) document.body.classList.add("focus-mode");
-    else document.body.classList.remove("focus-mode");
     return () => document.body.classList.remove("focus-mode");
-  }, [focusMode]);
+  }, []);
 
   useEffect(() => {
     if (!focusMode) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFocusMode(false);
+      if (e.key === "Escape") handleSetFocusMode(false);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [focusMode]);
+  }, [focusMode, handleSetFocusMode]);
 
   const areas = useMemo(
     () => Array.from(new Set(contacts.map((c) => c.area).filter(Boolean))) as string[],
@@ -1037,7 +1071,7 @@ function ContactsPage() {
             <span className="hidden text-xs text-muted-foreground sm:inline">ESC για έξοδο</span>
             <button
               type="button"
-              onClick={() => setFocusMode(false)}
+              onClick={() => handleSetFocusMode(false)}
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted"
               aria-label="Έξοδος από λειτουργία εστίασης"
             >
@@ -1143,7 +1177,7 @@ function ContactsPage() {
             {!focusMode && (
               <button
                 type="button"
-                onClick={() => setFocusMode(true)}
+                onClick={() => handleSetFocusMode(true)}
                 title="Λειτουργία εστίασης"
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm transition-colors hover:bg-muted sm:w-auto"
               >
@@ -1476,7 +1510,7 @@ function ContactsPage() {
                 <ContactSwipeCard
                   c={c}
                   isAdmin={isAdmin}
-                  onNavigateDetail={() => router.push(`/contacts/${c.id}`)}
+                  onNavigateDetail={() => router.push(contactDetailHref(c.id))}
                   onDeleted={() => void load()}
                 />
               </li>
@@ -1546,7 +1580,7 @@ function ContactsPage() {
                   return n;
                 })
               }
-              onNavigate={() => router.push(`/contacts/${c.id}`)}
+              onNavigate={() => router.push(contactDetailHref(c.id))}
               onOpenInTab={() => openTab(c.id, contactDisplayName(c))}
             />
           ))}

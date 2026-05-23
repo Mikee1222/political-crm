@@ -20,6 +20,11 @@ export function ContactTabsBar() {
 
   if (tabs.length === 0) return null;
 
+  const contactTabHref = (contactId: string) => {
+    const focus = new URLSearchParams(window.location.search).get("focus") === "1";
+    return focus ? `/contacts/${contactId}?focus=1` : `/contacts/${contactId}`;
+  };
+
   return (
     <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-card px-4 py-1.5 scrollbar-hide">
       {tabs.map((tab) => (
@@ -30,13 +35,13 @@ export function ContactTabsBar() {
           aria-selected={activeTab === tab.id}
           onClick={() => {
             setActiveTab(tab.id);
-            router.push(`/contacts/${tab.contactId}`);
+            router.push(contactTabHref(tab.contactId));
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               setActiveTab(tab.id);
-              router.push(`/contacts/${tab.contactId}`);
+              router.push(contactTabHref(tab.contactId));
             }
           }}
           className={cn(

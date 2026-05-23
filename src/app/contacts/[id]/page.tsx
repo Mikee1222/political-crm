@@ -19,9 +19,9 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
@@ -324,6 +324,7 @@ function QuickCopyRow({ label, value, mono, copyLabel }: { label: string; value:
 function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { profile } = useProfile();
   const { openTab } = useContactTabs();
@@ -370,6 +371,25 @@ function ContactDetailPage() {
   const [focusMode, setFocusMode] = useState(false);
   const alexPage = useOptionalAlexandraPageContact();
   const aliveRef = useRef(true);
+
+  const applyFocusModeDom = useCallback((val: boolean) => {
+    if (val) document.body.classList.add("focus-mode");
+    else document.body.classList.remove("focus-mode");
+  }, []);
+
+  const handleSetFocusMode = useCallback(
+    (val: boolean) => {
+      setFocusMode(val);
+      applyFocusModeDom(val);
+      const params = new URLSearchParams(window.location.search);
+      if (val) params.set("focus", "1");
+      else params.delete("focus");
+      const q = params.toString();
+      const path = window.location.pathname;
+      window.history.replaceState(null, "", q ? `${path}?${q}` : path);
+    },
+    [applyFocusModeDom],
+  );
   useEffect(() => {
     aliveRef.current = true;
     return () => {
@@ -614,19 +634,23 @@ function ContactDetailPage() {
   }, [router]);
 
   useEffect(() => {
+    const enabled = searchParams.get("focus") === "1";
+    setFocusMode(enabled);
+    applyFocusModeDom(enabled);
+  }, [searchParams, applyFocusModeDom]);
+
+  useEffect(() => {
+    return () => document.body.classList.remove("focus-mode");
+  }, []);
+
+  useEffect(() => {
     if (!focusMode) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFocusMode(false);
+      if (e.key === "Escape") handleSetFocusMode(false);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [focusMode]);
-
-  useEffect(() => {
-    if (focusMode) document.body.classList.add("focus-mode");
-    else document.body.classList.remove("focus-mode");
-    return () => document.body.classList.remove("focus-mode");
-  }, [focusMode]);
+  }, [focusMode, handleSetFocusMode]);
 
   const c = contact;
   const w = buf ?? c;
@@ -851,7 +875,7 @@ function ContactDetailPage() {
             <span className="hidden text-xs text-muted-foreground sm:inline">ESC για έξοδο</span>
             <button
               type="button"
-              onClick={() => setFocusMode(false)}
+              onClick={() => handleSetFocusMode(false)}
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted"
               aria-label="Έξοδος από λειτουργία εστίασης"
             >
@@ -862,13 +886,14 @@ function ContactDetailPage() {
       ) : null}
       <div className={cn(focusMode && "max-w-6xl mx-auto px-6 py-4")}>
     <div className="min-h-full -m-6 bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8">
-      <Link
-        href="/contacts"
+      <button
+        type="button"
+        onClick={() => router.push(focusMode ? "/contacts?focus=1" : "/contacts")}
         className={lux.btnSecondary + " mb-4 inline-flex w-fit items-center gap-2 !py-2 text-sm"}
       >
         <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
         Επαφές
-      </Link>
+      </button>
       {isCaller && (
         <p className="mb-4 rounded-[12px] border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">
           Προβολή — μπορείτε να αλλάξετε μόνο την <strong>κατάσταση κλήσης</strong>· αποθήκευση παρακάτω.
@@ -981,7 +1006,7 @@ function ContactDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFocusMode((f) => !f)}
+                  onClick={() => handleSetFocusMode(!focusMode)}
                   title={focusMode ? "Έξοδος εστίασης (ESC)" : "Λειτουργία εστίασης"}
                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-border transition-colors hover:bg-muted"
                 >
@@ -1037,7 +1062,7 @@ function ContactDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFocusMode((f) => !f)}
+                  onClick={() => handleSetFocusMode(!focusMode)}
                   title={focusMode ? "Έξοδος εστίασης (ESC)" : "Λειτουργία εστίασης"}
                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-border transition-colors hover:bg-muted"
                 >
@@ -2140,8 +2165,16 @@ function ContactDetailPage() {
 
 export default function ContactDetailPageWithBoundary() {
   return (
-    <CrmErrorBoundary title="Δεν φορτώθηκε η επαφή.">
-      <ContactDetailPage />
-    </CrmErrorBoundary>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center p-6 text-sm text-[var(--text-muted)]">
+          Φόρτωση…
+        </div>
+      }
+    >
+      <CrmErrorBoundary title="Δεν φορτώθηκε η επαφή.">
+        <ContactDetailPage />
+      </CrmErrorBoundary>
+    </Suspense>
   );
 }
