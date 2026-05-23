@@ -589,6 +589,7 @@ function ContactDetailPage() {
     if (!contact) return;
     const name = `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || "Επαφή";
     openTab(contact.id, name);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact?.id, contact?.first_name, contact?.last_name, openTab]);
 
   const setContactPage = alexPage?.setContactPage;
@@ -625,17 +626,6 @@ function ContactDetailPage() {
       ac.abort();
     };
   }, []);
-
-  const groupSearchOptions = useMemo(
-    () =>
-      groupOptions.map((g) => ({
-        value: g.id,
-        label: g.year != null ? `${g.name} (${g.year})` : g.name,
-        color: g.color,
-        group: g.category ?? "Άλλο",
-      })),
-    [groupOptions],
-  );
 
   const callStatusSearchOptions = useMemo(
     () => CALL_OPTS.map((o) => ({ value: o.value, label: o.label })),

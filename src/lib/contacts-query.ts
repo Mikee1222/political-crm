@@ -23,8 +23,8 @@ export function contactMatchesLocalSearch(c: ContactForSearch, search: string | 
   return contactMatchesFuzzyGreekSearch(c, search);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function applyContactListFiltersToBuilder(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
   f: ContactListFilters,
   groupResolution?: GroupFilterResolution,
@@ -174,6 +174,7 @@ export function buildContactsQuery(
   return supabase.from("contacts").select(EXPORT_FLAT_SELECT);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function buildContactsQueryFromListFilters(supabase: SupabaseClient, _f: ContactListFilters) {
   return supabase.from("contacts").select(EXPORT_FLAT_SELECT);
 }

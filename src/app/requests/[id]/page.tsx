@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft, Loader2, Phone, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
@@ -83,16 +82,6 @@ function authorInitials(name: string) {
   return `${w[0]![0] ?? ""}${w[1]![0] ?? ""}`.toUpperCase() || "?";
 }
 
-function primaryPhone(c: ContactCard | null) {
-  if (!c) return null;
-  return c.phone?.trim() || c.phone2?.trim() || c.landline?.trim() || null;
-}
-
-function displayName(c: ContactCard | null) {
-  if (!c) return "—";
-  return `${c.first_name} ${c.last_name}`.trim() || "—";
-}
-
 function StatusBadge({ status }: { status: string }) {
   const s = status || "Νέο";
   const styles = REQUEST_STATUS_BADGE_CLASSES;
@@ -172,42 +161,6 @@ function SlaBar({
   );
 }
 
-function PersonCard({ label, contact }: { label: string; contact: ContactCard | null }) {
-  const ph = contact ? primaryPhone(contact) : null;
-  return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{label}</p>
-      {contact ? (
-        <div className="mt-2">
-          <Link
-            href={`/contacts/${contact.id}`}
-            className="group block rounded-lg p-0.5 transition hover:bg-[var(--bg-elevated)]/50"
-          >
-            <div className="flex items-start gap-2.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent-gold)] to-[#8b6914] text-xs font-bold text-white shadow-sm">
-                {authorInitials(displayName(contact))}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--text-primary)] group-hover:underline">
-                  {displayName(contact)}
-                </p>
-                {ph && (
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-secondary)]">
-                    <Phone className="h-3.5 w-3.5 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-                    {ph}
-                  </p>
-                )}
-                <span className="mt-1 inline-block text-[10px] font-medium text-[#003476]">Άνοιγμα επαφής →</span>
-              </div>
-            </div>
-          </Link>
-        </div>
-      ) : (
-        <p className="mt-1 text-sm text-[var(--text-muted)]">—</p>
-      )}
-    </div>
-  );
-}
 
 export default function RequestDetailPage() {
   const params = useParams();
