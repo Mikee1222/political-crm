@@ -232,7 +232,7 @@ function QueueFiltersPanel({
         <select
           value={filter.category}
           onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
-          className="min-w-0 rounded-xl border border-border bg-background px-2 py-1.5 text-xs focus: string-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+          className="min-w-0 rounded-xl border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
           aria-label="Κατηγορία"
         >
           <option value="">Κατηγορία</option>
@@ -336,7 +336,7 @@ function CalendarFilterToolbar({
       <select
         value={filter.category}
         onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
-        className="max-w-36 min  min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        className="max-w-36 min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
         aria-label="Κατηγορία"
       >
         <option value="">Κατηγορία</option>
@@ -365,168 +365,13 @@ function CalendarFilterToolbar({
         <button
           type="button"
           onClick={() => setFilter(EMPTY_CAL_FILTER)}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded  rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="Καθαρισμός φίλτρων"
         >
           <X className="h-4 w-4" aria-hidden />
         </button>
       ) : null}
     </div>
-  );
-}
-
-function SchedulerFiltersPanel({
-  filter,
-  setFilter,
-  categories,
-  staffUsers,
-}: {
-  filter: CalFilter;
-  setFilter: Dispatch<SetStateAction<CalFilter>>;
-  categories: string[];
-  staffUsers: StaffUser[];
-}) {
-  const hasActive = Boolean(
-    filter.q || filter.category || filter.priority || filter.status || filter.assignedTo,
-  );
-
-  return (
-    <div className="mb-3 space-y-2">
-      <div className="relative">
-        <Search
-          className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-          aria-hidden
-        />
-        <input
-          type="text"
-          placeholder="Τίτλος ή τηλέφωνο..."
-          value={filter.q}
-          onChange={(e) => setFilter((p) => ({ ...p, q: e.target.value }))}
-          className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
-        />
-      </div>
-      <select
-        value={filter.category}
-        onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
-        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
-        aria-label="Κατηγορία"
-      >
-        <option value="">Όλες οι κατηγορίες</option>
-        {categories.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
-      <div className="grid grid-cols-2 gap-2">
-        <select
-          value={filter.priority}
-          onChange={(e) => setFilter((p) => ({ ...p, priority: e.target.value }))}
-          className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
-          aria-label="Προτεραιότητα"
-        >
-          <option value="">Προτεραιότητα</option>
-          <option value="Urgent">Επείγον</option>
-          <option value="High">Υψηλή</option>
-          <option value="Medium">Μεσαία</option>
-          <option value="Low">Χαμηλή</option>
-        </select>
-        <select
-          value={filter.status}
-          onChange={(e) => setFilter((p) => ({ ...p, status: e.target.value }))}
-          className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
-          aria-label="Κατάσταση"
-        >
-          <option value="">Κατάσταση</option>
-          <option value="Νέο">Νέο</option>
-          <option value="Σε εξέλιξη">Σε εξέλιξη</option>
-          <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
-          <option value="Απορρίφθηκε">Απορρίφθηκε</option>
-        </select>
-      </div>
-      <select
-        value={filter.assignedTo}
-        onChange={(e) => setFilter((p) => ({ ...p, assignedTo: e.target.value }))}
-        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none"
-        aria-label="Ανάθεση"
-      >
-        <option value="">Όλοι οι υπάλληλοι</option>
-        {staffUsers.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.full_name || u.email}
-            {u.role ? ` (${u.role})` : ""}
-          </option>
-        ))}
-      </select>
-      {hasActive ? (
-        <button
-          type="button"
-          onClick={() => setFilter(EMPTY_CAL_FILTER)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted"
-        >
-          <X className="h-3 w-3" aria-hidden />
-          Καθαρισμός φίλτρων
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function SchedulerCalendarFilterBar({
-  calFilter,
-  setCalFilter,
-  categories,
-  staffUsers,
-  isMobile,
-  filtersOpen,
-  onToggleFilters,
-}: {
-  calFilter: CalFilter;
-  setCalFilter: Dispatch<SetStateAction<CalFilter>>;
-  categories: string[];
-  staffUsers: StaffUser[];
-  isMobile: boolean;
-  filtersOpen: boolean;
-  onToggleFilters: () => void;
-}) {
-  const hasActive = Boolean(
-    calFilter.q || calFilter.category || calFilter.priority || calFilter.status || calFilter.assignedTo,
-  );
-
-  if (isMobile) {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={onToggleFilters}
-          className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card py-2 text-sm font-semibold text-foreground"
-        >
-          Φίλτρα
-          {hasActive ? (
-            <span className="rounded-full bg-[var(--accent-gold)]/20 px-2 py-0.5 text-[10px] font-bold text-[var(--accent-gold)]">
-              Ενεργά
-            </span>
-          ) : null}
-        </button>
-        {filtersOpen ? (
-          <SchedulerFiltersPanel
-            filter={calFilter}
-            setFilter={setCalFilter}
-            categories={categories}
-            staffUsers={staffUsers}
-          />
-        ) : null}
-      </div>
-    );
-  }
-
-  return (
-    <SchedulerFiltersPanel
-      filter={calFilter}
-      setFilter={setCalFilter}
-      categories={categories}
-      staffUsers={staffUsers}
-    />
   );
 }
 
@@ -1182,7 +1027,7 @@ export default function RequestsSchedulerPage() {
                       {queueOpen ? "Σύμπτυξη" : "Ουρά"}
                     </button>
                   </div>
-                  <SchedulerFiltersPanel
+                  <QueueFiltersPanel
                     filter={queueFilter}
                     setFilter={setQueueFilter}
                     categories={categoryOptions}
@@ -1304,15 +1149,37 @@ export default function RequestsSchedulerPage() {
           </div>
 
           <div className="border-b border-border px-4 py-3">
-            <SchedulerCalendarFilterBar
-              calFilter={calFilter}
-              setCalFilter={setCalFilter}
-              categories={categoryOptions}
-              staffUsers={staffUsers}
-              isMobile={isMobile}
-              filtersOpen={calFiltersOpen}
-              onToggleFilters={() => setCalFiltersOpen((o) => !o)}
-            />
+            {isMobile ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setCalFiltersOpen((o) => !o)}
+                  className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card py-2 text-sm font-semibold text-foreground"
+                >
+                  Φίλτρα
+                  {filterHasActive(calFilter) ? (
+                    <span className="rounded-full bg-[var(--accent-gold)]/20 px-2 py-0.5 text-[10px] font-bold text-[var(--accent-gold)]">
+                      Ενεργά
+                    </span>
+                  ) : null}
+                </button>
+                {calFiltersOpen ? (
+                  <CalendarFilterToolbar
+                    filter={calFilter}
+                    setFilter={setCalFilter}
+                    categories={categoryOptions}
+                    staffUsers={staffUsers}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <CalendarFilterToolbar
+                filter={calFilter}
+                setFilter={setCalFilter}
+                categories={categoryOptions}
+                staffUsers={staffUsers}
+              />
+            )}
           </div>
 
           {viewMode === "kanban" ? (
