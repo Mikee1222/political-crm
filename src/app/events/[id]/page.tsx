@@ -115,7 +115,7 @@ function EventDetail() {
       <Link href="/events" className="text-sm text-[#003476] hover:underline dark:text-[var(--accent-blue-bright)]">
         ← Όλες οι εκδηλώσεις
       </Link>
-      <motion.div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <h1 className={lux.pageTitle}>{String(ev.title)}</h1>
         {(profile?.role === "admin" || profile?.role === "manager") && (
           <button
@@ -127,7 +127,7 @@ function EventDetail() {
             Διαγραφή
           </button>
         )}
-      </motion/div>
+      </div>
       <p className="text-sm text-[var(--text-secondary)]">
         {String(ev.date)} {ev.location ? `· ${String(ev.location)}` : ""} · {String(ev.type)}
       </p>

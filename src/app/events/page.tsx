@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { Calendar as CalendarIcon, MapPin, Plus, Sparkles, Users, CalendarCheck } from "lucide-react";
+import { Calendar as CalendarIcon, MapPin, Plus, Sparkles, Trash2, Users, CalendarCheck } from "lucide-react";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
@@ -131,6 +131,24 @@ function EventsBody() {
     }
   }, []);
 
+  const handleDeleteEvent = async (e: React.MouseEvent, eventId: string) => {
+    e.stopPropagation();
+    if (!confirm("Να διαγραφεί η εκδήλωση;")) return;
+    try {
+      const res = await fetchWithTimeout(`/api/events/${eventId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        showToast(j.error ?? "Αποτυχία διαγραφής.", "error");
+        return;
+      }
+      showToast("Η εκδήλωση διαγράφηκε.", "success");
+      setList((prev) => prev.filter((x) => x.id !== eventId));
+      if (detail?.id === eventId) setDetail(null);
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    }
+  };
+
   const sorted = useMemo(() => {
     return [...list].sort((a, b) => {
       const ta = new Date(a.date).getTime();
@@ -170,15 +188,26 @@ function EventsBody() {
           {sorted.map((e) => {
             const { day, month } = dateParts(e.date);
             return (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => void openDetail(e)}
-                className="group w-full min-w-0 text-left"
-              >
-                <article
-                  className="flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--bg-card)] to-[var(--bg-elevated)]/30 shadow-md transition duration-200 hover:-translate-y-0.5 hover:border-[#C9A84C]/45 hover:shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
+              <div key={e.id} className="group relative w-full min-w-0">
+                {(profile?.role === "admin" || profile?.role === "manager") && (
+                  <button
+                    type="button"
+                    onClick={(ev) => void handleDeleteEvent(ev, e.id)}
+                    className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 text-red-500 opacity-0 transition-opacity hover:bg-red-500/10 group-hover:opacity-100"
+                    title="Διαγραφή"
+                    aria-label="Διαγραφή εκδήλωσης"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void openDetail(e)}
+                  className="w-full min-w-0 text-left"
                 >
+                  <article
+                    className="flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--bg-card)] to-[var(--bg-elevated)]/30 shadow-md transition duration-200 hover:-translate-y-0.5 hover:border-[#C9A84C]/45 hover:shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
+                  >
                   <div className="relative h-36 w-full overflow-hidden border-b border-[var(--border)]/60 bg-gradient-to-br from-[#0A1628] via-[#132a4a] to-[#1e5fa8]/40">
                     <div
                       className="absolute inset-0 opacity-[0.15]"
@@ -220,6 +249,7 @@ function EventsBody() {
                   </div>
                 </article>
               </button>
+              </div>
             );
           })}
         </div>

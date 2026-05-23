@@ -61,6 +61,10 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
     if (!hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }
+    const { error: rsvpErr } = await supabase.from("event_rsvps").delete().eq("event_id", params.id);
+    if (rsvpErr) {
+      return NextResponse.json({ error: rsvpErr.message }, { status: 400 });
+    }
     const { error } = await supabase.from("events_local").delete().eq("id", params.id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

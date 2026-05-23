@@ -109,6 +109,272 @@ function appendQueueFilterParams(params: URLSearchParams, queueFilter: CalFilter
   if (queueFilter.assignedTo) params.set("queue_assigned_to", queueFilter.assignedTo);
 }
 
+const STATUS_FILTER_OPTIONS = ["Νέο", "Σε εξέλιξη", "Ολοκληρώθηκε", "Απορρίφθηκε"] as const;
+
+const PRIORITY_FILTER_OPTIONS = [
+  {
+    value: "Urgent",
+    label: "Επείγον",
+    chipClass: "text-red-500 border-red-500/50 bg-red-500/10",
+    dotClass: "bg-red-500",
+  },
+  {
+    value: "High",
+    label: "Υψηλή",
+    chipClass: "text-orange-500 border-orange-500/50 bg-orange-500/10",
+    dotClass: "bg-orange-500",
+  },
+  {
+    value: "Medium",
+    label: "Μεσαία",
+    chipClass: "text-yellow-600 border-yellow-500/50 bg-yellow-500/10",
+    dotClass: "bg-yellow-500",
+  },
+  {
+    value: "Low",
+    label: "Χαμηλή",
+    chipClass: "text-blue-500 border-blue-400/50 bg-blue-400/10",
+    dotClass: "bg-blue-400",
+  },
+] as const;
+
+function toggleFilterField(current: string, value: string) {
+  return current === value ? "" : value;
+}
+
+function filterHasActive(filter: CalFilter) {
+  return Boolean(filter.q || filter.category || filter.priority || filter.status || filter.assignedTo);
+}
+
+function QueueFiltersPanel({
+  filter,
+  setFilter,
+  categories,
+  staffUsers,
+}: {
+  filter: CalFilter;
+  setFilter: Dispatch<SetStateAction<CalFilter>>;
+  categories: string[];
+  staffUsers: StaffUser[];
+}) {
+  const hasActive = filterHasActive(filter);
+
+  const assignedLabel =
+    staffUsers.find((u) => u.id === filter.assignedTo)?.full_name ??
+    staffUsers.find((u) => u.id === filter.assignedTo)?.email ??
+    null;
+
+  const activeTags: { key: keyof CalFilter; label: string }[] = [];
+  if (filter.q.trim()) activeTags.push({ key: "q", label: `"${filter.q.trim()}"` });
+  if (filter.status) activeTags.push({ key: "status", label: filter.status });
+  if (filter.priority) {
+    const pri = PRIORITY_FILTER_OPTIONS.find((p) => p.value === filter.priority);
+    activeTags.push({ key: "priority", label: pri?.label ?? filter.priority });
+  }
+  if (filter.category) activeTags.push({ key: "category", label: filter.category });
+  if (filter.assignedTo && assignedLabel) {
+    activeTags.push({ key: "assignedTo", label: assignedLabel });
+  }
+
+  return (
+    <motion.div className="mb-4 space-y-2">
+      <div className="relative">
+        <Search
+          className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <input
+          type="text"
+          placeholder="Τίτλος ή τηλέφωνο..."
+          value={filter.q}
+          onChange={(e) => setFilter((p) => ({ ...p, q: e.target.value }))}
+          className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        />
+      </motion.div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {STATUS_FILTER_OPTIONS.map((status) => (
+          <button
+            key={status}
+            type="button"
+            onClick={() => setFilter((p) => ({ ...p, status: toggleFilterField(p.status, status) }))}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              filter.status === status
+                ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_15%,var(--bg-card))] text-foreground"
+                : "border-border bg-background text-muted-foreground hover:border-[var(--accent-gold)]/40 hover:text-foreground",
+            )}
+          >
+            {status}
+          </button>
+        ))}
+      </motion.div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {PRIORITY_FILTER_OPTIONS.map((pri) => (
+          <button
+            key={pri.value}
+            type="button"
+            onClick={() => setFilter((p) => ({ ...p, priority: toggleFilterField(p.priority, pri.value) }))}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+              filter.priority === pri.value
+                ? pri.chipClass
+                : "border-border bg-background text-muted-foreground hover:border-border/80",
+            )}
+          >
+            {pri.label}
+          </button>
+        ))}
+      </motion.div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          value={filter.category}
+          onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
+          className="min-w-0 rounded-xl border border-border bg-background px-2 py-1.5 text-xs focus: string-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+          aria-label="Κατηγορία"
+        >
+          <option value="">Κατηγορία</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filter.assignedTo}
+          onChange={(e) => setFilter((p) => ({ ...p, assignedTo: e.target.value }))}
+          className="min-w-0 rounded-xl border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+          aria-label="Ανάθεση"
+        >
+          <option value="">Ανάθεση</option>
+          {staffUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.full_name || u.email}
+            </option>
+          ))}
+        </select>
+      </motion.div>
+
+      {hasActive ? (
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          {activeTags.map((tag) => (
+            <button
+              key={tag.key}
+              type="button"
+              onClick={() => setFilter((p) => ({ ...p, [tag.key]: "" }))}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              {tag.label}
+              <X className="h-2.5 w-2.5 text-muted-foreground" aria-hidden />
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFilter(EMPTY_CAL_FILTER)}
+            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Καθαρισμός φίλτρων"
+          >
+            <X className="h-3 w-3" aria-hidden />
+            Καθαρισμός
+          </button>
+        </motion.div>
+      ) : null}
+    </motion.div>
+  );
+}
+
+function CalendarFilterToolbar({
+  filter,
+  setFilter,
+  categories,
+  staffUsers,
+}: {
+  filter: CalFilter;
+  setFilter: Dispatch<SetStateAction<CalFilter>>;
+  categories: string[];
+  staffUsers: StaffUser[];
+}) {
+  const hasActive = filterHasActive(filter);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative min-w-[140px] flex-1">
+        <Search
+          className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <input
+          type="text"
+          placeholder="Αναζήτηση..."
+          value={filter.q}
+          onChange={(e) => setFilter((p) => ({ ...p, q: e.target.value }))}
+          className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        />
+      </motion.div>
+
+      <motion.div className="flex items-center gap-1">
+        {PRIORITY_FILTER_OPTIONS.map((pri) => (
+          <button
+            key={pri.value}
+            type="button"
+            onClick={() => setFilter((p) => ({ ...p, priority: toggleFilterField(p.priority, pri.value) }))}
+            aria-label={pri.label}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg border transition-colors",
+              filter.priority === pri.value
+                ? cn(pri.chipClass, "ring-1 ring-offset-1 ring-offset-background")
+                : "border-border bg-background hover:bg-muted/50",
+            )}
+          >
+            <span className={cn("h-3 w-3 rounded-full", pri.dotClass)} aria-hidden />
+          </button>
+        ))}
+      </motion.div>
+
+      <select
+        value={filter.category}
+        onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
+        className="max-w-36 min  min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        aria-label="Κατηγορία"
+      >
+        <option value="">Κατηγορία</option>
+        {categories.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+
+      <select
+        value={filter.assignedTo}
+        onChange={(e) => setFilter((p) => ({ ...p, assignedTo: e.target.value }))}
+        className="max-w-36 min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        aria-label="Υπάλληλος"
+      >
+        <option value="">Υπάλληλος</option>
+        {staffUsers.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.full_name || u.email}
+          </option>
+        ))}
+      </select>
+
+      {hasActive ? (
+        <button
+          type="button"
+          onClick={() => setFilter(EMPTY_CAL_FILTER)}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded  rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Καθαρισμός φίλτρων"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      ) : null}
+    </motion.div>
+  );
+}
+
 function SchedulerFiltersPanel({
   filter,
   setFilter,
