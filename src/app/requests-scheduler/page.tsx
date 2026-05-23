@@ -53,6 +53,7 @@ import { lux, priorityPill } from "@/lib/luxury-styles";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
@@ -229,32 +230,27 @@ function QueueFiltersPanel({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <select
+        <SearchableSelect
+          className="min-w-0 text-xs"
           value={filter.category}
-          onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
-          className="min-w-0 rounded-xl border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+          onChange={(v) => setFilter((p) => ({ ...p, category: v }))}
+          placeholder="Κατηγορία"
+          searchPlaceholder="Αναζήτηση..."
           aria-label="Κατηγορία"
-        >
-          <option value="">Κατηγορία</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <select
+          options={categories.map((c) => ({ value: c, label: c }))}
+        />
+        <SearchableSelect
+          className="min-w-0 text-xs"
           value={filter.assignedTo}
-          onChange={(e) => setFilter((p) => ({ ...p, assignedTo: e.target.value }))}
-          className="min-w-0 rounded-xl border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+          onChange={(v) => setFilter((p) => ({ ...p, assignedTo: v }))}
+          placeholder="Ανάθεση"
+          searchPlaceholder="Αναζήτηση..."
           aria-label="Ανάθεση"
-        >
-          <option value="">Ανάθεση</option>
-          {staffUsers.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.full_name || u.email}
-            </option>
-          ))}
-        </select>
+          options={staffUsers.map((u) => ({
+            value: u.id,
+            label: u.full_name || u.email || u.id,
+          }))}
+        />
       </div>
 
       {hasActive ? (
@@ -333,33 +329,28 @@ function CalendarFilterToolbar({
         ))}
       </div>
 
-      <select
+      <SearchableSelect
+        className="max-w-36 min-w-0 text-xs"
         value={filter.category}
-        onChange={(e) => setFilter((p) => ({ ...p, category: e.target.value }))}
-        className="max-w-36 min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        onChange={(v) => setFilter((p) => ({ ...p, category: v }))}
+        placeholder="Κατηγορία"
+        searchPlaceholder="Αναζήτηση..."
         aria-label="Κατηγορία"
-      >
-        <option value="">Κατηγορία</option>
-        {categories.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
+        options={categories.map((c) => ({ value: c, label: c }))}
+      />
 
-      <select
+      <SearchableSelect
+        className="max-w-36 min-w-0 text-xs"
         value={filter.assignedTo}
-        onChange={(e) => setFilter((p) => ({ ...p, assignedTo: e.target.value }))}
-        className="max-w-36 min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
+        onChange={(v) => setFilter((p) => ({ ...p, assignedTo: v }))}
+        placeholder="Υπάλληλος"
+        searchPlaceholder="Αναζήτηση..."
         aria-label="Υπάλληλος"
-      >
-        <option value="">Υπάλληλος</option>
-        {staffUsers.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.full_name || u.email}
-          </option>
-        ))}
-      </select>
+        options={staffUsers.map((u) => ({
+          value: u.id,
+          label: u.full_name || u.email || u.id,
+        }))}
+      />
 
       {hasActive ? (
         <button

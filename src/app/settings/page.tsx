@@ -25,6 +25,7 @@ import { WhatsappSettingsSection } from "@/components/settings/whatsapp-settings
 import { CampaignTypesSettingsSection } from "@/components/settings/campaign-types-section";
 import { RetellAgentsSettingsSection } from "@/components/settings/retell-agents-section";
 import { AccessCodeSecuritySection } from "@/components/settings/access-code-section";
+import { GroupCategoriesSettings } from "@/components/settings/group-categories-settings";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { EventCategoryRow } from "@/lib/event-categories";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
@@ -332,6 +333,12 @@ export default function SettingsPage() {
       {isAdmin && <EventCategoriesSection />}
 
       {isAdmin && <GroupsSection />}
+
+      {isAdmin && (
+        <section className={lux.card}>
+          <GroupCategoriesSettings />
+        </section>
+      )}
 
       {isAdmin && <TagsSection />}
 

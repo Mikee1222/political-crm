@@ -5,6 +5,7 @@ import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
 import type { RequestCategoryRow } from "@/lib/request-categories";
@@ -214,32 +215,33 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
               <label className={lux.label} htmlFor="nr-cat">
                 Κατηγορία
               </label>
-              <HqSelect id="nr-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
-                {categories.length === 0
-                  ? ["Άλλο", "Υγεία", "Εκπαίδευση", "Δημόσια υπηρεσία", "Υποδομές"].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))
-                  : categories.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-              </HqSelect>
+              <SearchableSelect
+                id="nr-cat"
+                value={category}
+                onChange={setCategory}
+                placeholder="Επιλέξτε κατηγορία"
+                options={
+                  categories.length === 0
+                    ? ["Άλλο", "Υγεία", "Εκπαίδευση", "Δημόσια υπηρεσία", "Υποδομές"].map((n) => ({
+                        value: n,
+                        label: n,
+                      }))
+                    : categories.map((c) => ({ value: c.name, label: c.name }))
+                }
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className={lux.label} htmlFor="nr-st">
                   Κατάσταση
                 </label>
-                <HqSelect id="nr-st" value={status} onChange={(e) => setStatus(e.target.value as (typeof STATUSES)[number])}>
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </HqSelect>
+                <SearchableSelect
+                  id="nr-st"
+                  value={status}
+                  onChange={(v) => setStatus(v as (typeof STATUSES)[number])}
+                  placeholder="Κατάσταση"
+                  options={STATUSES.map((s) => ({ value: s, label: s }))}
+                />
               </div>
               <div>
                 <label className={lux.label} htmlFor="nr-pri">
@@ -311,14 +313,16 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
               <label className={lux.label} htmlFor="nr-asg">
                 Ανατέθηκε σε
               </label>
-              <HqSelect id="nr-asg" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
-                <option value="">—</option>
-                {staffUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.full_name || u.email} ({u.role})
-                  </option>
-                ))}
-              </HqSelect>
+              <SearchableSelect
+                id="nr-asg"
+                value={assignedTo}
+                onChange={setAssignedTo}
+                placeholder="—"
+                options={staffUsers.map((u) => ({
+                  value: u.id,
+                  label: `${u.full_name || u.email} (${u.role})`,
+                }))}
+              />
             </div>
           </div>
 

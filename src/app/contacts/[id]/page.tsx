@@ -17,7 +17,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
@@ -30,6 +30,7 @@ import { ContactElectoralLocationEdit } from "@/components/contact-electoral-loc
 import { ContactExtraSections } from "@/components/contact-extra-sections";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
@@ -527,6 +528,22 @@ function ContactDetailPage() {
       ac.abort();
     };
   }, []);
+
+  const groupSearchOptions = useMemo(
+    () =>
+      groupOptions.map((g) => ({
+        value: g.id,
+        label: g.year != null ? `${g.name} (${g.year})` : g.name,
+        color: g.color,
+        group: g.category ?? "Άλλο",
+      })),
+    [groupOptions],
+  );
+
+  const callStatusSearchOptions = useMemo(
+    () => CALL_OPTS.map((o) => ({ value: o.value, label: o.label })),
+    [],
+  );
 
   useEffect(() => {
     if (!canManage || !id || !historyOpen) {
@@ -1236,24 +1253,19 @@ function ContactDetailPage() {
                 {canManage && editing === "electoral" && w ? (
                   <div className="fieldGap sm:col-span-2">
                     <span className={lbl}>Ομάδα</span>
-                    <HqSelect
+                    <SearchableSelect
                       className={inputSm + " !pr-9"}
                       value={w.group_id ?? ""}
-                      onChange={(e) =>
+                      onChange={(v) =>
                         setBuf({
                           ...w,
-                          group_id: e.target.value || null,
+                          group_id: v || null,
                         } as Contact)
                       }
-                    >
-                      <option value="">— Χωρίς ομάδα —</option>
-                      {groupOptions.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}
-                          {g.year != null ? ` (${g.year})` : ""}
-                        </option>
-                      ))}
-                    </HqSelect>
+                      options={groupSearchOptions}
+                      placeholder="— Χωρίς ομάδα —"
+                      searchPlaceholder="Αναζήτηση ομάδας..."
+                    />
                   </div>
                 ) : null}
                 {!(canManage && editing === "electoral" && w) ? (
@@ -1341,13 +1353,13 @@ function ContactDetailPage() {
                 <div className={fieldGap}>
                   <span className={lbl}>Κατάσταση κλήσης</span>
                   {canManage && editing === "electoral" && w ? (
-                    <HqSelect className={inputSm + " !pr-9"} value={w.call_status ?? "Pending"} onChange={(e) => setBuf({ ...w, call_status: e.target.value })}>
-                      {CALL_OPTS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </HqSelect>
+                    <SearchableSelect
+                      className={inputSm + " !pr-9"}
+                      value={w.call_status ?? "Pending"}
+                      onChange={(v) => setBuf({ ...w, call_status: v })}
+                      options={callStatusSearchOptions}
+                      placeholder="Κατάσταση κλήσης"
+                    />
                   ) : (
                     <p className={val}>{callStatusLabel(c.call_status)}</p>
                   )}

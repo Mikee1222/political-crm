@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
@@ -361,36 +362,32 @@ export default function RequestsPage() {
             <label className={lux.label} htmlFor="r-st">
               Κατάσταση
             </label>
-            <HqSelect
+            <SearchableSelect
               id="r-st"
               className="hq-input-elevated"
               value={f.status}
-              onChange={(e) => patch({ status: e.target.value })}
-            >
-              <option value="">Όλες οι καταστάσεις</option>
-              <option value="Νέο">Νέο</option>
-              <option value="Σε εξέλιξη">Σε εξέλιξη</option>
-              <option value="Ολοκληρώθηκε">Ολοκληρώθηκε</option>
-              <option value="Απορρίφθηκε">Απορρίφθηκε</option>
-            </HqSelect>
+              onChange={(v) => patch({ status: v })}
+              placeholder="Όλες οι καταστάσεις"
+              options={[
+                { value: "Νέο", label: "Νέο" },
+                { value: "Σε εξέλιξη", label: "Σε εξέλιξη" },
+                { value: "Ολοκληρώθηκε", label: "Ολοκληρώθηκε" },
+                { value: "Απορρίφθηκε", label: "Απορρίφθηκε" },
+              ]}
+            />
           </div>
           <div>
             <label className={lux.label} htmlFor="r-cat">
               Κατηγορία
             </label>
-            <HqSelect
+            <SearchableSelect
               id="r-cat"
               className="hq-input-elevated"
               value={f.category}
-              onChange={(e) => patch({ category: e.target.value })}
-            >
-              <option value="">Όλες οι κατηγορίες</option>
-              {categoryOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </HqSelect>
+              onChange={(v) => patch({ category: v })}
+              placeholder="Όλες οι κατηγορίες"
+              options={categoryOptions.map((c) => ({ value: c, label: c }))}
+            />
           </div>
           <div>
             <label className={lux.label} htmlFor="r-priority">
@@ -430,19 +427,16 @@ export default function RequestsPage() {
             <label className={lux.label} htmlFor="r-assigned">
               Ανάθεση
             </label>
-            <HqSelect
+            <SearchableSelect
               id="r-assigned"
               className="hq-input-elevated"
               value={f.assigned}
-              onChange={(e) => patch({ assigned: e.target.value })}
-            >
-              <option value="">Όλα</option>
-              {assignees.map((a) => (
-                <option key={a.id} value={a.full_name ?? ""}>
-                  {a.full_name}
-                </option>
-              ))}
-            </HqSelect>
+              onChange={(v) => patch({ assigned: v })}
+              placeholder="Όλα"
+              options={assignees
+                .filter((a) => a.full_name)
+                .map((a) => ({ value: a.full_name!, label: a.full_name! }))}
+            />
           </div>
         </div>
       </div>

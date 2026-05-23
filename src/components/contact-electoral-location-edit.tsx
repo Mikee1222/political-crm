@@ -9,6 +9,7 @@ import {
 } from "@/lib/aitoloakarnania-data";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
 import type { ElectoralDistrictRow } from "@/app/api/geo/electoral-districts/route";
 import type { ToponymRow } from "@/app/api/geo/toponyms/route";
@@ -135,24 +136,20 @@ export function ContactElectoralLocationEdit({
     <div className="col-span-1 flex w-full min-w-0 flex-col gap-3 sm:col-span-2">
       <div className="flex flex-col gap-2">
         <span className={labelClassName}>Δήμος</span>
-        <HqSelect
+        <SearchableSelect
           className={inputClassName + " !pr-9"}
           value={muni}
-          onChange={(e) =>
+          onChange={(v) =>
             patch({
-              municipality: e.target.value || null,
+              municipality: v || null,
               electoral_district: null,
               toponym: null,
             })
           }
-        >
-          <option value="">Επιλέξτε δήμο</option>
-          {municipalityOptions.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </HqSelect>
+          options={municipalityOptions.map((name) => ({ value: name, label: name }))}
+          placeholder="Επιλέξτε δήμο"
+          searchPlaceholder="Αναζήτηση δήμου..."
+        />
       </div>
 
       <div className="flex flex-col gap-2">

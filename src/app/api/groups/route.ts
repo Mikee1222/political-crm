@@ -2,7 +2,7 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
-import type { ContactGroupRow } from "@/lib/contact-groups";
+import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 export const dynamic = 'force-dynamic';
 
 export type { ContactGroupRow } from "@/lib/contact-groups";
@@ -14,14 +14,14 @@ export async function GET() {
     const { supabase } = crm;
     const { data, error } = await supabase
       .from("contact_groups")
-      .select("id, name, color, year, description, created_at")
-      .order("year", { ascending: false, nullsFirst: false })
+      .select("id, name, color, category, year, description, created_at")
+      .order("category", { ascending: true, nullsFirst: false })
       .order("name", { ascending: true });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const rows = (data ?? []) as ContactGroupRow[];
-    const unique = [...new Map(rows.map((g) => [g.id, g])).values()];
+    const unique = dedupeContactGroupsById(rows);
     return NextResponse.json({ groups: unique });
   } catch (e) {
     console.error("[api/groups GET]", e);
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         year,
         description,
       })
-      .select("id, name, color, year, description, created_at")
+      .select("id, name, color, category, year, description, created_at")
       .single();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

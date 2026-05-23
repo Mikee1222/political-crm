@@ -2,6 +2,7 @@ export type ContactGroupRow = {
   id: string;
   name: string;
   color: string;
+  category: string | null;
   year: number | null;
   description: string | null;
   created_at: string;

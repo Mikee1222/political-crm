@@ -57,6 +57,7 @@ import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
@@ -675,91 +676,6 @@ function ContactSwipeCard({
 
 const CALL_STATUS_OPTS = CONTACT_CALL_STATUS_OPTIONS.map((o) => ({ v: o.value, l: o.label }));
 
-function GroupMultiSelect({
-  id,
-  label,
-  value,
-  groups,
-  onChange,
-  emptyLabel,
-}: {
-  id: string;
-  label: string;
-  value: string[];
-  groups: ContactGroupRow[];
-  onChange: (v: string[]) => void;
-  emptyLabel: string;
-}) {
-  const { triggerRef, panelRef, open, pos, toggle } = usePortalDropdown();
-  const list = useMemo(() => dedupeContactGroupsById(groups), [groups]);
-  const selected = list.filter((g) => value.includes(g.id));
-  const labelText =
-    selected.length === 0
-      ? emptyLabel
-      : selected.length === 1
-        ? selected[0]!.name
-        : `${selected.length} επιλογές`;
-  const toggleGroup = (idG: string) => {
-    if (value.includes(idG)) onChange(value.filter((x) => x !== idG));
-    else onChange([...value, idG]);
-  };
-  return (
-    <div className="relative w-full min-w-0 max-w-full">
-      <span className={lux.label} id={id + "-label"}>
-        {label}
-      </span>
-      <button
-        type="button"
-        id={id}
-        ref={triggerRef as RefObject<HTMLButtonElement>}
-        className={lux.select + " mt-1 flex w-full min-w-0 items-center justify-between gap-2 text-left"}
-        onClick={toggle}
-        aria-expanded={open}
-        aria-labelledby={id + "-label"}
-        aria-haspopup="listbox"
-      >
-        <span className="min-w-0 flex-1 truncate text-left text-[var(--text-primary)]">{labelText}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-      </button>
-      <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} role="listbox">
-        <ul className="m-0 list-none p-0">
-          {list.map((g) => {
-            const on = value.includes(g.id);
-            return (
-              <li key={g.id}>
-                <button
-                  type="button"
-                  className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                  onClick={() => toggleGroup(g.id)}
-                >
-                  <span
-                    className={
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border " +
-                      (on ? "border-[var(--accent-gold)] bg-[var(--accent-gold)]/20" : "border-[var(--border)]")
-                    }
-                    aria-hidden
-                  >
-                    {on ? <Check className="h-3 w-3 text-[var(--accent-gold)]" aria-hidden /> : null}
-                  </span>
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)]"
-                    style={{ background: g.color || "var(--accent-blue)" }}
-                    aria-hidden
-                  />
-                  <span className="min-w-0 flex-1 truncate">
-                    {g.name}
-                    {g.year != null ? <span className="text-[var(--text-muted)]"> ({g.year})</span> : null}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </PortalDropdownPanel>
-    </div>
-  );
-}
-
 function CallStatusMultiSelect({
   value,
   onChange,
@@ -876,6 +792,17 @@ function ContactsPage() {
     for (const g of groups) m.set(g.name.toLowerCase(), g.id);
     return m;
   }, [groups]);
+
+  const groupSelectOptions = useMemo(
+    () =>
+      dedupeContactGroupsById(groups).map((g) => ({
+        value: g.id,
+        label: g.year != null ? `${g.name} (${g.year})` : g.name,
+        color: g.color,
+        group: g.category ?? "Άλλο",
+      })),
+    [groups],
+  );
 
   const patch = useCallback(
     (p: Partial<ContactListFilters>) => {
@@ -1452,28 +1379,36 @@ function ContactsPage() {
             />
           </div>
           <div className="min-w-0 max-w-full sm:col-span-2">
-            <GroupMultiSelect
+            <label className={lux.label} htmlFor="f-groups">
+              Ομάδα
+            </label>
+            <SearchableSelect
               id="f-groups"
-              label="Ομάδα"
-              value={f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : []}
-              groups={groups}
-              onChange={(ids) => {
+              className="mt-1 hq-input-elevated"
+              options={groupSelectOptions}
+              value={f.group_id || f.group_ids[0] || ""}
+              onChange={(v) =>
                 patch({
-                  group_ids: ids,
-                  group_id: "",
-                });
-              }}
-              emptyLabel="Όλες οι ομάδες"
+                  group_id: v,
+                  group_ids: [],
+                })
+              }
+              placeholder="Όλες οι ομάδες"
+              searchPlaceholder="Αναζήτηση ομάδας..."
             />
           </div>
           <div className="min-w-0 max-w-full sm:col-span-2">
-            <GroupMultiSelect
+            <label className={lux.label} htmlFor="f-groups-ex">
+              Εξαίρεση ομάδας
+            </label>
+            <SearchableSelect
               id="f-groups-ex"
-              label="Εξαίρεση ομάδας"
-              value={f.exclude_group_ids}
-              groups={groups}
-              onChange={(ids) => patch({ exclude_group_ids: ids })}
-              emptyLabel="Χωρίς εξαίρεση"
+              className="mt-1 hq-input-elevated"
+              options={groupSelectOptions}
+              value={f.exclude_group_ids[0] ?? ""}
+              onChange={(v) => patch({ exclude_group_ids: v ? [v] : [] })}
+              placeholder="Χωρίς εξαίρεση"
+              searchPlaceholder="Αναζήτηση ομάδας..."
             />
           </div>
           <div className="min-w-0 max-w-full">
