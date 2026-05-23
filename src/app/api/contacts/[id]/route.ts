@@ -32,7 +32,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   const { data: contact, error } = await supabase
     .from("contacts")
-    .select("*, contact_groups ( id, name, color, description, year )")
+    .select("*, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )")
     .eq("id", params.id)
     .single();
   if (error) {

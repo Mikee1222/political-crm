@@ -181,7 +181,7 @@ export function buildContactsQueryFromListFilters(
 }
 
 const CONTACT_LIST_SELECT =
-  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, contact_groups ( id, name, color, description, year )";
+  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )";
 
 /** Same filtering semantics as GET /api/contacts (fuzzy when search is set), capped. */
 export async function queryContactsList(

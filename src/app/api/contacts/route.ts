@@ -14,7 +14,7 @@ import { applyContactListFiltersToBuilder } from "@/lib/contacts-query";
 export const dynamic = "force-dynamic";
 
 const SELECT_LIST =
-  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, contact_groups ( id, name, color, description, year )";
+  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QueryBuilder = any;
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     const { supabase } = crm;
 
     const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
+    console.log("contacts query filters:", JSON.stringify(f));
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;
     const listLimit = Number.isFinite(parsedLimit) ? Math.min(10_000, Math.max(1, parsedLimit)) : null;
