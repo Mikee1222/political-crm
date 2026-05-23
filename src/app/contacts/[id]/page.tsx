@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Clipboard,
   Gift,
+  Maximize2,
+  Minimize2,
   Pencil,
   Phone,
   Plus,
@@ -35,6 +37,7 @@ import type { ContactGroupRow } from "@/lib/contact-groups";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
+import { cn } from "@/lib/utils";
 
 const card =
   "contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm";
@@ -364,6 +367,7 @@ function ContactDetailPage() {
     }[]
   >([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const alexPage = useOptionalAlexandraPageContact();
   const aliveRef = useRef(true);
   useEffect(() => {
@@ -609,6 +613,21 @@ function ContactDetailPage() {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (!focusMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusMode(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [focusMode]);
+
+  useEffect(() => {
+    if (focusMode) document.body.classList.add("focus-mode");
+    else document.body.classList.remove("focus-mode");
+    return () => document.body.classList.remove("focus-mode");
+  }, [focusMode]);
+
   const c = contact;
   const w = buf ?? c;
 
@@ -814,6 +833,34 @@ function ContactDetailPage() {
   };
 
   return (
+    <div className={cn(focusMode && "fixed inset-0 z-[200] bg-background overflow-y-auto")}>
+      {focusMode && c ? (
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-xs font-bold text-white">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-foreground">{headNameLine}</p>
+              {c.contact_code ? (
+                <p className="truncate font-mono text-xs text-muted-foreground">{c.contact_code}</p>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden text-xs text-muted-foreground sm:inline">ESC για έξοδο</span>
+            <button
+              type="button"
+              onClick={() => setFocusMode(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted"
+              aria-label="Έξοδος από λειτουργία εστίασης"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div className={cn(focusMode && "max-w-6xl mx-auto px-6 py-4")}>
     <div className="min-h-full -m-6 bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8">
       <Link
         href="/contacts"
@@ -932,6 +979,14 @@ function ContactDetailPage() {
                   <Clipboard className="h-3.5 w-3.5" />
                   {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setFocusMode((f) => !f)}
+                  title={focusMode ? "Έξοδος εστίασης (ESC)" : "Λειτουργία εστίασης"}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-border transition-colors hover:bg-muted"
+                >
+                  {focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </button>
               </div>
             ) : (
               <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -979,6 +1034,14 @@ function ContactDetailPage() {
                 >
                   <Clipboard className="h-3.5 w-3.5" />
                   {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFocusMode((f) => !f)}
+                  title={focusMode ? "Έξοδος εστίασης (ESC)" : "Λειτουργία εστίασης"}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-border transition-colors hover:bg-muted"
+                >
+                  {focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
                 <p className="w-full text-right text-[10px] text-[var(--text-muted)] sm:hidden">Retell: εξερχόμενη κλήση</p>
                 <p className="hidden w-full text-right text-[10px] text-[var(--text-muted)] sm:block">Retell: εξερχόμενη κλήση (Outbound)</p>
@@ -2068,6 +2131,8 @@ function ContactDetailPage() {
             ) : null}
           </p>
         ) : null}
+      </div>
+    </div>
       </div>
     </div>
   );
