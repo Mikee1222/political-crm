@@ -6,6 +6,7 @@ import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
 import { sendWhatsAppMessage, isWhatsAppConfigured } from "@/lib/whatsapp";
+import { upsertContactGroupMemberships } from "@/lib/contact-group-members";
 export const dynamic = 'force-dynamic';
 const schema = z.object({
   contact_ids: z.array(z.string()).min(1),
@@ -52,6 +53,15 @@ export async function POST(request: NextRequest) {
       if (ge || !g) return NextResponse.json({ error: "Η ομάδα δεν βρέθηκε" }, { status: 400 });
     }
     const patch: Record<string, string | null> = { [f]: f === "group_id" && !v ? null : v };
+    if (f === "group_id") {
+      try {
+        await upsertContactGroupMemberships(supabase, contact_ids, v || null);
+      } catch (memberErr) {
+        console.error("[api/contacts/bulk-action] contact_group_members", memberErr);
+        return NextResponse.json({ error: "Αποτυχία ενημέρωσης ομάδας" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, updated: contact_ids.length });
+    }
     const { error } = await supabase.from("contacts").update(patch).in("id", contact_ids);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, updated: contact_ids.length });

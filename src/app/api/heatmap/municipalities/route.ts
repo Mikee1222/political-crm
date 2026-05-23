@@ -5,6 +5,9 @@ import { hasMinRole } from "@/lib/roles";
 import { MUNI_CENTROIDS, findCanonicalMuni, KNOWN_MUNICIPALITY_NAMES } from "@/lib/aitoloakarnania-map-centroids";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { nextJsonError } from "@/lib/api-resilience";
+import { resolveGroupFilterContactIds } from "@/lib/contact-group-members";
+import { getDefaultContactFilters } from "@/lib/contacts-filters";
+import type { SupabaseClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 
 type Mode = "contacts" | "positive" | "negative";
@@ -51,6 +54,37 @@ function pasokParty(p: string) {
   return t.includes("πασοκ") || t.includes("pasok") || t.includes("πα.σο.κ");
 }
 
+async function loadHeatmapContactRows(supabase: SupabaseClient, searchParams: URLSearchParams) {
+  const group_id = searchParams.get("group_id")?.trim() || "";
+  const group_ids = (searchParams.get("group_ids") ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const f = getDefaultContactFilters();
+  if (group_ids.length) f.group_ids = group_ids;
+  else if (group_id) f.group_id = group_id;
+
+  const groupResolution =
+    f.group_id || f.group_ids.length ? await resolveGroupFilterContactIds(supabase, f) : null;
+
+  let query = supabase.from("contacts").select("id, municipality, call_status");
+  if (groupResolution) {
+    if (groupResolution.includeContactIds !== null) {
+      if (!groupResolution.includeContactIds.length) {
+        return [] as { id: string; municipality: string | null; call_status: string | null }[];
+      }
+      query = query.in("id", groupResolution.includeContactIds);
+    }
+    if (groupResolution.excludeContactIds.length) {
+      query = query.not("id", "in", `(${groupResolution.excludeContactIds.join(",")})`);
+    }
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as { id: string; municipality: string | null; call_status: string | null }[];
+}
+
 export async function GET(request: NextRequest) {
   try {
   const crm = await checkCRMAccess();
@@ -65,11 +99,7 @@ export async function GET(request: NextRequest) {
   const elecYear = Number.isFinite(yearQ) ? yearQ : 2023;
 
   if (view === "electoral" || view === "compare") {
-    const { data: cdata, error: cErr } = await supabase.from("contacts").select("municipality, call_status");
-    if (cErr) {
-      return NextResponse.json({ error: cErr.message }, { status: 400 });
-    }
-    const crows = (cdata ?? []) as { municipality: string | null; call_status: string | null }[];
+    const crows = await loadHeatmapContactRows(supabase, request.nextUrl.searchParams);
     const { data: edata, error: eErr } = await supabase
       .from("electoral_results")
       .select("municipality, party, percentage, votes")
@@ -201,11 +231,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Άκυρο mode" }, { status: 400 });
   }
 
-  const { data, error } = await supabase.from("contacts").select("municipality, call_status");
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  let rows: { id: string; municipality: string | null; call_status: string | null }[];
+  try {
+    rows = await loadHeatmapContactRows(supabase, request.nextUrl.searchParams);
+  } catch (loadErr) {
+    const msg = loadErr instanceof Error ? loadErr.message : "Σφάλμα φόρτωσης";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
-  const rows = (data ?? []) as { municipality: string | null; call_status: string | null }[];
 
   const agg = new Map<
     string,

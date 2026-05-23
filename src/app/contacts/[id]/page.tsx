@@ -132,6 +132,7 @@ type Contact = {
   volunteer_since?: string | null;
   language?: string | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
+  all_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year">[];
 };
 
 type SupporterRow = {
@@ -350,6 +351,7 @@ function ContactDetailPage() {
   const [openTask, setOpenTask] = useState(false);
   const [headerCopied, setHeaderCopied] = useState(false);
   const [groupOptions, setGroupOptions] = useState<ContactGroupRow[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [supporters, setSupporters] = useState<SupporterRow[]>([]);
   const [newSup, setNewSup] = useState({ support_type: "Οικονομική", amount: "", date: "", notes: "" });
   const [contactNotes, setContactNotes] = useState<ContactNoteItem[]>([]);
@@ -472,9 +474,16 @@ function ContactDetailPage() {
           if (raw) {
             const g = raw.contact_groups;
             const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+            const all_groups =
+              raw.all_groups?.length
+                ? raw.all_groups
+                : contact_groups
+                  ? [contact_groups]
+                  : [];
             setContact({
               ...raw,
               contact_groups,
+              all_groups,
               group_id: raw.group_id ?? null,
               phone2: raw.phone2 ?? null,
               landline: raw.landline ?? null,
@@ -658,10 +667,15 @@ function ContactDetailPage() {
   const startEdit = (s: Exclude<Section, null>) => {
     if (!c || !canManage) return;
     setBuf({ ...c });
+    if (s === "electoral") {
+      const ids = (c.all_groups ?? []).map((g) => g.id);
+      setSelectedGroupIds(ids.length ? ids : c.group_id ? [c.group_id] : []);
+    }
     setEditing(s);
   };
   const cancelEdit = () => {
     setBuf(null);
+    setSelectedGroupIds([]);
     setEditing(null);
   };
 
@@ -716,7 +730,7 @@ function ContactDetailPage() {
         priority: buf.priority,
         call_status: buf.call_status,
         influence: buf.influence,
-        group_id: buf.group_id,
+        group_ids: selectedGroupIds,
         is_volunteer: buf.is_volunteer,
         volunteer_role: buf.volunteer_role,
         volunteer_area: buf.volunteer_area,
@@ -1165,7 +1179,7 @@ function ContactDetailPage() {
                       ) : (
                         <input
                           className={inputSm}
-                          value={String((w as Record<string, string | null>)[row.k] ?? "")}
+                          value={String((w as unknown as Record<string, string | null>)[row.k] ?? "")}
                           onChange={(e) =>
                             setBuf({ ...w!, [row.k]: e.target.value || null } as Contact)
                           }
@@ -1340,20 +1354,43 @@ function ContactDetailPage() {
                 ) : null}
                 {canManage && editing === "electoral" && w ? (
                   <div className="fieldGap sm:col-span-2">
-                    <span className={lbl}>Ομάδα</span>
-                    <SearchableSelect
-                      className={inputSm + " !pr-9"}
-                      value={w.group_id ?? ""}
-                      onChange={(v) =>
-                        setBuf({
-                          ...w,
-                          group_id: v || null,
-                        } as Contact)
-                      }
-                      options={groupSearchOptions}
-                      placeholder="— Χωρίς ομάδα —"
-                      searchPlaceholder="Αναζήτηση ομάδας..."
-                    />
+                    <span className={lbl}>Ομάδες</span>
+                    <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-2">
+                      {groupOptions.length === 0 ? (
+                        <p className="text-xs text-[var(--text-muted)]">Φόρτωση ομάδων…</p>
+                      ) : (
+                        groupOptions.map((g) => {
+                          const checked = selectedGroupIds.includes(g.id);
+                          return (
+                            <label
+                              key={g.id}
+                              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--bg-card)]"
+                            >
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-[var(--border)]"
+                                checked={checked}
+                                onChange={(e) => {
+                                  setSelectedGroupIds((prev) =>
+                                    e.target.checked ? [...prev, g.id] : prev.filter((id) => id !== g.id),
+                                  );
+                                }}
+                              />
+                              <span
+                                className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
+                                style={{
+                                  borderColor: g.color || "#003476",
+                                  color: g.color || "#003476",
+                                }}
+                              >
+                                {g.name}
+                                {g.year != null ? ` · ${g.year}` : ""}
+                              </span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 ) : null}
                 {!(canManage && editing === "electoral" && w) ? (
@@ -1372,29 +1409,25 @@ function ContactDetailPage() {
                       );
                     })}
                     <div className="fieldGap sm:col-span-2">
-                      <span className={lbl}>Ομάδα</span>
-                      {c.contact_groups ? (
-                        <p className="flex flex-wrap items-center gap-1.5">
-                          <span
-                            className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
-                            style={{
-                              borderColor: c.contact_groups.color || "#003476",
-                              color: c.contact_groups.color || "#003476",
-                              background: "var(--bg-elevated)",
-                            }}
-                          >
-                            {c.contact_groups.name}
-                            {c.contact_groups.year != null ? ` · ${c.contact_groups.year}` : ""}
-                          </span>
-                          {c.contact_groups.description ? (
+                      <span className={lbl}>Ομάδες</span>
+                      {c.all_groups && c.all_groups.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {c.all_groups.map((g) => (
                             <span
-                              className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[9px] font-bold text-[var(--text-secondary)]"
-                              title={c.contact_groups.description}
+                              key={g.id}
+                              className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
+                              style={{
+                                borderColor: g.color || "#003476",
+                                color: g.color || "#003476",
+                                background: "var(--bg-elevated)",
+                              }}
+                              title={g.description ?? undefined}
                             >
-                              ?
+                              {g.name}
+                              {g.year != null ? ` · ${g.year}` : ""}
                             </span>
-                          ) : null}
-                        </p>
+                          ))}
+                        </div>
                       ) : (
                         <p className={val}>—</p>
                       )}
@@ -1803,7 +1836,7 @@ function ContactDetailPage() {
                     {canManage && editing === "comm" && w ? (
                       <input
                         className={inputSm}
-                        value={String((w as Record<string, string | null>)[row.k] ?? "")}
+                        value={String((w as unknown as Record<string, string | null>)[row.k] ?? "")}
                         onChange={(e) =>
                           setBuf({ ...w, [row.k]: e.target.value || null } as Contact)
                         }

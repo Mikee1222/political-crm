@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  applyGroupMembershipFiltersToBuilder,
+  type GroupFilterResolution,
+} from "@/lib/contact-group-members";
 import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
@@ -20,7 +24,11 @@ export function contactMatchesLocalSearch(c: ContactForSearch, search: string | 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyContactListFiltersToBuilder(query: any, f: ContactListFilters) {
+export function applyContactListFiltersToBuilder(
+  query: any,
+  f: ContactListFilters,
+  groupResolution?: GroupFilterResolution,
+) {
   const callStatuses = f.call_statuses.length
     ? f.call_statuses
     : f.call_status
@@ -38,14 +46,8 @@ export function applyContactListFiltersToBuilder(query: any, f: ContactListFilte
   if (f.tag) query = query.contains("tags", [f.tag]);
   if (f.political_stance) query = query.eq("political_stance", f.political_stance);
   if (f.phone) query = query.ilike("phone", `%${f.phone}%`);
-  if (f.group_ids.length) {
-    query = query.in("group_id", f.group_ids);
-  } else if (f.group_id) {
-    query = query.eq("group_id", f.group_id);
-  }
-  if (f.exclude_group_ids.length) {
-    const ids = f.exclude_group_ids.join(",");
-    query = query.or(`group_id.is.null,group_id.not.in.(${ids})`);
+  if (groupResolution) {
+    query = applyGroupMembershipFiltersToBuilder(query, groupResolution);
   }
   if (f.age_min) {
     const n = parseInt(f.age_min, 10);
@@ -144,6 +146,7 @@ const EXPORT_FLAT_SELECT =
 
 /**
  * Ίδιο φιλτράρισμα με GET /api/contacts — για export (flat query params) & bulk.
+ * Group filters require async `resolveGroupFilterContactIds` before applyContactListFiltersToBuilder.
  */
 export function buildContactsQuery(
   supabase: SupabaseClient,
@@ -167,17 +170,12 @@ export function buildContactsQuery(
 ) {
   const f = listFiltersFromExportOpts(opts);
   const { search: _search } = f;
-  void _search; /* in-memory fuzzy filter (export) after query */
-  const query = supabase.from("contacts").select(EXPORT_FLAT_SELECT);
-  return applyContactListFiltersToBuilder(query, f);
+  void _search;
+  return supabase.from("contacts").select(EXPORT_FLAT_SELECT);
 }
 
-export function buildContactsQueryFromListFilters(
-  supabase: SupabaseClient,
-  f: ContactListFilters,
-) {
-  const query = supabase.from("contacts").select(EXPORT_FLAT_SELECT);
-  return applyContactListFiltersToBuilder(query, f);
+export function buildContactsQueryFromListFilters(supabase: SupabaseClient, _f: ContactListFilters) {
+  return supabase.from("contacts").select(EXPORT_FLAT_SELECT);
 }
 
 const CONTACT_LIST_SELECT =

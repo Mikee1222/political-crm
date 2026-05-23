@@ -5,13 +5,16 @@ import { hasMinRole } from "@/lib/roles";
 import { hasPermissionFlexible } from "@/lib/permission-check";
 import {
   applyContactListFiltersToBuilder,
-  buildContactsQueryFromListFilters,
   contactMatchesLocalSearch,
 } from "@/lib/contacts-query";
 import { getDefaultContactFilters, searchParamsToFilters } from "@/lib/contacts-filters";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { callStatusLabel } from "@/lib/luxury-styles";
 import { nextJsonError } from "@/lib/api-resilience";
+import {
+  fetchGroupNamesByContactId,
+  resolveGroupFilterContactIds,
+} from "@/lib/contact-group-members";
 
 export const dynamic = "force-dynamic";
 
@@ -69,11 +72,16 @@ export async function GET(request: NextRequest) {
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
-        qn = applyContactListFiltersToBuilder(qn, f);
+        qn = applyContactListFiltersToBuilder(qn, f, await resolveGroupFilterContactIds(supabase, f));
         query = qn;
       }
     } else if (filtered) {
-      query = buildContactsQueryFromListFilters(supabase, f);
+      const groupResolution = await resolveGroupFilterContactIds(supabase, f);
+      query = applyContactListFiltersToBuilder(
+        supabase.from("contacts").select(SELECT_EXPORT),
+        f,
+        groupResolution,
+      );
     } else {
       const canFullExport = await hasPermissionFlexible(user.id, "contacts_export", isManager);
       if (!canFullExport) {
@@ -115,14 +123,10 @@ export async function GET(request: NextRequest) {
       rawRows = rawRows.filter((c) => contactMatchesLocalSearch(c, f.search));
     }
 
-    const groupIds = [...new Set(rawRows.map((r) => r.group_id).filter(Boolean))] as string[];
-    const groupNameById = new Map<string, string>();
-    if (groupIds.length) {
-      const { data: gRows } = await supabase.from("contact_groups").select("id,name").in("id", groupIds);
-      for (const g of gRows ?? []) {
-        groupNameById.set(String((g as { id: string }).id), String((g as { name: string }).name));
-      }
-    }
+    const groupNamesByContact = await fetchGroupNamesByContactId(
+      supabase,
+      rawRows.map((r) => r.id),
+    );
 
     const header = [
       "Κωδικός επαφής",
@@ -169,7 +173,7 @@ export async function GET(request: NextRequest) {
           r.political_stance,
           callStatusLabel(r.call_status),
           priorityGr(r.priority),
-          r.group_id ? groupNameById.get(r.group_id) ?? "" : "",
+          groupNamesByContact.get(r.id)?.join("; ") ?? "",
           tagsCell(r.tags),
           r.notes,
           r.created_at ? new Date(r.created_at).toISOString() : "",

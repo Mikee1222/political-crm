@@ -11,6 +11,12 @@ import { nextPaddedCode } from "@/lib/codes";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
 import { searchParamsToFilters, getDefaultContactFilters } from "@/lib/contacts-filters";
 import { applyContactListFiltersToBuilder } from "@/lib/contacts-query";
+import {
+  enrichContactsWithGroupCounts,
+  insertContactGroupMembershipsAfterCreate,
+  normalizeGroupIdsInput,
+  resolveGroupFilterContactIds,
+} from "@/lib/contact-group-members";
 export const dynamic = "force-dynamic";
 
 const SELECT_LIST =
@@ -34,6 +40,18 @@ function paginateList<T>(rows: T[], page: number, pageSize: number) {
   return { slice: rows.slice(from, from + pageSize), total };
 }
 
+async function enrichContactsWithGroupCount(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  rows: Array<Record<string, unknown>>,
+) {
+  if (!rows.length) return rows;
+  return enrichContactsWithGroupCounts(
+    supabase,
+    rows as { id: string; group_id?: string | null }[],
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
@@ -42,6 +60,7 @@ export async function GET(request: NextRequest) {
 
     const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
     console.log("contacts query filters:", JSON.stringify(f));
+    const groupResolution = await resolveGroupFilterContactIds(supabase, f);
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;
     const listLimit = Number.isFinite(parsedLimit) ? Math.min(10_000, Math.max(1, parsedLimit)) : null;
@@ -65,7 +84,7 @@ export async function GET(request: NextRequest) {
         .select(SELECT_LIST)
         .in("id", ids)
         .order("created_at", { ascending: false });
-      query = applyContactListFiltersToBuilder(query, f);
+      query = applyContactListFiltersToBuilder(query, f, groupResolution);
       if (comboboxMode) {
         query = query.limit(listLimit!);
       } else {
@@ -77,38 +96,43 @@ export async function GET(request: NextRequest) {
       const rows = data ?? [];
       const work = f.search ? afterFilterRows(rows, f.search) : rows;
       if (comboboxMode) {
-        return NextResponse.json({ contacts: work.slice(0, listLimit!) });
+        const enriched = await enrichContactsWithGroupCount(supabase, work.slice(0, listLimit!) as Record<string, unknown>[]);
+        return NextResponse.json({ contacts: enriched });
       }
       const { slice, total } = paginateList(work, page, pageSize);
-      return NextResponse.json({ contacts: slice, total, page, pageSize });
+      const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
+      return NextResponse.json({ contacts: enriched, total, page, pageSize });
     }
 
     if (f.search) {
       let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
-      query = applyContactListFiltersToBuilder(query, f);
+      query = applyContactListFiltersToBuilder(query, f, groupResolution);
       query = query.limit(12_000);
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       const rows = data ?? [];
       const list = afterFilterRows(rows, f.search);
       if (comboboxMode) {
-        return NextResponse.json({ contacts: list.slice(0, listLimit!) });
+        const enriched = await enrichContactsWithGroupCount(supabase, list.slice(0, listLimit!) as Record<string, unknown>[]);
+        return NextResponse.json({ contacts: enriched });
       }
       const { slice, total } = paginateList(list, page, pageSize);
-      return NextResponse.json({ contacts: slice, total, page, pageSize });
+      const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
+      return NextResponse.json({ contacts: enriched, total, page, pageSize });
     }
 
     let query: QueryBuilder = supabase
       .from("contacts")
       .select(SELECT_LIST, { count: "exact" })
       .order("created_at", { ascending: false });
-    query = applyContactListFiltersToBuilder(query, f);
+    query = applyContactListFiltersToBuilder(query, f, groupResolution);
 
     if (comboboxMode) {
       query = query.limit(listLimit!);
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ contacts: data ?? [] });
+      const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
+      return NextResponse.json({ contacts: enriched.slice(0, listLimit!) });
     }
 
     const from = (page - 1) * pageSize;
@@ -116,7 +140,8 @@ export async function GET(request: NextRequest) {
     query = query.range(from, to);
     const { data, error, count } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ contacts: data ?? [], total: count ?? 0, page, pageSize });
+    const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
+    return NextResponse.json({ contacts: enriched, total: count ?? 0, page, pageSize });
   } catch (e) {
     console.error("[api/contacts GET]", e);
     return nextJsonError();
@@ -154,9 +179,29 @@ export async function POST(request: NextRequest) {
       const auto = nameDayDateStringFromFirstName(String(body.first_name));
       if (auto) body.name_day = auto;
     }
+    const groupIds = normalizeGroupIdsInput(body);
+    const primaryGroupId =
+      groupIds !== undefined
+        ? groupIds[0] ?? null
+        : body.group_id != null && String(body.group_id).trim()
+          ? String(body.group_id)
+          : null;
+    delete body.group_ids;
+    if (groupIds !== undefined || "group_id" in body) {
+      body.group_id = primaryGroupId;
+    }
     const { data, error } = await supabase.from("contacts").insert(body).select("*").single();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    try {
+      await insertContactGroupMembershipsAfterCreate(supabase, String(data.id), {
+        group_id: primaryGroupId,
+        group_ids: groupIds,
+      });
+    } catch (memberErr) {
+      console.error("[api/contacts POST] contact_group_members", memberErr);
+      return NextResponse.json({ error: "Η επαφή δημιουργήθηκε αλλά απέτυχε η ανάθεση ομάδων" }, { status: 400 });
     }
     const name = `${String(data.first_name)} ${String(data.last_name)}`.trim();
     await logActivity({

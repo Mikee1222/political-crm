@@ -25,7 +25,10 @@ export async function GET() {
       .maybeSingle();
 
     const positiveCountQuery = posGroup?.id
-      ? supabase.from("contacts").select("id", { count: "exact", head: true }).eq("group_id", posGroup.id)
+      ? supabase
+          .from("contact_group_members")
+          .select("contact_id", { count: "exact", head: true })
+          .eq("group_id", posGroup.id)
       : supabase.from("contacts").select("id", { count: "exact", head: true }).eq("call_status", "Positive");
 
     const [totalR, positiveR, pendingR, monthR] = await Promise.all([

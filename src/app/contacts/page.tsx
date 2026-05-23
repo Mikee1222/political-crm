@@ -85,7 +85,38 @@ type Contact = {
   birthday?: string | null;
   age?: number | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
+  group_count?: number;
 };
+
+function ContactGroupBadge({ c }: { c: Contact }) {
+  const total = c.group_count ?? (c.contact_groups ? 1 : 0);
+  if (!c.contact_groups && total === 0) return null;
+  const extra = total > 1 ? total - 1 : 0;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {c.contact_groups ? (
+        <span
+          className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+          style={{
+            borderColor: c.contact_groups.color || "#003476",
+            color: c.contact_groups.color || "#003476",
+            background: "var(--bg-elevated)",
+          }}
+        >
+          {c.contact_groups.name}
+        </span>
+      ) : null}
+      {extra > 0 ? (
+        <span
+          className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-px text-[10px] font-semibold text-[var(--text-muted)]"
+          title={`${total} ομάδες συνολικά`}
+        >
+          +{extra}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 function ContactAgeInline({ c }: { c: Pick<Contact, "birthday" | "age"> }) {
   const age = getAgeFromBirthday(c.birthday) ?? c.age;
@@ -323,10 +354,10 @@ function ContactDesktopRowCard({
             ) : null}
             <ContactAgeInline c={c} />
           </div>
-          {(c.contact_groups || c.father_name?.trim()) && (
+          {(c.contact_groups || (c.group_count ?? 0) > 0 || c.father_name?.trim()) && (
             <div className="mt-1.5 line-clamp-1 text-[11px] text-[var(--text-muted)]">
-              {c.contact_groups ? <span className="font-medium text-[var(--text-secondary)]">{c.contact_groups.name}</span> : null}
-              {c.contact_groups && c.father_name?.trim() ? <span> · </span> : null}
+              <ContactGroupBadge c={c} />
+              {(c.contact_groups || (c.group_count ?? 0) > 0) && c.father_name?.trim() ? <span> · </span> : null}
               {c.father_name?.trim() ? <span>{c.father_name}</span> : null}
             </div>
           )}
@@ -1837,6 +1868,7 @@ function CreateContactModal({
     tags: "",
     group_id: "",
   });
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<{
@@ -1865,7 +1897,8 @@ function CreateContactModal({
     name_day: form.name_day || null,
     birthday: form.birthday || null,
     call_status: "Pending",
-    group_id: form.group_id || null,
+    group_id: selectedGroupIds[0] ?? null,
+    group_ids: selectedGroupIds,
   });
 
   const postCreate = async () => {
@@ -2045,18 +2078,37 @@ function CreateContactModal({
               />
             </div>
             <div className="md:col-span-2">
-              <label className={lux.label} htmlFor="new-contact-group">
-                Ομάδα
-              </label>
-              <HqSelect id="new-contact-group" value={form.group_id} onChange={(e) => setForm({ ...form, group_id: e.target.value })}>
-                <option value="">— Χωρίς ομάδα —</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                    {g.year != null ? ` (${g.year})` : ""}
-                  </option>
-                ))}
-              </HqSelect>
+              <span className={lux.label}>Ομάδες</span>
+              <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-2">
+                {groups.length === 0 ? (
+                  <p className="text-xs text-[var(--text-muted)]">Φόρτωση ομάδων…</p>
+                ) : (
+                  groups.map((g) => {
+                    const checked = selectedGroupIds.includes(g.id);
+                    return (
+                      <label
+                        key={g.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-[var(--bg-card)]"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-[var(--border)]"
+                          checked={checked}
+                          onChange={(e) => {
+                            setSelectedGroupIds((prev) =>
+                              e.target.checked ? [...prev, g.id] : prev.filter((id) => id !== g.id),
+                            );
+                          }}
+                        />
+                        <span>
+                          {g.name}
+                          {g.year != null ? ` (${g.year})` : ""}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
             <FormField label="Email" value={form.email} placeholder="email@example.com" onChange={(v) => setForm({ ...form, email: v })} />
             <FormField label="Περιοχή" value={form.area} placeholder="Περιοχή / περιφέρεια" onChange={(v) => setForm({ ...form, area: v })} />
