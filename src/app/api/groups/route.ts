@@ -20,7 +20,9 @@ export async function GET() {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    return NextResponse.json({ groups: (data ?? []) as ContactGroupRow[] });
+    const rows = (data ?? []) as ContactGroupRow[];
+    const unique = [...new Map(rows.map((g) => [g.id, g])).values()];
+    return NextResponse.json({ groups: unique });
   } catch (e) {
     console.error("[api/groups GET]", e);
     return nextJsonError();

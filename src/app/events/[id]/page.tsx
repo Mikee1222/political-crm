@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
@@ -10,6 +10,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { HqSelect } from "@/components/ui/hq-select";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { Trash2 } from "lucide-react";
 
 type Rsvp = {
   id: string;
@@ -35,6 +36,7 @@ const rsvpBadge = (s: string) => {
 
 function EventDetail() {
   const { showToast } = useFormToast();
+  const router = useRouter();
   const { id: raw } = useParams();
   const id = typeof raw === "string" ? raw : "";
   const { profile } = useProfile();
@@ -70,6 +72,22 @@ function EventDetail() {
     void load();
   }, [load]);
 
+  const handleDelete = async () => {
+    if (!ev) return;
+    if (!confirm("Να διαγραφεί η εκδήλωση;")) return;
+    try {
+      const res = await fetchWithTimeout(`/api/events/${ev.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        showToast(j.error ?? "Αποτυχία διαγραφής.", "error");
+        return;
+      }
+      router.push("/events");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    }
+  };
+
   const searchC = async () => {
     const r = await fetchWithTimeout(`/api/contacts?search=${encodeURIComponent(q)}&limit=15`);
     const j = (await r.json()) as {
@@ -97,7 +115,19 @@ function EventDetail() {
       <Link href="/events" className="text-sm text-[#003476] hover:underline dark:text-[var(--accent-blue-bright)]">
         ← Όλες οι εκδηλώσεις
       </Link>
-      <h1 className={lux.pageTitle}>{String(ev.title)}</h1>
+      <motion.div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className={lux.pageTitle}>{String(ev.title)}</h1>
+        {(profile?.role === "admin" || profile?.role === "manager") && (
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 text-sm font-medium transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Διαγραφή
+          </button>
+        )}
+      </motion/div>
       <p className="text-sm text-[var(--text-secondary)]">
         {String(ev.date)} {ev.location ? `· ${String(ev.location)}` : ""} · {String(ev.type)}
       </p>

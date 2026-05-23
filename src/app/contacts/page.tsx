@@ -48,7 +48,7 @@ import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-loca
 import { hasMinRole } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { callStatusLabel, lux } from "@/lib/luxury-styles";
-import type { ContactGroupRow } from "@/lib/contact-groups";
+import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
@@ -688,7 +688,8 @@ function GroupMultiSelect({
   emptyLabel: string;
 }) {
   const { triggerRef, panelRef, open, pos, toggle } = usePortalDropdown();
-  const selected = groups.filter((g) => value.includes(g.id));
+  const list = useMemo(() => dedupeContactGroupsById(groups), [groups]);
+  const selected = list.filter((g) => value.includes(g.id));
   const labelText =
     selected.length === 0
       ? emptyLabel
@@ -719,7 +720,7 @@ function GroupMultiSelect({
       </button>
       <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} role="listbox">
         <ul className="m-0 list-none p-0">
-          {groups.map((g) => {
+          {list.map((g) => {
             const on = value.includes(g.id);
             return (
               <li key={g.id}>
