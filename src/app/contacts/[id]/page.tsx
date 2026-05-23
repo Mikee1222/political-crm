@@ -6,19 +6,26 @@ import {
   Bell,
   Building2,
   Cake,
+  CalendarDays,
   Check,
+  ChevronLeft,
   ChevronRight,
   Clipboard,
+  Flag,
   Gift,
+  MapPin,
   Maximize2,
   Minimize2,
   Pencil,
   Phone,
   Plus,
   Sparkles,
+  Trash2,
   User,
   X,
 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { el } from "date-fns/locale";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -131,9 +138,50 @@ type Contact = {
   volunteer_area?: string | null;
   volunteer_since?: string | null;
   language?: string | null;
+  last_contacted_at?: string | null;
+  dimotologio?: string | null;
+  may_not_have_mobile?: boolean | null;
+  may_not_have_landline?: boolean | null;
+  may_not_have_email?: boolean | null;
+  is_dead?: boolean | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
   all_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year">[];
 };
+
+type ContactAddressRow = {
+  id: string;
+  type: string;
+  odos: string | null;
+  poli: string | null;
+  tk: string | null;
+  send_post: boolean | null;
+};
+
+type ContactEventRow = {
+  id: string;
+  title: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  type: string | null;
+  status: string | null;
+  rsvp_status: string | null;
+};
+
+type ContactNavInfo = {
+  prev: string | null;
+  next: string | null;
+  position: number;
+  total: number;
+};
+
+const CONTACT_FLAG_KEYS = [
+  { key: "may_not_have_mobile" as const, label: "Χωρίς κινητό" },
+  { key: "may_not_have_landline" as const, label: "Χωρίς σταθερό" },
+  { key: "may_not_have_email" as const, label: "Χωρίς email" },
+  { key: "is_dead" as const, label: "Απεβίωσε" },
+];
 
 type SupporterRow = {
   id: string;
@@ -371,8 +419,27 @@ function ContactDetailPage() {
   >([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [addresses, setAddresses] = useState<ContactAddressRow[]>([]);
+  const [showAddAddress, setShowAddAddress] = useState(false);
+  const [newAddress, setNewAddress] = useState({
+    type: "Οικία",
+    odos: "",
+    poli: "",
+    tk: "",
+    send_post: false,
+  });
+  const [navInfo, setNavInfo] = useState<ContactNavInfo | null>(null);
+  const [contactEvents, setContactEvents] = useState<ContactEventRow[]>([]);
+  const [calendarYearsBack, setCalendarYearsBack] = useState(0);
+  const [calendarYearsForward, setCalendarYearsForward] = useState(1);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const alexPage = useOptionalAlexandraPageContact();
   const aliveRef = useRef(true);
+
+  const contactDetailHref = useCallback(
+    (targetId: string) => (focusMode ? `/contacts/${targetId}?focus=1` : `/contacts/${targetId}`),
+    [focusMode],
+  );
 
   const applyFocusModeDom = useCallback((val: boolean) => {
     if (val) document.body.classList.add("focus-mode");
@@ -653,6 +720,79 @@ function ContactDetailPage() {
   }, []);
 
   useEffect(() => {
+    if (!id) return;
+    const ac = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/addresses`, {
+          signal: ac.signal,
+        });
+        if (!res.ok) return;
+        const d = (await res.json()) as { addresses?: ContactAddressRow[] };
+        if (!ac.signal.aborted) setAddresses(d.addresses ?? []);
+      } catch {
+        if (!ac.signal.aborted) setAddresses([]);
+      }
+    })();
+    return () => ac.abort();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const stored = sessionStorage.getItem("contacts_nav");
+      if (!stored) {
+        setNavInfo(null);
+        return;
+      }
+      const nav = JSON.parse(stored) as { ids?: string[] };
+      const ids = nav.ids ?? [];
+      const idx = ids.indexOf(id);
+      if (idx === -1) {
+        setNavInfo(null);
+        return;
+      }
+      setNavInfo({
+        prev: ids[idx - 1] ?? null,
+        next: ids[idx + 1] ?? null,
+        position: idx + 1,
+        total: ids.length,
+      });
+    } catch {
+      setNavInfo(null);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const ac = new AbortController();
+    setEventsLoading(true);
+    void (async () => {
+      try {
+        const q = new URLSearchParams({
+          years_back: String(calendarYearsBack),
+          years_forward: String(calendarYearsForward),
+        });
+        const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/events?${q}`, {
+          signal: ac.signal,
+        });
+        if (ac.signal.aborted) return;
+        if (!res.ok) {
+          setContactEvents([]);
+          return;
+        }
+        const d = (await res.json()) as { events?: ContactEventRow[] };
+        if (!ac.signal.aborted) setContactEvents(d.events ?? []);
+      } catch {
+        if (!ac.signal.aborted) setContactEvents([]);
+      } finally {
+        if (!ac.signal.aborted) setEventsLoading(false);
+      }
+    })();
+    return () => ac.abort();
+  }, [id, calendarYearsBack, calendarYearsForward]);
+
+  useEffect(() => {
     if (!focusMode) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleSetFocusMode(false);
@@ -735,6 +875,7 @@ function ContactDetailPage() {
         volunteer_role: buf.volunteer_role,
         volunteer_area: buf.volunteer_area,
         volunteer_since: buf.volunteer_since,
+        dimotologio: buf.dimotologio,
       });
     } else if (s === "comm") {
       await patch({ phone: buf.phone, phone2: buf.phone2, landline: buf.landline, email: buf.email, area: buf.area });
@@ -803,6 +944,89 @@ function ContactDetailPage() {
       body: JSON.stringify({ completed: !task.completed }),
     });
     await load();
+  };
+
+  const handleAddAddress = async () => {
+    if (!id || !canManage) return;
+    try {
+      const res = await fetchWithTimeout(`/api/contacts/${id}/addresses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newAddress),
+      });
+      const data = (await res.json().catch(() => ({}))) as { address?: ContactAddressRow; error?: string };
+      if (!res.ok || !data.address) {
+        showToast(data.error ?? "Αποτυχία προσθήκης διεύθυνσης", "error");
+        return;
+      }
+      setAddresses((prev) => [...prev, data.address!]);
+      setShowAddAddress(false);
+      setNewAddress({ type: "Οικία", odos: "", poli: "", tk: "", send_post: false });
+      showToast("Η διεύθυνση προστέθηκε.", "success");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    }
+  };
+
+  const handleDeleteAddress = async (addressId: string) => {
+    if (!id || !canManage) return;
+    if (!confirm("Να διαγραφεί η διεύθυνση;")) return;
+    try {
+      const res = await fetchWithTimeout(`/api/contacts/${id}/addresses`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address_id: addressId }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        showToast(j.error ?? "Αποτυχία διαγραφής", "error");
+        return;
+      }
+      setAddresses((prev) => prev.filter((a) => a.id !== addressId));
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    }
+  };
+
+  const handleToggleFlag = async (flagKey: (typeof CONTACT_FLAG_KEYS)[number]["key"]) => {
+    if (!c || !canManage) return;
+    const newVal = !Boolean(c[flagKey]);
+    try {
+      const res = await fetchWithTimeout(`/api/contacts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [flagKey]: newVal }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία", "error");
+        return;
+      }
+      setContact((prev) => (prev ? { ...prev, [flagKey]: newVal } : prev));
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    }
+  };
+
+  const handleMarkContacted = async () => {
+    if (!c) return;
+    const now = new Date().toISOString();
+    try {
+      const res = await fetchWithTimeout(`/api/contacts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ last_contacted_at: now }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία", "error");
+        return;
+      }
+      setContact((prev) => (prev ? { ...prev, last_contacted_at: now } : prev));
+      showToast("Σημειώθηκε επικοινωνία.", "success");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    }
   };
 
   const triggerCall = async () => {
@@ -900,14 +1124,41 @@ function ContactDetailPage() {
       ) : null}
       <div className={cn(focusMode && "max-w-6xl mx-auto px-6 py-4")}>
     <div className="min-h-full -m-6 bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8">
-      <button
-        type="button"
-        onClick={() => router.push(focusMode ? "/contacts?focus=1" : "/contacts")}
-        className={lux.btnSecondary + " mb-4 inline-flex w-fit items-center gap-2 !py-2 text-sm"}
-      >
-        <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-        Επαφές
-      </button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => router.push(focusMode ? "/contacts?focus=1" : "/contacts")}
+          className={lux.btnSecondary + " inline-flex w-fit items-center gap-2 !py-2 text-sm"}
+        >
+          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+          Επαφές
+        </button>
+        {navInfo ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navInfo.prev && router.push(contactDetailHref(navInfo.prev))}
+              disabled={!navInfo.prev}
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+              Προηγούμενο
+            </button>
+            <span className="text-xs text-[var(--text-muted)]">
+              {navInfo.position} / {navInfo.total}
+            </span>
+            <button
+              type="button"
+              onClick={() => navInfo.next && router.push(contactDetailHref(navInfo.next))}
+              disabled={!navInfo.next}
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+            >
+              Επόμενο
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+        ) : null}
+      </div>
       {isCaller && (
         <p className="mb-4 rounded-[12px] border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">
           Προβολή — μπορείτε να αλλάξετε μόνο την <strong>κατάσταση κλήσης</strong>· αποθήκευση παρακάτω.
@@ -1434,6 +1685,20 @@ function ContactDetailPage() {
                     </div>
                   </>
                 ) : null}
+                <div className={fieldGap + " sm:col-span-2"}>
+                  <span className={lbl}>Δημοτολόγιο</span>
+                  {canManage && editing === "electoral" && w ? (
+                    <input
+                      type="text"
+                      className={inputSm}
+                      placeholder="Αριθμός δημοτολογίου…"
+                      value={String(w.dimotologio ?? "")}
+                      onChange={(e) => setBuf({ ...w, dimotologio: e.target.value || null } as Contact)}
+                    />
+                  ) : (
+                    <p className={val}>{disp(c.dimotologio)}</p>
+                  )}
+                </div>
                 {(
                   [
                     { k: "political_stance" as const, l: "Πολιτική τοποθέτηση" },
@@ -1545,6 +1810,147 @@ function ContactDetailPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {canManage ? (
+              <div {...animDelay(2)} className={card}>
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                  <Flag className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                  Επισημάνσεις
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {CONTACT_FLAG_KEYS.map((flag) => (
+                    <button
+                      key={flag.key}
+                      type="button"
+                      onClick={() => void handleToggleFlag(flag.key)}
+                      className={cn(
+                        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                        c[flag.key]
+                          ? "border-red-500/30 bg-red-500/10 text-red-500"
+                          : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent-gold)]/40",
+                      )}
+                    >
+                      {c[flag.key] ? "✓ " : ""}
+                      {flag.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div {...animDelay(2)} className={card}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                  <MapPin className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                  Διευθύνσεις
+                </h2>
+                {canManage ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAddress(true)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
+                  >
+                    <Plus className="h-3 w-3" aria-hidden />
+                    Προσθήκη
+                  </button>
+                ) : null}
+              </div>
+              {addresses.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)]">Δεν υπάρχουν διευθύνσεις.</p>
+              ) : (
+                <ul className="space-y-0">
+                  {addresses.map((addr) => (
+                    <li
+                      key={addr.id}
+                      className="flex items-start gap-3 border-b border-[var(--border)]/50 py-2.5 last:border-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-0.5 flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold uppercase text-[#003476]">{addr.type}</span>
+                          {addr.send_post ? (
+                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
+                              Αποστέλλεται αλληλογραφία
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-sm text-[var(--text-primary)]">{addr.odos?.trim() || "—"}</p>
+                        <p className="text-sm text-[var(--text-muted)]">
+                          {[addr.poli, addr.tk].filter(Boolean).join(" ") || "—"}
+                        </p>
+                      </div>
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteAddress(addr.id)}
+                          className="rounded-lg p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
+                          aria-label="Διαγραφή διεύθυνσης"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canManage && showAddAddress ? (
+                <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
+                  <HqSelect
+                    className={inputSm + " !pr-9"}
+                    value={newAddress.type}
+                    onChange={(e) => setNewAddress((p) => ({ ...p, type: e.target.value }))}
+                  >
+                    <option value="Οικία">Οικία</option>
+                    <option value="Εργασία">Εργασία</option>
+                    <option value="Άλλο">Άλλο</option>
+                  </HqSelect>
+                  <input
+                    placeholder="Οδός"
+                    value={newAddress.odos}
+                    onChange={(e) => setNewAddress((p) => ({ ...p, odos: e.target.value }))}
+                    className={inputSm}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      placeholder="Πόλη"
+                      value={newAddress.poli}
+                      onChange={(e) => setNewAddress((p) => ({ ...p, poli: e.target.value }))}
+                      className={inputSm}
+                    />
+                    <input
+                      placeholder="Τ.Κ."
+                      value={newAddress.tk}
+                      onChange={(e) => setNewAddress((p) => ({ ...p, tk: e.target.value }))}
+                      className={inputSm}
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-[var(--border)]"
+                      checked={newAddress.send_post}
+                      onChange={(e) => setNewAddress((p) => ({ ...p, send_post: e.target.checked }))}
+                    />
+                    Αποστέλλεται αλληλογραφία
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAddress(false)}
+                      className="flex-1 rounded-xl border border-[var(--border)] py-2 text-sm"
+                    >
+                      Άκυρο
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleAddAddress()}
+                      className="flex-1 rounded-xl bg-[#003476] py-2 text-sm font-semibold text-white"
+                    >
+                      Αποθήκευση
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {canManage && (
@@ -1896,9 +2302,89 @@ function ContactDetailPage() {
               </div>
             </div>
 
+            <div {...animDelay(5)} className={card}>
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                <Phone className="h-4 w-4 shrink-0 text-[#10B981]" aria-hidden />
+                Τελευταία επικοινωνία
+              </h2>
+              {c.last_contacted_at ? (
+                <div>
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{fmtDateTime(c.last_contacted_at)}</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    {formatDistanceToNow(new Date(c.last_contacted_at), { locale: el, addSuffix: true })}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--text-muted)]">Δεν υπάρχει καταγεγραμμένη επικοινωνία.</p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleMarkContacted()}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#003476] hover:underline"
+              >
+                <Check className="h-3 w-3" aria-hidden />
+                Σήμανση ως επικοινωνία τώρα
+              </button>
+            </div>
+
+            <div {...animDelay(6)} className={card}>
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                <CalendarDays className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                Ημερολόγιο
+              </h2>
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                <span>Από</span>
+                <HqSelect
+                  className="!h-8 !min-h-0 w-auto rounded-lg border border-[var(--border)] px-2 py-1 text-xs"
+                  value={String(calendarYearsBack)}
+                  onChange={(e) => setCalendarYearsBack(Number(e.target.value))}
+                  aria-label="Έτη πριν"
+                >
+                  <option value="0">0</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                </HqSelect>
+                <span>έτη πριν — Μέχρι</span>
+                <HqSelect
+                  className="!h-8 !min-h-0 w-auto rounded-lg border border-[var(--border)] px-2 py-1 text-xs"
+                  value={String(calendarYearsForward)}
+                  onChange={(e) => setCalendarYearsForward(Number(e.target.value))}
+                  aria-label="Έτη στο μέλλον"
+                >
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                </HqSelect>
+                <span>έτη στο μέλλον</span>
+              </div>
+              {eventsLoading ? (
+                <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>
+              ) : contactEvents.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)]">Δε βρέθηκαν εκδηλώσεις (RSVP).</p>
+              ) : (
+                <ul className="space-y-0">
+                  {contactEvents.map((event) => (
+                    <li
+                      key={event.id}
+                      className="flex items-center gap-3 border-b border-[var(--border)]/50 py-2 last:border-0"
+                    >
+                      <div className="w-20 shrink-0 text-xs text-[var(--text-muted)]">{fmtDate(event.date)}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-[var(--text-primary)]">{event.title}</p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {[event.start_time, event.end_time].filter(Boolean).join(" — ") || event.type || "—"}
+                          {event.rsvp_status ? ` · ${event.rsvp_status}` : ""}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             {/* E Requests */}
             {canManage && (
-              <div {...animDelay(5)} className={card}>
+              <div {...animDelay(7)} className={card}>
                 <h2 className={cardTitle}>Αιτήματα</h2>
                 <ul className="mb-3 space-y-2">
                   {requests.length === 0 && <li className="text-xs text-muted-foreground">Κανένα αίτημα.</li>}

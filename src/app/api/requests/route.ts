@@ -12,7 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const REQUEST_STATUSES = ["Νέο", "Σε εξέλιξη", "Ολοκληρώθηκε", "Απορρίφθηκε"] as const;
+import { REQUEST_STATUSES } from "@/lib/request-statuses";
 
 const BASE_SELECT =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, contacts!contact_id(first_name,last_name,phone)";
@@ -308,6 +308,16 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase.from("requests").insert(payload).select("*").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     const newId = (data as { id: string }).id;
+    const personRows: { request_id: string; contact_id: string; role: string }[] = [
+      { request_id: newId, contact_id: contactId, role: "requester" },
+    ];
+    if (affectedContactId) {
+      personRows.push({ request_id: newId, contact_id: affectedContactId, role: "affected" });
+    }
+    await supabase.from("request_persons").upsert(personRows, {
+      onConflict: "request_id,contact_id,role",
+      ignoreDuplicates: true,
+    });
     if (initialNote) {
       const { error: noteErr } = await supabase
         .from("request_notes")

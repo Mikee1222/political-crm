@@ -112,6 +112,9 @@ html {
   --status-req-rej-bg: rgba(239, 68, 68, 0.2);
   --status-req-rej-fg: #fecaca;
   --status-req-rej-ring: rgba(239, 68, 68, 0.45);
+  --status-req-closed-bg: rgba(113, 113, 122, 0.22);
+  --status-req-closed-fg: #e4e4e7;
+  --status-req-closed-ring: rgba(113, 113, 122, 0.45);
   /* Shell — set by app-frame (64 | 240 px); see .app-main-shell */
   --sidebar-width: 240px;
   --sidebar-bg: #0a1628;
@@ -207,6 +210,9 @@ html {
   --status-req-rej-bg: #fee2e2;
   --status-req-rej-fg: #991b1b;
   --status-req-rej-ring: #fca5a5;
+  --status-req-closed-bg: #f4f4f5;
+  --status-req-closed-fg: #3f3f46;
+  --status-req-closed-ring: #a1a1aa;
   /* ND blue chrome */
   --sidebar-bg: #003476;
   --sidebar-brand-title: #ffffff;

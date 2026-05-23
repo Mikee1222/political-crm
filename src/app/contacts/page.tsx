@@ -966,6 +966,21 @@ function ContactsPage() {
   }, [load]);
 
   useEffect(() => {
+    if (contacts.length === 0) return;
+    try {
+      sessionStorage.setItem(
+        "contacts_nav",
+        JSON.stringify({
+          ids: contacts.map((c) => c.id),
+          filters: f,
+        }),
+      );
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [contacts, f]);
+
+  useEffect(() => {
     let cancelled = false;
     fetchWithTimeout("/api/contacts/summary-stats")
       .then(async (r) => {

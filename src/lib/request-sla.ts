@@ -2,7 +2,9 @@
 
 export type SlaUiStatus = "on_track" | "at_risk" | "overdue";
 
-const OPEN = new Set(["Νέο", "Σε εξέλιξη"]);
+import { OPEN_REQUEST_STATUSES } from "@/lib/request-statuses";
+
+const OPEN = OPEN_REQUEST_STATUSES;
 
 /** Κατάσταση αποθήκευσης (ίδιο set τιμών με sla_status στη βάση) */
 export function computeSlaStatus(

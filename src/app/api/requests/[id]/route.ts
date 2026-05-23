@@ -10,6 +10,58 @@ import { fieldDiff } from "@/lib/field-diff";
 import { notifyRequestStatusToCitizen } from "@/lib/request-notifications";
 export const dynamic = "force-dynamic";
 
+type ContactBrief = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  phone2: string | null;
+  landline: string | null;
+};
+
+type PersonRow = {
+  role: string;
+  contact_id: string;
+  contacts: ContactBrief | ContactBrief[] | null;
+};
+
+function contactFromPersonRow(p: PersonRow): ContactBrief | null {
+  const c = p.contacts;
+  if (c == null) return null;
+  return Array.isArray(c) ? c[0] ?? null : c;
+}
+
+function groupPersons(rows: PersonRow[]) {
+  const requesters: ContactBrief[] = [];
+  const affected: ContactBrief[] = [];
+  const helpers: ContactBrief[] = [];
+  const handlers: ContactBrief[] = [];
+  const seen = {
+    requester: new Set<string>(),
+    affected: new Set<string>(),
+    helper: new Set<string>(),
+    handler: new Set<string>(),
+  };
+  for (const p of rows) {
+    const c = contactFromPersonRow(p);
+    if (!c) continue;
+    if (p.role === "requester" && !seen.requester.has(c.id)) {
+      seen.requester.add(c.id);
+      requesters.push(c);
+    } else if (p.role === "affected" && !seen.affected.has(c.id)) {
+      seen.affected.add(c.id);
+      affected.push(c);
+    } else if (p.role === "helper" && !seen.helper.has(c.id)) {
+      seen.helper.add(c.id);
+      helpers.push(c);
+    } else if (p.role === "handler" && !seen.handler.has(c.id)) {
+      seen.handler.add(c.id);
+      handlers.push(c);
+    }
+  }
+  return { requesters, affected, helpers, handlers };
+}
+
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
   const crm = await checkCRMAccess();
@@ -33,23 +85,53 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     contact_id: string;
     affected_contact_id: string | null;
   };
+
+  const { data: personRows } = await supabase
+    .from("request_persons")
+    .select(
+      "role, contact_id, contacts(id, first_name, last_name, phone, phone2, landline)",
+    )
+    .eq("request_id", params.id);
+
+  let grouped = groupPersons((personRows ?? []) as PersonRow[]);
+
   const cids = [r.contact_id, r.affected_contact_id].filter(
     (x): x is string => x != null && x !== "",
   );
   const uniqCids = [...new Set(cids)];
-  let cRows: { id: string; first_name: string; last_name: string; phone: string | null; phone2: string | null; landline: string | null }[] =
-    [];
+  let cRows: ContactBrief[] = [];
   if (uniqCids.length > 0) {
     const { data } = await supabase
       .from("contacts")
       .select("id, first_name, last_name, phone, phone2, landline")
       .in("id", uniqCids);
-    cRows = (data ?? []) as typeof cRows;
+    cRows = (data ?? []) as ContactBrief[];
   }
   const byId = new Map(cRows.map((c) => [c.id, c] as const));
-  const requester = byId.get(r.contact_id) ?? null;
-  const affected = r.affected_contact_id != null ? byId.get(r.affected_contact_id) ?? null : null;
-  return NextResponse.json({ request: { ...row, requester, affected } });
+
+  if (grouped.requesters.length === 0 && r.contact_id) {
+    const c = byId.get(r.contact_id);
+    if (c) grouped = { ...grouped, requesters: [c] };
+  }
+  if (grouped.affected.length === 0 && r.affected_contact_id) {
+    const c = byId.get(r.affected_contact_id);
+    if (c) grouped = { ...grouped, affected: [c] };
+  }
+
+  const requester = grouped.requesters[0] ?? byId.get(r.contact_id) ?? null;
+  const affectedOne = grouped.affected[0] ?? (r.affected_contact_id != null ? byId.get(r.affected_contact_id) ?? null : null);
+
+  return NextResponse.json({
+    request: {
+      ...row,
+      requester,
+      affected: affectedOne,
+      requesters: grouped.requesters,
+      affected_list: grouped.affected,
+      helpers: grouped.helpers,
+      handlers: grouped.handlers,
+    },
+  });
   } catch (e) {
     console.error("[api/requests/id GET]", e);
     return nextJsonError();

@@ -10,6 +10,11 @@ import { computeSlaStatus } from "@/lib/request-sla";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { RequestDocumentsSection } from "@/components/request-documents-section";
+import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
+import {
+  OPEN_REQUEST_STATUSES,
+  REQUEST_STATUS_BADGE_CLASSES,
+} from "@/lib/request-statuses";
 
 type ContactCard = {
   id: string;
@@ -39,6 +44,10 @@ type RequestDetail = {
   portal_visible: boolean;
   requester: ContactCard | null;
   affected: ContactCard | null;
+  requesters: ContactCard[];
+  affected_list: ContactCard[];
+  helpers: ContactCard[];
+  handlers: ContactCard[];
 };
 
 type Note = {
@@ -49,7 +58,7 @@ type Note = {
   author_full_name: string;
 };
 
-const OPEN = new Set(["Νέο", "Σε εξέλιξη"]);
+const OPEN = OPEN_REQUEST_STATUSES;
 
 function fmtDateTime(s: string | null | undefined) {
   if (s == null || String(s).trim() === "") return "—";
@@ -86,12 +95,7 @@ function displayName(c: ContactCard | null) {
 
 function StatusBadge({ status }: { status: string }) {
   const s = status || "Νέο";
-  const styles: Record<string, string> = {
-    "Νέο": "bg-[var(--status-req-new-bg)] text-[var(--status-req-new-fg)] ring-1 ring-inset ring-[var(--status-req-new-ring)]",
-    "Σε εξέλιξη": "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
-    "Ολοκληρώθηκε": "bg-[var(--status-req-done-bg)] text-[var(--status-req-done-fg)] ring-1 ring-inset ring-[var(--status-req-done-ring)]",
-    "Απορρίφθηκε": "bg-[var(--status-req-rej-bg)] text-[var(--status-req-rej-fg)] ring-1 ring-inset ring-[var(--status-req-rej-ring)]",
-  };
+  const styles = REQUEST_STATUS_BADGE_CLASSES;
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles[s] ?? styles["Νέο"]}`}
@@ -478,8 +482,15 @@ export default function RequestDetailPage() {
         </div>
 
         <aside className="space-y-3">
-          <PersonCard label="Πρόσωπο που το ζήτησε" contact={data.requester} />
-          <PersonCard label="Πρόσωπο που αφορά" contact={data.affected} />
+          <RequestPersonsSections
+            requestId={data.id}
+            requesters={data.requesters ?? (data.requester ? [data.requester] : [])}
+            affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
+            helpers={data.helpers ?? []}
+            handlers={data.handlers ?? []}
+            canManage={canManage}
+            onChanged={() => void load()}
+          />
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Ανατέθηκε σε</p>
             {data.assigned_to ? (
