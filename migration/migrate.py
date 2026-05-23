@@ -32,7 +32,7 @@ Phone type mapping:
     1 = κινητό, 2 = σταθερό, 3 = εργασίας, 4 = fax, 5 = άλλο
 
 Aitima status mapping:
-    0 = Σε εξέλιξη (legacy αναμονή), 1 = Νέο, 2 = Σε εξέλιξη, 3 = Ολοκληρώθηκε
+    0 = Νέο, 1 = Σε εξέλιξη, 2 = Ολοκληρώθηκε, 3 = Απορρίφθηκε
 """
 
 import sys
@@ -69,7 +69,12 @@ FILES = {
 
 BATCH_SIZE = 500
 
-AITIMA_STATUS_MAP = {0: "Σε εξέλιξη", 1: "Νέο", 2: "Σε εξέλιξη", 3: "Ολοκληρώθηκε"}
+STATUS_MAP = {
+    0: "Νέο",
+    1: "Σε εξέλιξη",
+    2: "Ολοκληρώθηκε",
+    3: "Απορρίφθηκε",
+}
 
 # ─── LOGGING ─────────────────────────────────────────────────
 logging.basicConfig(
@@ -83,12 +88,13 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 stats = {
-    "contact_groups":  {"ok": 0, "fail": 0},
-    "contacts":        {"ok": 0, "fail": 0},
-    "contact_notes":   {"ok": 0, "fail": 0},
-    "requests":        {"ok": 0, "fail": 0},
-    "request_notes":   {"ok": 0, "fail": 0},
-    "toponyms":        {"ok": 0, "fail": 0},
+    "contact_groups":         {"ok": 0, "fail": 0},
+    "contacts":               {"ok": 0, "fail": 0},
+    "contact_group_members":  {"ok": 0, "fail": 0},
+    "contact_notes":          {"ok": 0, "fail": 0},
+    "requests":               {"ok": 0, "fail": 0},
+    "request_notes":          {"ok": 0, "fail": 0},
+    "toponyms":               {"ok": 0, "fail": 0},
 }
 
 # ─── HELPERS ─────────────────────────────────────────────────
@@ -107,6 +113,39 @@ def clean(val):
 def s(val):
     v = clean(val)
     return str(v).strip() if v is not None else None
+
+def format_electoral_district(raw):
+    """Convert Excel float codes (e.g. 120980008035.0) to text."""
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return None
+    raw_ed = raw
+    if not raw_ed and raw_ed != 0:
+        return None
+    try:
+        return str(int(float(str(raw_ed))))
+    except (ValueError, TypeError):
+        text = str(raw_ed).strip()
+        return text or None
+
+def build_toponym_to_municipality(topo_df):
+    """toponym name → municipality from person_toponimio Excel."""
+    toponym_col = "toponimio" if "toponimio" in topo_df.columns else "name"
+    if "municipality" in topo_df.columns:
+        muni_col = "municipality"
+    elif "dimotiki_enotita" in topo_df.columns:
+        muni_col = "dimotiki_enotita"
+    else:
+        muni_col = None
+
+    lookup = {}
+    for _, r in topo_df.iterrows():
+        topo_name = s(r.get(toponym_col))
+        if not topo_name:
+            continue
+        muni = s(r.get(muni_col)) if muni_col else None
+        if muni:
+            lookup[topo_name] = muni
+    return lookup
 
 def upsert_batch(supabase: Client, table: str, records: list, dry_run: bool):
     if dry_run:
@@ -145,7 +184,7 @@ def insert_batch(supabase: Client, table: str, records: list, dry_run: bool):
 def migrate_groups(supabase, dry_run):
     log.info("=== STEP 1: contact_groups ===")
     df = load("person_group")
-    group_id_map = {}   # old pgID → new Supabase id
+    group_id_map = {}   # old pgID (str) → new Supabase uuid
 
     records = []
     for _, row in df.iterrows():
@@ -163,7 +202,7 @@ def migrate_groups(supabase, dry_run):
                 # map: find original pgID by name
                 match = df[df["name"] == rec["name"]]
                 if not match.empty:
-                    group_id_map[int(match.iloc[0]["pgID"])] = new_id
+                    group_id_map[str(int(match.iloc[0]["pgID"]))] = new_id
                 stats["contact_groups"]["ok"] += 1
             except Exception as e:
                 log.warning(f"Group fail: {e} | {rec}")
@@ -192,6 +231,7 @@ def migrate_contacts(supabase, group_id_map, dry_run, dry_run_limit=100):
     job_map    = dict(zip(jobs_df["objID"], jobs_df["name"]))
     topo_map   = dict(zip(topo_df["objID"], topo_df["name"]))
     source_map = dict(zip(sources_df["sID"], sources_df["name"]))
+    toponym_to_municipality = build_toponym_to_municipality(topo_df)
 
     # phone lookup: personID → list of (number, type)
     phone_lookup = {}
@@ -226,7 +266,7 @@ def migrate_contacts(supabase, group_id_map, dry_run, dry_run_limit=100):
         active = active.head(dry_run_limit)
         log.info(f"[DRY RUN] Processing {len(active)} contacts")
 
-    old_to_new = {}   # old personID → new contact id
+    old_to_new = {}   # old personID (str) → new contact uuid
     batch = []
     counter = 0
 
@@ -243,13 +283,19 @@ def migrate_contacts(supabase, group_id_map, dry_run, dry_run_limit=100):
         phone2 = mobiles[1] if len(mobiles) > 1 else None
         landline = landlines[0] if landlines else None
 
-        # Group
+        # Group (primary = first group for backward compatibility)
         old_gid = group_lookup.get(pid)
-        new_gid = group_id_map.get(old_gid) if old_gid else None
+        new_gid = group_id_map.get(str(old_gid)) if old_gid else None
 
         # Source
         old_sid = source_lookup.get(pid)
         source_name = source_map.get(old_sid) if old_sid else None
+
+        toponym_val = topo_map.get(clean(row.get("toponimioID"))) or ""
+        municipality_raw = toponym_to_municipality.get(toponym_val, row.get("municipality", ""))
+        municipality_val = s(municipality_raw) if municipality_raw is not None and not (isinstance(municipality_raw, float) and pd.isna(municipality_raw)) else None
+
+        raw_ed = row.get("ekl_ar") or row.get("eklKodikos") or row.get("electoral_district")
 
         rec = {
             "contact_code":        f"EP-{counter:06d}",
@@ -264,8 +310,9 @@ def migrate_contacts(supabase, group_id_map, dry_run, dry_run_limit=100):
             "phone2":              phone2,
             "landline":            landline,
             "email":               email_lookup.get(pid),
-            "toponym":             topo_map.get(clean(row.get("toponimioID"))),
-            "electoral_district":  s(row.get("ekl_ar")),
+            "toponym":             toponym_val or None,
+            "municipality":        municipality_val,
+            "electoral_district":  format_electoral_district(raw_ed),
             "occupation":          job_map.get(clean(row.get("douleiaID"))),
             "source":              source_name,
             "group_id":            new_gid,
@@ -300,15 +347,58 @@ def _flush_contacts(supabase, batch, old_to_new, dry_run):
                 if existing.data:
                     new_id = existing.data[0]["id"]
                     supabase.table("contacts").update(rec).eq("id", new_id).execute()
-                    old_to_new[old_id] = new_id
+                    old_to_new[str(old_id)] = new_id
                     stats["contacts"]["ok"] += 1
                     continue
             res = supabase.table("contacts").insert(rec).execute()
-            old_to_new[old_id] = res.data[0]["id"]
+            old_to_new[str(old_id)] = res.data[0]["id"]
             stats["contacts"]["ok"] += 1
         except Exception as e:
             log.warning(f"Contact fail (old_id={old_id}): {e}")
             stats["contacts"]["fail"] += 1
+
+# ─── STEP 2b: CONTACT GROUP MEMBERS (many-to-many) ───────────
+def migrate_contact_group_members(supabase, person_has_groups_df, old_to_new_contact_map, group_id_map, dry_run=False):
+    """Insert all group memberships into contact_group_members junction table."""
+    log.info("=== STEP 2b: contact_group_members ===")
+    rows = []
+    for _, row in person_has_groups_df.iterrows():
+        pid = str(row["pID"])
+        gid = str(row["gID"])
+        contact_uuid = old_to_new_contact_map.get(pid)
+        group_uuid = group_id_map.get(gid)
+        if contact_uuid and group_uuid:
+            rows.append({
+                "contact_id": contact_uuid,
+                "group_id": group_uuid,
+            })
+
+    seen = set()
+    unique_rows = []
+    for r in rows:
+        key = (r["contact_id"], r["group_id"])
+        if key not in seen:
+            seen.add(key)
+            unique_rows.append(r)
+
+    log.info(f"Inserting {len(unique_rows)} contact_group_members...")
+    if dry_run:
+        log.info(f"[DRY RUN] Would upsert {len(unique_rows)} contact_group_members")
+        stats["contact_group_members"]["ok"] += len(unique_rows)
+        return
+
+    for i in range(0, len(unique_rows), BATCH_SIZE):
+        batch = unique_rows[i:i + BATCH_SIZE]
+        try:
+            supabase.table("contact_group_members").upsert(
+                batch, on_conflict="contact_id,group_id"
+            ).execute()
+            stats["contact_group_members"]["ok"] += len(batch)
+        except Exception as e:
+            log.error(f"Batch fail on contact_group_members: {e}")
+            stats["contact_group_members"]["fail"] += len(batch)
+
+    log.info("Done contact_group_members")
 
 # ─── STEP 3: CONTACT NOTES ───────────────────────────────────
 def migrate_contact_notes(supabase, old_to_new, dry_run, dry_run_limit=100):
@@ -321,7 +411,7 @@ def migrate_contact_notes(supabase, old_to_new, dry_run, dry_run_limit=100):
     batch = []
     for _, row in active.iterrows():
         pid = int(row["pID"])
-        new_cid = old_to_new.get(pid)
+        new_cid = old_to_new.get(str(pid))
         if not new_cid:
             continue
         content = s(row["info"])
@@ -373,15 +463,21 @@ def migrate_requests(supabase, old_to_new, dry_run, dry_run_limit=100):
         counter += 1
 
         old_pid = primary_contact.get(aid)
-        new_cid = old_to_new.get(old_pid) if old_pid else None
+        new_cid = old_to_new.get(str(old_pid)) if old_pid else None
 
         status_raw = int(row.get("status", 1))
-        status = AITIMA_STATUS_MAP.get(status_raw, "Νέο")
+        status = STATUS_MAP.get(status_raw, "Νέο")
+
+        category = aitima_cat.get(aid)
+        title = s(row.get("title")) or ""
+        if not title:
+            title = category or "Αίτημα"
 
         batch.append({
             "request_code":  f"AIT-{counter:06d}",
+            "title":         title,
             "contact_id":    new_cid,
-            "category":      aitima_cat.get(aid),
+            "category":      category,
             "status":        status,
             "priority":      "Medium",
             "old_aitima_id": aid,
@@ -470,6 +566,8 @@ def main():
 
     group_id_map   = migrate_groups(supabase, dry_run)
     old_to_new     = migrate_contacts(supabase, group_id_map, dry_run)
+    person_has_groups_df = load("person_has_groups")
+    migrate_contact_group_members(supabase, person_has_groups_df, old_to_new, group_id_map, dry_run)
     migrate_contact_notes(supabase, old_to_new, dry_run)
     old_req_to_new = migrate_requests(supabase, old_to_new, dry_run)
     migrate_request_notes(supabase, old_req_to_new, dry_run)
