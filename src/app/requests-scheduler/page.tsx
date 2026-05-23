@@ -177,7 +177,7 @@ function QueueFiltersPanel({
   }
 
   return (
-    <motion.div className="mb-4 space-y-2">
+    <div className="mb-4 space-y-2">
       <div className="relative">
         <Search
           className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
@@ -190,7 +190,7 @@ function QueueFiltersPanel({
           onChange={(e) => setFilter((p) => ({ ...p, q: e.target.value }))}
           className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
         />
-      </motion.div>
+      </div>
 
       <div className="flex flex-wrap gap-1.5">
         {STATUS_FILTER_OPTIONS.map((status) => (
@@ -208,7 +208,7 @@ function QueueFiltersPanel({
             {status}
           </button>
         ))}
-      </motion.div>
+      </div>
 
       <div className="flex flex-wrap gap-1.5">
         {PRIORITY_FILTER_OPTIONS.map((pri) => (
@@ -226,7 +226,7 @@ function QueueFiltersPanel({
             {pri.label}
           </button>
         ))}
-      </motion.div>
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <select
@@ -255,7 +255,7 @@ function QueueFiltersPanel({
             </option>
           ))}
         </select>
-      </motion.div>
+      </div>
 
       {hasActive ? (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
@@ -279,9 +279,9 @@ function QueueFiltersPanel({
             <X className="h-3 w-3" aria-hidden />
             Καθαρισμός
           </button>
-        </motion.div>
+        </div>
       ) : null}
-    </motion.div>
+    </div>
   );
 }
 
@@ -312,9 +312,9 @@ function CalendarFilterToolbar({
           onChange={(e) => setFilter((p) => ({ ...p, q: e.target.value }))}
           className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/30"
         />
-      </motion.div>
+      </div>
 
-      <motion.div className="flex items-center gap-1">
+      <div className="flex items-center gap-1">
         {PRIORITY_FILTER_OPTIONS.map((pri) => (
           <button
             key={pri.value}
@@ -331,7 +331,7 @@ function CalendarFilterToolbar({
             <span className={cn("h-3 w-3 rounded-full", pri.dotClass)} aria-hidden />
           </button>
         ))}
-      </motion.div>
+      </div>
 
       <select
         value={filter.category}
@@ -371,7 +371,7 @@ function CalendarFilterToolbar({
           <X className="h-4 w-4" aria-hidden />
         </button>
       ) : null}
-    </motion.div>
+    </div>
   );
 }
 
