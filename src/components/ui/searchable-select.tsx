@@ -45,7 +45,7 @@ export function SearchableSelect({
   "aria-label": ariaLabel,
 }: SearchableSelectProps) {
   const [search, setSearch] = useState("");
-  const { triggerRef, panelRef, open, setOpen, pos, toggle } = usePortalDropdown({ minWidth: 240 });
+  const { triggerRef, panelRef, open, setOpen, pos } = usePortalDropdown({ minWidth: 240 });
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.value === value);
@@ -79,80 +79,94 @@ export function SearchableSelect({
     }
   }, [open]);
 
-  const handleToggle = () => {
+  const handleOpen = () => {
     if (disabled) return;
-    toggle();
+    setOpen(true);
   };
 
   return (
     <>
-      <div
-        ref={triggerRef as RefObject<HTMLDivElement>}
+      <button
+        ref={triggerRef as RefObject<HTMLButtonElement>}
+        type="button"
         id={id}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          if (open) setOpen(false);
+          else handleOpen();
+        }}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
         className={cn(
-          "flex w-full items-center gap-1 rounded-xl border border-border bg-background px-1 py-1 text-sm transition-colors hover:border-primary/50",
-          open && "border-primary ring-2 ring-primary/20",
+          "flex w-full items-center justify-between gap-2 rounded-xl border bg-background px-3 py-2.5 text-left text-sm transition-all",
+          open
+            ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+            : "border-border hover:border-primary/40",
           disabled && "cursor-not-allowed opacity-50",
           className,
         )}
       >
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={handleToggle}
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          aria-label={ariaLabel}
-          className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2 py-1 text-left"
-        >
-          <span className="flex min-w-0 flex-1 items-center gap-2 truncate">
-            {selected?.color ? (
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ background: selected.color }}
-                aria-hidden
-              />
-            ) : null}
-            <span className={cn("truncate", !selected && "text-muted-foreground")}>
-              {selected?.label ?? placeholder}
-            </span>
+        <span className="flex min-w-0 flex-1 items-center gap-2 truncate">
+          {selected?.color ? (
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+              style={{ background: selected.color }}
+              aria-hidden
+            />
+          ) : null}
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected?.label ?? placeholder}
           </span>
+        </span>
+        <div className="ml-2 flex shrink-0 items-center gap-1">
+          {value ? (
+            <span
+              role="button"
+              tabIndex={-1}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!disabled) onChange("");
+              }}
+              className="rounded-md p-0.5 transition-colors hover:bg-muted"
+              aria-label="Καθαρισμός επιλογής"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" aria-hidden />
+            </span>
+          ) : null}
           <ChevronDown
-            className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform duration-200",
+              open && "rotate-180",
+            )}
             aria-hidden
           />
-        </button>
-        {value ? (
-          <button
-            type="button"
-            disabled={disabled}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onChange("")}
-            className="shrink-0 rounded p-1 hover:bg-muted"
-            aria-label="Καθαρισμός επιλογής"
-          >
-            <X className="h-3 w-3 text-muted-foreground" aria-hidden />
-          </button>
-        ) : null}
-      </div>
+        </div>
+      </button>
 
       <PortalDropdownPanel
         open={open && !disabled}
         pos={pos}
         panelRef={panelRef}
         role="listbox"
-        className="overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+        className="overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl"
       >
-        <div className="border-b border-border p-2">
+        <div className="border-b border-border/60 p-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full rounded-lg bg-muted py-1.5 pl-8 pr-3 text-sm focus:outline-none"
+              className="w-full rounded-xl border border-border/40 bg-muted/60 py-2 pl-9 pr-9 text-sm transition-colors focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.stopPropagation();
@@ -162,12 +176,21 @@ export function SearchableSelect({
               autoComplete="off"
               aria-label={searchPlaceholder}
             />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+                aria-label="Καθαρισμός αναζήτησης"
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" aria-hidden />
+              </button>
+            ) : null}
           </div>
         </div>
 
-        <div className="max-h-64 overflow-y-auto">
-          <button
-            type="button"
+        <div className="max-h-72 overflow-y-auto py-1.5">
+          <div
             role="option"
             aria-selected={!value}
             onClick={() => {
@@ -175,27 +198,34 @@ export function SearchableSelect({
               setOpen(false);
             }}
             className={cn(
-              "flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted",
-              !value && "bg-muted/50",
+              "mx-2 flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
+              !value ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted",
             )}
           >
-            — {placeholder} —
-          </button>
+            {!value ? <Check className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
+            <span>{placeholder}</span>
+          </div>
 
           {grouped.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">{emptyText}</p>
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">{emptyText}</p>
+            </div>
           ) : (
             grouped.map(([group, opts]) => (
               <div key={group || "__ungrouped"}>
                 {group ? (
-                  <div className="border-y border-border/50 bg-muted/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary">
-                    {group}
+                  <div className="flex items-center gap-2 px-5 pb-1.5 pt-3">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                      {group}
+                    </span>
+                    <div className="h-px flex-1 bg-border/60" />
+                    <span className="text-[10px] text-muted-foreground">{opts.length}</span>
                   </div>
                 ) : null}
+
                 {opts.map((opt) => (
-                  <button
+                  <div
                     key={opt.value}
-                    type="button"
                     role="option"
                     aria-selected={value === opt.value}
                     onClick={() => {
@@ -203,25 +233,40 @@ export function SearchableSelect({
                       setOpen(false);
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
-                      value === opt.value && "bg-primary/10 font-medium text-primary",
+                      "group mx-2 flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
+                      value === opt.value
+                        ? "bg-primary/10 font-medium text-primary"
+                        : "text-foreground hover:bg-muted",
                     )}
                   >
                     {opt.color ? (
                       <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
                         style={{ background: opt.color }}
                         aria-hidden
                       />
-                    ) : null}
+                    ) : (
+                      <span className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                    )}
                     <span className="min-w-0 flex-1 truncate">{opt.label}</span>
-                    {value === opt.value ? <Check className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
-                  </button>
+                    {value === opt.value ? (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                    ) : null}
+                  </div>
                 ))}
               </div>
             ))
           )}
         </div>
+
+        {filtered.length > 0 ? (
+          <div className="border-t border-border/60 bg-muted/20 px-4 py-2">
+            <p className="text-[10px] text-muted-foreground">
+              {filtered.length} αποτελέσματα
+              {search ? ` για "${search}"` : ""}
+            </p>
+          </div>
+        ) : null}
       </PortalDropdownPanel>
     </>
   );

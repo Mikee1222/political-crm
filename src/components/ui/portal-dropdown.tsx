@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type MouseEventHandler,
   type MutableRefObject,
   type ReactNode,
 } from "react";
@@ -112,6 +113,7 @@ type PortalDropdownPanelProps = {
   className?: string;
   role?: string;
   id?: string;
+  onMouseDown?: MouseEventHandler<HTMLDivElement>;
 };
 
 export function PortalDropdownPanel({
@@ -122,6 +124,7 @@ export function PortalDropdownPanel({
   className,
   role,
   id,
+  onMouseDown,
 }: PortalDropdownPanelProps) {
   if (typeof document === "undefined" || !open || !pos) return null;
   return createPortal(
@@ -129,6 +132,7 @@ export function PortalDropdownPanel({
       ref={panelRef}
       id={id}
       role={role}
+      onMouseDown={onMouseDown}
       style={{
         position: "fixed",
         top: pos.top,
