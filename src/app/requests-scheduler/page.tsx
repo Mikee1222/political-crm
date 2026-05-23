@@ -58,6 +58,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
+import { REQUEST_STATUSES } from "@/lib/request-statuses";
 
 type ViewMode = "week" | "month" | "kanban";
 
@@ -110,7 +111,7 @@ function appendQueueFilterParams(params: URLSearchParams, queueFilter: CalFilter
   if (queueFilter.assignedTo) params.set("queue_assigned_to", queueFilter.assignedTo);
 }
 
-const STATUS_FILTER_OPTIONS = ["Νέο", "Σε εξέλιξη", "Ολοκληρώθηκε", "Απορρίφθηκε"] as const;
+const STATUS_FILTER_OPTIONS = REQUEST_STATUSES;
 
 const PRIORITY_FILTER_OPTIONS = [
   {
@@ -376,6 +377,12 @@ const KANBAN_COLUMNS: {
   { status: "Σε εξέλιξη", color: "border-orange-500", Icon: Circle, dotClass: "text-orange-500 fill-orange-500" },
   { status: "Ολοκληρώθηκε", color: "border-green-500", Icon: Circle, dotClass: "text-green-500 fill-green-500" },
   { status: "Απορρίφθηκε", color: "border-red-500", Icon: Circle, dotClass: "text-red-500 fill-red-500" },
+  {
+    status: "Κλειστό χωρίς επιτυχία",
+    color: "border-zinc-400",
+    Icon: Circle,
+    dotClass: "text-zinc-400 fill-zinc-400",
+  },
 ];
 
 const WEEKDAY_HEADERS = ["ΔΕΥ", "ΤΡΙ", "ΤΕΤ", "ΠΕΜ", "ΠΑΡ", "ΣΑΒ", "ΚΥΡ"] as const;

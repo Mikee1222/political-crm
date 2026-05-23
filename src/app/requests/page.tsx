@@ -14,9 +14,9 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { isClosedRequestStatus, REQUEST_STATUSES, REQUEST_STATUS_BADGE_CLASSES } from "@/lib/request-statuses";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { NewRequestModal } from "@/components/requests/new-request-modal";
-import type { RequestCategoryRow } from "@/lib/request-categories";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CenteredModal } from "@/components/ui/centered-modal";
@@ -209,8 +209,8 @@ export default function RequestsPage() {
         fetchWithTimeout("/api/team/assignees"),
       ]);
       if (catRes.ok) {
-        const j = (await catRes.json()) as { categories?: RequestCategoryRow[] };
-        setCategoryOptions((j.categories ?? []).map((c) => c.name));
+        const j = (await catRes.json()) as { categories?: string[] };
+        setCategoryOptions(j.categories ?? []);
       }
       if (teamRes.ok) {
         const j = (await teamRes.json()) as { assignees?: Assignee[] };
@@ -368,12 +368,7 @@ export default function RequestsPage() {
               value={f.status}
               onChange={(v) => patch({ status: v })}
               placeholder="Όλες οι καταστάσεις"
-              options={[
-                { value: "Νέο", label: "Νέο" },
-                { value: "Σε εξέλιξη", label: "Σε εξέλιξη" },
-                { value: "Ολοκληρώθηκε", label: "Ολοκληρώθηκε" },
-                { value: "Απορρίφθηκε", label: "Απορρίφθηκε" },
-              ]}
+              options={REQUEST_STATUSES.map((s) => ({ value: s, label: s }))}
             />
           </div>
           <div>
@@ -539,7 +534,7 @@ function contactInitials(c: { first_name: string; last_name: string } | null) {
 }
 
 function daysLeftSla(due: string | null | undefined, status: string) {
-  if (status === "Ολοκληρώθηκε" || status === "Απορρίφθηκε") return null;
+  if (isClosedRequestStatus(status)) return null;
   if (!due) return null;
   const d = new Date(due + "T12:00:00");
   const now = new Date();
@@ -602,7 +597,7 @@ function RequestCard({
   const days = daysLeftSla(r.sla_due_date, r.status ?? "Νέο");
   const status = r.status ?? "Νέο";
   const isCompleted = status === "Ολοκληρώθηκε";
-  const isRejected = status === "Απορρίφθηκε";
+  const isRejected = status === "Απορρίφθηκε" || status === "Κλειστό χωρίς επιτυχία";
   const showQuickTick = canQuickComplete && !isCompleted && !isRejected;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -738,15 +733,7 @@ function PriorityPill({ p }: { p: string | null | undefined }) {
 }
 
 function StatusBadge({ status, withDot }: { status: string; withDot?: boolean }) {
-  const styles: Record<string, string> = {
-    "Νέο": "bg-[var(--status-req-new-bg)] text-[var(--status-req-new-fg)] ring-1 ring-inset ring-[var(--status-req-new-ring)]",
-    "Σε εξέλιξη":
-      "bg-[var(--status-req-prog-bg)] text-[var(--status-req-prog-fg)] ring-1 ring-inset ring-[var(--status-req-prog-ring)]",
-    "Ολοκληρώθηκε":
-      "bg-[var(--status-req-done-bg)] text-[var(--status-req-done-fg)] ring-1 ring-inset ring-[var(--status-req-done-ring)]",
-    "Απορρίφθηκε":
-      "bg-[var(--status-req-rej-bg)] text-[var(--status-req-rej-fg)] ring-1 ring-inset ring-[var(--status-req-rej-ring)]",
-  };
+  const styles = REQUEST_STATUS_BADGE_CLASSES;
   const s = status || "Νέο";
   return (
     <span
@@ -775,7 +762,7 @@ function EditRequestModal({
   onSaved: () => Promise<void>;
 }) {
   const { showToast } = useFormToast();
-  const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [form, setForm] = useState({
     title: request.title,
     description: request.description ?? "",
@@ -794,7 +781,7 @@ function EditRequestModal({
     void (async () => {
       const res = await fetchWithTimeout("/api/request-categories");
       if (res.ok) {
-        const j = (await res.json()) as { categories?: RequestCategoryRow[] };
+        const j = (await res.json()) as { categories?: string[] };
         setCategories(j.categories ?? []);
       }
     })();
@@ -896,8 +883,8 @@ function EditRequestModal({
                   </option>
                 ))
               : categories.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
+                  <option key={c} value={c}>
+                    {c}
                   </option>
                 ))}
           </HqSelect>
@@ -905,10 +892,9 @@ function EditRequestModal({
         <div>
           <label className={lux.label}>Κατάσταση</label>
           <HqSelect value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-            <option>Νέο</option>
-            <option>Σε εξέλιξη</option>
-            <option>Ολοκληρώθηκε</option>
-            <option>Απορρίφθηκε</option>
+            {REQUEST_STATUSES.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
           </HqSelect>
         </div>
         <div>

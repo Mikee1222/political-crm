@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, Copy, Download, ExternalLink, Pencil, Phone, Smartphone, Sparkles, Trash2, X } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, GitMerge, Pencil, Phone, Smartphone, Sparkles, Trash2, X } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,7 @@ type C = {
 
 type DupPair = { contactA: C; contactB: C; score: number; reasons: string[] };
 
-type ToolId = "dup" | "phone" | "predict" | "export";
+type ToolId = "dup" | "phone" | "predict" | "export" | "merge";
 
 type PhoneIssue = "missing" | "invalid" | "duplicate";
 
@@ -72,6 +72,9 @@ export default function DataToolsPage() {
   const [mergeTarget, setMergeTarget] = useState<DupPair | null>(null);
   const [keepSide, setKeepSide] = useState<"a" | "b">("a");
   const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergePrimaryCode, setMergePrimaryCode] = useState("");
+  const [mergeSecondaryCode, setMergeSecondaryCode] = useState("");
+  const [codeMergeBusy, setCodeMergeBusy] = useState(false);
   const { showToast } = useFormToast();
   const [scoring, setScoring] = useState(false);
   const [scoreMsg, setScoreMsg] = useState<string | null>(null);
@@ -337,6 +340,35 @@ export default function DataToolsPage() {
     }
   };
 
+  const doCodeMerge = async () => {
+    const primary = mergePrimaryCode.trim();
+    const secondary = mergeSecondaryCode.trim();
+    if (!primary || !secondary) {
+      showToast("Συμπληρώστε και τους δύο κωδικούς.", "error");
+      return;
+    }
+    setCodeMergeBusy(true);
+    try {
+      const res = await fetchWithTimeout("/api/contacts/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ primary_id: primary, secondary_id: secondary }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; contact?: { id: string } };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία συγχώνευσης", "error");
+        return;
+      }
+      showToast("Η συγχώνευση ολοκληρώθηκε.", "success");
+      setMergePrimaryCode("");
+      setMergeSecondaryCode("");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setCodeMergeBusy(false);
+    }
+  };
+
   if (!can) {
     return (
       <p className="rounded-[12px] border border-amber-500/35 bg-amber-500/10 p-4 text-sm text-amber-100/95">Δεν έχετε πρόσβαση.</p>
@@ -409,6 +441,21 @@ export default function DataToolsPage() {
             setResultsOpen(true);
           }}
         />
+        <ToolCard
+          title="Συγχώνευση Επαφών"
+          description="Συγχώνευση δύο επαφών με κωδικό EP-XXXXXX. Μεταφέρονται σημειώσεις, αιτήματα, ομάδες και σχέσεις."
+          icon={<GitMerge className="h-9 w-9" strokeWidth={2} />}
+          active={activeTool === "merge"}
+          onOpen={() => {
+            setActiveTool("merge");
+            setResultsOpen(true);
+          }}
+          actionLabel="Άνοιγμα φόρμας"
+          onAction={() => {
+            setActiveTool("merge");
+            setResultsOpen(true);
+          }}
+        />
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
@@ -426,7 +473,9 @@ export default function DataToolsPage() {
                 ? "Τηλέφωνα"
                 : activeTool === "predict"
                   ? "Προβλεπτική λίστα"
-                  : "Εξαγωγή"}
+                  : activeTool === "merge"
+                    ? "Συγχώνευση επαφών"
+                    : "Εξαγωγή"}
           </span>
           <span className="text-xs font-semibold text-[#C9A84C]">{resultsOpen ? "Σύμπτυξη" : "Ανάπτυξη"}</span>
         </button>
@@ -686,6 +735,37 @@ export default function DataToolsPage() {
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">Καμία λίστα — πατήστε δημιουργία ή φόρτωση.</p>
                 )}
+              </div>
+            )}
+
+            {activeTool === "merge" && (
+              <div className="mx-auto max-w-xl space-y-3">
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Εισάγετε τον κωδικό της επαφής που θα κρατηθεί και αυτής που θα συγχωνευθεί.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    placeholder="Κωδικός κύριας επαφής (EP-XXXXXX)"
+                    className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-[var(--text-input)]"
+                    value={mergePrimaryCode}
+                    onChange={(e) => setMergePrimaryCode(e.target.value)}
+                  />
+                  <input
+                    placeholder="Κωδικός επαφής προς συγχώνευση"
+                    className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-[var(--text-input)]"
+                    value={mergeSecondaryCode}
+                    onChange={(e) => setMergeSecondaryCode(e.target.value)}
+                  />
+                </div>
+                <FormSubmitButton
+                  type="button"
+                  variant="gold"
+                  className="w-full"
+                  loading={codeMergeBusy}
+                  onClick={() => void doCodeMerge()}
+                >
+                  Συγχώνευση
+                </FormSubmitButton>
               </div>
             )}
 

@@ -8,19 +8,20 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
-import type { RequestCategoryRow } from "@/lib/request-categories";
 import { useFormToast } from "@/contexts/form-toast-context";
+
+import { REQUEST_STATUSES } from "@/lib/request-statuses";
 
 const PRIORITIES = ["High", "Medium", "Low"] as const;
 
-const STATUSES = ["Νέο", "Σε εξέλιξη", "Ολοκληρώθηκε", "Απορρίφθηκε"] as const;
+const STATUSES = REQUEST_STATUSES;
 
 type StaffUser = { id: string; full_name: string | null; email: string; role: string };
 
 type Props = { open: boolean; onClose: () => void; onCreated: () => void };
 
 export function NewRequestModal({ open, onClose, onCreated }: Props) {
-  const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -42,11 +43,11 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
   const loadMeta = useCallback(async () => {
     const cRes = await fetchWithTimeout("/api/request-categories");
     if (cRes.ok) {
-      const cj = (await cRes.json()) as { categories?: RequestCategoryRow[] };
+      const cj = (await cRes.json()) as { categories?: string[] };
       const list = cj.categories ?? [];
       setCategories(list);
       if (list.length) {
-        setCategory((cur) => (list.some((x) => x.name === cur) ? cur : list[0]!.name));
+        setCategory((cur) => (list.includes(cur) ? cur : list[0]!));
       }
     }
   }, []);
@@ -226,7 +227,7 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
                         value: n,
                         label: n,
                       }))
-                    : categories.map((c) => ({ value: c.name, label: c.name }))
+                    : categories.map((n) => ({ value: n, label: n }))
                 }
               />
             </div>

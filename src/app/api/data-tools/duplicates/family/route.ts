@@ -22,17 +22,16 @@ export async function POST(request: NextRequest) {
     related_contact_id: big,
     relation_type: "family",
   });
+  if (e1 && e1.code !== "23505") {
+    return NextResponse.json({ error: e1.message }, { status: 400 });
+  }
   const { error: e2 } = await supabase.from("contact_relations").insert({
     contact_id: big,
     related_contact_id: small,
     relation_type: "family",
   });
-  const error = e1 && e2 ? e1 : null;
-  if (error) {
-    if (error.code === "23505") {
-      return NextResponse.json({ ok: true });
-    }
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  if (e2 && e2.code !== "23505") {
+    return NextResponse.json({ error: e2.message }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
   } catch (e) {

@@ -33,10 +33,12 @@ import { useProfile } from "@/contexts/profile-context";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { hasMinRole } from "@/lib/roles";
+import { REQUEST_STATUSES, REQUEST_STATUS_CONTACT_BADGE } from "@/lib/request-statuses";
 import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactElectoralLocationEdit } from "@/components/contact-electoral-location-edit";
 import { ContactExtraSections } from "@/components/contact-extra-sections";
+import { ContactRelatedPersonsSection } from "@/components/contact-related-persons-section";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -292,12 +294,7 @@ function OutcomeBadge({ o }: { o: string | null | undefined }) {
 
 function ReqStatus({ s }: { s: string | null | undefined }) {
   const t = s ?? "Νέο";
-  const map: Record<string, string> = {
-    "Νέο": "bg-sky-500/15 text-sky-800 ring-1 ring-sky-500/25 dark:text-sky-200",
-    "Σε εξέλιξη": "bg-amber-500/15 text-amber-900 ring-1 ring-amber-500/25 dark:text-amber-200",
-    "Ολοκληρώθηκε": "bg-emerald-500/15 text-emerald-800 ring-1 ring-emerald-500/25 dark:text-emerald-200",
-    "Απορρίφθηκε": "bg-red-500/15 text-red-800 ring-1 ring-red-500/25 dark:text-red-200",
-  };
+  const map = REQUEST_STATUS_CONTACT_BADGE;
   return (
     <span
       className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[t] ?? "bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))] text-muted-foreground ring-1 ring-border"}`}
@@ -1345,6 +1342,11 @@ function ContactDetailPage() {
         {canManage && (
           <div className="min-w-0 md:col-span-2">
             <ContactExtraSections contactId={c.id} phone={c.phone} canManage={canManage} />
+          </div>
+        )}
+        {canManage && (
+          <div className="min-w-0 md:col-span-2">
+            <ContactRelatedPersonsSection contactId={c.id} canManage={canManage} />
           </div>
         )}
           <div className="flex min-w-0 flex-col gap-4">
@@ -2466,10 +2468,9 @@ function ContactDetailPage() {
                           value={newRequest.status}
                           onChange={(e) => setNewRequest({ ...newRequest, status: e.target.value })}
                         >
-                          <option>Νέο</option>
-                          <option>Σε εξέλιξη</option>
-                          <option>Ολοκληρώθηκε</option>
-                          <option>Απορρίφθηκε</option>
+                          {REQUEST_STATUSES.map((s) => (
+                            <option key={s}>{s}</option>
+                          ))}
                         </HqSelect>
                       </div>
                     </div>
