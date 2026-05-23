@@ -1359,3 +1359,10 @@ textarea::placeholder {
     animation: none !important;
   }
 }
+
+/* Contacts focus mode — hide app chrome while fullscreen list is active */
+body.focus-mode .crm-sidebar,
+body.focus-mode .crm-navbar,
+body.focus-mode .crm-bottom-nav {
+  display: none !important;
+}

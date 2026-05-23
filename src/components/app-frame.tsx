@@ -813,7 +813,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       style={shellStyle}
     >
       <aside
-        className="app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 hidden h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)] px-2 py-3 pb-2 lg:flex"
+        className="crm-sidebar app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 hidden h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)] px-2 py-3 pb-2 lg:flex"
         style={{ background: "var(--sidebar-bg)" }}
         aria-label="Πλοήγηση"
       >
@@ -947,7 +947,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="app-main-shell ml-0 box-border flex min-h-0 min-w-0 w-full max-w-full flex-1 min-h-[-webkit-fill-available] min-h-screen flex-col overflow-x-hidden pl-0 lg:ml-[var(--sidebar-width)] lg:h-screen lg:min-h-0 lg:overflow-hidden">
-        <header className="mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-border bg-background pt-0 backdrop-blur-lg lg:[background:var(--topbar-bg)]">
+        <header className="crm-navbar mobile-top-bar sticky top-0 z-20 box-border min-h-0 w-full min-w-0 max-w-full shrink-0 border-b border-border bg-background pt-0 backdrop-blur-lg lg:[background:var(--topbar-bg)]">
           <MobileGlassHeader
             firstName={mobileFirstName}
             avatarUrl={profile?.avatar_url}
@@ -1102,7 +1102,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <FloatingActions role={role} />
-        <div className="lg:hidden">
+        <div className="crm-bottom-nav lg:hidden">
           <MobileBottomNav role={role} onOpenMore={() => setMoreOpen(true)} openRequestsCount={openRequestsCount} />
         </div>
         <MobileMoreSheet

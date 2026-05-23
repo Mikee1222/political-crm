@@ -8,12 +8,14 @@ import {
   ChevronDown,
   Download,
   LayoutPanelTop,
+  Maximize2,
   Phone,
   Plus,
   Search,
   Sparkles,
   Trash2,
   User,
+  Users,
   X,
 } from "lucide-react";
 import { ContactsImportWizard } from "@/components/contacts-import-wizard";
@@ -60,6 +62,7 @@ import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-conte
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
+import { cn } from "@/lib/utils";
 
 type Contact = {
   id: string;
@@ -864,6 +867,7 @@ function ContactsPage() {
   const [saving, setSaving] = useState(false);
   const [bulkWaMessage, setBulkWaMessage] = useState("");
   const [savedFilterMenuKey, setSavedFilterMenuKey] = useState(0);
+  const [focusMode, setFocusMode] = useState(false);
   const filtersUrlKeyRef = useRef<string | null>(null);
   const { showToast: showListToast } = useFormToast();
 
@@ -1003,6 +1007,21 @@ function ContactsPage() {
       .catch(() => setCampaigns([]));
   }, [canManage]);
 
+  useEffect(() => {
+    if (focusMode) document.body.classList.add("focus-mode");
+    else document.body.classList.remove("focus-mode");
+    return () => document.body.classList.remove("focus-mode");
+  }, [focusMode]);
+
+  useEffect(() => {
+    if (!focusMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusMode(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [focusMode]);
+
   const areas = useMemo(
     () => Array.from(new Set(contacts.map((c) => c.area).filter(Boolean))) as string[],
     [contacts],
@@ -1072,7 +1091,41 @@ function ContactsPage() {
   };
 
   return (
-    <div className="w-full max-w-full px-4 overflow-x-hidden space-y-6 pb-24 md:px-0 md:pb-6">
+    <div
+      className={cn(
+        "transition-all duration-300",
+        focusMode && "fixed inset-0 z-[200] flex flex-col overflow-hidden bg-background",
+      )}
+    >
+      {focusMode && (
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Users className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+            <span className="font-semibold text-foreground">Επαφές</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {listTotal.toLocaleString("el-GR")} επαφές
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden text-xs text-muted-foreground sm:inline">ESC για έξοδο</span>
+            <button
+              type="button"
+              onClick={() => setFocusMode(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted"
+              aria-label="Έξοδος από λειτουργία εστίασης"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+      <div className={cn(focusMode && "flex min-h-0 flex-1 flex-col overflow-auto px-6 py-4")}>
+        <div
+          className={cn(
+            "w-full max-w-full space-y-6 overflow-x-hidden",
+            focusMode ? "pb-6" : "px-4 pb-24 md:px-0 md:pb-6",
+          )}
+        >
       {f.nameday_today && (
         <div
           className="flex w-full min-w-0 max-w-full flex-col gap-2 rounded-2xl border-2 border-[var(--accent-gold)]/45 bg-gradient-to-r from-[rgba(201,168,76,0.12)] to-[var(--bg-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
@@ -1160,6 +1213,17 @@ function ContactsPage() {
                 </a>
               </PortalDropdownPanel>
             </div>
+            {!focusMode && (
+              <button
+                type="button"
+                onClick={() => setFocusMode(true)}
+                title="Λειτουργία εστίασης"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm transition-colors hover:bg-muted sm:w-auto"
+              >
+                <Maximize2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Εστίαση</span>
+              </button>
+            )}
             {canManage && (
               <>
                 <a href="/api/contacts/import-template" className={lux.btnSecondary + " !py-2 text-sm w-full sm:w-auto"}>
@@ -1502,7 +1566,12 @@ function ContactsPage() {
         </div>
       )}
 
-      <div className="relative hidden max-h-[min(70vh,900px)] min-h-0 w-full min-w-0 max-w-full overflow-y-auto rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-secondary)_55%,var(--bg-card))] p-3 md:block">
+      <div
+        className={cn(
+          "relative hidden min-h-0 w-full min-w-0 max-w-full overflow-y-auto rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-secondary)_55%,var(--bg-card))] p-3 md:block",
+          focusMode ? "max-h-none flex-1" : "max-h-[min(70vh,900px)]",
+        )}
+      >
         <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-center gap-2 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-card)_82%,transparent)] px-3 py-2.5 backdrop-blur-md">
           <div className="flex w-10 shrink-0 items-center justify-center">
             <input
@@ -1755,6 +1824,8 @@ function ContactsPage() {
       )}
 
       {openCreate && <CreateContactModal groups={groups} onClose={() => setOpenCreate(false)} onSaved={load} />}
+        </div>
+      </div>
     </div>
   );
 }
