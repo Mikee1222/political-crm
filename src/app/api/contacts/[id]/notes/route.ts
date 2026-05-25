@@ -16,7 +16,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     const { supabase } = crm;
     const { data: rows, error } = await supabase
       .from("contact_notes")
-      .select("id, contact_id, user_id, content, created_at")
+      .select("id, contact_id, user_id, content, created_at, author_name")
       .eq("contact_id", params.id)
       .order("created_at", { ascending: false });
     if (error) {
@@ -25,10 +25,18 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     const list = rows ?? [];
     const nameMap = await resolveProfileNames(list.map((r) => (r as { user_id: string | null }).user_id));
     const notes = list.map((r) => {
-      const row = r as { id: string; user_id: string | null; content: string; created_at: string };
+      const row = r as {
+        id: string;
+        user_id: string | null;
+        content: string;
+        created_at: string;
+        author_name: string | null;
+      };
+      const stored = row.author_name?.trim();
       return {
         ...row,
-        author_full_name: row.user_id ? (nameMap.get(row.user_id) ?? "—") : "—",
+        author_name: stored || null,
+        author_full_name: stored || (row.user_id ? (nameMap.get(row.user_id) ?? "—") : "—"),
       };
     });
     return NextResponse.json({ notes });
@@ -53,8 +61,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     const { data: row, error: insErr } = await supabase
       .from("contact_notes")
-      .insert({ contact_id: params.id, user_id: user.id, content })
-      .select("id, contact_id, user_id, content, created_at")
+      .insert({
+        contact_id: params.id,
+        user_id: user.id,
+        content,
+        author_name: profile?.full_name?.trim() || null,
+      })
+      .select("id, contact_id, user_id, content, created_at, author_name")
       .single();
     if (insErr) {
       return NextResponse.json({ error: insErr.message }, { status: 400 });
@@ -79,10 +92,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const nameMap = await resolveProfileNames([(row as { user_id: string | null }).user_id]);
     const uid = (row as { user_id: string | null }).user_id;
+    const r = row as {
+      id: string;
+      user_id: string | null;
+      content: string;
+      created_at: string;
+      author_name: string | null;
+    };
+    const stored = r.author_name?.trim();
     return NextResponse.json({
       note: {
-        ...(row as object),
-        author_full_name: uid ? (nameMap.get(uid) ?? "—") : "—",
+        ...r,
+        author_name: stored || null,
+        author_full_name: stored || (uid ? (nameMap.get(uid) ?? "—") : "—"),
       },
     });
   } catch (e) {

@@ -132,6 +132,7 @@ type Contact = {
   updated_at?: string | null;
   created_by?: string | null;
   updated_by?: string | null;
+  author_name?: string | null;
   created_by_name?: string | null;
   updated_by_name?: string | null;
   group_id: string | null;
@@ -199,6 +200,7 @@ type ContactNoteItem = {
   user_id: string | null;
   content: string;
   created_at: string;
+  author_name?: string | null;
   author_full_name: string;
 };
 
@@ -265,6 +267,10 @@ function fmtDateTime(s: string | null | undefined) {
     minute: "2-digit",
     hour12: false,
   });
+}
+
+function formatDate(s: string | null | undefined) {
+  return fmtDateTime(s);
 }
 
 function authorInitials(name: string) {
@@ -2014,12 +2020,12 @@ function ContactDetailPage() {
                 {contactNotes.length === 0 && (c.notes?.trim() ?? "") !== "" && (
                   <li className="text-xs text-[var(--text-muted)]">Χωρίς νέες σημειώσεις.</li>
                 )}
-                {contactNotes.map((n) => {
+                {contactNotes.map((note) => {
                   const canDeleteThis =
                     Boolean(profile?.id) &&
-                    (n.user_id === profile?.id || profile?.role === "admin");
+                    (note.user_id === profile?.id || profile?.role === "admin");
                   return (
-                    <li key={n.id}>
+                    <li key={note.id}>
                       <div className="group relative rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35 p-3 pl-3 pr-2">
                         {canDeleteThis && (
                           <button
@@ -2027,11 +2033,11 @@ function ContactDetailPage() {
                             onClick={async () => {
                               if (!id) return;
                               const dres = await fetchWithTimeout(
-                                `/api/contacts/${id}/notes/${n.id}`,
+                                `/api/contacts/${id}/notes/${note.id}`,
                                 { method: "DELETE" },
                               );
                               if (dres.ok) {
-                                setContactNotes((prev) => prev.filter((x) => x.id !== n.id));
+                                setContactNotes((prev) => prev.filter((x) => x.id !== note.id));
                               }
                             }}
                             className="absolute right-1.5 top-1.5 z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-muted)] opacity-0 transition hover:bg-[var(--bg-card)] hover:text-red-400 group-hover:opacity-100"
@@ -2046,16 +2052,17 @@ function ContactDetailPage() {
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] font-bold text-[var(--text-primary)]"
                             aria-hidden
                           >
-                            {authorInitials(n.author_full_name || "—")}
+                            {authorInitials(note.author_name?.trim() || note.author_full_name || "—")}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-[var(--text-primary)]">{n.author_full_name || "—"}</p>
-                            <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">
-                              {fmtDateTime(n.created_at)}
-                            </p>
-                            <p className="mt-1.5 whitespace-pre-wrap text-sm text-[var(--text-primary)]">
-                              {n.content}
-                            </p>
+                            <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{note.content}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              {note.author_name && (
+                                <span className="text-xs font-medium text-primary/70">{note.author_name}</span>
+                              )}
+                              {note.author_name && <span className="text-xs text-muted-foreground">·</span>}
+                              <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2654,10 +2661,18 @@ function ContactDetailPage() {
           </div>
         </div>
       <div className="mt-6 border-t border-[var(--border)] pt-4 text-[11px] leading-relaxed text-[var(--text-muted)]">
-        <p>
-          Δημιουργήθηκε από <span className="text-[var(--text-secondary)]">{c.created_by_name?.trim() || "—"}</span> στις{" "}
-          <span className="text-[var(--text-secondary)]">{fmtDateTime(c.created_at)}</span>
-        </p>
+        <div className="text-xs text-[var(--text-muted)]">
+          {(c.author_name?.trim() || c.created_by_name?.trim()) && (
+            <span>
+              Δημιουργία από:{" "}
+              <span className="font-medium text-[var(--text-secondary)]">
+                {c.author_name?.trim() || c.created_by_name?.trim()}
+              </span>
+              {c.created_at ? " · " : null}
+            </span>
+          )}
+          {c.created_at && <span className="text-[var(--text-secondary)]">{fmtDateTime(c.created_at)}</span>}
+        </div>
         {c.updated_by && c.updated_at ? (
           <p className="mt-1.5">
             Τελευταία ενημέρωση: <span className="text-[var(--text-secondary)]">{fmtDateTime(c.updated_at)}</span>

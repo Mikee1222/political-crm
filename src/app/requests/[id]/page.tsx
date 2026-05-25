@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles, UserCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
@@ -46,7 +46,9 @@ type RequestDetail = {
   requesters: ContactCard[];
   affected_list: ContactCard[];
   helpers: ContactCard[];
-  handlers: ContactCard[];
+  person_handlers: ContactCard[];
+  handlers: string[];
+  notes?: Note[];
 };
 
 type Note = {
@@ -54,6 +56,7 @@ type Note = {
   user_id: string | null;
   content: string;
   created_at: string;
+  author_name?: string | null;
   author_full_name: string;
 };
 
@@ -71,6 +74,10 @@ function fmtDateTime(s: string | null | undefined) {
     minute: "2-digit",
     hour12: false,
   });
+}
+
+function formatDate(s: string | null | undefined) {
+  return fmtDateTime(s);
 }
 
 function authorInitials(name: string) {
@@ -184,10 +191,7 @@ export default function RequestDetailPage() {
     setErr("");
     setAiSummary(null);
     try {
-      const [rRes, nRes] = await Promise.all([
-        fetchWithTimeout(`/api/requests/${id}`),
-        fetchWithTimeout(`/api/requests/${id}/notes`),
-      ]);
+      const rRes = await fetchWithTimeout(`/api/requests/${id}`);
       const rj = await rRes.json();
       if (!rRes.ok) {
         setErr(String((rj as { error?: string }).error ?? "Σφάλμα"));
@@ -196,10 +200,7 @@ export default function RequestDetailPage() {
       const req = (rj as { request: RequestDetail }).request;
       setData(req);
       setPortalMsg(req.portal_message?.trim() ?? "");
-      if (nRes.ok) {
-        const nj = (await nRes.json()) as { notes?: Note[] };
-        setNotes(nj.notes ?? []);
-      }
+      setNotes(req.notes ?? []);
     } catch {
       setErr("Σφάλμα φόρτωσης");
     }
@@ -370,20 +371,25 @@ export default function RequestDetailPage() {
               {notes.length === 0 ? (
                 <li className="text-xs text-[var(--text-muted)]">Καμία σημείωση ακόμα.</li>
               ) : (
-                notes.map((n) => (
-                  <li key={n.id}>
+                notes.map((note) => (
+                  <li key={note.id}>
                     <div className="group relative rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35 p-3 pl-3 pr-2">
                       <div className="flex gap-3 pr-2">
                         <div
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] font-bold text-[var(--text-primary)]"
                           aria-hidden
                         >
-                          {authorInitials(n.author_full_name || "—")}
+                          {authorInitials(note.author_name?.trim() || note.author_full_name || "—")}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-[var(--text-primary)]">{n.author_full_name || "—"}</p>
-                          <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">{fmtDateTime(n.created_at)}</p>
-                          <p className="mt-1.5 whitespace-pre-wrap text-sm text-[var(--text-primary)]">{n.content}</p>
+                          <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{note.content}</p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {note.author_name && (
+                              <span className="text-xs font-medium text-primary/70">{note.author_name}</span>
+                            )}
+                            {note.author_name && <span className="text-xs text-muted-foreground">·</span>}
+                            <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -440,10 +446,31 @@ export default function RequestDetailPage() {
             requesters={data.requesters ?? (data.requester ? [data.requester] : [])}
             affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
             helpers={data.helpers ?? []}
-            handlers={data.handlers ?? []}
+            handlers={data.person_handlers ?? []}
             canManage={canManage}
             onChanged={() => void load()}
           />
+          {(data.handlers?.length ?? 0) > 0 && (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                <UserCheck className="h-3.5 w-3.5" aria-hidden />
+                ΧΕΙΡΙΣΤΕΣ
+              </h3>
+              <ul className="space-y-0">
+                {data.handlers.map((name, i) => (
+                  <li
+                    key={`${name}-${i}`}
+                    className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#003476]/10 text-[10px] font-bold text-[#003476]">
+                      {(name[0] ?? "?").toUpperCase()}
+                    </div>
+                    <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Ανατέθηκε σε</p>
             {data.assigned_to ? (

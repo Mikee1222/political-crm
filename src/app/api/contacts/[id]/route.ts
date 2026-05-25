@@ -21,9 +21,12 @@ function enrichContact(
   names: { created?: string | null; updated?: string | null },
 ) {
   if (!c) return null;
+  const storedAuthor = typeof c.author_name === "string" ? c.author_name.trim() : "";
+  const createdName = names.created ?? null;
   return {
     ...c,
-    created_by_name: names.created ?? null,
+    author_name: storedAuthor || createdName,
+    created_by_name: createdName,
     updated_by_name: names.updated ?? null,
   };
 }

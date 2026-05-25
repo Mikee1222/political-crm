@@ -8,7 +8,22 @@ import { nextJsonError } from "@/lib/api-resilience";
 import { computeSlaStatus } from "@/lib/request-sla";
 import { fieldDiff } from "@/lib/field-diff";
 import { notifyRequestStatusToCitizen } from "@/lib/request-notifications";
+import { resolveProfileNames } from "@/lib/profile-names";
 export const dynamic = "force-dynamic";
+
+type RequestNoteRow = {
+  id: string;
+  content: string;
+  created_at: string;
+  created_by: string | null;
+  author_name: string | null;
+};
+
+function noteAuthorDisplay(row: RequestNoteRow, nameMap: Map<string, string | null>) {
+  const stored = row.author_name?.trim();
+  if (stored) return stored;
+  return row.created_by ? (nameMap.get(row.created_by) ?? "—") : "—";
+}
 
 type ContactBrief = {
   id: string;
@@ -121,6 +136,32 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const requester = grouped.requesters[0] ?? byId.get(r.contact_id) ?? null;
   const affectedOne = grouped.affected[0] ?? (r.affected_contact_id != null ? byId.get(r.affected_contact_id) ?? null : null);
 
+  const { data: noteRows } = await supabase
+    .from("request_notes")
+    .select("id, content, created_at, created_by:user_id, author_name")
+    .eq("request_id", params.id)
+    .order("created_at", { ascending: false });
+
+  const rawNotes = (noteRows ?? []) as RequestNoteRow[];
+  const nameMap = await resolveProfileNames(rawNotes.map((n) => n.created_by));
+  const notesData = rawNotes.map((n) => ({
+    ...n,
+    author_name: n.author_name?.trim() || null,
+    author_full_name: noteAuthorDisplay(n, nameMap),
+  }));
+
+  const allNotes = notesData ?? [];
+
+  const handlers = allNotes
+    .filter((n: any) => n.content?.startsWith('[Χειριστής:'))
+    .map((n: any) => {
+      const match = n.content.match(/\[Χειριστής: (.+?)\]/);
+      return match ? match[1].trim() : null;
+    })
+    .filter(Boolean);
+
+  const regularNotes = allNotes.filter((n: any) => !n.content?.startsWith('[Χειριστής:'));
+
   return NextResponse.json({
     request: {
       ...row,
@@ -129,7 +170,9 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
       requesters: grouped.requesters,
       affected_list: grouped.affected,
       helpers: grouped.helpers,
-      handlers: grouped.handlers,
+      person_handlers: grouped.handlers,
+      handlers,
+      notes: regularNotes,
     },
   });
   } catch (e) {
