@@ -41,7 +41,7 @@ export function ContactElectoralLocationEdit({
   const [municipalities, setMunicipalities] = useState<string[]>([]);
   const [geoMunicipalities, setGeoMunicipalities] = useState<MunicipalityRow[]>([]);
   const [districts, setDistricts] = useState<ElectoralDistrictRow[]>([]);
-  const [toponymNames, setToponymNames] = useState<string[]>([]);
+  const [toponyms, setToponyms] = useState<ToponymListRow[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -101,13 +101,18 @@ export function ContactElectoralLocationEdit({
       try {
         const r = await fetchWithTimeout("/api/toponyms");
         if (!r.ok) {
-          setToponymNames([]);
+          setToponyms([]);
           return;
         }
-        const d = (await r.json()) as { toponyms?: ToponymListRow[] };
-        setToponymNames((d.toponyms ?? []).map((t) => t.name?.trim() ?? "").filter(Boolean));
+        const d = (await r.json()) as ToponymListRow[];
+        const clean = Array.isArray(d)
+          ? d
+              .filter((t) => t.name && t.name.trim().length > 2)
+              .map((t) => ({ ...t, name: t.name.trim() }))
+          : [];
+        setToponyms(clean);
       } catch {
-        setToponymNames([]);
+        setToponyms([]);
       }
     })();
   }, []);
@@ -120,6 +125,8 @@ export function ContactElectoralLocationEdit({
     const base = districts.length > 0 ? districts.map((d) => d.name) : getDistrictsForMuni(muni).map((d) => d.name);
     return withLegacyOption(base, dist);
   }, [districts, muni, dist]);
+
+  const toponymNames = useMemo(() => toponyms.map((t) => t.name), [toponyms]);
 
   const toponymOptions = useMemo(() => withLegacyOption(toponymNames, top.trim()), [toponymNames, top]);
 

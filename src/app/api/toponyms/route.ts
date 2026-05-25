@@ -30,6 +30,7 @@ export async function GET() {
       const { data, error } = await supabase
         .from("toponyms")
         .select("id, name")
+        .not("name", "is", null)
         .order("name", { ascending: true })
         .range(from, from + batchSize - 1);
 
@@ -44,14 +45,16 @@ export async function GET() {
           throw new Error("Invalid toponym row returned from database");
         }
 
-        allToponyms.push(row);
+        allToponyms.push({ ...row, name: row.name.trim() });
       }
 
       if (data.length < batchSize) break;
       from += batchSize;
     }
 
-    return NextResponse.json(allToponyms);
+    const clean = allToponyms.filter((t) => t.name && t.name.trim().length > 2);
+
+    return NextResponse.json(clean);
   } catch (e) {
     console.error("[api/toponyms GET]", e);
     return nextJsonError();
