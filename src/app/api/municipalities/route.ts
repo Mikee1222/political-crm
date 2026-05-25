@@ -4,16 +4,12 @@ import { NextResponse } from "next/server"
 export async function GET() {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
-    .from("contacts")
-    .select("municipality")
-    .not("municipality", "is", null)
-    .order("municipality")
-    .range(0, 999)
+  const { data, error } = await supabase.rpc("get_distinct_municipalities")
 
-  if (error) return NextResponse.json([], { status: 500 })
-
-  const unique = [...new Set(data.map(r => r.municipality).filter(Boolean))].sort((a, b) => a.localeCompare(b, "el"))
+  if (error) {
+    // fallback
+    return NextResponse.json([])
+  }
   
-  return NextResponse.json(unique)
+  return NextResponse.json(data)
 }
