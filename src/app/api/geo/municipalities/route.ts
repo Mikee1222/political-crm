@@ -1,6 +1,13 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
+export type MunicipalityRow = {
+  id: string
+  name: string
+  regional_unit: string | null
+  created_at: string
+}
+
 export async function GET() {
   const supabase = await createClient()
   
