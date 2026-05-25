@@ -1,18 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  MUNICIPALITIES,
-  getAllSettlementsForMuni,
-  getDistrictsForMuni,
-  getSettlements,
-} from "@/lib/aitoloakarnania-data";
+import { getDistrictsForMuni } from "@/lib/aitoloakarnania-data";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
 import type { ElectoralDistrictRow } from "@/app/api/geo/electoral-districts/route";
-import type { ToponymRow } from "@/app/api/geo/toponyms/route";
+import type { ToponymListRow } from "@/app/api/toponyms/route";
 
 export type ElectoralLocationValues = {
   municipality: string | null;
@@ -32,7 +27,7 @@ type Props = {
   labelClassName?: string;
 };
 
-/** Municipality / electoral district / toponym — native selects + text fallback for contact edit. */
+/** Municipality / electoral district / toponym editor with searchable CRM dropdowns. */
 export function ContactElectoralLocationEdit({
   values,
   onChange,
@@ -43,34 +38,43 @@ export function ContactElectoralLocationEdit({
   const dist = values.electoral_district?.trim() ?? "";
   const top = values.toponym ?? "";
 
-  const [useApi, setUseApi] = useState(false);
-  const [municipalities, setMunicipalities] = useState<MunicipalityRow[]>([]);
+  const [municipalityNames, setMunicipalityNames] = useState<string[]>([]);
+  const [geoMunicipalities, setGeoMunicipalities] = useState<MunicipalityRow[]>([]);
   const [districts, setDistricts] = useState<ElectoralDistrictRow[]>([]);
   const [toponymNames, setToponymNames] = useState<string[]>([]);
 
   useEffect(() => {
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/geo/municipalities");
+        const r = await fetchWithTimeout("/api/municipalities");
         if (!r.ok) return;
-        const d = (await r.json()) as { municipalities?: MunicipalityRow[] };
-        if (d.municipalities?.length) {
-          setMunicipalities(d.municipalities);
-          setUseApi(true);
-        }
+        const d = (await r.json()) as { municipalities?: string[] };
+        setMunicipalityNames((d.municipalities ?? []).map((name) => name.trim()).filter(Boolean));
       } catch {
-        /* static fallback */
+        setMunicipalityNames([]);
       }
     })();
   }, []);
 
+  useEffect(() => {
+    void (async () => {
+      const r = await fetchWithTimeout("/api/geo/municipalities");
+      if (r.ok) {
+        const d = (await r.json()) as { municipalities?: MunicipalityRow[] };
+        setGeoMunicipalities(d.municipalities ?? []);
+      } else {
+        setGeoMunicipalities([]);
+      }
+    })().catch(() => setGeoMunicipalities([]));
+  }, []);
+
   const muniId = useMemo(
-    () => (useApi ? municipalities.find((x) => x.name === muni)?.id ?? null : null),
-    [useApi, municipalities, muni],
+    () => geoMunicipalities.find((x) => x.name === muni)?.id ?? null,
+    [geoMunicipalities, muni],
   );
 
   useEffect(() => {
-    if (!useApi || !muniId) {
+    if (!muniId) {
       setDistricts([]);
       return;
     }
@@ -83,49 +87,32 @@ export function ContactElectoralLocationEdit({
         setDistricts([]);
       }
     })();
-  }, [useApi, muniId]);
-
-  const distId = useMemo(
-    () => districts.find((x) => x.name === dist)?.id ?? null,
-    [districts, dist],
-  );
+  }, [muniId]);
 
   useEffect(() => {
-    if (!muni) {
-      setToponymNames([]);
-      return;
-    }
-    if (useApi && muniId) {
-      void (async () => {
-        const q = new URLSearchParams({ municipality_id: muniId });
-        if (distId) q.set("electoral_district_id", distId);
-        const r = await fetchWithTimeout(`/api/geo/toponyms?${q.toString()}`);
-        if (r.ok) {
-          const d = (await r.json()) as { toponyms?: ToponymRow[] };
-          setToponymNames((d.toponyms ?? []).map((t) => t.name).filter(Boolean));
-        } else {
+    void (async () => {
+      try {
+        const r = await fetchWithTimeout("/api/toponyms");
+        if (!r.ok) {
           setToponymNames([]);
+          return;
         }
-      })();
-      return;
-    }
-    const staticNames = dist ? getSettlements(muni, dist) : getAllSettlementsForMuni(muni);
-    setToponymNames([...staticNames]);
-  }, [useApi, muniId, distId, muni, dist]);
+        const d = (await r.json()) as { toponyms?: ToponymListRow[] };
+        setToponymNames((d.toponyms ?? []).map((t) => t.name?.trim() ?? "").filter(Boolean));
+      } catch {
+        setToponymNames([]);
+      }
+    })();
+  }, []);
 
   const municipalityOptions = useMemo(() => {
-    const base = useApi
-      ? municipalities.map((x) => x.name)
-      : MUNICIPALITIES.map((x) => x.name);
-    return withLegacyOption(base, muni);
-  }, [useApi, municipalities, muni]);
+    return withLegacyOption(municipalityNames, muni);
+  }, [municipalityNames, muni]);
 
   const districtOptions = useMemo(() => {
-    const base = useApi
-      ? districts.map((d) => d.name)
-      : getDistrictsForMuni(muni).map((d) => d.name);
+    const base = districts.length > 0 ? districts.map((d) => d.name) : getDistrictsForMuni(muni).map((d) => d.name);
     return withLegacyOption(base, dist);
-  }, [useApi, districts, muni, dist]);
+  }, [districts, muni, dist]);
 
   const toponymOptions = useMemo(() => withLegacyOption(toponymNames, top.trim()), [toponymNames, top]);
 
@@ -192,33 +179,19 @@ export function ContactElectoralLocationEdit({
 
       <div className="flex flex-col gap-2">
         <span className={labelClassName}>Τοπωνύμιο / χωριό</span>
-        {toponymOptions.length > 0 ? (
-          <HqSelect
-            className={inputClassName + " !pr-9"}
-            value={top}
-            disabled={!muni}
-            onChange={(e) => patch({ toponym: e.target.value || null })}
-          >
-            <option value="">Επιλέξτε τοπωνύμιο</option>
-            {toponymOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </HqSelect>
-        ) : (
-          <input
-            type="text"
-            className={inputClassName}
-            value={top}
-            disabled={!muni}
-            placeholder={muni ? "Πληκτρολογήστε τοπωνύμιο" : "Πρώτα επιλέξτε δήμο"}
-            onChange={(e) => patch({ toponym: e.target.value || null })}
-          />
-        )}
-        {toponymOptions.length > 0 && top && !toponymNames.includes(top.trim()) ? (
+        <SearchableSelect
+          className={inputClassName + " !pr-9"}
+          value={top}
+          disabled={!muni}
+          onChange={(v) => patch({ toponym: v || null })}
+          options={toponymOptions.map((name) => ({ value: name, label: name }))}
+          placeholder={muni ? "Επιλέξτε τοπωνύμιο" : "Πρώτα επιλέξτε δήμο"}
+          searchPlaceholder="Αναζήτηση τοπωνυμίου..."
+          emptyText="Δεν βρέθηκαν τοπωνύμια"
+        />
+        {toponymNames.length > 0 && top && !toponymNames.includes(top.trim()) ? (
           <p className="text-[11px] text-[var(--text-muted)]">
-            Τρέχουσα τιμή εκτός λίστας — επιλέξτε από τη λίστα ή αλλάξτε δήμο/διαμέρισμα.
+            Τρέχουσα τιμή εκτός λίστας - επιλέξτε από τη λίστα ή αλλάξτε δήμο.
           </p>
         ) : null}
       </div>

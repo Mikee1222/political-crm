@@ -46,6 +46,7 @@ import { ContactExtraSections } from "@/components/contact-extra-sections";
 import { ContactRelatedPersonsSection } from "@/components/contact-related-persons-section";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { useFormToast } from "@/contexts/form-toast-context";
@@ -175,6 +176,11 @@ type ContactEventRow = {
   type: string | null;
   status: string | null;
   rsvp_status: string | null;
+};
+
+type ContactSourceRow = {
+  id: string;
+  name: string;
 };
 
 type ContactNavInfo = {
@@ -408,6 +414,10 @@ function ContactDetailPage() {
   const [headerCopied, setHeaderCopied] = useState(false);
   const [groupOptions, setGroupOptions] = useState<ContactGroupRow[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [availableSources, setAvailableSources] = useState<ContactSourceRow[]>([]);
+  const [contactSources, setContactSources] = useState<ContactSourceRow[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [sourcesSaving, setSourcesSaving] = useState(false);
   const [supporters, setSupporters] = useState<SupporterRow[]>([]);
   const [newSup, setNewSup] = useState({ support_type: "Οικονομική", amount: "", date: "", notes: "" });
   const [contactNotes, setContactNotes] = useState<ContactNoteItem[]>([]);
@@ -588,6 +598,34 @@ function ContactDetailPage() {
     [id, profile?.role],
   );
 
+  const loadSources = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!id) return;
+      setSourcesLoading(true);
+      try {
+        const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/sources`, { signal });
+        if (signal?.aborted) return;
+        if (!res.ok) {
+          setContactSources([]);
+          return;
+        }
+        const data = (await res.json()) as { sources?: ContactSourceRow[] };
+        if (!signal?.aborted) {
+          setContactSources(data.sources ?? []);
+        }
+      } catch {
+        if (!signal?.aborted) {
+          setContactSources([]);
+        }
+      } finally {
+        if (!signal?.aborted) {
+          setSourcesLoading(false);
+        }
+      }
+    },
+    [id],
+  );
+
   useEffect(() => {
     const ac = new AbortController();
     void load(ac.signal);
@@ -638,9 +676,50 @@ function ContactDetailPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const ac = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetchWithTimeout("/api/contact-sources", { signal: ac.signal });
+        if (ac.signal.aborted) return;
+        if (!res.ok) {
+          setAvailableSources([]);
+          return;
+        }
+        const data = (await res.json()) as { sources?: ContactSourceRow[] };
+        if (!ac.signal.aborted) {
+          setAvailableSources(data.sources ?? []);
+        }
+      } catch {
+        if (!ac.signal.aborted) {
+          setAvailableSources([]);
+        }
+      }
+    })();
+    return () => {
+      ac.abort();
+    };
+  }, []);
+
   const callStatusSearchOptions = useMemo(
     () => CALL_OPTS.map((o) => ({ value: o.value, label: o.label })),
     [],
+  );
+
+  const sourceOptions = useMemo(() => {
+    const byId = new Map<string, ContactSourceRow>();
+    for (const source of availableSources) byId.set(source.id, source);
+    for (const source of contactSources) {
+      if (!byId.has(source.id)) byId.set(source.id, source);
+    }
+    return [...byId.values()]
+      .sort((a, b) => a.name.localeCompare(b.name, "el"))
+      .map((source) => ({ value: source.id, label: source.name }));
+  }, [availableSources, contactSources]);
+
+  const selectedSourceIds = useMemo(
+    () => contactSources.map((source) => source.id),
+    [contactSources],
   );
 
   useEffect(() => {
@@ -734,6 +813,12 @@ function ContactDetailPage() {
     })();
     return () => ac.abort();
   }, [id]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    void loadSources(ac.signal);
+    return () => ac.abort();
+  }, [loadSources]);
 
   useEffect(() => {
     if (!id) return;
@@ -864,7 +949,6 @@ function ContactDetailPage() {
         electoral_district: buf.electoral_district,
         toponym: buf.toponym,
         political_stance: buf.political_stance,
-        source: buf.source,
         priority: buf.priority,
         call_status: buf.call_status,
         influence: buf.influence,
@@ -970,6 +1054,65 @@ function ContactDetailPage() {
     } catch {
       showToast("Σφάλμα δικτύου.", "error");
     }
+  };
+
+  const handleAddSource = async (sourceId: string) => {
+    if (!id || !canManage || sourcesSaving) return;
+    setSourcesSaving(true);
+    try {
+      const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/sources`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_id: sourceId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        source?: ContactSourceRow;
+        error?: string;
+      };
+      if (!res.ok || !data.source) {
+        showToast(data.error ?? "Αποτυχία προσθήκης πηγής", "error");
+        return;
+      }
+      setContactSources((prev) => {
+        if (prev.some((source) => source.id === data.source!.id)) return prev;
+        return [...prev, data.source!].sort((a, b) => a.name.localeCompare(b.name, "el"));
+      });
+      showToast("Η πηγή προστέθηκε.", "success");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setSourcesSaving(false);
+    }
+  };
+
+  const handleRemoveSource = async (sourceId: string) => {
+    if (!id || !canManage || sourcesSaving) return;
+    setSourcesSaving(true);
+    try {
+      const res = await fetchWithTimeout(
+        `/api/contacts/${encodeURIComponent(id)}/sources/${encodeURIComponent(sourceId)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        showToast(data.error ?? "Αποτυχία αφαίρεσης πηγής", "error");
+        return;
+      }
+      setContactSources((prev) => prev.filter((source) => source.id !== sourceId));
+      showToast("Η πηγή αφαιρέθηκε.", "success");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setSourcesSaving(false);
+    }
+  };
+
+  const handleToggleSource = async (sourceId: string) => {
+    if (selectedSourceIds.includes(sourceId)) {
+      await handleRemoveSource(sourceId);
+      return;
+    }
+    await handleAddSource(sourceId);
   };
 
   const handleDeleteAddress = async (addressId: string) => {
@@ -1711,7 +1854,6 @@ function ContactDetailPage() {
                 {(
                   [
                     { k: "political_stance" as const, l: "Πολιτική τοποθέτηση" },
-                    { k: "source" as const, l: "Πηγή επαφής" },
                   ] as const
                 ).map((row) => (
                   <div key={row.k} className={fieldGap}>
@@ -1819,6 +1961,70 @@ function ContactDetailPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            <div {...animDelay(2)} className={card}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                  <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+                  Πηγές
+                </h2>
+                {sourcesLoading ? (
+                  <span className="text-xs text-[var(--text-muted)]">Φόρτωση...</span>
+                ) : null}
+              </div>
+
+              {contactSources.length > 0 ? (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {contactSources.map((source) =>
+                    canManage ? (
+                      <button
+                        key={source.id}
+                        type="button"
+                        disabled={sourcesSaving}
+                        onClick={() => void handleRemoveSource(source.id)}
+                        className="inline-flex items-center gap-1 rounded-full border border-[var(--accent-gold)]/30 bg-[var(--accent-gold)]/10 px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--accent-gold)]/15 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <span>{source.name}</span>
+                        <X className="h-3 w-3" aria-hidden />
+                      </button>
+                    ) : (
+                      <span
+                        key={source.id}
+                        className="inline-flex items-center rounded-full border border-[var(--accent-gold)]/30 bg-[var(--accent-gold)]/10 px-2.5 py-1 text-xs font-medium text-[var(--text-primary)]"
+                      >
+                        {source.name}
+                      </span>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <p className="mb-3 text-sm text-[var(--text-muted)]">
+                  {sourcesLoading ? "Φόρτωση πηγών..." : "Δεν έχουν οριστεί πηγές."}
+                </p>
+              )}
+
+              {canManage ? (
+                <div className="space-y-2">
+                  <span className={lbl}>Προσθήκη / αφαίρεση</span>
+                  <SearchableMultiSelect
+                    className={inputSm + " !pr-9"}
+                    values={selectedSourceIds}
+                    onToggle={(sourceId) => void handleToggleSource(sourceId)}
+                    options={sourceOptions}
+                    placeholder={
+                      sourceOptions.length > 0 ? "Επιλέξτε πηγές" : "Δεν υπάρχουν διαθέσιμες πηγές"
+                    }
+                    searchPlaceholder="Αναζήτηση πηγής..."
+                    emptyText="Δεν βρέθηκαν πηγές"
+                    disabled={sourcesLoading || sourcesSaving || sourceOptions.length === 0}
+                    aria-label="Επιλογή πηγών"
+                  />
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Επιλέξτε μία πηγή για προσθήκη ή ξαναπατήστε την για αφαίρεση.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             {canManage ? (
