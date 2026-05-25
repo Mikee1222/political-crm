@@ -707,6 +707,13 @@ function ContactSwipeCard({
 
 const CALL_STATUS_OPTS = CONTACT_CALL_STATUS_OPTIONS.map((o) => ({ v: o.value, l: o.label }));
 
+const AGE_GROUPS: Record<string, { min: number; max: number }> = {
+  "17-20": { min: 17, max: 20 },
+  "20-40": { min: 20, max: 40 },
+  "40-70": { min: 40, max: 70 },
+  "70+": { min: 70, max: 120 },
+};
+
 function CallStatusMultiSelect({
   value,
   onChange,
@@ -794,6 +801,7 @@ function ContactsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [f, setF] = useState<ContactListFilters>(getDefaultContactFilters);
+  const [ageGroup, setAgeGroup] = useState<string>("");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listTotal, setListTotal] = useState(0);
@@ -890,6 +898,14 @@ function ContactsPage() {
   }, [searchKey]);
 
   useEffect(() => {
+    const nextAgeGroup =
+      Object.entries(AGE_GROUPS).find(
+        ([, range]) => f.age_min === String(range.min) && f.age_max === String(range.max),
+      )?.[0] ?? "";
+    setAgeGroup(nextAgeGroup);
+  }, [f.age_min, f.age_max]);
+
+  useEffect(() => {
     if (searchParams.get("new") !== "1") return;
     if (canManage) setOpenCreate(true);
     const p = new URLSearchParams(searchParams.toString());
@@ -907,6 +923,10 @@ function ContactsPage() {
   const load = useCallback(async () => {
     const q = f;
     const params = contactFiltersToSearchParams(q);
+    if (ageGroup) {
+      params.set("age_min", String(AGE_GROUPS[ageGroup].min));
+      params.set("age_max", String(AGE_GROUPS[ageGroup].max));
+    }
     params.set("page", q.page || "1");
     params.set("page_size", String(pageSize));
     setListLoading(true);
@@ -931,7 +951,7 @@ function ContactsPage() {
     } finally {
       setListLoading(false);
     }
-  }, [f, pageSize]);
+  }, [f, ageGroup, pageSize]);
 
   useEffect(() => {
     fetchWithTimeout("/api/groups")
@@ -1406,8 +1426,8 @@ function ContactsPage() {
                 id="f-age-from"
                 type="number"
                 placeholder="Από"
-                min={18}
-                max={100}
+                min={17}
+                max={120}
                 value={f.age_min}
                 onChange={(e) => patch({ age_min: e.target.value.replace(/[^\d]/g, "") })}
                 className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--text-input)]"
@@ -1417,12 +1437,46 @@ function ContactsPage() {
                 id="f-age-to"
                 type="number"
                 placeholder="Έως"
-                min={18}
-                max={100}
+                min={17}
+                max={120}
                 value={f.age_max}
                 onChange={(e) => patch({ age_max: e.target.value.replace(/[^\d]/g, "") })}
                 className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--text-input)]"
               />
+            </div>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground font-medium">Ηλικία:</span>
+              {[
+                { label: "17-20", min: 17, max: 20 },
+                { label: "20-40", min: 20, max: 40 },
+                { label: "40-70", min: 40, max: 70 },
+                { label: "70+", min: 70, max: 120 },
+              ].map((g) => (
+                <button
+                  key={g.label}
+                  type="button"
+                  onClick={() => {
+                    const nextGroup = ageGroup === g.label ? "" : g.label;
+                    setAgeGroup(nextGroup);
+                    patch(
+                      nextGroup
+                        ? {
+                            age_min: String(AGE_GROUPS[nextGroup].min),
+                            age_max: String(AGE_GROUPS[nextGroup].max),
+                          }
+                        : { age_min: "", age_max: "" },
+                    );
+                  }}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    ageGroup === g.label
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40",
+                  )}
+                >
+                  {g.label}
+                </button>
+              ))}
             </div>
           </div>
           <div className="min-w-0 max-w-full">

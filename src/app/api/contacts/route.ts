@@ -25,6 +25,39 @@ const SELECT_LIST =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QueryBuilder = any;
 
+function parseOptionalInt(value: string | null | undefined): number | null {
+  if (!value?.trim()) return null;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function applyBirthdayAgeFilters(query: QueryBuilder, ageMin: string, ageMax: string) {
+  const minAge = parseOptionalInt(ageMin);
+  const maxAge = parseOptionalInt(ageMax);
+  if (minAge == null && maxAge == null) return query;
+
+  const now = new Date();
+  if (maxAge != null) {
+    const minDate = new Date(now.getFullYear() - maxAge, now.getMonth(), now.getDate());
+    query = query.gte("birthday", minDate.toISOString().split("T")[0]);
+  }
+  if (minAge != null) {
+    const maxDate = new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate());
+    query = query.lte("birthday", maxDate.toISOString().split("T")[0]);
+  }
+  return query;
+}
+
+function applyApiContactFilters(
+  query: QueryBuilder,
+  f: ReturnType<typeof getDefaultContactFilters>,
+  groupResolution: Awaited<ReturnType<typeof resolveGroupFilterContactIds>>,
+) {
+  const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
+  query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution);
+  return applyBirthdayAgeFilters(query, f.age_min, f.age_max);
+}
+
 function afterFilterRows(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rows: any[],
@@ -84,7 +117,7 @@ export async function GET(request: NextRequest) {
         .select(SELECT_LIST)
         .in("id", ids)
         .order("created_at", { ascending: false });
-      query = applyContactListFiltersToBuilder(query, f, groupResolution);
+      query = applyApiContactFilters(query, f, groupResolution);
       if (comboboxMode) {
         query = query.limit(listLimit!);
       } else {
@@ -106,7 +139,7 @@ export async function GET(request: NextRequest) {
 
     if (f.search) {
       let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
-      query = applyContactListFiltersToBuilder(query, f, groupResolution);
+      query = applyApiContactFilters(query, f, groupResolution);
       query = query.limit(12_000);
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -125,7 +158,7 @@ export async function GET(request: NextRequest) {
       .from("contacts")
       .select(SELECT_LIST, { count: "exact" })
       .order("created_at", { ascending: false });
-    query = applyContactListFiltersToBuilder(query, f, groupResolution);
+    query = applyApiContactFilters(query, f, groupResolution);
 
     if (comboboxMode) {
       query = query.limit(listLimit!);
