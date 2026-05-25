@@ -66,16 +66,15 @@ function SearchableSelect({
     return options.filter((o) => norm(o).includes(t));
   }, [options, q]);
 
-  const inList = Boolean(value && options.includes(value));
   const displayLabel = value;
 
   useEffect(() => {
     if (open) {
-      setQ(inList ? value : "");
+      setQ("");
       const t = requestAnimationFrame(() => inputRef.current?.focus());
       return () => cancelAnimationFrame(t);
     }
-  }, [open, value, inList]);
+  }, [open]);
 
   return (
     <div className="relative min-w-0">
