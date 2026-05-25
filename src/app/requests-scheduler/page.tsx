@@ -1593,7 +1593,7 @@ function QueueCard({
           open={scheduleOpen}
           pos={scheduleMenu.pos}
           panelRef={scheduleMenu.panelRef}
-          className="rounded-lg border border-border bg-card p-2 shadow-lg"
+          className="rounded-lg border border-border bg-background p-2 shadow-lg"
         >
           <div onClick={(e) => e.stopPropagation()}>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

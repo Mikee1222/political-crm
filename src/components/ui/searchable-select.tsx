@@ -130,7 +130,7 @@ export function SearchableSelect({
                 e.stopPropagation();
                 if (!disabled) onChange("");
               }}
-              className="rounded-md p-0.5 transition-colors hover:bg-muted"
+              className="rounded-md p-0.5 transition-colors hover:bg-accent"
               aria-label="Καθαρισμός επιλογής"
             >
               <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" aria-hidden />
@@ -152,7 +152,7 @@ export function SearchableSelect({
         panelRef={panelRef}
         role="listbox"
         onMouseDown={(e) => e.stopPropagation()}
-        className="overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl"
+        className="overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
       >
         <div className="border-b border-border/60 p-3">
           <div className="relative">
@@ -199,7 +199,7 @@ export function SearchableSelect({
             }}
             className={cn(
               "mx-2 flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
-              !value ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted",
+              !value ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-accent",
             )}
           >
             {!value ? <Check className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
@@ -236,7 +236,7 @@ export function SearchableSelect({
                       "group mx-2 flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
                       value === opt.value
                         ? "bg-primary/10 font-medium text-primary"
-                        : "text-foreground hover:bg-muted",
+                        : "text-foreground hover:bg-accent",
                     )}
                   >
                     {opt.color ? (

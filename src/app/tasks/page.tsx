@@ -760,14 +760,14 @@ function TaskCard({
                   pos={contactHitsMenu.pos}
                   panelRef={contactHitsMenu.panelRef}
                   role="listbox"
-                  className="max-h-44 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-0 text-sm shadow-2xl"
+                  className="max-h-44 rounded-lg border border-border bg-background p-0 text-sm shadow-2xl"
                 >
                   <ul className="m-0 list-none p-0">
                     {hits.map((h) => h && h.id && (
                       <li key={h.id}>
                         <button
                           type="button"
-                          className="block w-full px-3 py-2 text-left text-xs hover:bg-[var(--bg-elevated)]"
+                          className="block w-full px-3 py-2 text-left text-xs hover:bg-accent"
                           onClick={() => {
                             setEdit((e) => ({ ...e, contact_id: h.id! }));
                             setQ("");
@@ -1090,14 +1090,14 @@ function NewTaskModal({
                   pos={contactHitsMenu.pos}
                   panelRef={contactHitsMenu.panelRef}
                   role="listbox"
-                  className="max-h-40 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0 shadow-2xl"
+                  className="max-h-40 rounded-lg border border-border bg-background p-0 shadow-2xl"
                 >
                   <ul className="m-0 list-none p-0">
                     {hits.map((h) => (
                       <li key={h.id}>
                         <button
                           type="button"
-                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[var(--bg-card)]"
+                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-accent"
                           onClick={() => {
                             setF((x) => ({ ...x, contact_id: h.id }));
                             setCLabel([h.first_name, h.last_name, h.phone].filter(Boolean).join(" · "));

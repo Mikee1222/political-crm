@@ -246,7 +246,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
         </div>
         {loading && <p className="mt-2 text-center text-sm text-[var(--text-muted)]">Φόρτωση…</p>}
 
-        <div className="mt-4 max-h-[min(62dvh,480px)] space-y-5 overflow-y-auto rounded-xl border border-[var(--border)]/60 bg-[var(--bg-card)]/95 p-4 text-left shadow-xl">
+        <div className="mt-4 max-h-[min(62dvh,480px)] space-y-5 overflow-y-auto rounded-xl border border-[var(--border)]/60 bg-background p-4 text-left shadow-xl">
           {deb.length < 2 && <p className="px-1 py-2 text-sm text-[var(--text-secondary)]">Πληκτρολογήστε τουλάχιστον 2 χαρακτήρες…</p>}
           {deb.length >= 2 && total === 0 && !loading && (
             <p className="px-1 py-2 text-sm text-[var(--text-secondary)]">Δεν βρέθηκαν αποτελέσματα.</p>
@@ -269,7 +269,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                         "flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-left text-sm transition-colors",
                         idx === active
                           ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]"
-                          : "text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]",
+                          : "text-[var(--text-primary)] hover:bg-accent",
                       ].join(" ")}
                       onMouseEnter={() => setActive(idx)}
                     >
@@ -316,7 +316,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     onClick={() => go(e)}
                     className={[
                       "mb-1 w-full rounded-lg px-2 py-2.5 text-left text-sm",
-                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-[var(--bg-elevated)]",
+                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-accent",
                     ].join(" ")}
                     onMouseEnter={() => setActive(idx)}
                   >
@@ -342,7 +342,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     onClick={() => go(e)}
                     className={[
                       "mb-1 w-full rounded-lg px-2 py-2.5 text-left text-sm",
-                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-[var(--bg-elevated)]",
+                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-accent",
                     ].join(" ")}
                     onMouseEnter={() => setActive(idx)}
                   >
@@ -367,7 +367,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     onClick={onClose}
                     className={[
                       "mb-1 block w-full rounded-lg px-2 py-2.5 text-sm",
-                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-[var(--bg-elevated)]",
+                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-accent",
                     ].join(" ")}
                     onMouseEnter={() => setActive(idx)}
                   >

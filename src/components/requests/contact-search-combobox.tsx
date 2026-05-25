@@ -154,7 +154,12 @@ export function ContactSearchCombobox({
             aria-controls={listId + "list"}
             aria-invalid={error ? true : undefined}
           />
-          <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} className="max-h-52 py-1 text-sm shadow-xl">
+          <PortalDropdownPanel
+            open={open}
+            pos={pos}
+            panelRef={panelRef}
+            className="max-h-52 border border-border bg-background py-1 text-sm shadow-xl"
+          >
             <ul id={listId + "list"} className="m-0 list-none p-0">
               {loading && (
                 <li className="px-3 py-2.5 text-xs text-[var(--text-muted)]">Φόρτωση…</li>
@@ -171,7 +176,7 @@ export function ContactSearchCombobox({
                   <li key={c.id}>
                     <button
                       type="button"
-                      className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                      className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-accent"
                       onClick={() => {
                         onChange(c.id, displayName(c));
                         setSelectedLabel(displayName(c));

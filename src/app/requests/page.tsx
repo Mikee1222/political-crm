@@ -668,7 +668,7 @@ function RequestCard({
                 open={confirmOpen}
                 pos={confirmMenu.pos}
                 panelRef={confirmMenu.panelRef}
-                className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg"
+                className="rounded-lg border border-border bg-background p-3 shadow-lg"
               >
                 <div onClick={(e) => e.stopPropagation()}>
                   <p className="text-xs text-[var(--text-primary)]">

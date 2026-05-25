@@ -112,7 +112,7 @@ function SearchableSelect({
           pos={pos}
           panelRef={panelRef}
           role="listbox"
-          className="overflow-hidden rounded-lg border-2 border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-[var(--bg-card)] p-0 shadow-[var(--card-shadow)]"
+          className="overflow-hidden rounded-lg border-2 border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-background p-0 shadow-[var(--card-shadow)]"
         >
           <div className="flex items-center gap-2 border-b border-[var(--border)] px-2 py-1.5">
             <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />

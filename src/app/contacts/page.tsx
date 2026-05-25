@@ -756,7 +756,7 @@ function CallStatusMultiSelect({
               <li key={o.v}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
                   onClick={() => toggleStatus(o.v)}
                 >
                   <span
@@ -1210,11 +1210,11 @@ function ContactsPage() {
                 pos={exportMenu.pos}
                 panelRef={exportMenu.panelRef}
                 role="menu"
-                className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-xl"
+                className="overflow-hidden rounded-xl border border-border bg-background py-1 shadow-xl"
               >
                 {canManage && (
                   <a
-                    className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                    className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
                     href="/api/contacts/export"
                     onClick={() => exportMenu.setOpen(false)}
                   >
@@ -1222,14 +1222,14 @@ function ContactsPage() {
                   </a>
                 )}
                 <a
-                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
                   href={`/api/contacts/export?${contactFiltersToExportParams(f).toString()}`}
                   onClick={() => exportMenu.setOpen(false)}
                 >
                   Εξαγωγή φίλτρων
                 </a>
                 <a
-                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
                   href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
                   onClick={(e) => {
                     if (!selectedIds.length) e.preventDefault();

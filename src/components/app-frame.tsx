@@ -1037,11 +1037,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   pos={userMenu.pos}
                   panelRef={userMenu.panelRef}
                   role="menu"
-                  className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1.5 shadow-xl"
+                  className="overflow-hidden rounded-xl border border-border bg-background py-1.5 shadow-xl"
                 >
                   <Link
                     href="/profile"
-                    className="flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                    className="flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-accent"
                     onClick={() => userMenu.setOpen(false)}
                     role="menuitem"
                   >

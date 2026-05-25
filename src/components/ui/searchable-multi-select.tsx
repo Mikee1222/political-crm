@@ -129,7 +129,7 @@ export function SearchableMultiSelect({
         panelRef={panelRef}
         role="listbox"
         onMouseDown={(e) => e.stopPropagation()}
-        className="overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl"
+        className="overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
       >
         <div className="border-b border-border/60 p-3">
           <div className="relative">
@@ -197,7 +197,7 @@ export function SearchableMultiSelect({
                         "group mx-2 flex w-[calc(100%-1rem)] cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
                         checked
                           ? "bg-primary/10 font-medium text-primary"
-                          : "text-foreground hover:bg-muted",
+                          : "text-foreground hover:bg-accent",
                       )}
                     >
                       {opt.color ? (

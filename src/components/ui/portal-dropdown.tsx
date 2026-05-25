@@ -11,13 +11,14 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 
 export type PortalDropdownPosition = { top: number; left: number; width: number };
 
 const PANEL_Z_INDEX = 9999;
 
 export const PORTAL_DROPDOWN_PANEL_CLASS =
-  "max-h-64 overflow-y-auto overflow-x-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-[var(--card-shadow)]";
+  "max-h-64 overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-background py-1 shadow-lg";
 
 type UsePortalDropdownOptions = {
   minWidth?: number;
@@ -140,7 +141,7 @@ export function PortalDropdownPanel({
         width: pos.width,
         zIndex: PANEL_Z_INDEX,
       }}
-      className={className ?? PORTAL_DROPDOWN_PANEL_CLASS}
+      className={cn(PORTAL_DROPDOWN_PANEL_CLASS, className)}
     >
       {children}
     </div>,
