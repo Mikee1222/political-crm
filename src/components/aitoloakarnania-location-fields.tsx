@@ -314,23 +314,40 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   const dist = values.electoral_district?.trim() ?? "";
   const top = values.toponym?.trim() ?? "";
 
-  const [municipalities, setMunicipalities] = useState<MunicipalityRow[]>([]);
+  const [municipalityNames, setMunicipalityNames] = useState<string[]>([]);
+  const [geoMunicipalities, setGeoMunicipalities] = useState<MunicipalityRow[]>([]);
   const [districts, setDistricts] = useState<ElectoralDistrictRow[]>([]);
   const [toponymRows, setToponymRows] = useState<ToponymRow[]>([]);
 
-  const muniId = useMemo(() => municipalities.find((x) => x.name === muni)?.id ?? null, [municipalities, muni]);
+  const muniId = useMemo(() => geoMunicipalities.find((x) => x.name === muni)?.id ?? null, [geoMunicipalities, muni]);
   const distId = useMemo(() => districts.find((x) => x.name === dist)?.id ?? null, [districts, dist]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetchWithTimeout("/api/municipalities");
+        if (!r.ok) {
+          setMunicipalityNames([]);
+          return;
+        }
+        const data = (await r.json()) as string[];
+        setMunicipalityNames(Array.isArray(data) ? data : []);
+      } catch {
+        setMunicipalityNames([]);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     void (async () => {
       const r = await fetchWithTimeout("/api/geo/municipalities");
       if (r.ok) {
         const d = (await r.json()) as { municipalities?: MunicipalityRow[] };
-        setMunicipalities(d.municipalities ?? []);
+        setGeoMunicipalities(d.municipalities ?? []);
       } else {
-        setMunicipalities([]);
+        setGeoMunicipalities([]);
       }
-    })();
+    })().catch(() => setGeoMunicipalities([]));
   }, []);
 
   useEffect(() => {
@@ -368,8 +385,8 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   }, [muniId, distId]);
 
   const muniList = useMemo(
-    () => withLegacyOption(municipalities.map((x) => x.name), muni),
-    [municipalities, muni],
+    () => withLegacyOption(municipalityNames, muni),
+    [municipalityNames, muni],
   );
   const muniInDb = Boolean(muniId);
 
@@ -514,10 +531,10 @@ export function AitoloakarnaniaLocationFields({ values, onChange, errorMunicipal
   useEffect(() => {
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/geo/municipalities");
+        const r = await fetchWithTimeout("/api/municipalities");
         if (r.ok) {
-          const d = (await r.json()) as { municipalities?: unknown[] };
-          if (d.municipalities && d.municipalities.length > 0) {
+          const data = (await r.json()) as string[];
+          if (Array.isArray(data) && data.length > 0) {
             setMode("api");
             return;
           }

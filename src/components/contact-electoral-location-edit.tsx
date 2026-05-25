@@ -38,7 +38,7 @@ export function ContactElectoralLocationEdit({
   const dist = values.electoral_district?.trim() ?? "";
   const top = values.toponym ?? "";
 
-  const [municipalityNames, setMunicipalityNames] = useState<string[]>([]);
+  const [municipalities, setMunicipalities] = useState<string[]>([]);
   const [geoMunicipalities, setGeoMunicipalities] = useState<MunicipalityRow[]>([]);
   const [districts, setDistricts] = useState<ElectoralDistrictRow[]>([]);
   const [toponymNames, setToponymNames] = useState<string[]>([]);
@@ -47,14 +47,21 @@ export function ContactElectoralLocationEdit({
     void (async () => {
       try {
         const r = await fetchWithTimeout("/api/municipalities");
-        if (!r.ok) return;
-        const d = (await r.json()) as { municipalities?: string[] };
-        setMunicipalityNames((d.municipalities ?? []).map((name) => name.trim()).filter(Boolean));
+        if (!r.ok) {
+          setMunicipalities([]);
+          return;
+        }
+        const data = (await r.json()) as string[];
+        setMunicipalities(Array.isArray(data) ? data : []);
       } catch {
-        setMunicipalityNames([]);
+        setMunicipalities([]);
       }
     })();
   }, []);
+
+  useEffect(() => {
+    console.log("municipalities loaded:", municipalities.length);
+  }, [municipalities]);
 
   useEffect(() => {
     void (async () => {
@@ -106,8 +113,8 @@ export function ContactElectoralLocationEdit({
   }, []);
 
   const municipalityOptions = useMemo(() => {
-    return withLegacyOption(municipalityNames, muni);
-  }, [municipalityNames, muni]);
+    return withLegacyOption(municipalities, muni);
+  }, [municipalities, muni]);
 
   const districtOptions = useMemo(() => {
     const base = districts.length > 0 ? districts.map((d) => d.name) : getDistrictsForMuni(muni).map((d) => d.name);

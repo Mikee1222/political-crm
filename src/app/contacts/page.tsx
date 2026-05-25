@@ -34,7 +34,6 @@ import {
 } from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
-import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
 import {
   getDefaultContactFilters,
   searchParamsToFilters,
@@ -963,10 +962,10 @@ function ContactsPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/geo/municipalities");
+        const r = await fetchWithTimeout("/api/municipalities");
         if (!r.ok) return;
-        const d = (await r.json()) as { municipalities?: MunicipalityRow[] };
-        const names = (d.municipalities ?? []).map((m) => m.name).filter(Boolean);
+        const data = (await r.json()) as string[];
+        const names = Array.isArray(data) ? data : [];
         if (names.length) setFilterMunicipalities(names);
       } catch {
         /* keep static fallback */
