@@ -10,6 +10,8 @@ export async function GET() {
     // fallback
     return NextResponse.json([])
   }
-  
-  return NextResponse.json(data)
+
+  const municipalities = data.map((r: any) => r.municipality).filter(Boolean).sort((a: string, b: string) => a.localeCompare(b, "el"))
+
+  return NextResponse.json(municipalities)
 }
