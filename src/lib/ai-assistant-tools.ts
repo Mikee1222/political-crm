@@ -11,6 +11,10 @@ import { anthropicComplete } from "@/lib/anthropic-once";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { todayYmdAthens } from "@/lib/athens-ranges";
 import {
+  getRequestStatusQueryValues,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
+import {
   applyFindContactsToolInput,
   applySavedFilterJson,
   buildContactsPageUrl,
@@ -1318,7 +1322,7 @@ export async function runAlexTool(
         title,
         category: category || "Άλλο",
         description,
-        status: "Νέο",
+        status: REQUEST_STATUS_OPEN,
       }),
     });
     const j = (await r.json()) as { error?: string; request?: unknown };
@@ -1387,7 +1391,7 @@ export async function runAlexTool(
     const { count: openRequests } = await supa
       .from("requests")
       .select("id", { count: "exact", head: true })
-      .in("status", ["Νέο", "Σε εξέλιξη"]);
+      .in("status", getRequestStatusQueryValues(REQUEST_STATUS_OPEN));
     const { count: pendingTasks } = await supa
       .from("tasks")
       .select("id", { count: "exact", head: true })
@@ -2883,7 +2887,7 @@ export function buildSystemPrompt({
 
 ΓΝΩΣΗ CRM:
 - contacts: first_name, last_name, phone, phone2, landline, municipality, area, toponym, call_status (Pending/Positive/Negative/No Answer), priority, political_stance, father_name, mother_name, notes, tags, group_id, nickname
-- requests: title, description, category, status (Νέο/Σε εξέλιξη/Ολοκληρώθηκε/Απορρίφθηκε), assigned_to
+- requests: title, description, category, status (Ανοικτό/Κλειστό - ολοκληρωμένο με επιτυχία/Κλειστό - ολοκληρωμένο χωρίς επιτυχία/Κλειστό - δεν είναι δυνατή η πραγματοποίησή του), assigned_to
 - tasks: title, due_date, completed, contact_id, assigned_to_user_id (ανάθεση σε υπάλληλο / profiles)
 - campaigns: name, status, calls, τάση positive rate vs προηγούμενη καμπάνια
 - calls: outcome, duration_seconds, transferred_to_politician

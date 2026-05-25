@@ -5,6 +5,7 @@ import { nextPaddedCode } from "@/lib/codes";
 import { inferRequestCategoryFromDescription } from "@/lib/request-auto-category";
 import { addDaysYmd, computeSlaStatus } from "@/lib/request-sla";
 import { EmailTemplates, getPortalBaseUrl, sendResendEmail } from "@/lib/email";
+import { REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 
 export { slugifyNews } from "@/lib/slugify";
 
@@ -149,7 +150,7 @@ export async function createPortalRequest(
     typeof (catRow as { sla_days?: number } | null)?.sla_days === "number" ? (catRow as { sla_days: number }).sla_days : 14;
   const now = new Date();
   const sla = addDaysYmd(now.toISOString(), slaDays);
-  const slaStatus = computeSlaStatus(sla, "Νέο");
+  const slaStatus = computeSlaStatus(sla, REQUEST_STATUS_OPEN);
   const code = await nextPaddedCode(supabase, "requests", "request_code", "AIT");
   const { data, error } = await supabase
     .from("requests")
@@ -158,7 +159,7 @@ export async function createPortalRequest(
       title,
       description: descRaw || null,
       category: categoryName,
-      status: "Νέο",
+      status: REQUEST_STATUS_OPEN,
       request_code: code,
       priority: "Medium",
       portal_visible: true,

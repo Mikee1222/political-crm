@@ -12,7 +12,9 @@ import { RequestDocumentsSection } from "@/components/request-documents-section"
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
 import {
   OPEN_REQUEST_STATUSES,
+  normalizeRequestStatus,
   REQUEST_STATUS_BADGE_CLASSES,
+  REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
 
 type ContactCard = {
@@ -90,11 +92,11 @@ function authorInitials(name: string) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const s = status || "Νέο";
+  const s = normalizeRequestStatus(status || REQUEST_STATUS_OPEN);
   const styles = REQUEST_STATUS_BADGE_CLASSES;
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles[s] ?? styles["Νέο"]}`}
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles[s as keyof typeof styles] ?? styles[REQUEST_STATUS_OPEN]}`}
     >
       {s}
     </span>
@@ -121,10 +123,11 @@ function SlaBar({
   sla_due_date: string | null;
   created_at: string | null;
 }) {
+  const normalizedStatus = normalizeRequestStatus(status ?? REQUEST_STATUS_OPEN);
   if (!sla_due_date) {
     return <p className="text-sm text-[var(--text-muted)]">Δεν ορίστηκε SLA.</p>;
   }
-  if (!OPEN.has(status ?? "")) {
+  if (!OPEN.has(normalizedStatus)) {
     return (
       <p className="text-sm text-[var(--text-secondary)]">Το αίτημα δεν παρακολουθεί SLA (λήξη: {sla_due_date}).</p>
     );
@@ -137,7 +140,7 @@ function SlaBar({
   due.setHours(0, 0, 0, 0);
   const total = Math.max(1, Math.ceil((due.getTime() - start.getTime()) / 86_400_000));
   const left = Math.ceil((due.getTime() - now.getTime()) / 86_400_000);
-  const ui = computeSlaStatus(sla_due_date, status ?? "Νέο");
+  const ui = computeSlaStatus(sla_due_date, normalizedStatus);
   const fillPct = Math.max(0, Math.min(100, (left / total) * 100));
   const barClass =
     ui === "overdue"
@@ -275,7 +278,7 @@ export default function RequestDetailPage() {
             {data.category && <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={data.status ?? "Νέο"} />
+            <StatusBadge status={data.status ?? REQUEST_STATUS_OPEN} />
             <PriorityBadge p={data.priority} />
           </div>
         </div>

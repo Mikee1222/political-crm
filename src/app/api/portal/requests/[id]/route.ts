@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPortalUser } from "@/lib/portal";
 import { nextJsonError } from "@/lib/api-resilience";
+import { normalizeRequestStatus } from "@/lib/request-statuses";
 export const dynamic = "force-dynamic";
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
@@ -30,7 +31,12 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     if (!data || (data as { contact_id: string }).contact_id !== portal.contact_id) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
-    return NextResponse.json({ request: data });
+    return NextResponse.json({
+      request: {
+        ...data,
+        status: normalizeRequestStatus((data as { status?: string | null }).status ?? null),
+      },
+    });
   } catch (e) {
     console.error("[api/portal/requests/id GET]", e);
     return nextJsonError();

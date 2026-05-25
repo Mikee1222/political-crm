@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Role } from "@/lib/roles";
 import { hasMinRole } from "@/lib/roles";
+import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 
 function normGreek(s: string) {
   return s
@@ -148,7 +149,7 @@ async function requestsContext(supabase: SupabaseClient) {
   const { count, data: open } = await supabase
     .from("requests")
     .select("id, title, status, created_at, category, contacts(first_name, last_name)", { count: "exact" })
-    .in("status", ["Νέο", "Σε εξέλιξη"])
+    .in("status", getRequestStatusQueryValues(REQUEST_STATUS_OPEN))
     .order("created_at", { ascending: false })
     .limit(15);
   return {
@@ -444,7 +445,7 @@ export async function buildDatabaseContext(
       const { count } = await supabase
         .from("requests")
         .select("id", { count: "exact", head: true })
-        .in("status", ["Νέο", "Σε εξέλιξη"]);
+        .in("status", getRequestStatusQueryValues(REQUEST_STATUS_OPEN));
       return count ?? 0;
     })(),
     (async () => {

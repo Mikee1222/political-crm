@@ -33,7 +33,12 @@ import { useProfile } from "@/contexts/profile-context";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { hasMinRole } from "@/lib/roles";
-import { REQUEST_STATUSES, REQUEST_STATUS_CONTACT_BADGE } from "@/lib/request-statuses";
+import {
+  normalizeRequestStatus,
+  REQUEST_STATUSES,
+  REQUEST_STATUS_CONTACT_BADGE,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactElectoralLocationEdit } from "@/components/contact-electoral-location-edit";
@@ -299,11 +304,11 @@ function OutcomeBadge({ o }: { o: string | null | undefined }) {
 }
 
 function ReqStatus({ s }: { s: string | null | undefined }) {
-  const t = s ?? "Νέο";
+  const t = normalizeRequestStatus(s ?? REQUEST_STATUS_OPEN);
   const map = REQUEST_STATUS_CONTACT_BADGE;
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[t] ?? "bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))] text-muted-foreground ring-1 ring-border"}`}
+      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[t as keyof typeof map] ?? "bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))] text-muted-foreground ring-1 ring-border"}`}
     >
       {t}
     </span>
@@ -394,7 +399,7 @@ function ContactDetailPage() {
     title: "",
     description: "",
     category: "Άλλο",
-    status: "Νέο",
+    status: REQUEST_STATUS_OPEN,
     assigned_to: "",
   });
   const [openReq, setOpenReq] = useState(false);
@@ -892,7 +897,13 @@ function ContactDetailPage() {
         return;
       }
       showToast("Το αίτημα προστέθηκε.", "success");
-      setNewRequest({ title: "", description: "", category: "Άλλο", status: "Νέο", assigned_to: "" });
+      setNewRequest({
+        title: "",
+        description: "",
+        category: "Άλλο",
+        status: REQUEST_STATUS_OPEN,
+        assigned_to: "",
+      });
       setOpenReq(false);
       await load();
     } catch {

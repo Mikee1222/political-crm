@@ -5,6 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Building2, ChevronLeft } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import {
+  isFailedRequestStatus,
+  isSuccessfulRequestStatus,
+  normalizeRequestStatus,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 
 const ND = "#003476";
 
@@ -21,15 +27,15 @@ type Req = {
 };
 
 function bigBadge(s: string) {
-  const c =
-    s === "Ολοκληρώθηκε"
-      ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200"
-      : s === "Σε εξέλιξη"
-        ? "bg-amber-100 text-amber-900 ring-1 ring-amber-200"
-        : s === "Απορρίφθηκε"
-          ? "bg-rose-100 text-rose-800 ring-1 ring-rose-200"
-          : "bg-slate-100 text-slate-800 ring-1 ring-slate-200";
-  return <span className={`inline-flex rounded-full px-4 py-1.5 text-sm font-extrabold ${c}`}>{s || "Νέο"}</span>;
+  const status = normalizeRequestStatus(s || REQUEST_STATUS_OPEN);
+  const c = isSuccessfulRequestStatus(status)
+    ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200"
+    : status === "Κλειστό - ολοκληρωμένο χωρίς επιτυχία"
+      ? "bg-rose-100 text-rose-800 ring-1 ring-rose-200"
+      : status === "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του"
+        ? "bg-slate-100 text-slate-800 ring-1 ring-slate-200"
+        : "bg-amber-100 text-amber-900 ring-1 ring-amber-200";
+  return <span className={`inline-flex rounded-full px-4 py-1.5 text-sm font-extrabold ${c}`}>{status}</span>;
 }
 
 function fmt(d: string | null | undefined) {
@@ -39,7 +45,7 @@ function fmt(d: string | null | undefined) {
   return new Date(d).toLocaleString("el-GR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-const STEPS = ["Υποβλήθηκε", "Σε εξέλιξη", "Ολοκληρώθηκε"] as const;
+const STEPS = ["Υποβλήθηκε", "Ανοικτό", "Κλειστό"] as const;
 
 export default function PortalRequestDetailPage() {
   const params = useParams();
@@ -84,12 +90,12 @@ export default function PortalRequestDetailPage() {
     return <p className="p-6 text-[#64748B]">Φόρτωση…</p>;
   }
 
-  const st = r.status || "Νέο";
-  const isRejected = st === "Απορρίφθηκε";
-  const done = st === "Ολοκληρώθηκε";
+  const st = normalizeRequestStatus(r.status || REQUEST_STATUS_OPEN);
+  const isRejected = isFailedRequestStatus(st);
+  const done = isSuccessfulRequestStatus(st);
 
   let stepIndex = 0;
-  if (st === "Σε εξέλιξη" || (st === "Νέο" && !done)) {
+  if (st === REQUEST_STATUS_OPEN && !done) {
     stepIndex = 1;
   }
   if (done) {
@@ -153,7 +159,9 @@ export default function PortalRequestDetailPage() {
           </div>
         </div>
         {isRejected && (
-          <p className="mt-2 text-sm font-semibold text-rose-700">Το αίτημα τέθηκε σε κατάσταση «Απορρίφθηκε».</p>
+          <p className="mt-2 text-sm font-semibold text-rose-700">
+            Το αίτημα τέθηκε σε κατάσταση «{st}».
+          </p>
         )}
       </section>
 

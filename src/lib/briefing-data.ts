@@ -3,6 +3,7 @@ import { athensDayRange, pad2 } from "@/lib/athens-ranges";
 import { listAllCalendarsEventsHttp } from "@/lib/google-calendar";
 import { tallyOutcomes } from "@/lib/campaign-stats";
 import { contactCelebratesNameday } from "@/lib/namedays";
+import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 
 function monthDay(d: Date) {
   return { month: d.getMonth() + 1, day: d.getDate() };
@@ -18,6 +19,8 @@ function startOfWeekMonday(d: Date) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
+
+const OPEN_REQUEST_QUERY_VALUES = getRequestStatusQueryValues(REQUEST_STATUS_OPEN);
 
 export type BriefingTodayData = {
   namedays: { names: string[]; matchingContactsCount: number; contactNames: string[] };
@@ -99,16 +102,16 @@ export async function fetchBriefingTodayData(
       supabase
         .from("requests")
         .select("id", { count: "exact", head: true })
-        .in("status", ["Νέο", "Σε εξέλιξη"]),
+        .in("status", OPEN_REQUEST_QUERY_VALUES),
       supabase
         .from("requests")
         .select("id", { count: "exact", head: true })
-        .in("status", ["Νέο", "Σε εξέλιξη"])
+        .in("status", OPEN_REQUEST_QUERY_VALUES)
         .lt("created_at", weekAgo.toISOString()),
       supabase
         .from("requests")
         .select("id, request_code, title, created_at, status")
-        .in("status", ["Νέο", "Σε εξέλιξη"])
+        .in("status", OPEN_REQUEST_QUERY_VALUES)
         .lt("created_at", weekAgo.toISOString())
         .order("created_at", { ascending: true })
         .limit(5),
@@ -170,7 +173,7 @@ export async function fetchBriefingTodayData(
   const { count: overdueCount, error: overdueErr } = await supabase
     .from("requests")
     .select("id", { count: "exact", head: true })
-    .in("status", ["Νέο", "Σε εξέλιξη"])
+    .in("status", OPEN_REQUEST_QUERY_VALUES)
     .lt("sla_due_date", todayStr);
   const overdueRequestCount = !overdueErr ? overdueCount ?? 0 : 0;
 

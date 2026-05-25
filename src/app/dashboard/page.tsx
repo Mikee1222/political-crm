@@ -441,7 +441,7 @@ export default function DashboardPage() {
             iconClass="text-red-500"
             count={safeOverdueReq}
             label="Ληξιπρόθεσμα αιτήματα (SLA)"
-            description="Αιτήματα σε Νέο/Σε εξέλιξη με παρελθούσα ημ/νια λήξης"
+            description="Αιτήματα σε κατάσταση «Ανοικτό» με παρελθούσα ημ/νια λήξης"
             href="/requests"
             linkText="Προβολή"
             accent="text-red-600 dark:text-red-300"
@@ -488,7 +488,7 @@ export default function DashboardPage() {
               <Inbox className="h-4 w-4 text-[var(--accent-gold)]" aria-hidden />
             </div>
             <div className="text-3xl font-bold text-[var(--text-primary)]">{briefing.openRequestsCount}</div>
-            <div className="mt-1 text-xs text-[var(--text-muted)]">Νέο / Σε εξέλιξη</div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">Ανοικτό</div>
             {briefing.stalledOpenRequestCount > 0 ? (
               <div className="mt-2 flex items-center gap-1 text-xs font-medium text-[var(--danger)]">
                 <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />

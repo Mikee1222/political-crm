@@ -12,7 +12,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-import { REQUEST_STATUSES } from "@/lib/request-statuses";
+import {
+  getRequestStatusQueryValues,
+  normalizeRequestStatus,
+  REQUEST_STATUSES,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 
 const BASE_SELECT =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, contacts!contact_id(first_name,last_name,phone)";
@@ -68,7 +73,10 @@ async function resolvePhoneContactIds(supabase: SupabaseClient, search: string):
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyRequestFilters(query: any, f: RequestFilters, opts?: { withSearchEmbed?: boolean }) {
-  if (f.status) query = query.eq("status", f.status);
+  if (f.status) {
+    const statusValues = getRequestStatusQueryValues(f.status);
+    query = statusValues.length > 1 ? query.in("status", statusValues) : query.eq("status", statusValues[0]);
+  }
   if (f.category) query = query.eq("category", f.category);
   if (f.priority) query = query.eq("priority", f.priority);
   const dateFrom = dateFromForRange(f.range);
@@ -93,8 +101,9 @@ function mapRequestRows(data: unknown[]) {
     const r0 = row as { contacts?: unknown; sla_due_date?: string | null; status?: string | null };
     const c = r0.contacts;
     const contact = Array.isArray(c) ? c[0] : c;
-    const slaUi = computeSlaStatus(r0.sla_due_date ?? null, r0.status ?? null);
-    return { ...(row as Record<string, unknown>), contacts: contact ?? null, slaUi };
+    const status = normalizeRequestStatus(r0.status ?? null);
+    const slaUi = computeSlaStatus(r0.sla_due_date ?? null, status);
+    return { ...(row as Record<string, unknown>), status, contacts: contact ?? null, slaUi };
   });
 }
 
@@ -188,7 +197,7 @@ export async function GET(request: NextRequest) {
           const { count: c } = await supabase
             .from("requests")
             .select("*", { count: "exact", head: true })
-            .eq("status", s);
+            .in("status", getRequestStatusQueryValues(s));
           return { status: s, count: c ?? 0 };
         }),
       ),
@@ -267,7 +276,7 @@ export async function POST(request: NextRequest) {
       typeof (catRow as { sla_days?: number } | null)?.sla_days === "number"
         ? (catRow as { sla_days: number }).sla_days
         : 14;
-    const st = (body as { status?: string }).status ?? "Νέο";
+    const st = normalizeRequestStatus((body as { status?: string }).status ?? REQUEST_STATUS_OPEN);
     const now = new Date();
     const formSla = (body as { sla_due_date?: string | null }).sla_due_date;
     const explicitSla =

@@ -9,6 +9,7 @@ import { computeSlaStatus } from "@/lib/request-sla";
 import { fieldDiff } from "@/lib/field-diff";
 import { notifyRequestStatusToCitizen } from "@/lib/request-notifications";
 import { resolveProfileNames } from "@/lib/profile-names";
+import { normalizeRequestStatus } from "@/lib/request-statuses";
 export const dynamic = "force-dynamic";
 
 type RequestNoteRow = {
@@ -169,6 +170,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   return NextResponse.json({
     request: {
       ...row,
+      status: normalizeRequestStatus((row as { status?: string | null }).status ?? null),
       requester,
       affected: affectedOne,
       requesters: grouped.requesters,
@@ -204,7 +206,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
   const beforeRow = before as Record<string, unknown>;
   const curRow = before as { status?: string | null; sla_due_date?: string | null };
-  const newStatus = (body as { status?: string }).status != null ? String((body as { status?: string }).status) : curRow?.status;
+  const newStatus =
+    (body as { status?: string }).status != null
+      ? normalizeRequestStatus(String((body as { status?: string }).status))
+      : curRow?.status;
   const newDue =
     (body as { sla_due_date?: string }).sla_due_date != null
       ? String((body as { sla_due_date?: string }).sla_due_date)
@@ -217,6 +222,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     .from("requests")
     .update({
       ...body,
+      ...((body as { status?: string }).status != null ? { status: newStatus } : {}),
       updated_at: new Date().toISOString(),
       ...(mergedSla != null ? { sla_status: mergedSla } : {}),
     })
@@ -255,7 +261,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       });
     }
   }
-  return NextResponse.json({ request: data });
+  return NextResponse.json({
+    request: {
+      ...(data as Record<string, unknown>),
+      status: normalizeRequestStatus((data as { status?: string | null }).status ?? null),
+    },
+  });
   } catch (e) {
     console.error("[api/requests/id PUT]", e);
     return nextJsonError();

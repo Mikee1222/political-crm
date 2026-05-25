@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPortalUser, createPortalRequest } from "@/lib/portal";
 import { nextJsonError } from "@/lib/api-resilience";
+import { normalizeRequestStatus } from "@/lib/request-statuses";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
@@ -25,7 +26,12 @@ export async function GET() {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    return NextResponse.json({ requests: data ?? [] });
+    return NextResponse.json({
+      requests: (data ?? []).map((row) => ({
+        ...row,
+        status: normalizeRequestStatus((row as { status?: string | null }).status ?? null),
+      })),
+    });
   } catch (e) {
     console.error("[api/portal/requests GET]", e);
     return nextJsonError();

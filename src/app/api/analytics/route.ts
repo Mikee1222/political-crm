@@ -8,6 +8,7 @@ import { addWeeks, format, parseISO, startOfDay, startOfWeek, subDays } from "da
 import { el } from "date-fns/locale";
 import type { ActivityAction } from "@/lib/activity-log";
 import { activityGreekLine, firstNameFromFull, formatTimeAgo } from "@/lib/activity-descriptions";
+import { normalizeRequestStatus, REQUEST_STATUS_COMPLETED_SUCCESS } from "@/lib/request-statuses";
 
 export const dynamic = "force-dynamic";
 
@@ -220,7 +221,7 @@ export async function GET() {
       const st = (rq.status ?? "").trim();
       const cat = (rq.category ?? "").trim() || "Άλλο";
       catCount[cat] = (catCount[cat] ?? 0) + 1;
-      if (st === "Ολοκληρώθηκε") {
+      if (normalizeRequestStatus(st) === REQUEST_STATUS_COMPLETED_SUCCESS) {
         completedReq += 1;
         const u = rq.updated_at ? new Date(rq.updated_at) : null;
         if (u && u >= from30d) completedLast30 += 1;

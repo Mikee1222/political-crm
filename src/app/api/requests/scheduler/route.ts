@@ -5,10 +5,15 @@ import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getRequestStatusQueryValues,
+  normalizeRequestStatus,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 
 export const dynamic = "force-dynamic";
 
-const QUEUE_STATUSES = ["Νέο", "Σε εξέλιξη"] as const;
+const QUEUE_STATUSES = getRequestStatusQueryValues(REQUEST_STATUS_OPEN);
 
 const SELECT_WITH_CONTACT =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, scheduled_date, contact_id, contacts!contact_id(first_name,last_name)";
@@ -30,10 +35,14 @@ type SchedulerFilters = {
 };
 
 function mapRow(row: unknown) {
-  const r0 = row as { contacts?: unknown };
+  const r0 = row as { contacts?: unknown; status?: string | null };
   const c = r0.contacts;
   const contact = Array.isArray(c) ? c[0] : c;
-  return { ...(row as Record<string, unknown>), contacts: contact ?? null };
+  return {
+    ...(row as Record<string, unknown>),
+    status: normalizeRequestStatus(r0.status ?? null),
+    contacts: contact ?? null,
+  };
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -87,7 +96,10 @@ function filtersFromParams(
 function applySchedulerFilters(query: any, f: SchedulerFilters) {
   if (f.category) query = query.eq("category", f.category);
   if (f.priority) query = query.eq("priority", f.priority);
-  if (f.status) query = query.eq("status", f.status);
+  if (f.status) {
+    const statusValues = getRequestStatusQueryValues(f.status);
+    query = statusValues.length > 1 ? query.in("status", statusValues) : query.eq("status", statusValues[0]);
+  }
   if (f.assigned_to) query = query.eq("assigned_to", f.assigned_to);
   if (f.q) {
     const pat = `%${escapeIlike(f.q)}%`;
@@ -127,9 +139,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (queueFilters.status) {
-      queueQuery = queueQuery.eq("status", queueFilters.status);
-    } else {
+    if (!queueFilters.status) {
       queueQuery = queueQuery.in("status", [...QUEUE_STATUSES]);
     }
     queueQuery = applySchedulerFilters(queueQuery, queueFilters);
@@ -172,9 +182,7 @@ export async function GET(request: NextRequest) {
         .is("scheduled_date", null)
         .order("created_at", { ascending: false })
         .limit(200);
-      if (queueFilters.status) {
-        queueFallback = queueFallback.eq("status", queueFilters.status);
-      } else {
+      if (!queueFilters.status) {
         queueFallback = queueFallback.in("status", [...QUEUE_STATUSES]);
       }
       queueFallback = applySchedulerFilters(queueFallback, queueFilters);

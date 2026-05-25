@@ -58,7 +58,17 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
-import { REQUEST_STATUSES } from "@/lib/request-statuses";
+import {
+  isFailedRequestStatus,
+  isSuccessfulRequestStatus,
+  normalizeRequestStatus,
+  REQUEST_STATUS_COMPLETED_FAILURE,
+  REQUEST_STATUSES,
+  REQUEST_STATUS_COMPLETED_SUCCESS,
+  REQUEST_STATUS_IMPOSSIBLE,
+  REQUEST_STATUS_KANBAN_META,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 
 type ViewMode = "week" | "month" | "kanban";
 
@@ -373,15 +383,29 @@ const KANBAN_COLUMNS: {
   Icon: LucideIcon;
   dotClass: string;
 }[] = [
-  { status: "Νέο", color: "border-blue-500", Icon: Circle, dotClass: "text-blue-500 fill-blue-500" },
-  { status: "Σε εξέλιξη", color: "border-orange-500", Icon: Circle, dotClass: "text-orange-500 fill-orange-500" },
-  { status: "Ολοκληρώθηκε", color: "border-green-500", Icon: Circle, dotClass: "text-green-500 fill-green-500" },
-  { status: "Απορρίφθηκε", color: "border-red-500", Icon: Circle, dotClass: "text-red-500 fill-red-500" },
   {
-    status: "Κλειστό χωρίς επιτυχία",
-    color: "border-zinc-400",
+    status: REQUEST_STATUS_OPEN,
+    color: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_OPEN].color,
     Icon: Circle,
-    dotClass: "text-zinc-400 fill-zinc-400",
+    dotClass: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_OPEN].dotClass,
+  },
+  {
+    status: REQUEST_STATUS_COMPLETED_SUCCESS,
+    color: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_COMPLETED_SUCCESS].color,
+    Icon: Circle,
+    dotClass: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_COMPLETED_SUCCESS].dotClass,
+  },
+  {
+    status: REQUEST_STATUS_COMPLETED_FAILURE,
+    color: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_COMPLETED_FAILURE].color,
+    Icon: Circle,
+    dotClass: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_COMPLETED_FAILURE].dotClass,
+  },
+  {
+    status: REQUEST_STATUS_IMPOSSIBLE,
+    color: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_IMPOSSIBLE].color,
+    Icon: Circle,
+    dotClass: REQUEST_STATUS_KANBAN_META[REQUEST_STATUS_IMPOSSIBLE].dotClass,
   },
 ];
 
@@ -443,7 +467,7 @@ function mapApiRow(row: Record<string, unknown>): SchedulerRequest {
     id: String(row.id),
     request_code: (row.request_code as string | null) ?? null,
     title: String(row.title ?? ""),
-    status: (row.status as string | null) ?? null,
+    status: normalizeRequestStatus((row.status as string | null) ?? null),
     priority: (row.priority as string | null) ?? null,
     category: (row.category as string | null) ?? null,
     scheduled_date: (row.scheduled_date as string | null) ?? null,
@@ -792,14 +816,14 @@ export default function RequestsSchedulerPage() {
   };
 
   const handleReject = async (id: string) => {
-    if (!confirm("Να απορριφθεί το αίτημα;")) return;
+    if (!confirm(`Να επισημανθεί ως «${REQUEST_STATUS_IMPOSSIBLE}»;`)) return;
     const prevQueue = queue;
     setQueue((prev) => prev.filter((r) => r.id !== id));
     try {
       const res = await fetchWithTimeout(`/api/requests/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Απορρίφθηκε" }),
+        body: JSON.stringify({ status: REQUEST_STATUS_IMPOSSIBLE }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
@@ -807,7 +831,7 @@ export default function RequestsSchedulerPage() {
         showToast(j.error ?? "Σφάλμα", "error");
         return;
       }
-      showToast("Το αίτημα απορρίφθηκε.", "success");
+      showToast(`Το αίτημα ενημερώθηκε σε «${REQUEST_STATUS_IMPOSSIBLE}».`, "success");
     } catch {
       setQueue(prevQueue);
       showToast("Σφάλμα δικτύου", "error");
@@ -826,9 +850,11 @@ export default function RequestsSchedulerPage() {
 
   const completeRequest = async (id: string) => {
     const prev = scheduled;
-    setScheduled((s) => s.map((r) => (r.id === id ? { ...r, status: "Ολοκληρώθηκε" } : r)));
+    setScheduled((s) =>
+      s.map((r) => (r.id === id ? { ...r, status: REQUEST_STATUS_COMPLETED_SUCCESS } : r)),
+    );
     try {
-      await patchStatus(id, "Ολοκληρώθηκε");
+      await patchStatus(id, REQUEST_STATUS_COMPLETED_SUCCESS);
       showToast("Το αίτημα ολοκληρώθηκε.", "success");
     } catch (e) {
       setScheduled(prev);
@@ -841,15 +867,18 @@ export default function RequestsSchedulerPage() {
     const prev = kanbanByStatus;
     const card = kanbanByStatus[fromStatus]?.find((r) => r.id === id);
     if (!card) return;
-    const updated = { ...card, status: "Ολοκληρώθηκε" };
+    const updated = { ...card, status: REQUEST_STATUS_COMPLETED_SUCCESS };
     setKanbanByStatus((board) => {
       const next = { ...board };
       next[fromStatus] = (next[fromStatus] ?? []).filter((r) => r.id !== id);
-      next["Ολοκληρώθηκε"] = [updated, ...(next["Ολοκληρώθηκε"] ?? [])];
+      next[REQUEST_STATUS_COMPLETED_SUCCESS] = [
+        updated,
+        ...(next[REQUEST_STATUS_COMPLETED_SUCCESS] ?? []),
+      ];
       return next;
     });
     try {
-      await patchStatus(id, "Ολοκληρώθηκε");
+      await patchStatus(id, REQUEST_STATUS_COMPLETED_SUCCESS);
       showToast("Το αίτημα ολοκληρώθηκε.", "success");
     } catch (e) {
       setKanbanByStatus(prev);
@@ -1507,7 +1536,9 @@ function QueueCard({
         <p className="font-mono text-[10px] text-muted-foreground">{r.request_code ?? "—"}</p>
         <p className="mt-1 line-clamp-2 text-sm font-semibold text-foreground">{r.title}</p>
         <p className="mt-1.5 truncate text-xs text-muted-foreground">{contactLabel(r.contacts)}</p>
-        <p className="mt-2 text-[10px] font-medium text-muted-foreground">{r.status ?? "Νέο"}</p>
+        <p className="mt-2 text-[10px] font-medium text-muted-foreground">
+          {normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN)}
+        </p>
         {r.category ? (
           <span className="mt-1.5 inline-block rounded-full border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground">
             {r.category}
@@ -1595,8 +1626,9 @@ function KanbanCard({
   request: SchedulerRequest;
   onTickClick: (e: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const isCompleted = r.status === "Ολοκληρώθηκε";
-  const isRejected = r.status === "Απορρίφθηκε";
+  const status = normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN);
+  const isCompleted = isSuccessfulRequestStatus(status);
+  const isRejected = isFailedRequestStatus(status);
   const showTick = !isCompleted && !isRejected;
   const pri = r.priority === "High" || r.priority === "Low" || r.priority === "Urgent" || r.priority === "Medium" ? r.priority : "Medium";
 
@@ -1645,8 +1677,9 @@ function MobileCalendarCard({
   onTickClick: (e: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const router = useRouter();
-  const isCompleted = r.status === "Ολοκληρώθηκε";
-  const isRejected = r.status === "Απορρίφθηκε";
+  const status = normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN);
+  const isCompleted = isSuccessfulRequestStatus(status);
+  const isRejected = isFailedRequestStatus(status);
   const showTick = !isCompleted && !isRejected;
 
   return (
@@ -1685,7 +1718,9 @@ function MobileCalendarCard({
           Ολοκλήρωση
         </button>
       ) : isCompleted ? (
-        <p className="mt-1.5 text-center text-[10px] font-medium text-[var(--success)]">Ολοκληρώθηκε</p>
+        <p className="mt-1.5 text-center text-[10px] font-medium text-[var(--success)]">
+          {REQUEST_STATUS_COMPLETED_SUCCESS}
+        </p>
       ) : null}
     </div>
   );
@@ -1698,8 +1733,9 @@ function CalendarCard({
   request: SchedulerRequest;
   onTickClick: (e: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const isCompleted = r.status === "Ολοκληρώθηκε";
-  const isRejected = r.status === "Απορρίφθηκε";
+  const status = normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN);
+  const isCompleted = isSuccessfulRequestStatus(status);
+  const isRejected = isFailedRequestStatus(status);
   const showTick = !isCompleted && !isRejected;
 
   return (

@@ -60,6 +60,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { hasMinRole, ROLE_BADGE, type Role } from "@/lib/roles";
 import type { LucideIcon } from "lucide-react";
+import { normalizeRequestStatus, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 
 const STORAGE_SIDEBAR = "crm-sidebar-expanded";
 const STORAGE_NAV_GROUPS = "crm-nav-groups";
@@ -756,7 +757,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       .then((data) => {
         const rows = Array.isArray(data.requests) ? data.requests : [];
         const count = rows.filter((r: { status?: string }) => {
-          return r.status === "Νέο" || r.status === "Σε εξέλιξη";
+          return normalizeRequestStatus(r.status ?? null) === REQUEST_STATUS_OPEN;
         }).length;
         setOpenRequestsCount(count);
       })

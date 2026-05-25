@@ -6,6 +6,11 @@ import { useRouter } from "next/navigation";
 import { Calendar, ChevronRight, Inbox, Sparkles, TrendingUp } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { portalDisplayFirstName } from "@/lib/portal-display";
+import {
+  isSuccessfulRequestStatus,
+  normalizeRequestStatus,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 
 const ND = "#003476";
 
@@ -32,15 +37,15 @@ type Req = {
 type PortalMe = { first_name: string; last_name: string; verified?: boolean };
 
 function statusBadge(s: string) {
-  const c =
-    s === "Ολοκληρώθηκε"
-      ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
-      : s === "Σε εξέλιξη"
-        ? "bg-amber-100 text-amber-900 ring-1 ring-amber-200"
-        : s === "Απορρίφθηκε"
-          ? "bg-rose-100 text-rose-800 ring-1 ring-rose-200"
-          : "bg-slate-100 text-slate-800 ring-1 ring-slate-200";
-  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${c}`}>{s || "Νέο"}</span>;
+  const status = normalizeRequestStatus(s || REQUEST_STATUS_OPEN);
+  const c = isSuccessfulRequestStatus(status)
+    ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
+    : status === "Κλειστό - ολοκληρωμένο χωρίς επιτυχία"
+      ? "bg-rose-100 text-rose-800 ring-1 ring-rose-200"
+      : status === "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του"
+        ? "bg-slate-100 text-slate-800 ring-1 ring-slate-200"
+        : "bg-amber-100 text-amber-900 ring-1 ring-amber-200";
+  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${c}`}>{status}</span>;
 }
 
 export default function PortalDashboardPage() {
@@ -163,8 +168,8 @@ export default function PortalDashboardPage() {
   }
 
   const all = requests ?? [];
-  const openCount = all.filter((r) => r.status === "Νέο" || r.status === "Σε εξέλιξη").length;
-  const done = all.filter((r) => r.status === "Ολοκληρώθηκε").length;
+  const openCount = all.filter((r) => normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN) === REQUEST_STATUS_OPEN).length;
+  const done = all.filter((r) => isSuccessfulRequestStatus(r.status ?? null)).length;
   const recent = all.slice(0, 5);
 
   return (
@@ -202,11 +207,11 @@ export default function PortalDashboardPage() {
             c: ND,
           },
           {
-            t: "Σε εξέλιξη",
+            t: "Ανοικτά",
             n: openCount,
-            sub: "Νέο + Σε εξέλιξη",
+            sub: "Κατάσταση «Ανοικτό»",
             icon: TrendingUp,
-            c: "#1e5fa8",
+            c: "#F59E0B",
           },
           {
             t: "Ολοκληρώθηκαν",
@@ -253,7 +258,15 @@ export default function PortalDashboardPage() {
                     className="mt-0.5 h-3 w-3 shrink-0 rounded-full"
                     style={{
                       background:
-                        r.status === "Ολοκληρώθηκε" ? "#059669" : r.status === "Σε εξέλιξη" ? "#1e5fa8" : "#C9A84C",
+                        isSuccessfulRequestStatus(r.status ?? null)
+                          ? "#059669"
+                          : normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN) ===
+                              "Κλειστό - ολοκληρωμένο χωρίς επιτυχία"
+                            ? "#E11D48"
+                            : normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN) ===
+                                "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του"
+                              ? "#9CA3AF"
+                              : "#F59E0B",
                     }}
                   />
                   <div className="min-w-0 flex-1">
@@ -266,7 +279,7 @@ export default function PortalDashboardPage() {
                           {r.request_code}
                         </span>
                       )}
-                      {statusBadge(r.status || "Νέο")}
+                      {statusBadge(r.status || REQUEST_STATUS_OPEN)}
                     </div>
                     <p className="mt-1 font-bold text-[#1A1A2E] group-hover:underline">{r.title}</p>
                     <p className="text-xs text-[#64748B]">

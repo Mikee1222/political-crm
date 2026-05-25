@@ -5,6 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Inbox, Plus } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import {
+  isSuccessfulRequestStatus,
+  normalizeRequestStatus,
+  REQUEST_STATUSES,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 
 const ND = "#003476";
 
@@ -19,36 +25,33 @@ type Row = {
 
 const TABS: { id: string; label: string }[] = [
   { id: "all", label: "Όλα" },
-  { id: "Νέο", label: "Νέο" },
-  { id: "Σε εξέλιξη", label: "Σε εξέλιξη" },
-  { id: "Ολοκληρώθηκε", label: "Ολοκληρώθηκε" },
-  { id: "Απορρίφθηκε", label: "Απορρίφθηκε" },
+  ...REQUEST_STATUSES.map((status) => ({ id: status, label: status })),
 ];
 
 function leftBorder(s: string | null) {
-  const x = s || "Νέο";
-  if (x === "Ολοκληρώθηκε") {
+  const x = normalizeRequestStatus(s ?? REQUEST_STATUS_OPEN);
+  if (isSuccessfulRequestStatus(x)) {
     return "#059669";
   }
-  if (x === "Απορρίφθηκε") {
+  if (x === "Κλειστό - ολοκληρωμένο χωρίς επιτυχία") {
     return "#E11D48";
   }
-  if (x === "Σε εξέλιξη") {
-    return "#1e5fa8";
+  if (x === "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του") {
+    return "#9CA3AF";
   }
-  return "#C9A84C";
+  return "#F59E0B";
 }
 
 function statusBadge(s: string) {
-  const c =
-    s === "Ολοκληρώθηκε"
-      ? "bg-emerald-100 text-emerald-900"
-      : s === "Σε εξέλιξη"
-        ? "bg-amber-100 text-amber-900"
-        : s === "Απορρίφθηκε"
-          ? "bg-rose-100 text-rose-800"
-          : "bg-slate-100 text-slate-800";
-  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${c}`}>{s || "Νέο"}</span>;
+  const status = normalizeRequestStatus(s || REQUEST_STATUS_OPEN);
+  const c = isSuccessfulRequestStatus(status)
+    ? "bg-emerald-100 text-emerald-900"
+    : status === "Κλειστό - ολοκληρωμένο χωρίς επιτυχία"
+      ? "bg-rose-100 text-rose-800"
+      : status === "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του"
+        ? "bg-slate-100 text-slate-800"
+        : "bg-amber-100 text-amber-900";
+  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${c}`}>{status}</span>;
 }
 
 export default function PortalRequestsPage() {
@@ -80,11 +83,11 @@ export default function PortalRequestsPage() {
     if (filter === "all") {
       return r;
     }
-    return r.filter((x) => (x.status || "Νέο") === filter);
+    return r.filter((x) => normalizeRequestStatus(x.status ?? REQUEST_STATUS_OPEN) === filter);
   }, [rows, filter]);
 
   const openCount = useMemo(
-    () => (rows ?? []).filter((r) => r.status === "Νέο" || r.status === "Σε εξέλιξη").length,
+    () => (rows ?? []).filter((r) => normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN) === REQUEST_STATUS_OPEN).length,
     [rows],
   );
 
@@ -109,7 +112,7 @@ export default function PortalRequestsPage() {
           </h1>
           <p className="mt-1 text-sm text-[#64748B]">
             <Inbox className="mr-1 inline h-4 w-4" />
-            {rows.length} συνολικά · {openCount} σε εξέλιξη
+            {rows.length} συνολικά · {openCount} ανοικτά
           </p>
         </div>
         <Link
@@ -166,7 +169,7 @@ export default function PortalRequestsPage() {
                 <p className="mt-2 text-xs text-[#64748B]">
                   {r.created_at ? new Date(r.created_at).toLocaleString("el-GR") : "—"}
                 </p>
-                <div className="mt-2">{statusBadge(r.status || "Νέο")}</div>
+                <div className="mt-2">{statusBadge(r.status || REQUEST_STATUS_OPEN)}</div>
               </div>
               <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-[#94A3B8] transition group-hover:translate-x-0.5" />
             </div>

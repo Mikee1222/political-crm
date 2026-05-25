@@ -212,7 +212,7 @@ export default function AnalyticsPage() {
         <KpiCard
           label="Ολοκληρωμένα αιτήματα"
           value={String(kpis?.completedRequests ?? 0)}
-          sub="Κατάσταση «Ολοκληρώθηκε» · ρυθμός ενημέρωσης"
+          sub="Κατάσταση «Κλειστό - ολοκληρωμένο με επιτυχία» · ρυθμός ενημέρωσης"
           trend={kpis?.completedRequestsTrend}
         />
       </div>

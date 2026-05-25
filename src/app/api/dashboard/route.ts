@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { API_RACE_MS, runWithTimeCap } from "@/lib/api-resilience";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 export const dynamic = 'force-dynamic';
 
 const empty = {
@@ -59,7 +60,7 @@ export async function GET() {
           supabase
             .from("requests")
             .select("id", { count: "exact", head: true })
-            .in("status", ["Νέο", "Σε εξέλιξη"])
+            .in("status", getRequestStatusQueryValues(REQUEST_STATUS_OPEN))
             .lt("sla_due_date", todayYmd),
           supabase.from("contacts").select("id", { count: "exact", head: true }).is("phone", null),
           supabase.from("contacts").select("id", { count: "exact", head: true }).eq("phone", ""),

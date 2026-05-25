@@ -14,7 +14,16 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { isClosedRequestStatus, REQUEST_STATUSES, REQUEST_STATUS_BADGE_CLASSES } from "@/lib/request-statuses";
+import {
+  isClosedRequestStatus,
+  isFailedRequestStatus,
+  isSuccessfulRequestStatus,
+  normalizeRequestStatus,
+  REQUEST_STATUSES,
+  REQUEST_STATUS_BADGE_CLASSES,
+  REQUEST_STATUS_COMPLETED_SUCCESS,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { NewRequestModal } from "@/components/requests/new-request-modal";
 import { PageHeader } from "@/components/ui/page-header";
@@ -69,7 +78,7 @@ const DEFAULT_FILTERS: RequestFilters = {
 
 function filtersFromSearchParams(sp: URLSearchParams): RequestFilters {
   return {
-    status: sp.get("status") ?? "",
+    status: sp.get("status") ? normalizeRequestStatus(sp.get("status")) : "",
     category: sp.get("category") ?? "",
     priority: sp.get("priority") ?? "",
     range: sp.get("range") ?? "",
@@ -241,7 +250,7 @@ export default function RequestsPage() {
       const res = await fetchWithTimeout(`/api/requests/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Ολοκληρώθηκε" }),
+        body: JSON.stringify({ status: REQUEST_STATUS_COMPLETED_SUCCESS }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(j.error ?? "Σφάλμα");
@@ -250,7 +259,7 @@ export default function RequestsPage() {
           r.id === id
             ? {
                 ...r,
-                status: "Ολοκληρώθηκε",
+                status: REQUEST_STATUS_COMPLETED_SUCCESS,
                 slaUi: "on_track",
               }
             : r,
@@ -258,8 +267,10 @@ export default function RequestsPage() {
       );
       setStatusCounts((prev) =>
         prev.map((row) => {
-          if (row.status === "Ολοκληρώθηκε") return { ...row, count: row.count + 1 };
-          if (row.status === "Σε εξέλιξη" || row.status === "Νέο") {
+          if (row.status === REQUEST_STATUS_COMPLETED_SUCCESS) {
+            return { ...row, count: row.count + 1 };
+          }
+          if (row.status === REQUEST_STATUS_OPEN) {
             return { ...row, count: Math.max(0, row.count - 1) };
           }
           return row;
@@ -594,10 +605,10 @@ function RequestCard({
   const { showToast } = useFormToast();
   const st = categoryStyle(r.category);
   const Icon = st.Icon;
-  const days = daysLeftSla(r.sla_due_date, r.status ?? "Νέο");
-  const status = r.status ?? "Νέο";
-  const isCompleted = status === "Ολοκληρώθηκε";
-  const isRejected = status === "Απορρίφθηκε" || status === "Κλειστό χωρίς επιτυχία";
+  const status = normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN);
+  const days = daysLeftSla(r.sla_due_date, status);
+  const isCompleted = isSuccessfulRequestStatus(status);
+  const isRejected = isFailedRequestStatus(status);
   const showQuickTick = canQuickComplete && !isCompleted && !isRejected;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -635,7 +646,7 @@ function RequestCard({
           {isCompleted ? (
             <CheckCircle2
               className="h-7 w-7 shrink-0 fill-green-500 text-white shadow-[0_0_8px_2px_rgba(34,197,94,0.3)] sm:shadow-none"
-              aria-label="Ολοκληρώθηκε"
+              aria-label={REQUEST_STATUS_COMPLETED_SUCCESS}
             />
           ) : showQuickTick ? (
             <div className="relative">
@@ -649,7 +660,7 @@ function RequestCard({
                   confirmMenu.toggle();
                 }}
                 className="flex h-10 w-10 touch-manipulation items-center justify-center rounded-full shadow-[0_0_8px_2px_rgba(34,197,94,0.3)] transition-transform hover:bg-green-500/10 active:scale-95 sm:shadow-none"
-                aria-label="Ολοκλήρωση αιτήματος"
+                aria-label={REQUEST_STATUS_COMPLETED_SUCCESS}
               >
                 <CheckCircle2 className="h-7 w-7 text-green-500 hover:text-green-400" />
               </button>
@@ -660,7 +671,9 @@ function RequestCard({
                 className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg"
               >
                 <div onClick={(e) => e.stopPropagation()}>
-                  <p className="text-xs text-[var(--text-primary)]">Να επισημανθεί ως Ολοκληρώθηκε;</p>
+                  <p className="text-xs text-[var(--text-primary)]">
+                    Να επισημανθεί ως {REQUEST_STATUS_COMPLETED_SUCCESS};
+                  </p>
                   <div className="mt-2 flex gap-2">
                     <button
                       type="button"
@@ -734,11 +747,11 @@ function PriorityPill({ p }: { p: string | null | undefined }) {
 
 function StatusBadge({ status, withDot }: { status: string; withDot?: boolean }) {
   const styles = REQUEST_STATUS_BADGE_CLASSES;
-  const s = status || "Νέο";
+  const s = normalizeRequestStatus(status || REQUEST_STATUS_OPEN);
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-        styles[s] ?? styles["Νέο"]
+        styles[s as keyof typeof styles] ?? styles[REQUEST_STATUS_OPEN]
       } transition-colors duration-200`}
     >
       {withDot && (
@@ -767,7 +780,7 @@ function EditRequestModal({
     title: request.title,
     description: request.description ?? "",
     category: request.category ?? "Άλλο",
-    status: request.status ?? "Νέο",
+    status: normalizeRequestStatus(request.status ?? REQUEST_STATUS_OPEN),
     priority: (request.priority === "High" ||
     request.priority === "Low" ||
     request.priority === "Urgent"

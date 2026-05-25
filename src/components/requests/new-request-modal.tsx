@@ -10,7 +10,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
 import { useFormToast } from "@/contexts/form-toast-context";
 
-import { REQUEST_STATUSES } from "@/lib/request-statuses";
+import { REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 
 const PRIORITIES = ["High", "Medium", "Low"] as const;
 
@@ -31,7 +31,7 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("Άλλο");
-  const [status, setStatus] = useState<(typeof STATUSES)[number]>("Νέο");
+  const [status, setStatus] = useState<(typeof STATUSES)[number]>(REQUEST_STATUS_OPEN);
   const [priority, setPriority] = useState<string>("Medium");
   const [slaDate, setSlaDate] = useState(""); // yyyy-mm-dd optional
   const [assignedTo, setAssignedTo] = useState(""); // profile id
@@ -72,7 +72,7 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
     setTitle("");
     setDescription("");
     setCategory("Άλλο");
-    setStatus("Νέο");
+    setStatus(REQUEST_STATUS_OPEN);
     setPriority("Medium");
     setSlaDate("");
     setAssignedTo("");
