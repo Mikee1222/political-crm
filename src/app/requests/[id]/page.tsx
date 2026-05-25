@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Sparkles, UserCheck } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Sparkles, UserCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
@@ -441,34 +441,51 @@ export default function RequestDetailPage() {
         </div>
 
         <aside className="space-y-3">
-          <RequestPersonsSections
-            requestId={data.id}
-            requesters={data.requesters ?? (data.requester ? [data.requester] : [])}
-            affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
-            helpers={data.helpers ?? []}
-            handlers={data.person_handlers ?? []}
-            canManage={canManage}
-            onChanged={() => void load()}
-          />
-          {(data.handlers?.length ?? 0) > 0 && (
+          <div className="[&>div>div:last-child]:hidden">
+            <RequestPersonsSections
+              requestId={data.id}
+              requesters={data.requesters ?? (data.requester ? [data.requester] : [])}
+              affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
+              helpers={data.helpers ?? []}
+              handlers={data.person_handlers ?? []}
+              canManage={canManage}
+              onChanged={() => void load()}
+            />
+          </div>
+          {((data.handlers?.length ?? 0) > 0 || canManage) && (
             <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
-              <h3 className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-                <UserCheck className="h-3.5 w-3.5" aria-hidden />
-                ΧΕΙΡΙΣΤΕΣ
-              </h3>
-              <ul className="space-y-0">
-                {data.handlers.map((name, i) => (
-                  <li
-                    key={`${name}-${i}`}
-                    className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                  <UserCheck className="h-3.5 w-3.5" aria-hidden />
+                  ΧΕΙΡΙΣΤΕΣ ΑΙΤΗΜΑΤΟΣ
+                </h3>
+                {canManage && (
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
                   >
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#003476]/10 text-[10px] font-bold text-[#003476]">
-                      {(name[0] ?? "?").toUpperCase()}
-                    </div>
-                    <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
-                  </li>
-                ))}
-              </ul>
+                    <Plus className="h-3 w-3" aria-hidden />
+                    Προσθήκη
+                  </button>
+                )}
+              </div>
+              {(data.handlers?.length ?? 0) > 0 ? (
+                <ul className="space-y-0">
+                  {data.handlers.map((name, i) => (
+                    <li
+                      key={`${name}-${i}`}
+                      className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#003476]/10 text-[10px] font-bold text-[#003476]">
+                        {(name[0] ?? "?").toUpperCase()}
+                      </div>
+                      <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[var(--text-muted)]">—</p>
+              )}
             </div>
           )}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
