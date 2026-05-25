@@ -152,14 +152,18 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   const allNotes = notesData ?? [];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlers = allNotes
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((n: any) => n.content?.startsWith('[Χειριστής:'))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((n: any) => {
       const match = n.content.match(/\[Χειριστής: (.+?)\]/);
       return match ? match[1].trim() : null;
     })
     .filter(Boolean);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const regularNotes = allNotes.filter((n: any) => !n.content?.startsWith('[Χειριστής:'));
 
   return NextResponse.json({
