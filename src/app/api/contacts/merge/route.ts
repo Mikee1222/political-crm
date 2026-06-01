@@ -5,6 +5,7 @@ import { hasMinRole } from "@/lib/roles";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
+import { stablePairId } from "@/lib/duplicate-detection";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -115,40 +116,32 @@ export async function POST(request: NextRequest) {
     }
     await supabase.from("contact_group_members").delete().eq("contact_id", mergeId);
 
-    const { data: relAsContact } = await supabase
+    const { data: relationsToMerge } = await supabase
       .from("contact_relations")
-      .select("id, related_contact_id, relation_type")
-      .eq("contact_id", mergeId);
-    for (const rel of relAsContact ?? []) {
-      const r = rel as { related_contact_id: string; relation_type: string | null };
-      if (r.related_contact_id === keepId) continue;
+      .select("id, contact_id_1, contact_id_2, relation_type")
+      .or(`contact_id_1.eq.${mergeId},contact_id_2.eq.${mergeId}`);
+    for (const rel of relationsToMerge ?? []) {
+      const r = rel as {
+        contact_id_1: string;
+        contact_id_2: string;
+        relation_type: string | null;
+      };
+      const otherId = r.contact_id_1 === mergeId ? r.contact_id_2 : r.contact_id_1;
+      if (otherId === keepId) continue;
+      const { small, big } = stablePairId(keepId, otherId);
       await supabase.from("contact_relations").upsert(
         {
-          contact_id: keepId,
-          related_contact_id: r.related_contact_id,
+          contact_id_1: small,
+          contact_id_2: big,
           relation_type: r.relation_type,
         },
-        { onConflict: "contact_id,related_contact_id", ignoreDuplicates: true },
+        { onConflict: "contact_id_1,contact_id_2", ignoreDuplicates: true },
       );
     }
-    const { data: relAsRelated } = await supabase
+    await supabase
       .from("contact_relations")
-      .select("id, contact_id, relation_type")
-      .eq("related_contact_id", mergeId);
-    for (const rel of relAsRelated ?? []) {
-      const r = rel as { contact_id: string; relation_type: string | null };
-      if (r.contact_id === keepId) continue;
-      await supabase.from("contact_relations").upsert(
-        {
-          contact_id: r.contact_id,
-          related_contact_id: keepId,
-          relation_type: r.relation_type,
-        },
-        { onConflict: "contact_id,related_contact_id", ignoreDuplicates: true },
-      );
-    }
-    await supabase.from("contact_relations").delete().eq("contact_id", mergeId);
-    await supabase.from("contact_relations").delete().eq("related_contact_id", mergeId);
+      .delete()
+      .or(`contact_id_1.eq.${mergeId},contact_id_2.eq.${mergeId}`);
 
     await supabase.from("calls").update({ contact_id: keepId }).eq("contact_id", mergeId);
     await supabase.from("tasks").update({ contact_id: keepId }).eq("contact_id", mergeId);

@@ -19,8 +19,8 @@ type RelatedContact = {
 
 type RelationRow = {
   id: string;
-  contact_id: string;
-  related_contact_id: string;
+  contact_id_1: string;
+  contact_id_2: string;
   relation_type: string | null;
   related: RelatedContact | null;
 };

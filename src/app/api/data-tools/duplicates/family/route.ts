@@ -18,20 +18,12 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as { contactId1: string; contactId2: string };
   const { small, big } = stablePairId(body.contactId1, body.contactId2);
   const { error: e1 } = await supabase.from("contact_relations").insert({
-    contact_id: small,
-    related_contact_id: big,
+    contact_id_1: small,
+    contact_id_2: big,
     relation_type: "family",
   });
   if (e1 && e1.code !== "23505") {
     return NextResponse.json({ error: e1.message }, { status: 400 });
-  }
-  const { error: e2 } = await supabase.from("contact_relations").insert({
-    contact_id: big,
-    related_contact_id: small,
-    relation_type: "family",
-  });
-  if (e2 && e2.code !== "23505") {
-    return NextResponse.json({ error: e2.message }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
   } catch (e) {

@@ -46,7 +46,7 @@ export async function POST() {
 
   const { data: relations, error: e3 } = await supabase
     .from("contact_relations")
-    .select("contact_id, related_contact_id");
+    .select("contact_id_1, contact_id_2");
   if (e3) {
     return NextResponse.json({ error: e3.message }, { status: 400 });
   }
@@ -55,11 +55,9 @@ export async function POST() {
     (dismissed ?? []).map((d) => `${d.contact_id_1}|${d.contact_id_2}`),
   );
   const famSet = new Set(
-    (relations ?? []).flatMap((d) => {
-      const a = (d as { contact_id: string; related_contact_id: string }).contact_id;
-      const b = (d as { contact_id: string; related_contact_id: string }).related_contact_id;
-      const s = a < b ? `${a}|${b}` : `${b}|${a}`;
-      return [s];
+    (relations ?? []).map((d) => {
+      const row = d as { contact_id_1: string; contact_id_2: string };
+      return `${row.contact_id_1}|${row.contact_id_2}`;
     }),
   );
 

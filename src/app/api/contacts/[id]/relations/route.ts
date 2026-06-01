@@ -16,8 +16,8 @@ type RelatedContact = {
 
 type RelatedRow = {
   id: string;
-  contact_id: string;
-  related_contact_id: string;
+  contact_id_1: string;
+  contact_id_2: string;
   relation_type: string | null;
   created_at: string | null;
   related: RelatedContact | null;
@@ -34,14 +34,21 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
     const { data: rels, error } = await supabase
       .from("contact_relations")
-      .select("id, contact_id, related_contact_id, relation_type, created_at")
-      .eq("contact_id", params.id)
+      .select("id, contact_id_1, contact_id_2, relation_type, created_at")
+      .or(`contact_id_1.eq.${params.id},contact_id_2.eq.${params.id}`)
       .order("created_at", { ascending: false });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const relatedIds = [...new Set((rels ?? []).map((r) => (r as { related_contact_id: string }).related_contact_id))];
+    const relatedIds = [
+      ...new Set(
+        (rels ?? []).map((r) => {
+          const row = r as { contact_id_1: string; contact_id_2: string };
+          return row.contact_id_1 === params.id ? row.contact_id_2 : row.contact_id_1;
+        }),
+      ),
+    ];
     let byId = new Map<string, RelatedContact>();
     if (relatedIds.length > 0) {
       const { data: contacts } = await supabase
@@ -56,14 +63,15 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     const relations: RelatedRow[] = (rels ?? []).map((r) => {
       const row = r as {
         id: string;
-        contact_id: string;
-        related_contact_id: string;
+        contact_id_1: string;
+        contact_id_2: string;
         relation_type: string | null;
         created_at: string | null;
       };
+      const relatedId = row.contact_id_1 === params.id ? row.contact_id_2 : row.contact_id_1;
       return {
         ...row,
-        related: byId.get(row.related_contact_id) ?? null,
+        related: byId.get(relatedId) ?? null,
       };
     });
 
@@ -96,15 +104,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       body.relation_type != null && String(body.relation_type).trim() !== ""
         ? String(body.relation_type).trim()
         : "family";
+    const [contactId1, contactId2] = params.id < relatedId ? [params.id, relatedId] : [relatedId, params.id];
 
     const { data: inserted, error } = await supabase
       .from("contact_relations")
       .insert({
-        contact_id: params.id,
-        related_contact_id: relatedId,
+        contact_id_1: contactId1,
+        contact_id_2: contactId2,
         relation_type: relationType,
       })
-      .select("id, contact_id, related_contact_id, relation_type, created_at")
+      .select("id, contact_id_1, contact_id_2, relation_type, created_at")
       .single();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -146,7 +155,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .from("contact_relations")
       .delete()
       .eq("id", relationId)
-      .eq("contact_id", params.id);
+      .or(`contact_id_1.eq.${params.id},contact_id_2.eq.${params.id}`);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
