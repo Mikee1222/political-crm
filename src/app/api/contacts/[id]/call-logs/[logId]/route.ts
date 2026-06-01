@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasPermissionFlexible } from "@/lib/permission-check";
 import { nextJsonError } from "@/lib/api-resilience";
+import { resolveContactId } from "@/lib/resolve-entity-id";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,16 @@ export async function DELETE(
       return forbidden();
     }
 
+    const contactId = await resolveContactId(supabase, params.id);
+    if (!contactId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
     const { data: row, error: fErr } = await supabase
       .from("calls")
       .select("id, contact_id, called_at")
       .eq("id", params.logId)
-      .eq("contact_id", params.id)
+      .eq("contact_id", contactId)
       .maybeSingle();
     if (fErr) {
       return NextResponse.json({ error: fErr.message }, { status: 400 });
@@ -44,7 +50,8 @@ export async function DELETE(
     const { data: latest } = await supabase
       .from("calls")
       .select("called_at")
-      .eq("contact_id", params.id)
+      .eq("contact_id", contactId)
+      .not("marked_by_user_id", "is", null)
       .order("called_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -57,7 +64,7 @@ export async function DELETE(
         updated_at: new Date().toISOString(),
         updated_by: user.id,
       })
-      .eq("id", params.id);
+      .eq("id", contactId);
 
     return NextResponse.json({ ok: true, last_contacted_at: nextLast });
   } catch (e) {

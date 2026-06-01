@@ -4,6 +4,7 @@ import { nextJsonError } from "@/lib/api-resilience";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { resolveProfileNames } from "@/lib/profile-names";
+import { resolveContactId } from "@/lib/resolve-entity-id";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +32,15 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
     const { supabase } = crm;
+    const contactId = await resolveContactId(supabase, params.id);
+    if (!contactId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
     const { data: rows, error } = await supabase
       .from("calls")
       .select("id, contact_id, called_at, marked_by_user_id, marked_by_name")
-      .eq("contact_id", params.id)
+      .eq("contact_id", contactId)
+      .not("marked_by_user_id", "is", null)
       .order("called_at", { ascending: false });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -53,13 +59,17 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
     const { user, profile, supabase } = crm;
+    const contactId = await resolveContactId(supabase, params.id);
+    if (!contactId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
     const now = new Date().toISOString();
     const markerName = profile?.full_name?.trim() || null;
 
     const { data: row, error: insErr } = await supabase
       .from("calls")
       .insert({
-        contact_id: params.id,
+        contact_id: contactId,
         called_at: now,
         marked_by_user_id: user.id,
         marked_by_name: markerName,
@@ -73,7 +83,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     const { data: contact, error: upErr } = await supabase
       .from("contacts")
       .update({ last_contacted_at: now, updated_at: now, updated_by: user.id })
-      .eq("id", params.id)
+      .eq("id", contactId)
       .select("id, first_name, last_name, last_contacted_at")
       .single();
     if (upErr) {
@@ -87,7 +97,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
       userId: user.id,
       action: "contact_updated",
       entityType: "contact",
-      entityId: params.id,
+      entityId: contactId,
       entityName,
       details: {
         actor_name: firstNameFromFull(profile?.full_name),

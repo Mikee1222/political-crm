@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+import { resolveRequestId } from "@/lib/resolve-entity-id";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +25,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Άκυρα στοιχεία" }, { status: 400 });
     }
 
+    const requestId = await resolveRequestId(supabase, params.id);
+    if (!requestId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
     const { data, error } = await supabase
       .from("request_persons")
-      .insert({ request_id: params.id, contact_id: contactId, role })
+      .insert({ request_id: requestId, contact_id: contactId, role })
       .select("id, request_id, contact_id, role, created_at")
       .single();
     if (error) {
@@ -34,9 +40,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     if (role === "requester") {
-      await supabase.from("requests").update({ contact_id: contactId }).eq("id", params.id);
+      await supabase.from("requests").update({ contact_id: contactId }).eq("id", requestId);
     } else if (role === "affected") {
-      await supabase.from("requests").update({ affected_contact_id: contactId }).eq("id", params.id);
+      await supabase.from("requests").update({ affected_contact_id: contactId }).eq("id", requestId);
     }
 
     return NextResponse.json({ person: data });
@@ -61,10 +67,15 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Άκυρα στοιχεία" }, { status: 400 });
     }
 
+    const requestId = await resolveRequestId(supabase, params.id);
+    if (!requestId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
     const { error } = await supabase
       .from("request_persons")
       .delete()
-      .eq("request_id", params.id)
+      .eq("request_id", requestId)
       .eq("contact_id", contactId)
       .eq("role", role);
     if (error) {

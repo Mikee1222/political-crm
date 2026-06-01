@@ -10,6 +10,7 @@ import { fieldDiff } from "@/lib/field-diff";
 import { notifyRequestStatusToCitizen } from "@/lib/request-notifications";
 import { resolveProfileNames } from "@/lib/profile-names";
 import { normalizeRequestStatus } from "@/lib/request-statuses";
+import { resolveRequestId } from "@/lib/resolve-entity-id";
 export const dynamic = "force-dynamic";
 
 type RequestNoteRow = {
@@ -86,12 +87,16 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   if (!hasMinRole(profile?.role, "manager")) {
     return forbidden();
   }
+  const requestId = await resolveRequestId(supabase, params.id);
+  if (!requestId) {
+    return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+  }
   const { data: row, error } = await supabase
     .from("requests")
     .select(
       "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, portal_message, portal_visible",
     )
-    .eq("id", params.id)
+    .eq("id", requestId)
     .single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -107,7 +112,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     .select(
       "role, contact_id, contacts(id, first_name, last_name, phone, phone2, landline)",
     )
-    .eq("request_id", params.id);
+    .eq("request_id", requestId);
 
   let grouped = groupPersons((personRows ?? []) as PersonRow[]);
 
@@ -140,7 +145,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const { data: noteRows } = await supabase
     .from("request_notes")
     .select("id, content, created_at, created_by:user_id, author_name")
-    .eq("request_id", params.id)
+    .eq("request_id", requestId)
     .order("created_at", { ascending: false });
 
   const rawNotes = (noteRows ?? []) as RequestNoteRow[];
@@ -199,8 +204,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   if (!hasMinRole(profile?.role, "manager")) {
     return forbidden();
   }
+  const requestId = await resolveRequestId(supabase, params.id);
+  if (!requestId) {
+    return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+  }
   const body = (await request.json()) as Record<string, unknown>;
-  const { data: before } = await supabase.from("requests").select("*").eq("id", params.id).single();
+  const { data: before } = await supabase.from("requests").select("*").eq("id", requestId).single();
   if (!before) {
     return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
   }
@@ -226,7 +235,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       updated_at: new Date().toISOString(),
       ...(mergedSla != null ? { sla_status: mergedSla } : {}),
     })
-    .eq("id", params.id)
+    .eq("id", requestId)
     .select("*")
     .single();
   if (error) {
@@ -240,7 +249,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     userId: user.id,
     action: "request_updated",
     entityType: "request",
-    entityId: params.id,
+    entityId: requestId,
     entityName: title,
     details:
       Object.keys(changed).length > 0
@@ -281,7 +290,11 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   if (!hasMinRole(profile?.role, "manager")) {
     return forbidden();
   }
-  const { error } = await supabase.from("requests").delete().eq("id", params.id);
+  const requestId = await resolveRequestId(supabase, params.id);
+  if (!requestId) {
+    return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+  }
+  const { error } = await supabase.from("requests").delete().eq("id", requestId);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

@@ -397,6 +397,13 @@ update public.contacts
   where updated_at is null;
 create index if not exists idx_contacts_group_id on public.contacts (group_id) where group_id is not null;
 
+-- Manual communication markers on calls (Σήμανση ως επικοινωνία)
+alter table public.calls
+  add column if not exists marked_by_user_id uuid references auth.users (id) on delete set null,
+  add column if not exists marked_by_name text;
+create index if not exists idx_calls_contact_called_at
+  on public.calls (contact_id, called_at desc nulls last);
+
 -- Human-readable request codes: columns first, then unique index, then backfill
 alter table public.requests
   add column if not exists request_code text;

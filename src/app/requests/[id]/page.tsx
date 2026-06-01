@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowLeft, Loader2, Plus, Sparkles, UserCheck } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Loader2, Plus, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -12,6 +12,9 @@ import { RequestDocumentsSection } from "@/components/request-documents-section"
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
 import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
+import { CenteredModal } from "@/components/ui/centered-modal";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 type ContactCard = {
   id: string;
@@ -57,6 +60,8 @@ type Note = {
   author_name?: string | null;
   author_full_name: string;
 };
+
+type StaffUser = { id: string; full_name: string | null; email: string; role: string };
 
 const OPEN = OPEN_REQUEST_STATUSES;
 
@@ -172,13 +177,31 @@ export default function RequestDetailPage() {
   const [savingMsg, setSavingMsg] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignUserId, setAssignUserId] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [assignErr, setAssignErr] = useState("");
+
+  const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    void fetchWithTimeout("/api/team/assignees")
+      .then(async (r) => {
+        if (!r.ok) return;
+        const j = (await r.json()) as { assignees?: StaffUser[] };
+        setStaffUsers((j.assignees ?? []) as StaffUser[]);
+      })
+      .catch(() => setStaffUsers([]));
+  }, [canManage]);
 
   const load = useCallback(async () => {
     if (!id) return;
     setErr("");
     setAiSummary(null);
     try {
-      const rRes = await fetchWithTimeout(`/api/requests/${id}`);
+      const rRes = await fetchWithTimeout(`/api/requests/${encodeURIComponent(id)}`);
       const rj = await rRes.json();
       if (!rRes.ok) {
         setErr(String((rj as { error?: string }).error ?? "Σφάλμα"));
@@ -188,10 +211,13 @@ export default function RequestDetailPage() {
       setData(req);
       setPortalMsg(req.portal_message?.trim() ?? "");
       setNotes(req.notes ?? []);
+      if (req.id && req.id !== id) {
+        router.replace(`/requests/${req.id}`, { scroll: false });
+      }
     } catch {
       setErr("Σφάλμα φόρτωσης");
     }
-  }, [id]);
+  }, [id, router]);
 
   useEffect(() => {
     void load();
@@ -324,10 +350,10 @@ export default function RequestDetailPage() {
                   className={lux.btnBlue + " !text-xs"}
                   disabled={savingMsg}
                   onClick={async () => {
-                    if (!id) return;
+                    if (!requestApiId) return;
                     setSavingMsg(true);
                     try {
-                      const res = await fetchWithTimeout(`/api/requests/${id}`, {
+                      const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestApiId)}`, {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ portal_message: portalMsg || null }),
@@ -347,7 +373,7 @@ export default function RequestDetailPage() {
             </div>
           )}
 
-          <RequestDocumentsSection requestId={data.id} canManage={canManage} />
+          <RequestDocumentsSection requestId={requestApiId} canManage={canManage} />
 
           <div
             className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-card)]/95 p-5 shadow-sm"
@@ -399,10 +425,10 @@ export default function RequestDetailPage() {
                     className={lux.btnBlue + " !text-xs"}
                     disabled={sending || !noteDraft.trim()}
                     onClick={async () => {
-                      if (!noteDraft.trim() || !id) return;
+                      if (!noteDraft.trim() || !requestApiId) return;
                       setSending(true);
                       try {
-                        const res = await fetchWithTimeout(`/api/requests/${id}/notes`, {
+                        const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestApiId)}/notes`, {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ content: noteDraft.trim() }),
@@ -428,57 +454,35 @@ export default function RequestDetailPage() {
         </div>
 
         <aside className="space-y-3">
-          <div className="[&>div>div:last-child]:hidden">
-            <RequestPersonsSections
-              requestId={data.id}
-              requesters={data.requesters ?? (data.requester ? [data.requester] : [])}
-              affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
-              helpers={data.helpers ?? []}
-              handlers={data.person_handlers ?? []}
-              canManage={canManage}
-              onChanged={() => void load()}
-            />
-          </div>
-          {((data.handlers?.length ?? 0) > 0 || canManage) && (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-                  <UserCheck className="h-3.5 w-3.5" aria-hidden />
-                  ΧΕΙΡΙΣΤΕΣ ΑΙΤΗΜΑΤΟΣ
-                </h3>
-                {canManage && (
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
-                  >
-                    <Plus className="h-3 w-3" aria-hidden />
-                    Προσθήκη
-                  </button>
-                )}
-              </div>
-              {(data.handlers?.length ?? 0) > 0 ? (
-                <ul className="space-y-0">
-                  {data.handlers.map((name, i) => (
-                    <li
-                      key={`${name}-${i}`}
-                      className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
-                    >
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#003476]/10 text-[10px] font-bold text-[#003476]">
-                        {(name[0] ?? "?").toUpperCase()}
-                      </div>
-                      <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-[var(--text-muted)]">—</p>
+          <RequestPersonsSections
+            requestId={requestApiId}
+            requesters={data.requesters ?? (data.requester ? [data.requester] : [])}
+            affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
+            helpers={data.helpers ?? []}
+            handlers={data.person_handlers ?? []}
+            canManage={canManage}
+            onChanged={() => void load()}
+          />
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Ανατέθηκε σε</p>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignErr("");
+                    setAssignUserId("");
+                    setAssignOpen(true);
+                  }}
+                  className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
+                >
+                  <Plus className="h-3 w-3" aria-hidden />
+                  {data.assigned_to ? "Αλλαγή" : "Προσθήκη"}
+                </button>
               )}
             </div>
-          )}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Ανατέθηκε σε</p>
             {data.assigned_to ? (
-              <div className="mt-2 flex items-start gap-2.5">
+              <div className="flex items-start gap-2.5">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-xs font-bold text-[var(--text-primary)]">
                   {authorInitials(data.assigned_to)}
                 </div>
@@ -488,9 +492,84 @@ export default function RequestDetailPage() {
                 </div>
               </div>
             ) : (
-              <p className="mt-1 text-sm text-[var(--text-muted)]">Χωρίς ανάθεση</p>
+              <p className="text-sm text-[var(--text-muted)]">Χωρίς ανάθεση</p>
             )}
           </div>
+          <CenteredModal
+            open={assignOpen}
+            onClose={() => {
+              setAssignOpen(false);
+              setAssignUserId("");
+              setAssignErr("");
+            }}
+            title="Ανάθεση αιτήματος"
+            ariaLabel="Ανάθεση αιτήματος"
+            className="!max-w-md"
+            footer={
+              <>
+                <button
+                  type="button"
+                  className={lux.btnSecondary}
+                  onClick={() => setAssignOpen(false)}
+                  disabled={assignSaving}
+                >
+                  Άκυρο
+                </button>
+                <FormSubmitButton
+                  type="button"
+                  variant="gold"
+                  loading={assignSaving}
+                  disabled={!assignUserId}
+                  onClick={() => {
+                    void (async () => {
+                      if (!requestApiId || !assignUserId) return;
+                      setAssignSaving(true);
+                      setAssignErr("");
+                      try {
+                        const assignee = staffUsers.find((u) => u.id === assignUserId);
+                        const assignedName = assignee
+                          ? assignee.full_name?.trim() || assignee.email || null
+                          : null;
+                        const res = await fetchWithTimeout(
+                          `/api/requests/${encodeURIComponent(requestApiId)}`,
+                          {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ assigned_to: assignedName }),
+                          },
+                        );
+                        const j = (await res.json()) as { error?: string; request?: RequestDetail };
+                        if (!res.ok) {
+                          setAssignErr(j.error ?? "Σφάλμα");
+                          return;
+                        }
+                        if (j.request) setData(j.request);
+                        setAssignOpen(false);
+                        setAssignUserId("");
+                      } finally {
+                        setAssignSaving(false);
+                      }
+                    })();
+                  }}
+                >
+                  Αποθήκευση
+                </FormSubmitButton>
+              </>
+            }
+          >
+            <label className={lux.label}>Στέλεχος</label>
+            <SearchableSelect
+              value={assignUserId}
+              onChange={setAssignUserId}
+              options={staffUsers.map((u) => ({
+                value: u.id,
+                label: u.full_name?.trim() || u.email || u.id,
+              }))}
+              placeholder="Επιλέξτε στέλεχος…"
+              aria-label="Στέλεχος"
+            />
+            {assignErr && <p className="mt-2 text-sm text-red-400">{assignErr}</p>}
+          </CenteredModal>
         </aside>
       </div>
 

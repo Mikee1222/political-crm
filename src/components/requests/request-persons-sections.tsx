@@ -101,7 +101,7 @@ function PersonSection({
     setSaving(true);
     setErr("");
     try {
-      const res = await fetchWithTimeout(`/api/requests/${requestId}/persons`, {
+      const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestId)}/persons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contact_id: contactId, role }),
@@ -121,7 +121,7 @@ function PersonSection({
 
   const remove = async (id: string) => {
     const res = await fetchWithTimeout(
-      `/api/requests/${requestId}/persons?contact_id=${encodeURIComponent(id)}&role=${role}`,
+      `/api/requests/${encodeURIComponent(requestId)}/persons?contact_id=${encodeURIComponent(id)}&role=${role}`,
       { method: "DELETE" },
     );
     if (res.ok) onChanged();
@@ -238,7 +238,7 @@ function HandlersSection({
     setSaving(true);
     setErr("");
     try {
-      const res = await fetchWithTimeout(`/api/requests/${requestId}/persons`, {
+      const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestId)}/persons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contact_id: contactId, role: "handler" }),
@@ -258,7 +258,7 @@ function HandlersSection({
 
   const remove = async (id: string) => {
     const res = await fetchWithTimeout(
-      `/api/requests/${requestId}/persons?contact_id=${encodeURIComponent(id)}&role=handler`,
+      `/api/requests/${encodeURIComponent(requestId)}/persons?contact_id=${encodeURIComponent(id)}&role=handler`,
       { method: "DELETE" },
     );
     if (res.ok) onChanged();
