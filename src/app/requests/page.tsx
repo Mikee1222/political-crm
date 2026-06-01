@@ -25,6 +25,9 @@ import {
 } from "@/lib/request-statuses";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
+import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
+import { requestCardStatusStyle } from "@/lib/request-status-card-style";
+import type { RequestStatusColorsMap } from "@/lib/request-status-colors";
 import { NewRequestModal } from "@/components/requests/new-request-modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -119,6 +122,7 @@ export default function RequestsPage() {
   const searchParams = useSearchParams();
   const { profile } = useProfile();
   const canQuickComplete = hasMinRole(profile?.role, "manager");
+  const { colors: statusColors } = useRequestStatusColors();
 
   const [f, setF] = useState<RequestFilters>(DEFAULT_FILTERS);
   const [rows, setRows] = useState<RequestRow[]>([]);
@@ -470,6 +474,7 @@ export default function RequestsPage() {
             >
               <RequestCard
                 r={r}
+                statusColors={statusColors}
                 canQuickComplete={canQuickComplete}
                 onOpen={() => router.push(`/requests/${r.id}`)}
                 onEdit={() => setSelected(r)}
@@ -591,12 +596,14 @@ function SlaDonut({ daysLeft, max = 14 }: { daysLeft: number | null; max?: numbe
 
 function RequestCard({
   r,
+  statusColors,
   canQuickComplete,
   onOpen,
   onEdit,
   onQuickComplete,
 }: {
   r: RequestRow;
+  statusColors: RequestStatusColorsMap;
   canQuickComplete: boolean;
   onOpen: () => void;
   onEdit: () => void;
@@ -606,6 +613,7 @@ function RequestCard({
   const st = categoryStyle(r.category);
   const Icon = st.Icon;
   const status = normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN);
+  const cardStyle = requestCardStatusStyle(status, statusColors);
   const days = daysLeftSla(r.sla_due_date, status);
   const isCompleted = isSuccessfulRequestStatus(status);
   const isRejected = isFailedRequestStatus(status);
@@ -634,7 +642,12 @@ function RequestCard({
 
   return (
     <article
-      className={`hq-table-row-interactive group relative flex min-h-[180px] cursor-pointer flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm transition duration-200 hover:shadow-md ${st.left}`}
+      className={`hq-table-row-interactive group relative flex min-h-[180px] cursor-pointer flex-col gap-2 rounded-xl border border-[var(--border)] border-l-4 p-4 shadow-sm transition duration-200 hover:shadow-md ${st.left}`}
+      style={{
+        backgroundColor: cardStyle.backgroundColor,
+        borderLeftColor: cardStyle.borderLeftColor,
+        color: cardStyle.color,
+      }}
       onClick={onOpen}
     >
       <div className="flex items-start justify-between gap-2">

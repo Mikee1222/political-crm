@@ -23,6 +23,7 @@ import {
   searchParamsToRequestFilters,
   type RequestListFilters,
 } from "@/lib/requests-filters";
+import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { lux } from "@/lib/luxury-styles";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ const STORAGE_FILTERS_OPEN = "crm-request-search-filters-open";
 function RequestSearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { colors: statusColors } = useRequestStatusColors();
 
   const [draftFilters, setDraftFilters] = useState<RequestListFilters>(getDefaultRequestFilters);
   const [appliedFilters, setAppliedFilters] = useState<RequestListFilters | null>(null);
@@ -283,6 +285,7 @@ function RequestSearchPageInner() {
                   <li key={r.id}>
                     <RequestSearchResultCard
                       request={r}
+                      statusColors={statusColors}
                       onNavigate={() => router.push(`/requests/${r.id}`)}
                     />
                   </li>
