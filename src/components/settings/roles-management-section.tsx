@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { HelpCircle } from "lucide-react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { useFormToast } from "@/contexts/form-toast-context";
-import { PERMISSION_CATEGORIES, PERMISSION_LABELS, type PermissionKey } from "@/lib/permissions";
+import { PERMISSION_CATEGORIES, PERMISSION_LABELS, PERMISSION_TOOLTIPS, type PermissionKey } from "@/lib/permissions";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqLabel } from "@/components/ui/hq-form-primitives";
@@ -21,22 +22,43 @@ type RoleRow = {
   created_at: string;
 };
 
+function PermissionHelpIcon({ description }: { description: string }) {
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      className="inline-flex shrink-0 rounded-full text-[var(--text-muted)] hover:text-[var(--text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border)]"
+      title={description}
+      aria-label={description}
+      onClick={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      <HelpCircle className="h-3.5 w-3.5" aria-hidden />
+    </button>
+  );
+}
+
 function Toggle({
   checked,
   disabled,
   onChange,
   id,
   label,
+  description,
 }: {
   checked: boolean;
   disabled?: boolean;
   onChange: (v: boolean) => void;
   id: string;
   label: string;
+  description: string;
 }) {
   return (
     <label htmlFor={id} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm">
-      <span className="text-[var(--text-secondary)]">{label}</span>
+      <span className="flex min-w-0 items-center gap-1.5 text-[var(--text-secondary)]">
+        <span className="truncate">{label}</span>
+        <PermissionHelpIcon description={description} />
+      </span>
       <input
         id={id}
         type="checkbox"
@@ -174,13 +196,14 @@ export function RolesManagementSection() {
             <div className="space-y-6 p-4">
               {PERMISSION_CATEGORIES.map((cat) => (
                 <div key={cat.id}>
-                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{cat.label}</h3>
+                  <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">{cat.label}</h3>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {cat.keys.map((key) => (
                       <Toggle
                         key={key}
                         id={`${r.name}-${key}`}
                         label={PERMISSION_LABELS[key]}
+                        description={PERMISSION_TOOLTIPS[key]}
                         checked={Boolean(permMap[r.name]?.[key])}
                         onChange={(v) => setPerm(r.name, key, v)}
                       />

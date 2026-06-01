@@ -143,10 +143,71 @@ export type PermissionCategory = {
   keys: readonly PermissionKey[];
 };
 
+export const PERMISSION_TOOLTIPS: Record<PermissionKey, string> = {
+  contacts_view: "Προβολή λίστας και καρτέλας επαφών",
+  contacts_create: "Δημιουργία νέας επαφής",
+  contacts_edit: "Επεξεργασία πεδίων επαφής",
+  contacts_delete: "Διαγραφή επαφής (μόνιμη)",
+  contacts_export: "Εξαγωγή επαφών σε Excel/CSV",
+  contacts_import: "Εισαγωγή επαφών από αρχείο",
+  contacts_bulk: "Μαζικές ενέργειες σε επαφές",
+  requests_view: "Προβολή λίστας και λεπτομερειών αιτημάτων",
+  requests_create: "Δημιουργία νέου αιτήματος",
+  requests_edit: "Επεξεργασία αιτήματος",
+  requests_delete: "Διαγραφή αιτήματος",
+  requests_complete: "Γρήγορη ολοκλήρωση αιτήματος",
+  requests_reject: "Απόρριψη αιτήματος",
+  requests_assign: "Ανάθεση αιτήματος σε χρήστη",
+  requests_scheduler_view: "Προβολή ημερολογίου προγραμματισμού",
+  requests_scheduler_schedule: "Προγραμματισμός αιτήματος σε ημερομηνία",
+  requests_scheduler_complete: "Ολοκλήρωση προγραμματισμένου αιτήματος",
+  requests_scheduler_reject: "Απόρριψη από τον προγραμματισμό",
+  requests_scheduler_ai_summary: "AI περίληψη αιτημάτων στον προγραμματισμό",
+  data_tools_view: "Πρόσβαση στα εργαλεία δεδομένων (διπλότυπα, έλεγχοι)",
+  data_tools_bulk_delete: "Μαζική διαγραφή επαφών μέσω εργαλείων",
+  data_tools_bulk_edit: "Μαζική επεξεργασία επαφών μέσω εργαλείων",
+  data_tools_export_vcf: "Εξαγωγή επαφών σε vCard (.vcf)",
+  data_tools_export_excel: "Εξαγωγή επαφών σε Excel",
+  campaigns_view: "Προβολή καμπανιών κλήσεων",
+  campaigns_create: "Δημιουργία νέας καμπάνιας",
+  campaigns_start: "Εκκίνηση κλήσεων καμπάνιας",
+  tasks_view: "Προβολή εργασιών",
+  tasks_create: "Δημιουργία εργασίας",
+  tasks_assign: "Ανάθεση εργασίας σε χρήστη",
+  analytics_view: "Προβολή αναλυτικών στατιστικών",
+  documents_view: "Προβολή εγγράφων",
+  documents_upload: "Μεταφόρτωση εγγράφων",
+  events_view: "Προβολή εκδηλώσεων",
+  events_create: "Δημιουργία εκδήλωσης",
+  volunteers_view: "Προβολή εθελοντών",
+  polls_view: "Προβολή δημοσκοπήσεων",
+  polls_create: "Δημιουργία δημοσκόπησης",
+  retell_call: "Πραγματοποίηση κλήσεων μέσω Retell AI",
+  whatsapp_send: "Αποστολή μηνυμάτων WhatsApp",
+  export_data: "Γενική εξαγωγή δεδομένων",
+  alexandra_use: "Χρήση του AI assistant Αλεξάνδρα",
+  alexandra_bulk_delete: "Μαζική διαγραφή επαφών μέσω Αλεξάνδρας",
+  alexandra_bulk_update: "Μαζική ενημέρωση επαφών μέσω Αλεξάνδρας",
+  alexandra_import: "Εισαγωγή δεδομένων μέσω Αλεξάνδρας",
+  alexandra_tool_bulk_delete_contacts: "Εργαλείο: μαζική διαγραφή επαφών από chat",
+  alexandra_tool_bulk_update_contacts: "Εργαλείο: μαζική ενημέρωση επαφών από chat",
+  alexandra_tool_start_campaign: "Εργαλείο: εκκίνηση καμπάνιας από chat",
+  alexandra_tool_send_whatsapp: "Εργαλείο: αποστολή WhatsApp από chat",
+  alexandra_tool_export_contacts: "Εργαλείο: εξαγωγή επαφών από chat",
+  alexandra_tool_create_user: "Εργαλείο: δημιουργία χρήστη CRM από chat",
+  alexandra_tool_delete_data: "Εργαλείο: διαγραφή δεδομένων από chat",
+  access_code_view: "Προβολή κλειδαριθμού τρέχουσας ώρας",
+  access_code_revoke: "Ανάκληση πρόσβασης χρηστών",
+  settings_view: "Προβολή σελίδας ρυθμίσεων",
+  settings_edit: "Επεξεργασία ρυθμίσεων CRM",
+  users_manage: "Διαχείριση χρηστών (προσθήκη/διαγραφή)",
+  roles_manage: "Διαχείριση ρόλων και δικαιωμάτων",
+};
+
 export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   {
     id: "contacts",
-    label: "Επαφές",
+    label: "ΕΠΑΦΕΣ",
     keys: [
       "contacts_view",
       "contacts_create",
@@ -159,7 +220,7 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   },
   {
     id: "requests",
-    label: "Αιτήματα",
+    label: "ΑΙΤΗΜΑΤΑ",
     keys: [
       "requests_view",
       "requests_create",
@@ -172,7 +233,7 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   },
   {
     id: "requests_scheduler",
-    label: "Προγραμματισμός αιτημάτων",
+    label: "ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΣ ΑΙΤΗΜΑΤΩΝ",
     keys: [
       "requests_scheduler_view",
       "requests_scheduler_schedule",
@@ -183,7 +244,7 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   },
   {
     id: "data_tools",
-    label: "Εργαλεία δεδομένων",
+    label: "ΕΡΓΑΛΕΙΑ ΔΕΔΟΜΕΝΩΝ",
     keys: [
       "data_tools_view",
       "data_tools_bulk_delete",
@@ -194,12 +255,12 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   },
   {
     id: "campaigns",
-    label: "Καμπάνιες",
+    label: "ΚΑΜΠΑΝΙΕΣ",
     keys: ["campaigns_view", "campaigns_create", "campaigns_start"],
   },
   {
     id: "tools",
-    label: "Εργαλεία",
+    label: "ΕΡΓΑΛΕΙΑ & MODULES",
     keys: [
       "tasks_view",
       "tasks_create",
@@ -219,7 +280,7 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   },
   {
     id: "alexandra",
-    label: "Αλεξάνδρα",
+    label: "ΑΛΕΞΑΝΔΡΑ — ΓΕΝΙΚΑ",
     keys: [
       "alexandra_use",
       "alexandra_bulk_delete",
@@ -229,7 +290,7 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   },
   {
     id: "alexandra_tools",
-    label: "Αλεξάνδρα — εργαλεία",
+    label: "ΑΛΕΞΑΝΔΡΑ — ΕΡΓΑΛΕΙΑ CHAT",
     keys: [
       "alexandra_tool_bulk_delete_contacts",
       "alexandra_tool_bulk_update_contacts",
@@ -242,12 +303,12 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
   },
   {
     id: "access",
-    label: "Ασφάλεια πρόσβασης",
+    label: "ΑΣΦΑΛΕΙΑ ΠΡΟΣΒΑΣΗΣ",
     keys: ["access_code_view", "access_code_revoke"],
   },
   {
     id: "settings",
-    label: "Ρυθμίσεις",
+    label: "ΡΥΘΜΙΣΕΙΣ",
     keys: ["settings_view", "settings_edit", "users_manage", "roles_manage"],
   },
 ] as const;
@@ -314,3 +375,20 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
 };
 
 export const ALEXANDRA_TOOL_KEYS = PERMISSION_CATEGORIES.find((c) => c.id === "alexandra_tools")!.keys;
+
+/** Dev-only: every canonical key must appear in categories and tooltips. */
+function assertPermissionCatalogComplete() {
+  const inCategories = new Set(PERMISSION_CATEGORIES.flatMap((c) => c.keys));
+  for (const key of ALL_PERMISSION_KEYS) {
+    if (!inCategories.has(key)) throw new Error(`Permission missing from categories: ${key}`);
+    if (!PERMISSION_TOOLTIPS[key]) throw new Error(`Permission missing tooltip: ${key}`);
+  }
+  const categoryCount = PERMISSION_CATEGORIES.reduce((n, c) => n + c.keys.length, 0);
+  if (categoryCount !== ALL_PERMISSION_KEYS.length) {
+    throw new Error(`Category key count (${categoryCount}) !== ALL_PERMISSION_KEYS (${ALL_PERMISSION_KEYS.length})`);
+  }
+}
+
+if (process.env.NODE_ENV !== "production") {
+  assertPermissionCatalogComplete();
+}
