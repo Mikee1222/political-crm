@@ -63,7 +63,11 @@ export default function SettingsPage() {
   const isAdmin = profile?.role === "admin";
   const canAccess =
     hasMinRole(profile?.role as Role, "manager") || profile?.permissions?.["settings_view"] === true;
-  const [adminSettingsTab, setAdminSettingsTab] = useState<"main" | "roles">("main");
+  type SettingsTab = "settings" | "organization" | "roles";
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("settings");
+  const showOrgTab = isAdmin || hasMinRole(profile?.role as Role, "manager");
+  const showRolesTab = isAdmin;
+  const showTabBar = showOrgTab || showRolesTab;
   const [crmRoles, setCrmRoles] = useState<CrmRoleOption[]>([
     { name: "caller", label: "Καλητής" },
     { name: "manager", label: "Διευθυντής" },
@@ -184,130 +188,244 @@ export default function SettingsPage() {
   return (
     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
     <div className="w-full min-w-0 max-w-full space-y-6 [&>section]:w-full [&>section]:min-w-0 [&>section]:max-w-full">
-      {isAdmin && (
+      {showTabBar && (
         <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
           <button
             type="button"
-            onClick={() => setAdminSettingsTab("main")}
+            onClick={() => setSettingsTab("settings")}
             className={
-              (adminSettingsTab === "main" ? lux.btnPrimary : lux.btnSecondary) +
+              (settingsTab === "settings" ? lux.btnPrimary : lux.btnSecondary) +
               " !min-w-[120px] flex-1 sm:flex-none"
             }
           >
             Ρυθμίσεις
           </button>
-          <button
-            type="button"
-            onClick={() => setAdminSettingsTab("roles")}
-            className={
-              (adminSettingsTab === "roles" ? lux.btnPrimary : lux.btnSecondary) +
-              " !min-w-[120px] flex-1 sm:flex-none"
-            }
-          >
-            Ρόλοι
-          </button>
+          {showOrgTab && (
+            <button
+              type="button"
+              onClick={() => setSettingsTab("organization")}
+              className={
+                (settingsTab === "organization" ? lux.btnPrimary : lux.btnSecondary) +
+                " !min-w-[120px] flex-1 sm:flex-none"
+              }
+            >
+              Οργάνωση
+            </button>
+          )}
+          {showRolesTab && (
+            <button
+              type="button"
+              onClick={() => setSettingsTab("roles")}
+              className={
+                (settingsTab === "roles" ? lux.btnPrimary : lux.btnSecondary) +
+                " !min-w-[120px] flex-1 sm:flex-none"
+              }
+            >
+              Ρόλοι
+            </button>
+          )}
         </div>
       )}
 
-      {isAdmin && adminSettingsTab === "roles" ? (
-        <RolesManagementSection />
-      ) : (
+      {(settingsTab === "settings" || !showTabBar) && (
         <>
-      {canAccess && (
-        <Suspense fallback={null}>
-          <GoogleCalendarReturnHandler onConnected={loadInt} />
-        </Suspense>
+          {canAccess && (
+            <Suspense fallback={null}>
+              <GoogleCalendarReturnHandler onConnected={loadInt} />
+            </Suspense>
+          )}
+
+          {isAdmin && <AccessCodeSecuritySection />}
+
+          <TelegramSettingsSection />
+
+          <EmailSettingsSection />
+
+          <WhatsappSettingsSection />
+
+          <section className={lux.card}>
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <h2 className={lux.sectionTitle + " mb-0"}>Σύνδεση Google Calendar</h2>
+              {integrations && googleConnected && (
+                <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-500/40">
+                  Συνδεδεμένο
+                </span>
+              )}
+            </div>
+            <p className="mb-4 text-sm text-[var(--text-secondary)]">OAuth 2.0 — το ημερολόγιο εμφανίζεται μετά τη σύνδεση</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {integrations === null && <span className="text-sm text-[var(--text-muted)]">Φόρτωση…</span>}
+              {integrations && !googleConnected && (
+                <a href="/api/auth/google" className={lux.btnPrimary}>
+                  Σύνδεση Google Calendar
+                </a>
+              )}
+              {integrations && googleConnected && (
+                <button
+                  type="button"
+                  onClick={() => void disconnectGoogle()}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-[var(--bg-card)] px-4 py-2.5 text-sm font-medium text-red-300 transition-all duration-150 hover:bg-red-500/10"
+                >
+                  Αποσύνδεση
+                </button>
+              )}
+            </div>
+            {integrations && (
+              <p className="mt-3 text-xs text-[var(--text-secondary)]">
+                Ρυθμίσεις env: {integrations.googleOAuthConfigured ? "OK" : "Όχι"}
+              </p>
+            )}
+          </section>
+
+          {isAdmin && (
+            <section className={lux.card}>
+              <h2 className={lux.sectionTitle + " mb-2"}>Retell AI</h2>
+              {integrations && (
+                <p className="mb-4 text-sm text-[var(--text-primary)]">
+                  Κατάσταση API:{" "}
+                  <span className="font-semibold text-[#16A34A]">{integrations.retell ? "Συνδεδεμένο" : "Μη ρυθμισμένο"}</span>
+                </p>
+              )}
+            </section>
+          )}
+
+          {isAdmin && <RetellAgentsSettingsSection />}
+
+          <section className={lux.card}>
+            <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Όνομα εφαρμογής: <strong className="text-[var(--text-primary)]">Καραγκούνης CRM</strong>
+            </p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Πολιτική φιγούρα: <strong className="text-[var(--text-primary)]">Κώστας Καραγκούνης</strong>
+            </p>
+          </section>
+
+          {isAdmin && <NamedaySyncSection />}
+
+          {isAdmin && <PortalNewsSection />}
+
+          {isAdmin && <SocialMediaSettingsSection />}
+        </>
       )}
 
-      {isAdmin && <AccessCodeSecuritySection />}
+      {settingsTab === "organization" && showOrgTab && (
+        <>
+          {isAdmin && <GroupsSection />}
 
-      <TelegramSettingsSection />
+          {isAdmin && (
+            <section className={lux.card}>
+              <GroupCategoriesSettings />
+            </section>
+          )}
 
-      <EmailSettingsSection />
+          {isAdmin && <ContactSourcesSection />}
 
-      <WhatsappSettingsSection />
+          {isAdmin && <RequestCategoriesSettingsSection />}
 
-      {isAdmin && (
-      <section className={lux.card}>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className={lux.pageTitle + " mb-1"}>Διαχείριση Χρηστών</h2>
-            <p className="text-sm text-[var(--text-secondary)]">Ρόλοι, σύνδεση και ενέργειες λογαριασμού</p>
-          </div>
-          <button type="button" onClick={() => setAddOpen(true)} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
-            Προσθήκη χρήστη
-          </button>
-        </div>
-        {err && (
-          <p className="mb-3 text-sm text-amber-200" role="status">
-            {err}
-          </p>
-        )}
-        <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-                  <th className="sticky left-0 z-10 min-w-[140px] bg-[var(--bg-elevated)] p-3 pl-4">Όνομα</th>
-                  <th className="p-3">Email</th>
-                  <th className="p-3 min-w-[200px]">Ρόλος (επεξεργασία)</th>
-                  <th className="p-3">Τελ. σύνδεση</th>
-                  <th className="p-3 pr-4">Ημ/νία</th>
-                  <th className="p-3 pr-4 text-right">Ενέργειες</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
-                    <td className="sticky left-0 z-10 bg-[var(--bg-card)] p-3 pl-4 font-medium text-[var(--text-primary)]">
-                      {u.full_name ?? "—"}
-                    </td>
-                    <td className="p-3 text-[var(--text-secondary)]">{u.email}</td>
-                    <td className="p-3">
-                      <HqSelect
-                        className="!h-9 max-w-[200px]"
-                        value={u.role}
-                        onChange={(e) => void setRole(u.id, e.target.value)}
-                        disabled={u.id === profile?.id}
-                        aria-label={`Ρόλος για ${u.email}`}
-                      >
-                        {crmRoles.map((o) => (
-                          <option key={o.name} value={o.name}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </HqSelect>
-                    </td>
-                    <td className="p-3 text-[var(--text-secondary)]">
-                      {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("el-GR") : "—"}
-                    </td>
-                    <td className="p-3 text-[var(--text-secondary)]">
-                      {u.joined_at ? new Date(u.joined_at).toLocaleDateString("el-GR") : "—"}
-                    </td>
-                    <td className="p-3 pr-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <button
-                          type="button"
-                          className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
-                          onClick={() => void resetPassword(u.id)}
-                        >
-                          Επαναφορά κωδικού
-                        </button>
-                        <button
-                          type="button"
-                          className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
-                          disabled={u.id === profile?.id}
-                          onClick={() => setDeleteId(u.id)}
-                        >
-                          Διαγραφή
-                        </button>
-                      </div>
-                    </td>
+          {isAdmin && <TagsSection />}
+
+          {isAdmin && <PriorityLevelsSection />}
+
+          {isAdmin && <EventCategoriesSection />}
+
+          {isAdmin && <CampaignTypesSettingsSection />}
+
+          {hasMinRole(profile?.role as Role, "manager") && <ContactLocationSettingsSection />}
+
+          {isAdmin && <GeographicDataSection />}
+
+          {isAdmin && <ElectoralSettingsSection />}
+
+          <SavedFiltersSection isAdmin={isAdmin} />
+        </>
+      )}
+
+      {settingsTab === "roles" && showRolesTab && (
+        <>
+          <section className={lux.card}>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className={lux.pageTitle + " mb-1"}>Διαχείριση Χρηστών</h2>
+                <p className="text-sm text-[var(--text-secondary)]">Ρόλοι, σύνδεση και ενέργειες λογαριασμού</p>
+              </div>
+              <button type="button" onClick={() => setAddOpen(true)} className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}>
+                Προσθήκη χρήστη
+              </button>
+            </div>
+            {err && (
+              <p className="mb-3 text-sm text-amber-200" role="status">
+                {err}
+              </p>
+            )}
+            <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                    <th className="sticky left-0 z-10 min-w-[140px] bg-[var(--bg-elevated)] p-3 pl-4">Όνομα</th>
+                    <th className="p-3">Email</th>
+                    <th className="p-3 min-w-[200px]">Ρόλος (επεξεργασία)</th>
+                    <th className="p-3">Τελ. σύνδεση</th>
+                    <th className="p-3 pr-4">Ημ/νία</th>
+                    <th className="p-3 pr-4 text-right">Ενέργειες</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-        </div>
-      </section>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
+                      <td className="sticky left-0 z-10 bg-[var(--bg-card)] p-3 pl-4 font-medium text-[var(--text-primary)]">
+                        {u.full_name ?? "—"}
+                      </td>
+                      <td className="p-3 text-[var(--text-secondary)]">{u.email}</td>
+                      <td className="p-3">
+                        <HqSelect
+                          className="!h-9 max-w-[200px]"
+                          value={u.role}
+                          onChange={(e) => void setRole(u.id, e.target.value)}
+                          disabled={u.id === profile?.id}
+                          aria-label={`Ρόλος για ${u.email}`}
+                        >
+                          {crmRoles.map((o) => (
+                            <option key={o.name} value={o.name}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </HqSelect>
+                      </td>
+                      <td className="p-3 text-[var(--text-secondary)]">
+                        {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("el-GR") : "—"}
+                      </td>
+                      <td className="p-3 text-[var(--text-secondary)]">
+                        {u.joined_at ? new Date(u.joined_at).toLocaleDateString("el-GR") : "—"}
+                      </td>
+                      <td className="p-3 pr-4 text-right">
+                        <div className="flex flex-wrap justify-end gap-1">
+                          <button
+                            type="button"
+                            className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                            onClick={() => void resetPassword(u.id)}
+                          >
+                            Επαναφορά κωδικού
+                          </button>
+                          <button
+                            type="button"
+                            className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
+                            disabled={u.id === profile?.id}
+                            onClick={() => setDeleteId(u.id)}
+                          >
+                            Διαγραφή
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <RolesManagementSection />
+        </>
       )}
 
       {isAdmin && addOpen && (
@@ -329,98 +447,6 @@ export default function SettingsPage() {
           onCancel={() => setDeleteId(null)}
           onConfirm={() => void deleteUser(deleteId)}
         />
-      )}
-
-      {isAdmin && <EventCategoriesSection />}
-
-      {isAdmin && <GroupsSection />}
-
-      {isAdmin && (
-        <section className={lux.card}>
-          <GroupCategoriesSettings />
-        </section>
-      )}
-
-      {isAdmin && <TagsSection />}
-
-      {isAdmin && <ElectoralSettingsSection />}
-
-      {isAdmin && <GeographicDataSection />}
-
-      {hasMinRole(profile?.role as Role, "manager") && <ContactLocationSettingsSection />}
-
-      <SavedFiltersSection isAdmin={isAdmin} />
-
-      <section className={lux.card}>
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <h2 className={lux.sectionTitle + " mb-0"}>Σύνδεση Google Calendar</h2>
-          {integrations && googleConnected && (
-            <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-500/40">
-              Συνδεδεμένο
-            </span>
-          )}
-        </div>
-        <p className="mb-4 text-sm text-[var(--text-secondary)]">OAuth 2.0 — το ημερολόγιο εμφανίζεται μετά τη σύνδεση</p>
-        <div className="flex flex-wrap items-center gap-2">
-          {integrations === null && <span className="text-sm text-[var(--text-muted)]">Φόρτωση…</span>}
-          {integrations && !googleConnected && (
-            <a href="/api/auth/google" className={lux.btnPrimary}>
-              Σύνδεση Google Calendar
-            </a>
-          )}
-          {integrations && googleConnected && (
-            <button
-              type="button"
-              onClick={() => void disconnectGoogle()}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-[var(--bg-card)] px-4 py-2.5 text-sm font-medium text-red-300 transition-all duration-150 hover:bg-red-500/10"
-            >
-              Αποσύνδεση
-            </button>
-          )}
-        </div>
-        {integrations && (
-          <p className="mt-3 text-xs text-[var(--text-secondary)]">
-            Ρυθμίσεις env: {integrations.googleOAuthConfigured ? "OK" : "Όχι"}
-          </p>
-        )}
-      </section>
-
-      {isAdmin && (
-        <section className={lux.card}>
-          <h2 className={lux.sectionTitle + " mb-2"}>Retell AI</h2>
-          {integrations && (
-            <p className="text-sm text-[var(--text-primary)]">
-              Κατάσταση API:{" "}
-              <span className="font-semibold text-[#16A34A]">{integrations.retell ? "Συνδεδεμένο" : "Μη ρυθμισμένο"}</span>
-            </p>
-          )}
-        </section>
-      )}
-
-      {isAdmin && <CampaignTypesSettingsSection />}
-
-      {isAdmin && <RetellAgentsSettingsSection />}
-
-      {isAdmin && <NamedaySyncSection />}
-
-      {isAdmin && <PriorityLevelsSection />}
-
-      {isAdmin && <RequestCategoriesSettingsSection />}
-
-      {isAdmin && <PortalNewsSection />}
-
-      {isAdmin && <SocialMediaSettingsSection />}
-
-      <section className={lux.card}>
-        <h2 className={lux.sectionTitle + " mb-2"}>Γενικά</h2>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Όνομα εφαρμογής: <strong className="text-[var(--text-primary)]">Καραγκούνης CRM</strong>
-        </p>
-        <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          Πολιτική φιγούρα: <strong className="text-[var(--text-primary)]">Κώστας Καραγκούνης</strong>
-        </p>
-      </section>
-        </>
       )}
     </div>
     </div>
@@ -1215,6 +1241,205 @@ function TagEditModal({
             <input className={lux.input + " flex-1 font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
           </div>
         </div>
+      </div>
+    </CenteredModal>
+  );
+}
+
+type ContactSourceRow = { id: string; name: string };
+
+function ContactSourcesSection() {
+  const [rows, setRows] = useState<ContactSourceRow[]>([]);
+  const [editing, setEditing] = useState<ContactSourceRow | "new" | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [delId, setDelId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetchWithTimeout("/api/admin/contact-sources");
+    if (!res.ok) return;
+    const d = (await res.json()) as { sources?: ContactSourceRow[] };
+    setRows(d.sources ?? []);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section className={lux.card}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className={lux.pageTitle + " mb-1"}>Πηγές Επαφών</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Λεξιλόγιο πηγών — αντιστοιχίζονται στις επαφές (πολλαπλές ανά επαφή)</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setErr(null);
+            setEditing("new");
+          }}
+          className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}
+        >
+          Προσθήκη
+        </button>
+      </div>
+      {err && (
+        <p className="mb-3 text-sm text-amber-200" role="status">
+          {err}
+        </p>
+      )}
+      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full min-w-[320px] text-sm">
+          <thead>
+            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+              <th className="p-3 pl-4 text-left">Όνομα</th>
+              <th className="p-3 pr-4 text-right">Ενέργειες</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((g) => (
+              <tr key={g.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
+                <td className="p-3 pl-4 font-medium text-[var(--text-primary)]">{g.name}</td>
+                <td className="p-3 pr-4 text-right">
+                  <button
+                    type="button"
+                    className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                    onClick={() => {
+                      setErr(null);
+                      setEditing(g);
+                    }}
+                  >
+                    Επεξεργασία
+                  </button>{" "}
+                  <button type="button" className={lux.btnDanger + " !px-2 !py-1.5 text-xs"} onClick={() => setDelId(g.id)}>
+                    Διαγραφή
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && <p className="p-6 text-center text-sm text-[var(--text-muted)]">Καμία πηγή ακόμη — Προσθέστε.</p>}
+      </div>
+
+      {editing && (
+        <ContactSourceModal
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+          onError={setErr}
+        />
+      )}
+
+      {delId && (
+        <ConfirmModal
+          title="Διαγραφή πηγής"
+          body="Η πηγή αφαιρείται από το λεξιλόγιο και από όλες τις επαφές που τη χρησιμοποιούν."
+          confirmLabel="Διαγραφή"
+          onCancel={() => setDelId(null)}
+          onConfirm={async () => {
+            setErr(null);
+            const res = await fetchWithTimeout(`/api/admin/contact-sources/${delId}`, { method: "DELETE" });
+            if (!res.ok) {
+              const j = (await res.json().catch(() => ({}))) as { error?: string };
+              setErr(j.error ?? "Σφάλμα");
+              return;
+            }
+            setDelId(null);
+            await load();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function ContactSourceModal({
+  initial,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  initial: ContactSourceRow | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  onError: (e: string | null) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [busy, setBusy] = useState(false);
+  const [nameErr, setNameErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(initial?.name ?? "");
+  }, [initial]);
+
+  const save = async () => {
+    onError(null);
+    setNameErr(null);
+    const req = requiredText(name, "όνομα");
+    if (req) {
+      setNameErr(req);
+      onError(req);
+      return;
+    }
+    setBusy(true);
+    try {
+      const isNew = !initial;
+      const res = await fetchWithTimeout(
+        isNew ? "/api/admin/contact-sources" : `/api/admin/contact-sources/${initial!.id}`,
+        {
+          method: isNew ? "POST" : "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim() }),
+        },
+      );
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        onError(j.error ?? "Σφάλμα");
+        return;
+      }
+      await onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <CenteredModal
+      open
+      onClose={onClose}
+      title={initial ? "Επεξεργασία πηγής" : "Νέα πηγή"}
+      ariaLabel={initial ? "Επεξεργασία πηγής" : "Νέα πηγή"}
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" className={lux.btnPrimary} onClick={() => void save()} disabled={busy}>
+            {busy ? "…" : "Αποθήκευση"}
+          </button>
+        </>
+      }
+    >
+      <div>
+        <HqLabel htmlFor="cs-name" required>
+          Όνομα
+        </HqLabel>
+        <input
+          id="cs-name"
+          className={[lux.input, nameErr ? lux.inputError : ""].join(" ")}
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameErr(null);
+          }}
+          autoFocus={!initial}
+        />
+        <HqFieldError>{nameErr}</HqFieldError>
       </div>
     </CenteredModal>
   );
