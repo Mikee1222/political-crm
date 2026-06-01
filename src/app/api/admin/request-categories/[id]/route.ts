@@ -2,6 +2,8 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { countRequestsByCategoryName } from "@/lib/request-admin";
 import type { RequestCategoryRow } from "@/lib/request-categories";
 export const dynamic = "force-dynamic";
 
@@ -71,6 +73,28 @@ export async function DELETE(_: NextRequest, { params }: Ctx) {
     if (!id) {
       return NextResponse.json({ error: "Άκυρο" }, { status: 400 });
     }
+
+    const { data: row, error: loadErr } = await supabase
+      .from("request_categories")
+      .select("name")
+      .eq("id", id)
+      .maybeSingle();
+    if (loadErr) {
+      return NextResponse.json({ error: loadErr.message }, { status: 400 });
+    }
+    if (!row?.name) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
+    const service = createServiceClient();
+    const requestCount = await countRequestsByCategoryName(service, row.name);
+    if (requestCount > 0) {
+      return NextResponse.json(
+        { error: `Υπάρχουν ${requestCount} αιτήματα με αυτή την κατηγορία` },
+        { status: 400 },
+      );
+    }
+
     const { error } = await supabase.from("request_categories").delete().eq("id", id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

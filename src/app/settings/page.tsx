@@ -16,6 +16,8 @@ import { validateEmail, requiredText } from "@/lib/form-validation";
 import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
 import { ContactLocationSettingsSection } from "@/components/settings/contact-location-settings-section";
+import { RequestCategoriesSettingsSection } from "@/components/settings/request-categories-settings-section";
+import { RequestStatusesSettingsSection } from "@/components/settings/request-statuses-settings-section";
 import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
 import { PortalNewsSection } from "@/components/settings/portal-news-section";
 import { SocialMediaSettingsSection } from "@/components/settings/social-media-settings-section";
@@ -32,8 +34,6 @@ import type { EventCategoryRow } from "@/lib/event-categories";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
 import type { ContactTagDefinitionRow } from "@/lib/contact-tag-definitions";
 import type { PriorityLevelRow } from "@/lib/priority-levels";
-import type { RequestCategoryRow } from "@/lib/request-categories";
-
 type UserRow = {
   id: string;
   email: string;
@@ -321,6 +321,8 @@ export default function SettingsPage() {
 
           {isAdmin && <ContactSourcesSection />}
 
+          {isAdmin && <RequestStatusesSettingsSection />}
+
           {isAdmin && <RequestCategoriesSettingsSection />}
 
           {isAdmin && <TagsSection />}
@@ -601,233 +603,6 @@ function PriorityLevelsSection() {
         </table>
       </div>
     </section>
-  );
-}
-
-function RequestCategoriesSettingsSection() {
-  const [rows, setRows] = useState<RequestCategoryRow[]>([]);
-  const [editing, setEditing] = useState<RequestCategoryRow | "new" | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [delId, setDelId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    const res = await fetchWithTimeout("/api/admin/request-categories");
-    if (!res.ok) return;
-    const d = (await res.json()) as { categories?: RequestCategoryRow[] };
-    setRows(d.categories ?? []);
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return (
-    <section className={lux.card}>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className={lux.pageTitle + " mb-1"}>Κατηγορίες Αιτημάτων</h2>
-          <p className="text-sm text-[var(--text-secondary)]">Ονομασία και χρώμα (η στήλη `category` στα αιτήματα κρατά κείμενο)</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setErr(null);
-            setEditing("new");
-          }}
-          className={lux.btnPrimary + " w-full !py-2.5 sm:w-auto"}
-        >
-          Προσθήκη
-        </button>
-      </div>
-      {err && (
-        <p className="mb-2 text-sm text-amber-200" role="status">
-          {err}
-        </p>
-      )}
-      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-        <table className="w-full min-w-[360px] text-sm">
-          <thead>
-            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th className="p-3 pl-4 text-left">Όνομα</th>
-              <th className="p-3 text-left">Χρώμα</th>
-              <th className="p-3 pr-4 text-right">Ενέργειες</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((g) => (
-              <tr key={g.id} className="border-b border-[var(--border)] last:border-0">
-                <td className="p-3 pl-4 font-medium text-[var(--text-primary)]">
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
-                      style={{ background: g.color }}
-                    />
-                    {g.name}
-                  </span>
-                </td>
-                <td className="p-3 font-mono text-xs text-[var(--text-secondary)]">{g.color}</td>
-                <td className="p-3 pr-4 text-right">
-                  <button
-                    type="button"
-                    className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
-                    onClick={() => {
-                      setErr(null);
-                      setEditing(g);
-                    }}
-                  >
-                    Επεξεργασία
-                  </button>{" "}
-                  <button type="button" className={lux.btnDanger + " !px-2 !py-1.5 text-xs"} onClick={() => setDelId(g.id)}>
-                    Διαγραφή
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {editing && (
-        <RequestCategoryModal
-          initial={editing === "new" ? null : editing}
-          onClose={() => setEditing(null)}
-          onSaved={async () => {
-            setEditing(null);
-            await load();
-          }}
-          onError={setErr}
-        />
-      )}
-
-      {delId && (
-        <ConfirmModal
-          title="Διαγραφή κατηγορίας"
-          body="Υπάρχοντα αιτήματα κρατούν το παλιό κείμενο category."
-          confirmLabel="Διαγραφή"
-          onCancel={() => setDelId(null)}
-          onConfirm={async () => {
-            setErr(null);
-            const res = await fetchWithTimeout(`/api/admin/request-categories/${delId}`, { method: "DELETE" });
-            if (!res.ok) {
-              const j = (await res.json().catch(() => ({}))) as { error?: string };
-              setErr(j.error ?? "Σφάλμα");
-              return;
-            }
-            setDelId(null);
-            await load();
-          }}
-        />
-      )}
-    </section>
-  );
-}
-
-function RequestCategoryModal({
-  initial,
-  onClose,
-  onSaved,
-  onError,
-}: {
-  initial: RequestCategoryRow | null;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-  onError: (e: string | null) => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [color, setColor] = useState(initial?.color ?? "#6B7280");
-  const [sort, setSort] = useState(initial != null ? String(initial.sort_order) : "0");
-  const [busy, setBusy] = useState(false);
-  const [nameErr, setNameErr] = useState<string | null>(null);
-  useEffect(() => {
-    setName(initial?.name ?? "");
-    setColor(initial?.color ?? "#6B7280");
-    setSort(initial != null ? String(initial.sort_order) : "0");
-  }, [initial]);
-  const save = async () => {
-    onError(null);
-    setNameErr(null);
-    const req = requiredText(name, "όνομα");
-    if (req) {
-      setNameErr(req);
-      onError(req);
-      return;
-    }
-    const so = parseInt(sort, 10);
-    setBusy(true);
-    try {
-      const isNew = !initial;
-      const res = await fetchWithTimeout(
-        isNew ? "/api/admin/request-categories" : `/api/admin/request-categories/${initial!.id}`,
-        {
-          method: isNew ? "POST" : "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), color: color.trim(), sort_order: Number.isFinite(so) ? so : 0 }),
-        },
-      );
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        onError(j.error ?? "Σφάλμα");
-        return;
-      }
-      await onSaved();
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <CenteredModal
-      open
-      onClose={onClose}
-      title={initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}
-      ariaLabel={initial ? "Επεξεργασία κατηγορίας" : "Νέα κατηγορία"}
-      className="!max-w-md"
-      footer={
-        <>
-          <button type="button" className={lux.btnSecondary} onClick={onClose} disabled={busy}>
-            Άκυρο
-          </button>
-          <button type="button" className={lux.btnPrimary} onClick={() => void save()} disabled={busy}>
-            {busy ? "…" : "Αποθήκευση"}
-          </button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div>
-          <HqLabel htmlFor="rc-name" required>
-            Όνομα
-          </HqLabel>
-          <input
-            id="rc-name"
-            className={[lux.input, nameErr ? lux.inputError : ""].join(" ")}
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setNameErr(null);
-            }}
-            autoFocus={!initial}
-          />
-          <HqFieldError>{nameErr}</HqFieldError>
-        </div>
-        <div>
-          <HqLabel>Χρώμα</HqLabel>
-          <div className="mt-1 flex items-center gap-2">
-            <input type="color" className="h-10 w-14 cursor-pointer rounded border" value={color} onChange={(e) => setColor(e.target.value)} />
-            <input className={lux.input + " font-mono text-sm"} value={color} onChange={(e) => setColor(e.target.value)} />
-          </div>
-        </div>
-        <div>
-          <HqLabel htmlFor="rc-sort">Σειρά</HqLabel>
-          <input
-            id="rc-sort"
-            className={lux.input}
-            inputMode="numeric"
-            value={sort}
-            onChange={(e) => setSort(e.target.value.replace(/[^\d-]/g, ""))}
-          />
-        </div>
-      </div>
-    </CenteredModal>
   );
 }
 
