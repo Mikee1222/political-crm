@@ -191,8 +191,13 @@ function ContactSearchPageInner() {
       f.age_max = "";
     } else if (key === "birthday_today") f.birthday_today = false;
     else if (key === "nameday_today") f.nameday_today = false;
-    else if (key === "municipality") f.municipality = "";
-    else if (key === "toponym") f.toponym = "";
+    else if (key.startsWith("muni:")) {
+      const name = key.slice(5);
+      f.municipalities = f.municipalities.filter((x) => x !== name);
+    } else if (key.startsWith("top:")) {
+      const name = key.slice(4);
+      f.toponyms = f.toponyms.filter((x) => x !== name);
+    }
     else if (key === "phone") f.phone = "";
     else if (key === "mobile_presence") f.mobile_presence = "";
     else if (key === "landline_presence") f.landline_presence = "";

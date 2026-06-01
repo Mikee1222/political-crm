@@ -40,8 +40,8 @@ export function buildContactSearchFilterChips(
   if (ageKey) push("age", `Ηλικία: ${CONTACT_SEARCH_AGE_GROUPS[ageKey]!.label}`);
   if (f.birthday_today) push("birthday_today", "Γενέθλια σήμερα");
   if (f.nameday_today) push("nameday_today", "Ονομαστική σήμερα");
-  if (f.municipality) push("municipality", `Δήμος: ${f.municipality}`);
-  if (f.toponym) push("toponym", `Τοπωνύμιο: ${f.toponym}`);
+  f.municipalities.forEach((name) => push(`muni:${name}`, `Δήμος: ${name}`));
+  f.toponyms.forEach((name) => push(`top:${name}`, `Τοπωνύμιο: ${name}`));
   if (f.phone) push("phone", `Τηλ.: ${f.phone}`);
   if (f.mobile_presence) push("mobile_presence", `Κινητό: ${labelFor(PRESENCE_OPTIONS, f.mobile_presence)}`);
   if (f.landline_presence) push("landline_presence", `Σταθερό: ${labelFor(PRESENCE_OPTIONS, f.landline_presence)}`);
@@ -49,8 +49,8 @@ export function buildContactSearchFilterChips(
   f.group_ids.forEach((id) => push(`group:${id}`, `Ομάδα: ${groupNames.get(id) ?? id}`));
   f.exclude_group_ids.forEach((id) => push(`exgroup:${id}`, `Χωρίς ομάδα: ${groupNames.get(id) ?? id}`));
   if (f.group_ids.length > 1 && f.group_match === "and") push("group_match", "Ομάδες: ΚΑΙ");
-  f.source_ids.forEach((id) => push(`src:${id}`, `Πηγή: ${sourceNames.get(id) ?? id}`));
-  f.exclude_source_ids.forEach((id) => push(`exsrc:${id}`, `Χωρίς πηγή: ${sourceNames.get(id) ?? id}`));
+  f.source_ids.forEach((id) => push(`src:${id}`, `Να έχει πηγή: ${sourceNames.get(id) ?? id}`));
+  f.exclude_source_ids.forEach((id) => push(`exsrc:${id}`, `Να ΜΗΝ έχει: ${sourceNames.get(id) ?? id}`));
   if (f.ekl_ar) push("ekl_ar", `Εκλ. περιφ.: ${labelFor(EKL_AR_OPTIONS, f.ekl_ar)}`);
   if (f.electoral_district) push("electoral_district", `Εκλ. διαμ.: ${f.electoral_district}`);
   if (f.has_request) push("has_request", labelFor(HAS_REQUEST_OPTIONS, f.has_request));

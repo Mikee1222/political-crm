@@ -43,8 +43,16 @@ export function applyContactListFiltersToBuilder(
   if (f.last_name?.trim()) query = query.ilike("last_name", `%${f.last_name.trim()}%`);
   if (f.father_name?.trim()) query = query.ilike("father_name", `%${f.father_name.trim()}%`);
   if (f.area) query = query.eq("area", f.area);
-  if (f.municipality) query = query.eq("municipality", f.municipality);
-  if (f.toponym?.trim()) query = query.ilike("toponym", `%${f.toponym.trim()}%`);
+  if (f.municipalities.length === 1) {
+    query = query.eq("municipality", f.municipalities[0]!);
+  } else if (f.municipalities.length > 1) {
+    query = query.in("municipality", f.municipalities);
+  }
+  if (f.toponyms.length === 1) {
+    query = query.eq("toponym", f.toponyms[0]!);
+  } else if (f.toponyms.length > 1) {
+    query = query.in("toponym", f.toponyms);
+  }
   if (f.gender) query = query.eq("gender", f.gender);
   if (f.birthday_today) {
     const now = new Date();
@@ -127,7 +135,10 @@ function listFiltersFromExportOpts(opts: {
   search?: string;
   call_status?: string;
   area?: string;
+  municipalities?: string;
+  toponyms?: string;
   municipality?: string;
+  toponym?: string;
   priority?: string;
   tag?: string;
   group_id?: string;
@@ -143,7 +154,22 @@ function listFiltersFromExportOpts(opts: {
   const f = getDefaultContactFilters();
   if (opts.call_status) f.call_status = opts.call_status;
   if (opts.area) f.area = opts.area;
-  if (opts.municipality) f.municipality = opts.municipality;
+  if (opts.municipalities) {
+    f.municipalities = opts.municipalities
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  } else if (opts.municipality) {
+    f.municipalities = [opts.municipality];
+  }
+  if (opts.toponyms) {
+    f.toponyms = opts.toponyms
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  } else if (opts.toponym) {
+    f.toponyms = [opts.toponym];
+  }
   if (opts.priority) f.priority = opts.priority;
   if (opts.tag) f.tag = opts.tag;
   if (opts.group_id) f.group_id = opts.group_id;
@@ -188,7 +214,10 @@ export function buildContactsQuery(
     call_status?: string;
     call_statuses?: string;
     area?: string;
-    municipality?: string;
+    municipalities?: string;
+  toponyms?: string;
+  municipality?: string;
+  toponym?: string;
     priority?: string;
     tag?: string;
     group_id?: string;
@@ -222,7 +251,10 @@ export async function queryContactsList(
     search?: string;
     call_status?: string;
     area?: string;
-    municipality?: string;
+    municipalities?: string;
+  toponyms?: string;
+  municipality?: string;
+  toponym?: string;
     priority?: string;
     tag?: string;
     group_id?: string;
@@ -240,7 +272,9 @@ export async function queryContactsList(
     .order("created_at", { ascending: false });
   if (opts.call_status) query = query.eq("call_status", opts.call_status);
   if (opts.area) query = query.eq("area", opts.area);
-  if (opts.municipality) query = query.ilike("municipality", `%${opts.municipality}%`);
+  if (opts.municipality) {
+    query = query.ilike("municipality", `%${opts.municipality}%`);
+  }
   if (opts.priority) query = query.eq("priority", opts.priority);
   if (opts.tag) query = query.contains("tags", [opts.tag]);
   if (opts.group_id) query = query.eq("group_id", opts.group_id);

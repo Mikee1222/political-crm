@@ -12,8 +12,8 @@ import {
 } from "@/lib/contact-search-constants";
 import { REQUEST_STATUSES } from "@/lib/request-statuses";
 import { FilterSection } from "@/components/contacts/search/filter-section";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
+import { FilterFieldChips } from "@/components/contacts/search/filter-field-chips";
 import { HqSelect } from "@/components/ui/hq-select";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
@@ -214,20 +214,40 @@ export function ContactSearchFiltersPanel({
         <FilterSection title="Τοπωνύμιο & Δήμος">
           <div>
             <label className={lux.label}>Δήμος</label>
-            <SearchableSelect
-              value={draft.municipality}
-              onChange={(municipality) => patch({ municipality })}
+            <SearchableMultiSelect
               options={municipalities.map((name) => ({ value: name, label: name }))}
-              placeholder="Επιλέξτε δήμο..."
+              values={draft.municipalities}
+              onToggle={(name) =>
+                patch({
+                  municipalities: draft.municipalities.includes(name)
+                    ? draft.municipalities.filter((x) => x !== name)
+                    : [...draft.municipalities, name],
+                })
+              }
+              placeholder="Επιλέξτε δήμους..."
+            />
+            <FilterFieldChips
+              items={draft.municipalities.map((name) => ({ key: name, label: name }))}
+              onRemove={(name) => patch({ municipalities: draft.municipalities.filter((x) => x !== name) })}
             />
           </div>
           <div>
             <label className={lux.label}>Τοπωνύμιο</label>
-            <SearchableSelect
-              value={draft.toponym}
-              onChange={(toponym) => patch({ toponym })}
+            <SearchableMultiSelect
               options={toponyms.map((name) => ({ value: name, label: name }))}
-              placeholder="Επιλέξτε τοπωνύμιο..."
+              values={draft.toponyms}
+              onToggle={(name) =>
+                patch({
+                  toponyms: draft.toponyms.includes(name)
+                    ? draft.toponyms.filter((x) => x !== name)
+                    : [...draft.toponyms, name],
+                })
+              }
+              placeholder="Επιλέξτε τοπωνύμια..."
+            />
+            <FilterFieldChips
+              items={draft.toponyms.map((name) => ({ key: name, label: name }))}
+              onRemove={(name) => patch({ toponyms: draft.toponyms.filter((x) => x !== name) })}
             />
           </div>
         </FilterSection>
@@ -328,7 +348,7 @@ export function ContactSearchFiltersPanel({
 
         <FilterSection title="Πηγές">
           <div>
-            <label className={lux.label}>Συμπερίληψη πηγών</label>
+            <label className={lux.label}>Να έχει</label>
             <SearchableMultiSelect
               options={sourceOptions}
               values={draft.source_ids}
@@ -339,10 +359,18 @@ export function ContactSearchFiltersPanel({
                     : [...draft.source_ids, id],
                 })
               }
+              placeholder="Επιλέξτε πηγές..."
+            />
+            <FilterFieldChips
+              items={draft.source_ids.map((id) => ({
+                key: id,
+                label: sources.find((s) => s.id === id)?.name ?? id,
+              }))}
+              onRemove={(id) => patch({ source_ids: draft.source_ids.filter((x) => x !== id) })}
             />
           </div>
           <div>
-            <label className={lux.label}>Εξαίρεση πηγών</label>
+            <label className={lux.label}>Να ΜΗΝ έχει</label>
             <SearchableMultiSelect
               options={sourceOptions}
               values={draft.exclude_source_ids}
@@ -353,6 +381,14 @@ export function ContactSearchFiltersPanel({
                     : [...draft.exclude_source_ids, id],
                 })
               }
+              placeholder="Εξαίρεση πηγών..."
+            />
+            <FilterFieldChips
+              items={draft.exclude_source_ids.map((id) => ({
+                key: id,
+                label: sources.find((s) => s.id === id)?.name ?? id,
+              }))}
+              onRemove={(id) => patch({ exclude_source_ids: draft.exclude_source_ids.filter((x) => x !== id) })}
             />
           </div>
         </FilterSection>

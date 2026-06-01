@@ -1027,7 +1027,12 @@ function buildAdvancedContactFilters(f: Record<string, unknown>, extra?: { limit
   if (f.search) p.set("search", String(f.search));
   if (f.name) p.set("name", String(f.name));
   if (f.phone) p.set("phone", String(f.phone));
-  if (f.municipality) p.set("municipality", String(f.municipality));
+  if (Array.isArray(f.municipalities) && f.municipalities.length) {
+    p.set("municipalities", f.municipalities.map(String).join(","));
+  } else if (f.municipality) p.set("municipality", String(f.municipality));
+  if (Array.isArray(f.toponyms) && f.toponyms.length) {
+    p.set("toponyms", f.toponyms.map(String).join(","));
+  } else if (f.toponym) p.set("toponym", String(f.toponym));
   if (f.area) p.set("area", String(f.area));
   if (f.call_status) p.set("call_status", String(f.call_status));
   if (f.priority) p.set("priority", String(f.priority));

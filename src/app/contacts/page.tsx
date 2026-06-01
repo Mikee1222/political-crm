@@ -212,7 +212,7 @@ function countActiveContactFilters(filters: ContactListFilters): number {
   if (filters.search.trim()) n += 1;
   if (filters.call_statuses.length) n += 1;
   if (filters.call_status) n += 1;
-  if (filters.municipality) n += 1;
+  if (filters.municipalities.length) n += 1;
   if (filters.area) n += 1;
   if (filters.priority) n += 1;
   if (filters.tag) n += 1;
@@ -1284,7 +1284,7 @@ function ContactsPage() {
               ) : null}
             </div>
             {(f.call_statuses.length > 0 ||
-              f.municipality ||
+              f.municipalities.length > 0 ||
               f.area ||
               f.priority ||
               f.search ||
@@ -1295,11 +1295,14 @@ function ContactsPage() {
                     Ζ: {f.search}
                   </span>
                 ) : null}
-                {f.municipality ? (
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
-                    {f.municipality}
+                {f.municipalities.map((name) => (
+                  <span
+                    key={name}
+                    className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]"
+                  >
+                    {name}
                   </span>
-                ) : null}
+                ))}
                 {f.area ? (
                   <span className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
                     {f.area}
@@ -1333,7 +1336,11 @@ function ContactsPage() {
             <label className={lux.label} htmlFor="f-muni">
               Δήμος
             </label>
-            <HqSelect id="f-muni" value={f.municipality} onChange={(e) => patch({ municipality: e.target.value })}>
+            <HqSelect
+              id="f-muni"
+              value={f.municipalities[0] ?? ""}
+              onChange={(e) => patch({ municipalities: e.target.value ? [e.target.value] : [] })}
+            >
               <option value="">Όλοι</option>
               {filterMunicipalities.map((name) => (
                 <option key={name} value={name}>

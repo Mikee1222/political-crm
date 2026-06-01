@@ -13,8 +13,8 @@ export type ContactListFilters = {
   call_status: string;
   call_statuses: string[];
   area: string;
-  municipality: string;
-  toponym: string;
+  municipalities: string[];
+  toponyms: string[];
   priority: string;
   tag: string;
   political_stance: string;
@@ -62,6 +62,22 @@ function uniq(ids: string[]): string[] {
   return [...new Set(ids)];
 }
 
+/** Comma-separated query param; optional legacy single-value key. */
+function parseCsvParam(
+  sp: URLSearchParams,
+  key: string,
+  prev: string[] | undefined,
+  legacyKey?: string,
+): string[] {
+  const a = sp.get(key);
+  if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
+  if (legacyKey) {
+    const leg = sp.get(legacyKey)?.trim();
+    if (leg) return [leg];
+  }
+  return prev ?? [];
+}
+
 /** From URLSearchParams to partial filter state; merge with existing defaults. */
 export function searchParamsToFilters(sp: URLSearchParams, prev?: Partial<ContactListFilters>): ContactListFilters {
   const callStatuses = splitCsv(sp.get("call_statuses") ?? sp.get("call_status_in"));
@@ -82,8 +98,8 @@ export function searchParamsToFilters(sp: URLSearchParams, prev?: Partial<Contac
     call_status: sp.get("call_status") ?? prev?.call_status ?? "",
     call_statuses: callStatuses.length ? callStatuses : (prev?.call_statuses ?? []),
     area: sp.get("area") ?? prev?.area ?? "",
-    municipality: sp.get("municipality") ?? prev?.municipality ?? "",
-    toponym: sp.get("toponym") ?? prev?.toponym ?? "",
+    municipalities: parseCsvParam(sp, "municipalities", prev?.municipalities, "municipality"),
+    toponyms: parseCsvParam(sp, "toponyms", prev?.toponyms, "toponym"),
     priority: sp.get("priority") ?? prev?.priority ?? "",
     tag: sp.get("tag") ?? prev?.tag ?? "",
     political_stance: sp.get("political_stance") ?? prev?.political_stance ?? "",
@@ -152,8 +168,8 @@ export function contactFiltersToSearchParams(f: ContactListFilters, opts?: { for
     pushIf(p, "call_status", f.call_status);
   }
   pushIf(p, "area", f.area);
-  pushIf(p, "municipality", f.municipality);
-  pushIf(p, "toponym", f.toponym);
+  if (f.municipalities?.length) p.set("municipalities", f.municipalities.join(","));
+  if (f.toponyms?.length) p.set("toponyms", f.toponyms.join(","));
   pushIf(p, "priority", f.priority);
   pushIf(p, "tag", f.tag);
   pushIf(p, "political_stance", f.political_stance);
@@ -222,8 +238,8 @@ const DEFAULT_FILTERS: ContactListFilters = {
   call_status: "",
   call_statuses: [],
   area: "",
-  municipality: "",
-  toponym: "",
+  municipalities: [],
+  toponyms: [],
   priority: "",
   tag: "",
   political_stance: "",
@@ -274,7 +290,8 @@ export function applySavedFilterJson(
   if (typeof o.first_name === "string") base.first_name = o.first_name;
   if (typeof o.last_name === "string") base.last_name = o.last_name;
   if (typeof o.father_name === "string") base.father_name = o.father_name;
-  if (typeof o.toponym === "string") base.toponym = o.toponym;
+  if (Array.isArray(o.toponyms)) base.toponyms = o.toponyms.map(String);
+  else if (typeof o.toponym === "string" && o.toponym.trim()) base.toponyms = [o.toponym.trim()];
   if (o.mobile_presence === "has" || o.mobile_presence === "not") base.mobile_presence = o.mobile_presence;
   if (o.landline_presence === "has" || o.landline_presence === "not") {
     base.landline_presence = o.landline_presence;
@@ -296,7 +313,10 @@ export function applySavedFilterJson(
     base.call_status = o.call_status;
   }
   if (typeof o.area === "string") base.area = o.area;
-  if (typeof o.municipality === "string") base.municipality = o.municipality;
+  if (Array.isArray(o.municipalities)) base.municipalities = o.municipalities.map(String);
+  else if (typeof o.municipality === "string" && o.municipality.trim()) {
+    base.municipalities = [o.municipality.trim()];
+  }
   if (typeof o.priority === "string") base.priority = o.priority;
   if (typeof o.tag === "string") base.tag = o.tag;
   if (typeof o.political_stance === "string") base.political_stance = o.political_stance;
@@ -347,7 +367,16 @@ export function applyFindContactsToolInput(
   const o = { ...base };
   const s = (k: string) => (typeof raw[k] === "string" ? String(raw[k]).trim() : "");
   if (s("search")) o.search = s("search");
-  if (s("municipality")) o.municipality = s("municipality");
+  if (Array.isArray(raw.municipalities) && raw.municipalities.length) {
+    o.municipalities = uniq(raw.municipalities.map((x) => String(x).trim()).filter(Boolean));
+  } else if (s("municipality")) {
+    o.municipalities = [s("municipality")];
+  }
+  if (Array.isArray(raw.toponyms) && raw.toponyms.length) {
+    o.toponyms = uniq(raw.toponyms.map((x) => String(x).trim()).filter(Boolean));
+  } else if (s("toponym")) {
+    o.toponyms = [s("toponym")];
+  }
   if (s("area")) o.area = s("area");
   if (s("priority")) o.priority = s("priority");
   if (s("tag")) o.tag = s("tag");
@@ -408,7 +437,8 @@ export function summarizeContactFilters(f: ContactListFilters, groupNames: Map<s
   } else if (f.call_status) {
     parts.push(STATUS_LABEL[f.call_status] ?? f.call_status);
   }
-  if (f.municipality) parts.push(`Δήμος: ${f.municipality}`);
+  if (f.municipalities.length) parts.push(`Δήμοι: ${f.municipalities.join(", ")}`);
+  if (f.toponyms.length) parts.push(`Τοπωνύμια: ${f.toponyms.join(", ")}`);
   if (f.area) parts.push(`Περιοχή: ${f.area}`);
   f.group_ids.forEach((id) => parts.push(`Ομάδα: ${groupNames.get(id) ?? id}`));
   f.exclude_group_ids.forEach((id) => parts.push(`Χωρίς: ${groupNames.get(id) ?? id}`));
