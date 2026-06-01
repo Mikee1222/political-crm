@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { fetchBriefingTodayData, resolveCalendarUserId } from "@/lib/briefing-data";
 import { formatTelegramBriefing, sendTelegramMessage } from "@/lib/telegram-send";
+import { formatNowAthens } from "@/lib/date-format";
 export const dynamic = "force-dynamic";
 
 /**
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     const calUser = await resolveCalendarUserId(supabase);
     const data = await fetchBriefingTodayData(supabase, calUser);
 
-    const dateLabel = new Date().toLocaleDateString("el-GR", {
+    const dateLabel = formatNowAthens({
       day: "2-digit",
       month: "2-digit",
       year: "numeric",

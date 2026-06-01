@@ -5,6 +5,7 @@ import { Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
+import { formatCalendarDateOnly } from "@/lib/date-format";
 import { hasMinRole } from "@/lib/roles";
 
 type SContact = {
@@ -81,7 +82,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
         id: x.id,
         href: `/tasks`,
         title: x.title,
-        sub: x.due_date ? new Date(x.due_date).toLocaleDateString("el-GR") : "—",
+        sub: x.due_date ? formatCalendarDateOnly(x.due_date) : "—",
       });
     }
     for (const x of ca) {

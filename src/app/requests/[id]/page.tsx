@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { computeSlaStatus } from "@/lib/request-sla";
+import { formatCalendarDateOnly, formatDateTimeEnGb } from "@/lib/date-format";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { RequestDocumentsSection } from "@/components/request-documents-section";
@@ -65,22 +66,8 @@ type StaffUser = { id: string; full_name: string | null; email: string; role: st
 
 const OPEN = OPEN_REQUEST_STATUSES;
 
-function fmtDateTime(s: string | null | undefined) {
-  if (s == null || String(s).trim() === "") return "—";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
 function formatDate(s: string | null | undefined) {
-  return fmtDateTime(s);
+  return formatDateTimeEnGb(s);
 }
 
 function authorInitials(name: string) {
@@ -155,7 +142,7 @@ function SlaBar({
           style={{ width: `${fillPct}%` }}
         />
       </div>
-      <p className="mt-1.5 text-[10px] text-[var(--text-muted)]">Προθεσμία: {new Date(sla_due_date + "T12:00:00").toLocaleDateString("el-GR")}</p>
+      <p className="mt-1.5 text-[10px] text-[var(--text-muted)]">Προθεσμία: {formatCalendarDateOnly(sla_due_date)}</p>
     </div>
   );
 }

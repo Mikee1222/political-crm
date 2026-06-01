@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Download, FileText, Loader2, QrCode, Trash2, Wand2 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 
@@ -165,7 +166,7 @@ export function ContactExtraSections({
         <ul className="space-y-2">
           {appts.map((a) => (
             <li key={a.id} className="text-sm text-[var(--text-secondary)]">
-              {new Date(a.starts_at).toLocaleString("el-GR", { timeZone: "Europe/Athens" })} – {a.reason || "—"}
+              {formatDateTimeAthens(a.starts_at)} – {a.reason || "—"}
             </li>
           ))}
         </ul>

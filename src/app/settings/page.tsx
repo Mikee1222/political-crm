@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import type { Role } from "@/lib/roles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateAthens, formatDateTimeAthens } from "@/lib/date-format";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
@@ -398,10 +399,10 @@ export default function SettingsPage() {
                         </HqSelect>
                       </td>
                       <td className="p-3 text-[var(--text-secondary)]">
-                        {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("el-GR") : "—"}
+                        {u.last_sign_in_at ? formatDateTimeAthens(u.last_sign_in_at) : "—"}
                       </td>
                       <td className="p-3 text-[var(--text-secondary)]">
-                        {u.joined_at ? new Date(u.joined_at).toLocaleDateString("el-GR") : "—"}
+                        {u.joined_at ? formatDateAthens(u.joined_at) : "—"}
                       </td>
                       <td className="p-3 pr-4 text-right">
                         <div className="flex flex-wrap justify-end gap-1">

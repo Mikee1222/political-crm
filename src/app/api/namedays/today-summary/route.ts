@@ -2,10 +2,11 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
+import { formatDateAthens } from "@/lib/date-format";
 export const dynamic = 'force-dynamic';
 
 function dateLabelGreek(d: Date) {
-  return d.toLocaleDateString("el-GR", {
+  return formatDateAthens(d, {
     day: "numeric",
     month: "long",
     year: "numeric",

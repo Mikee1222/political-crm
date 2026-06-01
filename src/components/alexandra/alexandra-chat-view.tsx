@@ -28,6 +28,7 @@ import { AlexandraActivityPanel } from "./alexandra-activity-panel";
 import { HqSelect } from "@/components/ui/hq-select";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { formatTodayLabelAthens } from "@/lib/date-format";
 
 function isBriefingReady(b: BriefingToday | "loading" | null): b is BriefingToday {
   return b != null && b !== "loading";
@@ -39,12 +40,7 @@ function BriefingDetails({ b }: { b: BriefingToday }) {
   return (
     <>
       <p className="text-xs text-[var(--text-muted)]">
-        {new Date().toLocaleDateString("el-GR", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })}
+        {formatTodayLabelAthens()}
       </p>
       <p className="mt-2 text-sm">
         Σήμερα γιορτάζουν: {names}

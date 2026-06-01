@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Building2, ChevronLeft } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateAthens } from "@/lib/date-format";
 import {
   isFailedRequestStatus,
   isSuccessfulRequestStatus,
@@ -31,7 +32,7 @@ function fmt(d: string | null | undefined) {
   if (!d) {
     return "—";
   }
-  return new Date(d).toLocaleString("el-GR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return formatDateAthens(d, { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 const STEPS = ["Υποβλήθηκε", "Ανοικτό", "Κλειστό"] as const;

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, ChevronRight, Inbox, Sparkles, TrendingUp } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens, formatNowAthens } from "@/lib/date-format";
 import { portalDisplayFirstName } from "@/lib/portal-display";
 import {
   getRequestStatusStyle,
@@ -83,7 +84,7 @@ export default function PortalDashboardPage() {
   useEffect(() => {
     const t = () =>
       setNowStr(
-        new Date().toLocaleString("el-GR", {
+        formatNowAthens({
           weekday: "long",
           day: "numeric",
           month: "long",
@@ -264,7 +265,7 @@ export default function PortalDashboardPage() {
                     </div>
                     <p className="mt-1 font-bold text-[#1A1A2E] group-hover:underline">{r.title}</p>
                     <p className="text-xs text-[#64748B]">
-                      {r.created_at ? new Date(r.created_at).toLocaleString("el-GR") : ""}
+                      {r.created_at ? formatDateTimeAthens(r.created_at) : ""}
                     </p>
                   </div>
                   <ChevronRight className="h-5 w-5 shrink-0 text-[#94A3B8] transition group-hover:translate-x-0.5" />

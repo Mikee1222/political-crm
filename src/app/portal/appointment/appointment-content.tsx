@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatTimeAthens } from "@/lib/date-format";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 const ND = "#003476";
@@ -165,8 +166,8 @@ export function PortalAppointmentContent() {
                       "w-full rounded-lg border px-3 py-2 text-left text-sm text-[#1A1A2E]"
                     }
                   >
-                    {new Date(s.start).toLocaleString("el-GR", { timeZone: "Europe/Athens", hour: "2-digit", minute: "2-digit" })} –{" "}
-                    {new Date(s.end).toLocaleString("el-GR", { timeZone: "Europe/Athens", hour: "2-digit", minute: "2-digit" })}
+                    {formatTimeAthens(s.start, { hour: "2-digit", minute: "2-digit" })} –{" "}
+                    {formatTimeAthens(s.end, { hour: "2-digit", minute: "2-digit" })}
                   </button>
                 </li>
               ))}

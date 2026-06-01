@@ -5,6 +5,7 @@ import { requestCardStatusStyle } from "@/lib/request-status-card-style";
 import { getRequestStatusBadgeClasses, normalizeRequestStatus } from "@/lib/request-statuses";
 import type { RequestStatusColorsMap } from "@/lib/request-status-colors";
 import { cn } from "@/lib/utils";
+import { formatDateAthens } from "@/lib/date-format";
 
 export type RequestSearchResult = {
   id: string;
@@ -19,15 +20,11 @@ export type RequestSearchResult = {
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("el-GR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return "—";
-  }
+  return formatDateAthens(iso, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function contactLabel(c: RequestSearchResult["contacts"]) {

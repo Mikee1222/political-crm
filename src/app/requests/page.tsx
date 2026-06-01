@@ -14,6 +14,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateAthens } from "@/lib/date-format";
 import {
   isClosedRequestStatus,
   isFailedRequestStatus,
@@ -737,7 +738,7 @@ function RequestCard({
         <RequestStatusBadge status={status} withDot />
         <PriorityPill p={r.priority} />
         <span className="ml-auto text-[10px] text-[var(--text-muted)]">
-          {r.created_at ? new Date(r.created_at).toLocaleDateString("el-GR") : ""}
+          {r.created_at ? formatDateAthens(r.created_at) : ""}
         </span>
       </div>
     </article>

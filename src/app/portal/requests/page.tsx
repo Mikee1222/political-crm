@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Inbox, Plus } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 import {
   getCanonicalRequestStatus,
   getRequestStatusStyle,
@@ -154,7 +155,7 @@ export default function PortalRequestsPage() {
                   </span>
                 )}
                 <p className="mt-2 text-xs text-[#64748B]">
-                  {r.created_at ? new Date(r.created_at).toLocaleString("el-GR") : "—"}
+                  {r.created_at ? formatDateTimeAthens(r.created_at) : "—"}
                 </p>
                 <div className="mt-2">
                   <RequestStatusBadge status={r.status || REQUEST_STATUS_OPEN} bold />

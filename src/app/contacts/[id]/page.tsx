@@ -24,6 +24,13 @@ import {
   X,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import {
+  formatCalendarDateOnly,
+  formatCallLogDateTime,
+  formatDateAthens,
+  formatDateTimeAthens,
+  formatDateTimeEnGb,
+} from "@/lib/date-format";
 import { el } from "date-fns/locale";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
@@ -255,43 +262,6 @@ function buildContactCopyText(c: Contact) {
     .join("\n");
 }
 
-function fmtDate(s: string | null | undefined) {
-  if (s == null || String(s).trim() === "") return "—";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return disp(s);
-  return d.toLocaleDateString("el-GR");
-}
-
-function fmtDateTime(s: string | null | undefined) {
-  if (s == null || String(s).trim() === "") return "—";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
-const ATHENS_TZ = "Europe/Athens";
-
-function fmtCallLogDateTime(calledAt: string | null | undefined) {
-  if (calledAt == null || String(calledAt).trim() === "") return "—";
-  const d = new Date(calledAt);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("el-GR", {
-    timeZone: ATHENS_TZ,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 /** Relative elapsed time from called_at (absolute instant; display is Athens wall clock). */
 function fmtCallLogRelative(calledAt: string | null | undefined) {
   if (calledAt == null || String(calledAt).trim() === "") return "";
@@ -301,7 +271,7 @@ function fmtCallLogRelative(calledAt: string | null | undefined) {
 }
 
 function formatDate(s: string | null | undefined) {
-  return fmtDateTime(s);
+  return formatDateTimeEnGb(s);
 }
 
 function authorInitials(name: string) {
@@ -1609,7 +1579,7 @@ function ContactDetailPage() {
                       ? String(c.age)
                       : "—"
                     : isDate
-                      ? fmtDate(raw as string | null)
+                      ? formatCalendarDateOnly(raw as string | null)
                       : disp(raw as string | null);
                   return (
                   <div key={row.k} className="sm:col-span-1">
@@ -1679,7 +1649,7 @@ function ContactDetailPage() {
                       const isToday = daysUntil === 0;
                       const isSoon = daysUntil !== null && daysUntil <= 7 && daysUntil > 0;
                       const birthDate = c.birthday
-                        ? new Date(c.birthday).toLocaleDateString("el-GR", {
+                        ? formatCalendarDateOnly(c.birthday, {
                             day: "numeric",
                             month: "long",
                           })
@@ -2198,7 +2168,7 @@ function ContactDetailPage() {
                             className="rounded border border-[var(--border)]/50 bg-[var(--bg-elevated)]/30 p-2 text-xs text-[var(--text-secondary)]"
                           >
                             <p className="text-[10px] text-[var(--text-muted)]">
-                              {new Date(h.created_at).toLocaleString("el-GR", { hour12: false })} — {h.user_name}
+                              {formatDateTimeAthens(h.created_at, { hour12: false })} — {h.user_name}
                             </p>
                             <p className="mt-0.5 text-[11px] text-[var(--text-primary)]/90">
                               {h.action} · {h.entity_type} · {h.entity_name ?? "—"}
@@ -2527,7 +2497,7 @@ function ContactDetailPage() {
               {lastCommAt ? (
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">{fmtCallLogDateTime(lastCommAt)}</p>
+                    <p className="text-sm font-medium text-[var(--text-primary)]">{formatCallLogDateTime(lastCommAt)}</p>
                     <p className="mt-0.5 text-xs text-[var(--text-muted)]">{fmtCallLogRelative(lastCommAt)}</p>
                     {lastCommMarker ? (
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">από: {lastCommMarker}</p>
@@ -2599,7 +2569,7 @@ function ContactDetailPage() {
                       key={event.id}
                       className="flex items-center gap-3 border-b border-[var(--border)]/50 py-2 last:border-0"
                     >
-                      <div className="w-20 shrink-0 text-xs text-[var(--text-muted)]">{fmtDate(event.date)}</div>
+                      <div className="w-20 shrink-0 text-xs text-[var(--text-muted)]">{formatCalendarDateOnly(event.date)}</div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-[var(--text-primary)]">{event.title}</p>
                         <p className="text-xs text-[var(--text-muted)]">
@@ -2636,7 +2606,7 @@ function ContactDetailPage() {
                           <p className="truncate text-sm font-semibold text-foreground">{r.title}</p>
                           <p className="text-xs text-muted-foreground">
                             {r.category ?? "—"} ·{" "}
-                            {r.created_at ? new Date(r.created_at).toLocaleDateString("el-GR") : "—"}
+                            {r.created_at ? formatDateAthens(r.created_at) : "—"}
                           </p>
                         </div>
                         <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -2782,7 +2752,7 @@ function ContactDetailPage() {
                         </p>
                         <p className="text-[11px] text-[var(--text-muted)]">
                           {t.due_date
-                            ? new Date(t.due_date).toLocaleDateString("el-GR")
+                            ? formatCalendarDateOnly(t.due_date)
                             : "Χωρίς ημερομηνία"}
                         </p>
                       </div>
@@ -2871,9 +2841,7 @@ function ContactDetailPage() {
                       <span className="relative z-[1] mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#C9A84C] ring-2 ring-white" />
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-[var(--text-primary)]">
-                          {cl.called_at
-                            ? new Date(cl.called_at).toLocaleString("el-GR")
-                            : "—"}
+                          {cl.called_at ? formatCallLogDateTime(cl.called_at) : "—"}
                         </p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           <OutcomeBadge o={cl.outcome} />
@@ -2903,11 +2871,11 @@ function ContactDetailPage() {
               {c.created_at ? " · " : null}
             </span>
           )}
-          {c.created_at && <span className="text-[var(--text-secondary)]">{fmtDateTime(c.created_at)}</span>}
+          {c.created_at && <span className="text-[var(--text-secondary)]">{formatDateTimeEnGb(c.created_at)}</span>}
         </div>
         {c.updated_by && c.updated_at ? (
           <p className="mt-1.5">
-            Τελευταία ενημέρωση: <span className="text-[var(--text-secondary)]">{fmtDateTime(c.updated_at)}</span>
+            Τελευταία ενημέρωση: <span className="text-[var(--text-secondary)]">{formatDateTimeEnGb(c.updated_at)}</span>
             {c.updated_by_name?.trim() ? (
               <span> ({c.updated_by_name.trim()})</span>
             ) : null}

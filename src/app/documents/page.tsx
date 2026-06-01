@@ -18,6 +18,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 
 type Analysis = {
   title: string;
@@ -496,7 +497,7 @@ export default function DocumentsPage() {
                         {d.name}
                       </p>
                       <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
-                        {formatSize(d.file_size)} · {new Date(d.created_at).toLocaleString("el-GR")}{" "}
+                        {formatSize(d.file_size)} · {formatDateTimeAthens(d.created_at)}{" "}
                         {d.uploader_name ? `· ${d.uploader_name}` : ""}
                       </p>
                     </div>
@@ -632,7 +633,7 @@ export default function DocumentsPage() {
                   <li key={d.id} className="data-hq-card p-3 text-sm">
                     <p className="font-medium text-[var(--text-primary)]">{d.title || "Άνευ τίτλου"}</p>
                     <p className="line-clamp-2 text-xs text-[var(--text-secondary)]">
-                      {d.content_summary || "—"} · {new Date(d.created_at).toLocaleString("el-GR")}
+                      {d.content_summary || "—"} · {formatDateTimeAthens(d.created_at)}
                     </p>
                   </li>
                 ))}

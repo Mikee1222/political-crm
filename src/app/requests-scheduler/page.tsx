@@ -49,6 +49,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatCalendarDateOnly } from "@/lib/date-format";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
@@ -418,8 +419,7 @@ function contactLabel(c: SchedulerRequest["contacts"]) {
 }
 
 function formatScheduleToastDate(ymd: string) {
-  const d = parseISO(ymd);
-  return d.toLocaleDateString("el-GR", { day: "numeric", month: "numeric", year: "numeric" });
+  return formatCalendarDateOnly(ymd, { day: "numeric", month: "numeric", year: "numeric" });
 }
 
 function weekDays(weekStartYmd: string) {

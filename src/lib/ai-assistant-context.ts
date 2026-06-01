@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Role } from "@/lib/roles";
 import { hasMinRole } from "@/lib/roles";
 import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+import { formatDateAthens } from "@/lib/date-format";
 
 function normGreek(s: string) {
   return s
@@ -109,7 +110,7 @@ async function weekNamedayContext(supabase: SupabaseClient): Promise<Record<stri
       approxHits = count ?? 0;
     }
     out.push({
-      dayLabel: d.toLocaleDateString("el-GR", { weekday: "short", day: "numeric", month: "short" }),
+      dayLabel: formatDateAthens(d.toISOString(), { weekday: "short", day: "numeric", month: "short" }),
       month,
       dayOfMonth: day,
       names,

@@ -30,6 +30,7 @@ import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { formatDateTimeAthens, formatTimeAthens } from "@/lib/date-format";
 
 type CalEvent = {
   id: string;
@@ -638,8 +639,8 @@ export default function SchedulePage() {
                           >
                             {ev.start && !isAllDayStr(ev.start) && (
                               <span className="shrink-0 text-[9px] font-bold leading-tight text-white/95 [text-shadow:0_1px_0_rgba(0,0,0,0.2)]">
-                                {format(new Date(ev.start), "HH:mm", { locale: el })} —{" "}
-                                {ev.end ? format(new Date(ev.end), "HH:mm", { locale: el }) : "—"}
+                                {formatTimeAthens(ev.start, { hour: "2-digit", minute: "2-digit", hour12: false })} —{" "}
+                                {ev.end ? formatTimeAthens(ev.end, { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}
                               </span>
                             )}
                             <span className="line-clamp-2 min-h-0 text-[12px] font-medium leading-tight [text-shadow:0_1px_0_rgba(0,0,0,0.15)]">
@@ -755,8 +756,22 @@ export default function SchedulePage() {
                   </div>
                   {detail.start && !isAllDayStr(detail.start) && (
                     <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                      {format(new Date(detail.start), "PPPp", { locale: el })} —{" "}
-                      {detail.end ? format(new Date(detail.end), "Pp", { locale: el }) : ""}
+                      {formatDateTimeAthens(detail.start, {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      —{" "}
+                      {detail.end
+                        ? formatDateTimeAthens(detail.end, {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : ""}
                     </p>
                   )}
                   {detail.start && isAllDayStr(detail.start) && (

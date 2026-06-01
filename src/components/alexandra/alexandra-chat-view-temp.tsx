@@ -8,6 +8,7 @@ import { hasMinRole } from "@/lib/roles";
 import { useProfile } from "@/contexts/profile-context";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatChatTime } from "@/lib/date-format";
 import { callStatusLabel, callStatusPill } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 
@@ -90,7 +91,7 @@ function canConfirmCreate(role: string | null | undefined, a: ActionPayload) {
 
 function fmtTime(iso: string) {
   try {
-    return new Date(iso).toLocaleString("el-GR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return formatChatTime(iso);
   } catch {
     return "";
   }

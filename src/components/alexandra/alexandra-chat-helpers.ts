@@ -1,5 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { el } from "date-fns/locale";
+import { formatChatTime } from "@/lib/date-format";
 import { hasMinRole } from "@/lib/roles";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 
@@ -126,7 +127,7 @@ export function canConfirmCreate(role: string | null | undefined, a: ActionPaylo
 
 export function fmtTime(iso: string) {
   try {
-    return new Date(iso).toLocaleString("el-GR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return formatChatTime(iso);
   } catch {
     return "";
   }

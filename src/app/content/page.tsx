@@ -8,6 +8,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 
@@ -394,7 +395,7 @@ function ContentBody() {
                       <p className="text-xs text-[var(--text-secondary)]">Πολίτης: {it.citizen_name}</p>
                     ) : null}
                     <p className="mt-1 text-sm font-bold text-[var(--text-primary)]">{it.subject || "—"}</p>
-                    <p className="text-xs text-[var(--text-muted)]">{new Date(it.created_at).toLocaleString("el-GR")}</p>
+                    <p className="text-xs text-[var(--text-muted)]">{formatDateTimeAthens(it.created_at)}</p>
                     <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
                       {it.content || "—"}
                     </p>
@@ -521,7 +522,7 @@ function ContentBody() {
                     <p className="text-sm font-bold text-[var(--text-primary)]">{it.title || "—"}</p>
                     <p className="text-xs text-[var(--text-muted)]">
                       {it.tone ? `${it.tone} · ` : ""}
-                      {new Date(it.created_at).toLocaleString("el-GR")}
+                      {formatDateTimeAthens(it.created_at)}
                     </p>
                     <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
                       {it.content || "—"}
@@ -647,7 +648,7 @@ function ContentBody() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold uppercase text-[#C9A84C]">{it.platform || "—"}</p>
                     {it.topic ? <p className="text-sm font-bold text-[var(--text-primary)]">{it.topic}</p> : null}
-                    <p className="text-xs text-[var(--text-muted)]">{new Date(it.created_at).toLocaleString("el-GR")}</p>
+                    <p className="text-xs text-[var(--text-muted)]">{formatDateTimeAthens(it.created_at)}</p>
                     <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
                       {it.content}
                     </p>

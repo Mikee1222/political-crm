@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 import { slugifyNews } from "@/lib/slugify";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -180,7 +181,7 @@ export function PortalNewsSection() {
                   <td className="p-2 text-[var(--text-secondary)]">{p.category}</td>
                   <td className="p-2">{p.published ? "Δημοσιευμένο" : "Πρόχειρο"}</td>
                   <td className="p-2 text-[var(--text-secondary)]">
-                    {p.published_at ? new Date(p.published_at).toLocaleString("el-GR") : "—"}
+                    {p.published_at ? formatDateTimeAthens(p.published_at) : "—"}
                   </td>
                   <td className="p-2 pr-3">
                     <button

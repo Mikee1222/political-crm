@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateAthens } from "@/lib/date-format";
 
 const ND = "#003476";
 
@@ -69,7 +70,7 @@ export default function PortalNewsArticlePage() {
   }
 
   const p = data.post;
-  const date = p.published_at ? new Date(p.published_at) : new Date(p.created_at);
+  const dateIso = p.published_at ?? p.created_at;
 
   return (
     <article className="mx-auto w-full min-w-0 max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
@@ -92,7 +93,7 @@ export default function PortalNewsArticlePage() {
           {p.title}
         </h1>
         <p className="mt-2 text-sm text-[#64748B]">
-          {date.toLocaleString("el-GR", { day: "2-digit", month: "long", year: "numeric" })}
+          {formatDateAthens(dateIso, { day: "2-digit", month: "long", year: "numeric" })}
         </p>
       </div>
       {p.cover_image && (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 import type { ContactGroupRow } from "@/lib/contact-groups";
@@ -196,7 +197,7 @@ export function EmailSettingsSection() {
                 {log.map((r) => (
                   <tr key={r.id} className="border-t border-[var(--border)]/30">
                     <td className="p-1.5 text-[10px] text-[var(--text-secondary)]">
-                      {new Date(r.created_at).toLocaleString("el-GR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      {formatDateTimeAthens(r.created_at, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </td>
                     <td className="p-1.5">{r.to_email}</td>
                     <td className="p-1.5">{r.subject}</td>

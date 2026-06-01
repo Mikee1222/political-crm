@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 
 type WMsg = {
@@ -79,7 +80,7 @@ export function WhatsappSettingsSection() {
       <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-xs">
         {log.map((w) => (
           <li key={w.id} className="border-b border-[var(--border)]/50 py-1 text-[var(--text-secondary)]">
-            <span className="text-[var(--accent-gold)]">{w.direction}</span> {new Date(w.created_at).toLocaleString("el-GR")}{" "}
+            <span className="text-[var(--accent-gold)]">{w.direction}</span> {formatDateTimeAthens(w.created_at)}{" "}
             {w.contacts
               ? `${w.contacts.first_name} ${w.contacts.last_name}`.trim()
               : "—"}{" "}

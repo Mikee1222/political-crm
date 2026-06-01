@@ -23,6 +23,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { todayYmdAthens } from "@/lib/date-format";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -86,7 +87,7 @@ function prLabel(p: string | null | undefined) {
 }
 
 function athensTodayYmd() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Athens" });
+  return todayYmdAthens();
 }
 
 export default function TasksPage() {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateTimeAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { HqSelect } from "@/components/ui/hq-select";
@@ -534,8 +535,8 @@ export default function CampaignDetailPage() {
 
       {c && (
         <p className="text-xs text-[var(--text-muted)]">
-          Δημιουργήθηκε: {c.created_at ? new Date(c.created_at).toLocaleString("el-GR") : "—"}{" "}
-          {c.started_at ? `· Έναρξη: ${new Date(c.started_at).toLocaleString("el-GR")}` : ""}
+          Δημιουργήθηκε: {c.created_at ? formatDateTimeAthens(c.created_at) : "—"}{" "}
+          {c.started_at ? `· Έναρξη: ${formatDateTimeAthens(c.started_at)}` : ""}
         </p>
       )}
 
@@ -693,7 +694,7 @@ export default function CampaignDetailPage() {
                           {formatDuration(call.duration_seconds ?? null)}
                         </td>
                         <td className="p-2 pr-3 sm:p-3 sm:pr-4 text-left text-xs text-[var(--text-secondary)] sm:text-sm">
-                          {call.called_at ? new Date(call.called_at).toLocaleString("el-GR") : "—"}
+                          {call.called_at ? formatDateTimeAthens(call.called_at) : "—"}
                         </td>
                         <td className="p-2 pr-3 sm:p-3 sm:pr-4 text-right">
                           {call.transferred_to_politician ? (

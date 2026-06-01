@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BarChart3, CheckCircle2, FileText, LayoutGrid, Megaphone, Play, Search, Plus, Radio, Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState, type ComponentType } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 import type { CampaignTypeRow } from "@/lib/campaign-types";
 import {
@@ -294,10 +295,10 @@ export default function CampaignsPage() {
                   </div>
                   <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                     {c.created_at
-                      ? new Date(c.created_at).toLocaleDateString("el-GR", { day: "2-digit", month: "2-digit", year: "numeric" })
+                      ? formatDateAthens(c.created_at, { day: "2-digit", month: "2-digit", year: "numeric" })
                       : "—"}
                     {c.started_at
-                      ? ` · Έναρξη: ${new Date(c.started_at).toLocaleDateString("el-GR")}`
+                      ? ` · Έναρξη: ${formatDateAthens(c.started_at)}`
                       : ""}
                   </p>
                 </div>

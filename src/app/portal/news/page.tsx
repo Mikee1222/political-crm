@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatDateAthens } from "@/lib/date-format";
 
 const ND = "#003476";
 
@@ -138,8 +139,8 @@ function PortalNewsListInner() {
             <h2 className="mt-2 text-2xl font-extrabold leading-tight sm:text-3xl">{featured.title}</h2>
             {featured.excerpt && <p className="mt-2 line-clamp-2 text-sm text-white/80">{featured.excerpt}</p>}
             <p className="mt-2 text-xs text-white/60">
-              {(featured.published_at && new Date(featured.published_at).toLocaleDateString("el-GR")) ||
-                new Date(featured.created_at).toLocaleDateString("el-GR")}
+              {(featured.published_at && formatDateAthens(featured.published_at)) ||
+                formatDateAthens(featured.created_at)}
             </p>
           </div>
         </Link>
@@ -175,8 +176,8 @@ function PortalNewsListInner() {
                 </h3>
                 {p.excerpt && <p className="mt-1 line-clamp-2 text-sm text-[#64748B]">{p.excerpt}</p>}
                 <p className="mt-auto pt-2 text-xs text-[#94A3B8]">
-                  {(p.published_at && new Date(p.published_at).toLocaleDateString("el-GR")) ||
-                    new Date(p.created_at).toLocaleDateString("el-GR")}
+                  {(p.published_at && formatDateAthens(p.published_at)) ||
+                    formatDateAthens(p.created_at)}
                 </p>
               </div>
             </Link>

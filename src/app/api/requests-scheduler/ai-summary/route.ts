@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { anthropicComplete } from "@/lib/anthropic-once";
+import { formatDateAthens } from "@/lib/date-format";
 
 export const dynamic = "force-dynamic";
 
@@ -112,17 +113,13 @@ export async function POST(req: NextRequest) {
         ? notes
             .map((n) => {
               const c = n as { content?: string; created_at?: string };
-              const d = c.created_at
-                ? new Date(c.created_at).toLocaleDateString("el-GR")
-                : "—";
+              const d = c.created_at ? formatDateAthens(c.created_at) : "—";
               return `- ${c.content ?? ""} (${d})`;
             })
             .join("\n")
         : "Δεν υπάρχουν σημειώσεις.";
 
-    const createdLabel = row.created_at
-      ? new Date(row.created_at).toLocaleDateString("el-GR")
-      : "—";
+    const createdLabel = row.created_at ? formatDateAthens(row.created_at) : "—";
 
     const prompt = `Είσαι βοηθός πολιτικού γραφείου. Δώσε μια ΟΛΟΚΛΗΡΩΜΕΝΗ σύνοψη (4-6 προτάσεις) στα ελληνικά για το παρακάτω αίτημα. ΣΗΜΑΝΤΙΚΟ: Να ολοκληρώνεις πάντα τις προτάσεις σου.
 

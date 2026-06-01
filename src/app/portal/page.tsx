@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PortalSocialSection } from "@/components/portal/portal-social-section";
 import { PwaInstallSteps } from "@/components/pwa-install-guide";
 import { ArrowDown, ArrowRight } from "lucide-react";
+import { formatDateAthens } from "@/lib/date-format";
 
 export const dynamic = "force-dynamic";
 
@@ -251,8 +252,8 @@ export default async function PortalHomePage() {
                     )}
                     <p className="mt-2 text-xs text-[#64748B]">
                       {p.published_at
-                        ? new Date(p.published_at).toLocaleDateString("el-GR")
-                        : new Date(p.created_at).toLocaleDateString("el-GR")}
+                        ? formatDateAthens(p.published_at)
+                        : formatDateAthens(p.created_at)}
                     </p>
                     <span
                       className="mt-2 text-sm font-bold"

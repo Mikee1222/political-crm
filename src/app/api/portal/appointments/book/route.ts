@@ -5,6 +5,7 @@ import { getCalendarClientForUser, getAppointmentCalendarUserId } from "@/lib/go
 import { getAvailableSlotsForDate } from "@/lib/appointment-slots";
 import { EmailTemplates, sendResendEmail, getPublicBaseUrl } from "@/lib/email";
 import { nextJsonError } from "@/lib/api-resilience";
+import { formatDateTimeAthens } from "@/lib/date-format";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -94,12 +95,7 @@ export async function POST(request: NextRequest) {
 
     const email = (c as { email: string | null }).email;
     if (email?.includes("@")) {
-      const t = new Date(start);
-      const whenLabel = t.toLocaleString("el-GR", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "Europe/Athens",
-      });
+      const whenLabel = formatDateTimeAthens(start, { dateStyle: "medium", timeStyle: "short" });
       const tpl = EmailTemplates.appointmentConfirmation(whenLabel, reason);
       void sendResendEmail({
         to: email,
@@ -110,7 +106,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       const tpl = EmailTemplates.appointmentConfirmation(
-        new Date(start).toLocaleString("el-GR", { timeZone: "Europe/Athens" }),
+        formatDateTimeAthens(start),
         reason,
       );
       const adminEmail = process.env.ADMIN_EMAIL?.trim();

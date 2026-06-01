@@ -6,6 +6,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { formatCalendarDateOnly } from "@/lib/date-format";
 import { PageHeader } from "@/components/ui/page-header";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -35,14 +36,10 @@ function typeBadgeClass(t: string) {
 }
 
 function dateParts(dateStr: string) {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) {
-    return { day: "—", month: "" };
-  }
-  return {
-    day: d.getDate().toString().padStart(2, "0"),
-    month: d.toLocaleString("el-GR", { month: "short" }),
-  };
+  const day = formatCalendarDateOnly(dateStr, { day: "2-digit" });
+  const month = formatCalendarDateOnly(dateStr, { month: "short" });
+  if (day === "—") return { day: "—", month: "" };
+  return { day, month };
 }
 
 function EventsEmpty() {

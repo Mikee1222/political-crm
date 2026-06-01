@@ -1,10 +1,11 @@
 import { endOfMonth, endOfWeek, format, parseISO, startOfMonth, startOfWeek, isValid } from "date-fns";
+import { todayYmdAthens } from "@/lib/date-format";
 
 export type TaskTabFilter = "all" | "today" | "week" | "overdue";
 
 /** YYYY-MM-DD in Europe/Athens if no client anchor. */
 export function defaultAnchorYmd() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Athens" });
+  return todayYmdAthens();
 }
 
 function parseYmd(ymd: string): Date {

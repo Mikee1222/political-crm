@@ -33,6 +33,7 @@ import { useCountUp } from "@/hooks/use-count-up";
 import { MetricSparkline } from "@/components/ui/metric-sparkline";
 import { PwaInstallSteps } from "@/components/pwa-install-guide";
 import { getAgeFromBirthday } from "@/lib/contact-birthday";
+import { formatNowAthens, formatTimeAthens } from "@/lib/date-format";
 
 type DashboardData = {
   totalContacts: number;
@@ -117,9 +118,7 @@ function daysSinceCreated(iso: string): number {
 
 function formatCalendarTime(start: string | null): string {
   if (!start) return "—";
-  const d = new Date(start);
-  if (Number.isNaN(d.getTime())) return start.slice(11, 16) || "—";
-  return d.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" });
+  return formatTimeAthens(start, { hour: "2-digit", minute: "2-digit" });
 }
 
 const CAL_EVENT_COLORS = [
@@ -358,7 +357,7 @@ export default function DashboardPage() {
               <span className="text-[var(--accent-gold)]">{firstNameFromProfile(profile?.full_name)}!</span>
             </p>
             <p className="mt-1 text-sm capitalize leading-[1.6] text-muted-foreground">
-              {now.toLocaleDateString("el-GR", {
+              {formatNowAthens({
                 weekday: "long",
                 day: "numeric",
                 month: "long",
@@ -367,7 +366,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <p className="hq-metric-tabular font-mono text-3xl font-bold tabular-nums text-foreground">
-            {now.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            {formatNowAthens({ hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </p>
         </div>
       </section>

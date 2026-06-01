@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { hasPermissionFlexible } from "@/lib/permission-check";
+import { todayYmdAthens } from "@/lib/date-format";
 import {
   applyContactListFiltersToBuilder,
   contactMatchesLocalSearch,
@@ -151,7 +152,7 @@ export async function GET(request: NextRequest) {
       "Ημ/νία δημιουργίας",
     ];
 
-    const athensYmd = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Athens" });
+    const athensYmd = todayYmdAthens();
 
     const lines = [
       header.map(escapeCsvCell).join(","),

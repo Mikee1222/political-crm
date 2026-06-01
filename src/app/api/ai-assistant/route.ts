@@ -19,6 +19,7 @@ import { getAllowedPermissionKeysForRole } from "@/lib/permission-check";
 import { forbidden } from "@/lib/auth-helpers";
 import { z } from "zod";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
+import { formatTodayLabelAthens } from "@/lib/date-format";
 export const dynamic = 'force-dynamic';
 
 const pageContextSchema = z.object({
@@ -189,12 +190,7 @@ export async function POST(request: NextRequest) {
   const isFirst = priorChrono.length === 0;
   const historyForClaude = sliceMessages(priorChrono, message);
 
-  const today = new Date().toLocaleDateString("el-GR", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const today = formatTodayLabelAthens();
 
   const { data: memRows, error: memErr } = await supabase
     .from("alexandra_memory")
