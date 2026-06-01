@@ -15,6 +15,7 @@ import { useFormToast } from "@/contexts/form-toast-context";
 import { validateEmail, requiredText } from "@/lib/form-validation";
 import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
+import { ContactLocationSettingsSection } from "@/components/settings/contact-location-settings-section";
 import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
 import { PortalNewsSection } from "@/components/settings/portal-news-section";
 import { SocialMediaSettingsSection } from "@/components/settings/social-media-settings-section";
@@ -345,6 +346,8 @@ export default function SettingsPage() {
       {isAdmin && <ElectoralSettingsSection />}
 
       {isAdmin && <GeographicDataSection />}
+
+      {hasMinRole(profile?.role as Role, "manager") && <ContactLocationSettingsSection />}
 
       <SavedFiltersSection isAdmin={isAdmin} />
 

@@ -6,7 +6,7 @@ import { isPortalOnlyUser } from "@/lib/portal-user-status";
 
 export { isPortalUserFromServiceReads } from "@/lib/portal-user-status";
 
-type CrmAccessResult =
+export type CrmAccessResult =
   | { allowed: true; user: User; profile: UserProfile; supabase: SupabaseClient }
   | { allowed: false; response: NextResponse };
 

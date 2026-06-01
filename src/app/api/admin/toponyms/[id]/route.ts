@@ -2,6 +2,9 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
+import { hasMinRole } from "@/lib/roles";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { countContactsByToponymId } from "@/lib/contact-location-admin";
 import type { ToponymRow } from "@/app/api/geo/toponyms/route";
 
 export const dynamic = "force-dynamic";
@@ -63,11 +66,21 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
+    const { profile } = crm;
+    if (!hasMinRole(profile?.role, "manager")) {
       return forbidden();
     }
-    const { error } = await supabase.from("toponyms").delete().eq("id", params.id);
+
+    const service = createServiceClient();
+    const contact_count = await countContactsByToponymId(service, params.id);
+    if (contact_count > 0) {
+      return NextResponse.json(
+        { error: `Δεν μπορεί να διαγραφεί — ${contact_count} επαφές χρησιμοποιούν αυτό το τοπωνύμιο` },
+        { status: 409 },
+      );
+    }
+
+    const { error } = await service.from("toponyms").delete().eq("id", params.id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
