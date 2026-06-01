@@ -37,6 +37,7 @@ import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactElectoralLocationEdit } from "@/components/contact-electoral-location-edit";
+import { ContactGroupsSection } from "@/components/contact-groups-section";
 import { ContactExtraSections } from "@/components/contact-extra-sections";
 import { ContactRelatedPersonsSection } from "@/components/contact-related-persons-section";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
@@ -48,7 +49,6 @@ import { useFormToast } from "@/contexts/form-toast-context";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
 import { cn } from "@/lib/utils";
-import { getGroupChipStyle } from "@/lib/color-utils";
 import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 
 const card =
@@ -392,7 +392,6 @@ function ContactDetailPage() {
   const [openTask, setOpenTask] = useState(false);
   const [headerCopied, setHeaderCopied] = useState(false);
   const [groupOptions, setGroupOptions] = useState<ContactGroupRow[]>([]);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [availableSources, setAvailableSources] = useState<ContactSourceRow[]>([]);
   const [contactSources, setContactSources] = useState<ContactSourceRow[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
@@ -869,17 +868,28 @@ function ContactDetailPage() {
   const startEdit = (s: Exclude<Section, null>) => {
     if (!c || !canManage) return;
     setBuf({ ...c });
-    if (s === "electoral") {
-      const ids = (c.all_groups ?? []).map((g) => g.id);
-      setSelectedGroupIds(ids.length ? ids : c.group_id ? [c.group_id] : []);
-    }
     setEditing(s);
   };
   const cancelEdit = () => {
     setBuf(null);
-    setSelectedGroupIds([]);
     setEditing(null);
   };
+
+  const handleGroupsChange = useCallback(
+    (allGroups: NonNullable<Contact["all_groups"]>) => {
+      setContact((prev) =>
+        prev
+          ? {
+              ...prev,
+              all_groups: allGroups,
+              contact_groups: allGroups[0] ?? null,
+              group_id: allGroups[0]?.id ?? null,
+            }
+          : prev,
+      );
+    },
+    [],
+  );
 
   const patch = async (body: Record<string, unknown>) => {
     if (!id) return;
@@ -932,7 +942,6 @@ function ContactDetailPage() {
         priority: buf.priority,
         call_status: buf.call_status,
         influence: buf.influence,
-        group_ids: selectedGroupIds,
         is_volunteer: buf.is_volunteer,
         volunteer_role: buf.volunteer_role,
         volunteer_area: buf.volunteer_area,
@@ -1682,10 +1691,27 @@ function ContactDetailPage() {
               </div>
             </div>
 
+            <div {...animDelay(1)}>
+              <ContactGroupsSection
+                contactId={c.id}
+                groups={c.all_groups ?? []}
+                groupOptions={groupOptions}
+                canManage={canManage}
+                onGroupsChange={handleGroupsChange}
+                onToast={showToast}
+              />
+            </div>
+
             {/* B Electoral */}
             <div
-              {...animDelay(1)}
-              className={[cardBlue, canManage && editing === "electoral" && mobileEditOverlay].filter(Boolean).join(" ")}
+              {...animDelay(2)}
+              className={[
+                cardBlue,
+                canManage && editing === "electoral" && mobileEditOverlay,
+                canManage && editing === "electoral" ? "pb-6" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
@@ -1713,7 +1739,13 @@ function ContactDetailPage() {
                   </div>
                 )}
               </div>
-              <div className={grid2} style={{ gap: "0.5rem" }}>
+              <div
+                className={
+                  canManage && editing === "electoral" && w
+                    ? "flex flex-col gap-4"
+                    : cn(grid2, "gap-y-3")
+                }
+              >
                 {canManage && editing === "electoral" && w ? (
                   <ContactElectoralLocationEdit
                     values={{
@@ -1733,47 +1765,8 @@ function ContactDetailPage() {
                     labelClassName={lbl}
                   />
                 ) : null}
-                {canManage && editing === "electoral" && w ? (
-                  <div className="fieldGap sm:col-span-2">
-                    <span className={lbl}>Ομάδες</span>
-                    <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-2">
-                      {groupOptions.length === 0 ? (
-                        <p className="text-xs text-[var(--text-muted)]">Φόρτωση ομάδων…</p>
-                      ) : (
-                        groupOptions.map((g) => {
-                          const checked = selectedGroupIds.includes(g.id);
-                          return (
-                            <label
-                              key={g.id}
-                              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--bg-card)]"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-[var(--border)]"
-                                checked={checked}
-                                onChange={(e) => {
-                                  setSelectedGroupIds((prev) =>
-                                    e.target.checked ? [...prev, g.id] : prev.filter((id) => id !== g.id),
-                                  );
-                                }}
-                              />
-                              <span
-                                className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                                style={getGroupChipStyle(g.color)}
-                              >
-                                {g.name}
-                                {g.year != null ? ` · ${g.year}` : ""}
-                              </span>
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-                {!(canManage && editing === "electoral" && w) ? (
-                  <>
-                    {(["municipality", "electoral_district", "toponym"] as const).map((k) => {
+                {!(canManage && editing === "electoral" && w)
+                  ? (["municipality", "electoral_district", "toponym"] as const).map((k) => {
                       const labels: Record<typeof k, string> = {
                         municipality: "Δήμος",
                         electoral_district: "Εκλογικό διαμέρισμα",
@@ -1785,29 +1778,8 @@ function ContactDetailPage() {
                           <p className={val}>{disp(c?.[k] as string | null)}</p>
                         </div>
                       );
-                    })}
-                    <div className="fieldGap sm:col-span-2">
-                      <span className={lbl}>Ομάδες</span>
-                      {c.all_groups && c.all_groups.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {c.all_groups.map((g) => (
-                            <span
-                              key={g.id}
-                              className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                              style={getGroupChipStyle(g.color)}
-                              title={g.description ?? undefined}
-                            >
-                              {g.name}
-                              {g.year != null ? ` · ${g.year}` : ""}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className={val}>—</p>
-                      )}
-                    </div>
-                  </>
-                ) : null}
+                    })
+                  : null}
                 <div className={fieldGap + " sm:col-span-2"}>
                   <span className={lbl}>Δημοτολόγιο</span>
                   {canManage && editing === "electoral" && w ? (
@@ -1934,7 +1906,7 @@ function ContactDetailPage() {
               </div>
             </div>
 
-            <div {...animDelay(2)} className={card}>
+            <div {...animDelay(3)} className={card}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                   <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
@@ -1998,7 +1970,7 @@ function ContactDetailPage() {
               ) : null}
             </div>
 
-            <div {...animDelay(2)} className={card}>
+            <div {...animDelay(3)} className={card}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                   <MapPin className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />

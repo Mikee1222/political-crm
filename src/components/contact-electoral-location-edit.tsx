@@ -60,10 +60,6 @@ export function ContactElectoralLocationEdit({
   }, []);
 
   useEffect(() => {
-    console.log("municipalities loaded:", municipalities.length);
-  }, [municipalities]);
-
-  useEffect(() => {
     void (async () => {
       const r = await fetchWithTimeout("/api/geo/municipalities");
       if (r.ok) {
@@ -134,7 +130,7 @@ export function ContactElectoralLocationEdit({
     onChange({ ...values, ...partial });
 
   return (
-    <div className="col-span-1 flex w-full min-w-0 flex-col gap-3 sm:col-span-2">
+    <div className="flex w-full min-w-0 flex-col gap-3">
       <div className="flex flex-col gap-2">
         <span className={labelClassName}>Δήμος</span>
         <SearchableSelect

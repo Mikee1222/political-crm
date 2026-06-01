@@ -334,6 +334,58 @@ export async function upsertContactGroupMemberships(
   if (upsErr) throw upsErr;
 }
 
+/** Add one group membership; set primary group_id when contact has none. */
+export async function addContactGroupMembership(
+  supabase: SupabaseClient,
+  contactId: string,
+  groupId: string,
+): Promise<ContactGroupSummary[]> {
+  const gid = groupId.trim();
+  if (!gid) return fetchAllGroupsForContact(supabase, contactId);
+
+  const { error: upsErr } = await supabase
+    .from("contact_group_members")
+    .upsert({ contact_id: contactId, group_id: gid }, { onConflict: "contact_id,group_id" });
+  if (upsErr) throw upsErr;
+
+  const { data: contact, error: contactErr } = await supabase
+    .from("contacts")
+    .select("group_id")
+    .eq("id", contactId)
+    .maybeSingle();
+  if (contactErr) throw contactErr;
+  if (!contact?.group_id) {
+    const { error: updErr } = await supabase.from("contacts").update({ group_id: gid }).eq("id", contactId);
+    if (updErr) throw updErr;
+  }
+
+  return fetchAllGroupsForContact(supabase, contactId);
+}
+
+/** Remove one group membership; reassign primary group_id when needed. */
+export async function removeContactGroupMembership(
+  supabase: SupabaseClient,
+  contactId: string,
+  groupId: string,
+): Promise<ContactGroupSummary[]> {
+  const gid = groupId.trim();
+  if (!gid) return fetchAllGroupsForContact(supabase, contactId);
+
+  const { error: delErr } = await supabase
+    .from("contact_group_members")
+    .delete()
+    .eq("contact_id", contactId)
+    .eq("group_id", gid);
+  if (delErr) throw delErr;
+
+  const remaining = await fetchAllGroupsForContact(supabase, contactId);
+  const primary = remaining[0]?.id ?? null;
+  const { error: updErr } = await supabase.from("contacts").update({ group_id: primary }).eq("id", contactId);
+  if (updErr) throw updErr;
+
+  return remaining;
+}
+
 /** After create: insert junction rows for group_id and/or group_ids. */
 export async function insertContactGroupMembershipsAfterCreate(
   supabase: SupabaseClient,
