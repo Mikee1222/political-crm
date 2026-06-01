@@ -8,21 +8,17 @@ import { CenteredModal } from "@/components/ui/centered-modal";
 import { HqSelect } from "@/components/ui/hq-select";
 import { HqLabel } from "@/components/ui/hq-form-primitives";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { ClientPaginationBar } from "@/components/ui/client-pagination-bar";
+import { useClientPagination } from "@/hooks/use-client-pagination";
 import type { MunicipalityWithCount, ToponymWithCount } from "@/lib/contact-location-admin";
 
 type Tab = "municipalities" | "toponyms";
+type LocationRow = MunicipalityWithCount | ToponymWithCount;
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "municipalities", label: "Δήμοι" },
   { id: "toponyms", label: "Τοπωνύμια" },
 ];
-
-function norm(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 export function ContactLocationSettingsSection() {
   const [tab, setTab] = useState<Tab>("municipalities");
@@ -74,17 +70,14 @@ export function ContactLocationSettingsSection() {
     void load();
   }, [load]);
 
-  const filteredMunis = useMemo(() => {
-    const t = norm(q.trim());
-    if (!t) return munis;
-    return munis.filter((m) => norm(m.name).includes(t));
-  }, [munis, q]);
-
-  const filteredTops = useMemo(() => {
-    const t = norm(q.trim());
-    if (!t) return tops;
-    return tops.filter((r) => norm(r.name).includes(t));
-  }, [tops, q]);
+  const activeItems: LocationRow[] = tab === "municipalities" ? munis : tops;
+  const { pageItems, page, totalPages, totalCount, goToPrev, goToNext } = useClientPagination({
+    items: activeItems,
+    pageSize: 50,
+    searchQuery: q,
+    resetWhen: tab,
+    getSearchText: (r) => r.name,
+  });
 
   const addMunicipality = async () => {
     const name = newName.trim();
@@ -238,100 +231,103 @@ export function ContactLocationSettingsSection() {
       {loading ? (
         <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>
       ) : (
-        <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-          {tab === "municipalities" ? (
-            <table className="w-full min-w-[520px] text-sm">
-              <thead>
-                <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-                  <th className="p-2 pl-3 text-left">Όνομα</th>
-                  <th className="p-2 text-right">Επαφές</th>
-                  <th className="w-56 p-2 pr-3 text-right">Ενέργειες</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredMunis.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
-                      Δεν βρέθηκαν.
-                    </td>
+        <div className="space-y-3">
+          <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+            {tab === "municipalities" ? (
+              <table className="w-full min-w-[520px] text-sm">
+                <thead>
+                  <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                    <th className="p-2 pl-3 text-left">Όνομα</th>
+                    <th className="p-2 text-right">Επαφές</th>
+                    <th className="w-56 p-2 pr-3 text-right">Ενέργειες</th>
                   </tr>
-                )}
-                {filteredMunis.map((r) => (
-                  <tr key={r.name} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
-                    <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
-                    <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
-                    <td className="p-2 pr-3 text-right">
-                      <div className="inline-flex flex-wrap justify-end gap-1">
-                        <button
-                          type="button"
-                          className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
-                          disabled={r.contact_count === 0}
-                          onClick={() => setTransferMuni(r)}
-                        >
-                          Μεταφορά επαφών
-                        </button>
-                        <button
-                          type="button"
-                          className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
-                          disabled={r.contact_count > 0}
-                          title={r.contact_count > 0 ? "Υπάρχουν επαφές με αυτόν τον δήμο" : undefined}
-                          onClick={() => void deleteMunicipality(r)}
-                        >
-                          Διαγραφή
-                        </button>
-                      </div>
-                    </td>
+                </thead>
+                <tbody>
+                  {totalCount === 0 && (
+                    <tr>
+                      <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
+                        Δεν βρέθηκαν.
+                      </td>
+                    </tr>
+                  )}
+                  {(pageItems as MunicipalityWithCount[]).map((r) => (
+                    <tr key={r.name} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
+                      <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
+                      <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
+                      <td className="p-2 pr-3 text-right">
+                        <div className="inline-flex flex-wrap justify-end gap-1">
+                          <button
+                            type="button"
+                            className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                            disabled={r.contact_count === 0}
+                            onClick={() => setTransferMuni(r)}
+                          >
+                            Μεταφορά επαφών
+                          </button>
+                          <button
+                            type="button"
+                            className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
+                            disabled={r.contact_count > 0}
+                            title={r.contact_count > 0 ? "Υπάρχουν επαφές με αυτόν τον δήμο" : undefined}
+                            onClick={() => void deleteMunicipality(r)}
+                          >
+                            Διαγραφή
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full min-w-[520px] text-sm">
+                <thead>
+                  <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                    <th className="p-2 pl-3 text-left">Όνομα</th>
+                    <th className="p-2 text-right">Επαφές</th>
+                    <th className="w-56 p-2 pr-3 text-right">Ενέργειες</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <table className="w-full min-w-[520px] text-sm">
-              <thead>
-                <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-                  <th className="p-2 pl-3 text-left">Όνομα</th>
-                  <th className="p-2 text-right">Επαφές</th>
-                  <th className="w-56 p-2 pr-3 text-right">Ενέργειες</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTops.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
-                      Δεν βρέθηκαν.
-                    </td>
-                  </tr>
-                )}
-                {filteredTops.map((r) => (
-                  <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
-                    <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
-                    <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
-                    <td className="p-2 pr-3 text-right">
-                      <div className="inline-flex flex-wrap justify-end gap-1">
-                        <button
-                          type="button"
-                          className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
-                          disabled={r.contact_count === 0}
-                          onClick={() => setTransferTop(r)}
-                        >
-                          Μεταφορά επαφών
-                        </button>
-                        <button
-                          type="button"
-                          className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
-                          disabled={r.contact_count > 0}
-                          title={r.contact_count > 0 ? "Υπάρχουν επαφές με αυτό το τοπωνύμιο" : undefined}
-                          onClick={() => void deleteToponym(r)}
-                        >
-                          Διαγραφή
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {totalCount === 0 && (
+                    <tr>
+                      <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
+                        Δεν βρέθηκαν.
+                      </td>
+                    </tr>
+                  )}
+                  {(pageItems as ToponymWithCount[]).map((r) => (
+                    <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
+                      <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
+                      <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
+                      <td className="p-2 pr-3 text-right">
+                        <div className="inline-flex flex-wrap justify-end gap-1">
+                          <button
+                            type="button"
+                            className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                            disabled={r.contact_count === 0}
+                            onClick={() => setTransferTop(r)}
+                          >
+                            Μεταφορά επαφών
+                          </button>
+                          <button
+                            type="button"
+                            className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
+                            disabled={r.contact_count > 0}
+                            title={r.contact_count > 0 ? "Υπάρχουν επαφές με αυτό το τοπωνύμιο" : undefined}
+                            onClick={() => void deleteToponym(r)}
+                          >
+                            Διαγραφή
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <ClientPaginationBar page={page} totalPages={totalPages} onPrev={goToPrev} onNext={goToNext} />
         </div>
       )}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import type { Role } from "@/lib/roles";
@@ -29,6 +30,8 @@ import { CampaignTypesSettingsSection } from "@/components/settings/campaign-typ
 import { RetellAgentsSettingsSection } from "@/components/settings/retell-agents-section";
 import { AccessCodeSecuritySection } from "@/components/settings/access-code-section";
 import { GroupCategoriesSettings } from "@/components/settings/group-categories-settings";
+import { ClientPaginationBar } from "@/components/ui/client-pagination-bar";
+import { useClientPagination } from "@/hooks/use-client-pagination";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { EventCategoryRow } from "@/lib/event-categories";
 import { CAL_EVENT_TYPE_KEYS, CALENDAR_EVENT_TYPES, SCHEDULE_EVENT_COLORS, type CalendarEventType } from "@/lib/calendar-event-types";
@@ -1222,9 +1225,17 @@ function ContactSourceModal({
 
 function GroupsSection() {
   const [rows, setRows] = useState<ContactGroupRow[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [editing, setEditing] = useState<ContactGroupRow | null | "new">(null);
   const [err, setErr] = useState<string | null>(null);
   const [delId, setDelId] = useState<string | null>(null);
+
+  const { pageItems, page, totalPages, totalCount, goToPrev, goToNext } = useClientPagination({
+    items: rows,
+    pageSize: 50,
+    searchQuery,
+    getSearchText: (g) => g.name,
+  });
 
   const load = useCallback(async () => {
     const res = await fetchWithTimeout("/api/groups");
@@ -1248,60 +1259,79 @@ function GroupsSection() {
           Προσθήκη
         </button>
       </div>
+      <div className="relative mb-3 max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+        <input
+          className={lux.input + " !h-10 !pl-9"}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Αναζήτηση ομάδας…"
+          aria-label="Αναζήτηση ομάδας"
+        />
+      </div>
       {err && (
         <p className="mb-3 text-sm text-[var(--status-negative-text)]" role="status">
           {err}
         </p>
       )}
-      <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-        <table className="w-full min-w-[520px] text-sm">
-          <thead>
-            <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-              <th className="p-3 pl-4 text-left">Όνομα</th>
-              <th className="p-3 text-left">Χρώμα</th>
-              <th className="p-3 text-left">Έτος</th>
-              <th className="p-3 text-left">Περιγραφή</th>
-              <th className="p-3 pr-4 text-right">Ενέργειες</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((g) => (
-              <tr key={g.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
-                <td className="p-3 pl-4 font-medium text-[var(--text-primary)]">
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
-                      style={{ background: g.color || "#003476" }}
-                      title={g.color}
-                    />
-                    {g.name}
-                  </span>
-                </td>
-                <td className="p-3 font-mono text-xs text-[var(--text-secondary)]">{g.color}</td>
-                <td className="p-3 text-[var(--text-secondary)]">{g.year != null ? g.year : "—"}</td>
-                <td className="max-w-xs truncate p-3 text-[var(--text-secondary)]" title={g.description ?? ""}>
-                  {g.description || "—"}
-                </td>
-                <td className="p-3 pr-4 text-right">
-                  <button
-                    type="button"
-                    className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
-                    onClick={() => {
-                      setErr(null);
-                      setEditing(g);
-                    }}
-                  >
-                    Επεξεργασία
-                  </button>{" "}
-                  <button type="button" className={lux.btnDanger + " !px-2 !py-1.5 text-xs"} onClick={() => setDelId(g.id)}>
-                    Διαγραφή
-                  </button>
-                </td>
+      <div className="space-y-3">
+        <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                <th className="p-3 pl-4 text-left">Όνομα</th>
+                <th className="p-3 text-left">Χρώμα</th>
+                <th className="p-3 text-left">Έτος</th>
+                <th className="p-3 text-left">Περιγραφή</th>
+                <th className="p-3 pr-4 text-right">Ενέργειες</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && <p className="p-6 text-center text-sm text-[var(--text-muted)]">Καμία ομάδα ακόμη.</p>}
+            </thead>
+            <tbody>
+              {totalCount === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-6 text-center text-sm text-[var(--text-muted)]">
+                    {rows.length === 0 ? "Καμία ομάδα ακόμη." : "Δεν βρέθηκαν."}
+                  </td>
+                </tr>
+              )}
+              {pageItems.map((g) => (
+                <tr key={g.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
+                  <td className="p-3 pl-4 font-medium text-[var(--text-primary)]">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
+                        style={{ background: g.color || "#003476" }}
+                        title={g.color}
+                      />
+                      {g.name}
+                    </span>
+                  </td>
+                  <td className="p-3 font-mono text-xs text-[var(--text-secondary)]">{g.color}</td>
+                  <td className="p-3 text-[var(--text-secondary)]">{g.year != null ? g.year : "—"}</td>
+                  <td className="max-w-xs truncate p-3 text-[var(--text-secondary)]" title={g.description ?? ""}>
+                    {g.description || "—"}
+                  </td>
+                  <td className="p-3 pr-4 text-right">
+                    <button
+                      type="button"
+                      className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                      onClick={() => {
+                        setErr(null);
+                        setEditing(g);
+                      }}
+                    >
+                      Επεξεργασία
+                    </button>{" "}
+                    <button type="button" className={lux.btnDanger + " !px-2 !py-1.5 text-xs"} onClick={() => setDelId(g.id)}>
+                      Διαγραφή
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <ClientPaginationBar page={page} totalPages={totalPages} onPrev={goToPrev} onNext={goToNext} />
       </div>
 
       {editing != null && (
