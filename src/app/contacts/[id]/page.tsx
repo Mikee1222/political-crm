@@ -205,11 +205,10 @@ type ContactNoteItem = {
 type ContactCallLogItem = {
   id: string;
   contact_id: string;
-  contacted_at: string;
+  called_at: string;
   marked_by_user_id: string | null;
   marked_by_name: string | null;
   marker_name: string | null;
-  created_at: string;
 };
 
 const CALL_OPTS = CONTACT_CALL_STATUS_OPTIONS;
@@ -892,7 +891,7 @@ function ContactDetailPage() {
   const c = contact;
   const w = buf ?? c;
   const latestCommLog = callLogs[0] ?? null;
-  const lastCommAt = latestCommLog?.contacted_at ?? c?.last_contacted_at ?? null;
+  const lastCommAt = latestCommLog?.called_at ?? c?.last_contacted_at ?? null;
   const lastCommMarker = latestCommLog?.marker_name?.trim() || null;
 
   const startEdit = (s: Exclude<Section, null>) => {
@@ -1170,7 +1169,7 @@ function ContactDetailPage() {
         showToast(j.error ?? "Αποτυχία", "error");
         return;
       }
-      const lastAt = j.contact?.last_contacted_at ?? j.log?.contacted_at ?? new Date().toISOString();
+      const lastAt = j.contact?.last_contacted_at ?? j.log?.called_at ?? new Date().toISOString();
       setContact((prev) => (prev ? { ...prev, last_contacted_at: lastAt } : prev));
       if (j.log) {
         setCallLogs((prev) => [j.log as ContactCallLogItem, ...prev]);
@@ -2522,9 +2521,9 @@ function ContactDetailPage() {
                       className="flex items-start justify-between gap-2 border-b border-[var(--border)]/40 py-2 last:border-0"
                     >
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-[var(--text-primary)]">{fmtDateTime(log.contacted_at)}</p>
+                        <p className="text-xs font-medium text-[var(--text-primary)]">{fmtDateTime(log.called_at)}</p>
                         <p className="text-[11px] text-[var(--text-muted)]">
-                          {formatDistanceToNow(new Date(log.contacted_at), { locale: el, addSuffix: true })}
+                          {formatDistanceToNow(new Date(log.called_at), { locale: el, addSuffix: true })}
                         </p>
                         {log.marker_name?.trim() ? (
                           <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">από: {log.marker_name.trim()}</p>

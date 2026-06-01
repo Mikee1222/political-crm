@@ -120,9 +120,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
     if (updatePayload.last_contacted_at) {
       const markerName = profile?.full_name?.trim() || null;
-      await supabase.from("contact_call_logs").insert({
+      await supabase.from("calls").insert({
         contact_id: params.id,
-        contacted_at: updatePayload.last_contacted_at,
+        called_at: updatePayload.last_contacted_at,
         marked_by_user_id: user.id,
         marked_by_name: markerName,
       });

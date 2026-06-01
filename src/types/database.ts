@@ -52,6 +52,8 @@ export type Database = {
           outcome: string | null;
           transferred_to_politician: boolean | null;
           notes: string | null;
+          marked_by_user_id: string | null;
+          marked_by_name: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["calls"]["Row"]> & { contact_id: string };
         Update: Partial<Database["public"]["Tables"]["calls"]["Row"]>;

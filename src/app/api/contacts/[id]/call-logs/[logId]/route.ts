@@ -24,8 +24,8 @@ export async function DELETE(
     }
 
     const { data: row, error: fErr } = await supabase
-      .from("contact_call_logs")
-      .select("id, contact_id, contacted_at")
+      .from("calls")
+      .select("id, contact_id, called_at")
       .eq("id", params.logId)
       .eq("contact_id", params.id)
       .maybeSingle();
@@ -36,20 +36,20 @@ export async function DELETE(
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
 
-    const { error: dErr } = await supabase.from("contact_call_logs").delete().eq("id", params.logId);
+    const { error: dErr } = await supabase.from("calls").delete().eq("id", params.logId);
     if (dErr) {
       return NextResponse.json({ error: dErr.message }, { status: 400 });
     }
 
     const { data: latest } = await supabase
-      .from("contact_call_logs")
-      .select("contacted_at")
+      .from("calls")
+      .select("called_at")
       .eq("contact_id", params.id)
-      .order("contacted_at", { ascending: false })
+      .order("called_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    const nextLast = (latest as { contacted_at: string } | null)?.contacted_at ?? null;
+    const nextLast = (latest as { called_at: string } | null)?.called_at ?? null;
     await supabase
       .from("contacts")
       .update({

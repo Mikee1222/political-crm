@@ -10,10 +10,9 @@ export const dynamic = "force-dynamic";
 type CallLogRow = {
   id: string;
   contact_id: string;
-  contacted_at: string;
+  called_at: string;
   marked_by_user_id: string | null;
   marked_by_name: string | null;
-  created_at: string;
 };
 
 function enrichLog(row: CallLogRow, nameMap: Map<string, string | null>) {
@@ -33,10 +32,10 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     if (!crm.allowed) return crm.response;
     const { supabase } = crm;
     const { data: rows, error } = await supabase
-      .from("contact_call_logs")
-      .select("id, contact_id, contacted_at, marked_by_user_id, marked_by_name, created_at")
+      .from("calls")
+      .select("id, contact_id, called_at, marked_by_user_id, marked_by_name")
       .eq("contact_id", params.id)
-      .order("contacted_at", { ascending: false });
+      .order("called_at", { ascending: false });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
@@ -58,14 +57,14 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     const markerName = profile?.full_name?.trim() || null;
 
     const { data: row, error: insErr } = await supabase
-      .from("contact_call_logs")
+      .from("calls")
       .insert({
         contact_id: params.id,
-        contacted_at: now,
+        called_at: now,
         marked_by_user_id: user.id,
         marked_by_name: markerName,
       })
-      .select("id, contact_id, contacted_at, marked_by_user_id, marked_by_name, created_at")
+      .select("id, contact_id, called_at, marked_by_user_id, marked_by_name")
       .single();
     if (insErr) {
       return NextResponse.json({ error: insErr.message }, { status: 400 });
