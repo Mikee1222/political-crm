@@ -10,12 +10,8 @@ import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
 import { RequestDocumentsSection } from "@/components/request-documents-section";
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
-import {
-  OPEN_REQUEST_STATUSES,
-  normalizeRequestStatus,
-  REQUEST_STATUS_BADGE_CLASSES,
-  REQUEST_STATUS_OPEN,
-} from "@/lib/request-statuses";
+import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 
 type ContactCard = {
   id: string;
@@ -89,18 +85,6 @@ function authorInitials(name: string) {
     return w[0]!.slice(0, 2).toUpperCase() || (w[0]![0] ?? "?").toUpperCase();
   }
   return `${w[0]![0] ?? ""}${w[1]![0] ?? ""}`.toUpperCase() || "?";
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const s = normalizeRequestStatus(status || REQUEST_STATUS_OPEN);
-  const styles = REQUEST_STATUS_BADGE_CLASSES;
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles[s as keyof typeof styles] ?? styles[REQUEST_STATUS_OPEN]}`}
-    >
-      {s}
-    </span>
-  );
 }
 
 function PriorityBadge({ p }: { p: string | null | undefined }) {
@@ -278,7 +262,7 @@ export default function RequestDetailPage() {
             {data.category && <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={data.status ?? REQUEST_STATUS_OPEN} />
+            <RequestStatusBadge status={data.status ?? REQUEST_STATUS_OPEN} />
             <PriorityBadge p={data.priority} />
           </div>
         </div>

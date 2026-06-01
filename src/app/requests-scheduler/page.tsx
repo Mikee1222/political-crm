@@ -69,6 +69,7 @@ import {
   REQUEST_STATUS_KANBAN_META,
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
+import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 
 type ViewMode = "week" | "month" | "kanban";
 
@@ -1536,9 +1537,9 @@ function QueueCard({
         <p className="font-mono text-[10px] text-muted-foreground">{r.request_code ?? "—"}</p>
         <p className="mt-1 line-clamp-2 text-sm font-semibold text-foreground">{r.title}</p>
         <p className="mt-1.5 truncate text-xs text-muted-foreground">{contactLabel(r.contacts)}</p>
-        <p className="mt-2 text-[10px] font-medium text-muted-foreground">
-          {normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN)}
-        </p>
+        <div className="mt-2">
+          <RequestStatusBadge status={r.status ?? REQUEST_STATUS_OPEN} size="xs" />
+        </div>
         {r.category ? (
           <span className="mt-1.5 inline-block rounded-full border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground">
             {r.category}

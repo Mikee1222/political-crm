@@ -11,6 +11,7 @@ import {
   normalizeRequestStatus,
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
+import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 
 const ND = "#003476";
 
@@ -25,18 +26,6 @@ type Req = {
   updated_at: string | null;
   portal_message: string | null;
 };
-
-function bigBadge(s: string) {
-  const status = normalizeRequestStatus(s || REQUEST_STATUS_OPEN);
-  const c = isSuccessfulRequestStatus(status)
-    ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200"
-    : status === "Κλειστό - ολοκληρωμένο χωρίς επιτυχία"
-      ? "bg-rose-100 text-rose-800 ring-1 ring-rose-200"
-      : status === "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του"
-        ? "bg-slate-100 text-slate-800 ring-1 ring-slate-200"
-        : "bg-amber-100 text-amber-900 ring-1 ring-amber-200";
-  return <span className={`inline-flex rounded-full px-4 py-1.5 text-sm font-extrabold ${c}`}>{status}</span>;
-}
 
 function fmt(d: string | null | undefined) {
   if (!d) {
@@ -126,7 +115,9 @@ export default function PortalRequestDetailPage() {
           </p>
         )}
         <h1 className="mt-2 text-2xl font-extrabold text-[#1A1A2E] sm:text-3xl">{r.title}</h1>
-        <div className="mt-3">{bigBadge(st)}</div>
+        <div className="mt-3">
+          <RequestStatusBadge status={st} size="md" bold className="font-extrabold" />
+        </div>
         {r.category && <p className="mt-3 text-sm text-[#64748B]">{r.category}</p>}
         <p className="mt-1 text-xs text-[#94A3B8]">Υποβλήθηκε: {fmt(r.created_at)}</p>
       </div>

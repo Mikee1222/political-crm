@@ -7,10 +7,12 @@ import { Calendar, ChevronRight, Inbox, Sparkles, TrendingUp } from "lucide-reac
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { portalDisplayFirstName } from "@/lib/portal-display";
 import {
+  getRequestStatusStyle,
   isSuccessfulRequestStatus,
   normalizeRequestStatus,
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
+import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 
 const ND = "#003476";
 
@@ -35,18 +37,6 @@ type Req = {
 };
 
 type PortalMe = { first_name: string; last_name: string; verified?: boolean };
-
-function statusBadge(s: string) {
-  const status = normalizeRequestStatus(s || REQUEST_STATUS_OPEN);
-  const c = isSuccessfulRequestStatus(status)
-    ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
-    : status === "Κλειστό - ολοκληρωμένο χωρίς επιτυχία"
-      ? "bg-rose-100 text-rose-800 ring-1 ring-rose-200"
-      : status === "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του"
-        ? "bg-slate-100 text-slate-800 ring-1 ring-slate-200"
-        : "bg-amber-100 text-amber-900 ring-1 ring-amber-200";
-  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${c}`}>{status}</span>;
-}
 
 export default function PortalDashboardPage() {
   const router = useRouter();
@@ -257,16 +247,7 @@ export default function PortalDashboardPage() {
                   <span
                     className="mt-0.5 h-3 w-3 shrink-0 rounded-full"
                     style={{
-                      background:
-                        isSuccessfulRequestStatus(r.status ?? null)
-                          ? "#059669"
-                          : normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN) ===
-                              "Κλειστό - ολοκληρωμένο χωρίς επιτυχία"
-                            ? "#E11D48"
-                            : normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN) ===
-                                "Κλειστό - δεν είναι δυνατή η πραγματοποίησή του"
-                              ? "#9CA3AF"
-                              : "#F59E0B",
+                      background: getRequestStatusStyle(r.status ?? REQUEST_STATUS_OPEN, "light").color,
                     }}
                   />
                   <div className="min-w-0 flex-1">
@@ -279,7 +260,7 @@ export default function PortalDashboardPage() {
                           {r.request_code}
                         </span>
                       )}
-                      {statusBadge(r.status || REQUEST_STATUS_OPEN)}
+                      <RequestStatusBadge status={r.status || REQUEST_STATUS_OPEN} bold />
                     </div>
                     <p className="mt-1 font-bold text-[#1A1A2E] group-hover:underline">{r.title}</p>
                     <p className="text-xs text-[#64748B]">

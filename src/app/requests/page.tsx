@@ -20,11 +20,11 @@ import {
   isSuccessfulRequestStatus,
   normalizeRequestStatus,
   REQUEST_STATUSES,
-  REQUEST_STATUS_BADGE_CLASSES,
   REQUEST_STATUS_COMPLETED_SUCCESS,
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
 import { lux, priorityPill } from "@/lib/luxury-styles";
+import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 import { NewRequestModal } from "@/components/requests/new-request-modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -721,7 +721,7 @@ function RequestCard({
         <SlaDonut daysLeft={days} />
       </div>
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--border)]/60 pt-2">
-        <StatusBadge status={status} withDot />
+        <RequestStatusBadge status={status} withDot />
         <PriorityPill p={r.priority} />
         <span className="ml-auto text-[10px] text-[var(--text-muted)]">
           {r.created_at ? new Date(r.created_at).toLocaleDateString("el-GR") : ""}
@@ -741,26 +741,6 @@ function PriorityPill({ p }: { p: string | null | undefined }) {
       }`}
     >
       {k}
-    </span>
-  );
-}
-
-function StatusBadge({ status, withDot }: { status: string; withDot?: boolean }) {
-  const styles = REQUEST_STATUS_BADGE_CLASSES;
-  const s = normalizeRequestStatus(status || REQUEST_STATUS_OPEN);
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-        styles[s as keyof typeof styles] ?? styles[REQUEST_STATUS_OPEN]
-      } transition-colors duration-200`}
-    >
-      {withDot && (
-        <span
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-80 [animation:hq-pulse-dot_2.4s_ease-in-out_infinite]"
-          aria-hidden
-        />
-      )}
-      {s}
     </span>
   );
 }

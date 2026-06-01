@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  normalizeRequestStatus,
-  REQUEST_STATUS_BADGE_CLASSES,
-  type RequestStatus,
-} from "@/lib/request-statuses";
+import { getRequestStatusBadgeClasses, normalizeRequestStatus } from "@/lib/request-statuses";
 import { cn } from "@/lib/utils";
 
 export type RequestSearchResult = {
@@ -44,9 +40,7 @@ export function RequestSearchResultCard({
   onNavigate: () => void;
 }) {
   const status = normalizeRequestStatus(r.status);
-  const badge =
-    REQUEST_STATUS_BADGE_CLASSES[status as RequestStatus] ??
-    "bg-[var(--bg-elevated)] text-[var(--text-secondary)] ring-1 ring-inset ring-[var(--border)]";
+  const badge = getRequestStatusBadgeClasses(status);
   const desc = r.description?.trim();
 
   return (
