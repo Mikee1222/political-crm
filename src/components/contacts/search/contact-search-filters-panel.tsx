@@ -17,7 +17,6 @@ import { FilterFieldChips } from "@/components/contacts/search/filter-field-chip
 import { HqSelect } from "@/components/ui/hq-select";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
-import { cn } from "@/lib/utils";
 
 type Draft = ContactListFilters & { ageGroups: string[] };
 
@@ -317,32 +316,17 @@ export function ContactSearchFiltersPanel({
               placeholder="Εξαίρεση..."
             />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--text-muted)]">Σύνδεση ομάδων:</span>
-            <button
-              type="button"
-              className={cn(
-                "rounded-md border px-2 py-0.5 text-xs font-semibold",
-                draft.group_match === "or"
-                  ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_15%,transparent)] text-[var(--accent-gold)]"
-                  : "border-[var(--border)] text-[var(--text-muted)]",
-              )}
-              onClick={() => patch({ group_match: "or" })}
-            >
-              Ή (OR)
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "rounded-md border px-2 py-0.5 text-xs font-semibold",
-                draft.group_match === "and"
-                  ? "border-[var(--accent-gold)] bg-[color-mix(in_srgb,var(--accent-gold)_15%,transparent)] text-[var(--accent-gold)]"
-                  : "border-[var(--border)] text-[var(--text-muted)]",
-              )}
-              onClick={() => patch({ group_match: "and" })}
-            >
-              Και (AND)
-            </button>
+          <div>
+            <span className={lux.label}>Σύνδεση ομάδων</span>
+            <RadioRow
+              name="group_match"
+              options={[
+                { value: "or", label: "Να ανήκει σε ΤΟΥΛΑΧΙΣΤΟΝ ΜΙΑ ομάδα (OR)" },
+                { value: "and", label: "Να ανήκει σε ΟΛΕΣ τις ομάδες (AND)" },
+              ]}
+              value={draft.group_match}
+              onChange={(group_match) => patch({ group_match: group_match as Draft["group_match"] })}
+            />
           </div>
         </FilterSection>
 
