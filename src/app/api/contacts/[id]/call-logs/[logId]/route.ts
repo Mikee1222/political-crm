@@ -7,6 +7,7 @@ import { resolveContactId } from "@/lib/resolve-entity-id";
 
 export const dynamic = "force-dynamic";
 
+/** Admin clears manual last-contacted fields on contacts (logId is contact id). */
 export async function DELETE(
   _: NextRequest,
   { params }: { params: { id: string; logId: string } },
@@ -28,45 +29,37 @@ export async function DELETE(
     if (!contactId) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
+    if (params.logId !== contactId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
 
     const { data: row, error: fErr } = await supabase
-      .from("calls")
-      .select("id, contact_id, called_at")
-      .eq("id", params.logId)
-      .eq("contact_id", contactId)
+      .from("contacts")
+      .select("id, last_contacted_at")
+      .eq("id", contactId)
       .maybeSingle();
     if (fErr) {
       return NextResponse.json({ error: fErr.message }, { status: 400 });
     }
-    if (!row) {
+    if (!row?.last_contacted_at) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
 
-    const { error: dErr } = await supabase.from("calls").delete().eq("id", params.logId);
-    if (dErr) {
-      return NextResponse.json({ error: dErr.message }, { status: 400 });
-    }
-
-    const { data: latest } = await supabase
-      .from("calls")
-      .select("called_at")
-      .eq("contact_id", contactId)
-      .not("marked_by_user_id", "is", null)
-      .order("called_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const nextLast = (latest as { called_at: string } | null)?.called_at ?? null;
-    await supabase
+    const now = new Date().toISOString();
+    const { error: upErr } = await supabase
       .from("contacts")
       .update({
-        last_contacted_at: nextLast,
-        updated_at: new Date().toISOString(),
+        last_contacted_at: null,
+        last_contacted_by: null,
+        updated_at: now,
         updated_by: user.id,
       })
       .eq("id", contactId);
+    if (upErr) {
+      return NextResponse.json({ error: upErr.message }, { status: 400 });
+    }
 
-    return NextResponse.json({ ok: true, last_contacted_at: nextLast });
+    return NextResponse.json({ ok: true, last_contacted_at: null });
   } catch (e) {
     console.error("[api/contacts/call-logs/logId DELETE]", e);
     return nextJsonError();

@@ -397,7 +397,11 @@ update public.contacts
   where updated_at is null;
 create index if not exists idx_contacts_group_id on public.contacts (group_id) where group_id is not null;
 
--- Manual communication markers on calls (Σήμανση ως επικοινωνία)
+-- Manual "marked as contacted" on contacts (Σήμανση ως επικοινωνία τώρα)
+alter table public.contacts
+  add column if not exists last_contacted_by text;
+
+-- Legacy: campaign/manual rows on calls (campaign calls; not used for contact mark button)
 alter table public.calls
   add column if not exists marked_by_user_id uuid references auth.users (id) on delete set null,
   add column if not exists marked_by_name text;

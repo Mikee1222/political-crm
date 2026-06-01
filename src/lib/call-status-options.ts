@@ -4,6 +4,7 @@ export const CONTACT_CALL_STATUS_OPTIONS = [
   { value: "Positive", label: "Θετική" },
   { value: "Negative", label: "Αρνητική" },
   { value: "No Answer", label: "Δεν απαντά" },
+  { value: "Επικοινώνησε", label: "Επικοινώνησε" },
 ] as const;
 
 export type ContactCallStatusValue = (typeof CONTACT_CALL_STATUS_OPTIONS)[number]["value"];

@@ -19,6 +19,7 @@ create table if not exists public.contacts (
   call_status text,
   notes text,
   last_contacted_at timestamp,
+  last_contacted_by text,
   created_at timestamp default now()
 );
 

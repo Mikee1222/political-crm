@@ -55,6 +55,8 @@ export const callStatusPill: Record<string, string> = {
   Positive: "bg-[var(--status-positive-bg)] text-[var(--status-positive-text)] ring-1 ring-inset ring-[var(--status-positive-text)]/30",
   Negative: "bg-[var(--status-negative-bg)] text-[var(--status-negative-text)] ring-1 ring-inset ring-[var(--status-negative-text)]/30",
   "No Answer": "bg-[var(--status-noanswer-bg)] text-[var(--status-noanswer-text)] ring-1 ring-inset ring-[var(--status-noanswer-text)]/30",
+  Επικοινώνησε:
+    "bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/30",
 };
 
 export const priorityPill: Record<string, string> = {
@@ -70,6 +72,7 @@ export function callStatusLabel(key: string | null | undefined): string {
     Positive: "Θετική",
     Negative: "Αρνητική",
     "No Answer": "Δεν απαντά",
+    Επικοινώνησε: "Επικοινώνησε",
   };
   return m[key ?? "Pending"] ?? (key || "—");
 }

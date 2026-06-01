@@ -152,6 +152,7 @@ type Contact = {
   volunteer_since?: string | null;
   language?: string | null;
   last_contacted_at?: string | null;
+  last_contacted_by?: string | null;
   dimotologio?: string | null;
   is_dead?: boolean | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
@@ -886,7 +887,8 @@ function ContactDetailPage() {
   const w = buf ?? c;
   const latestCommLog = callLogs[0] ?? null;
   const lastCommAt = latestCommLog?.called_at ?? c?.last_contacted_at ?? null;
-  const lastCommMarker = latestCommLog?.marker_name?.trim() || null;
+  const lastCommMarker =
+    latestCommLog?.marker_name?.trim() || c?.last_contacted_by?.trim() || latestCommLog?.marked_by_name?.trim() || null;
 
   const startEdit = (s: Exclude<Section, null>) => {
     if (!c || !canManage) return;
@@ -1156,19 +1158,33 @@ function ContactDetailPage() {
       });
       const j = (await res.json().catch(() => ({}))) as {
         error?: string;
-        log?: ContactCallLogItem;
-        contact?: { last_contacted_at?: string | null };
+        log?: ContactCallLogItem | null;
+        contact?: {
+          last_contacted_at?: string | null;
+          last_contacted_by?: string | null;
+          call_status?: string | null;
+        };
       };
       if (!res.ok) {
         showToast(j.error ?? "Αποτυχία", "error");
         return;
       }
       const lastAt = j.contact?.last_contacted_at ?? j.log?.called_at ?? new Date().toISOString();
-      setContact((prev) => (prev ? { ...prev, last_contacted_at: lastAt } : prev));
+      const lastBy = j.contact?.last_contacted_by ?? j.log?.marked_by_name ?? null;
+      setContact((prev) =>
+        prev
+          ? {
+              ...prev,
+              last_contacted_at: lastAt,
+              last_contacted_by: lastBy,
+              call_status: j.contact?.call_status ?? prev.call_status,
+            }
+          : prev,
+      );
       if (j.log) {
         setCallLogs([j.log as ContactCallLogItem]);
       } else {
-        await load();
+        setCallLogs([]);
       }
       showToast("Σημειώθηκε επικοινωνία.", "success");
     } catch {
@@ -1191,9 +1207,9 @@ function ContactDetailPage() {
         showToast(j.error ?? "Αποτυχία διαγραφής", "error");
         return;
       }
-      setCallLogs((prev) => prev.filter((x) => x.id !== logId));
+      setCallLogs([]);
       setContact((prev) =>
-        prev ? { ...prev, last_contacted_at: j.last_contacted_at ?? null } : prev,
+        prev ? { ...prev, last_contacted_at: j.last_contacted_at ?? null, last_contacted_by: null } : prev,
       );
       showToast("Η καταγραφή διαγράφηκε.", "success");
     } catch {

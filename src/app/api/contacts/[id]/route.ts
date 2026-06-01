@@ -108,24 +108,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         return NextResponse.json({ error: "Μόνο call_status / last_contacted_at" }, { status: 400 });
       }
     }
-    const updatePayload: { call_status?: string; last_contacted_at?: string } = {};
+    const updatePayload: {
+      call_status?: string;
+      last_contacted_at?: string | null;
+      last_contacted_by?: string | null;
+    } = {};
     if (body.call_status !== undefined) {
       updatePayload.call_status = String(body.call_status);
     }
     if (body.last_contacted_at !== undefined) {
-      updatePayload.last_contacted_at = String(body.last_contacted_at);
+      const raw = body.last_contacted_at;
+      if (raw === null || raw === "") {
+        updatePayload.last_contacted_at = null;
+        updatePayload.last_contacted_by = null;
+      } else {
+        updatePayload.last_contacted_at = String(raw);
+        updatePayload.last_contacted_by = profile?.full_name?.trim() || null;
+      }
     }
     if (Object.keys(updatePayload).length === 0) {
       return NextResponse.json({ error: "Κενό" }, { status: 400 });
-    }
-    if (updatePayload.last_contacted_at) {
-      const markerName = profile?.full_name?.trim() || null;
-      await supabase.from("calls").insert({
-        contact_id: params.id,
-        called_at: updatePayload.last_contacted_at,
-        marked_by_user_id: user.id,
-        marked_by_name: markerName,
-      });
     }
     const { data: beforeC } = await supabase.from("contacts").select("*").eq("id", params.id).single();
     const beforeR = (beforeC ?? null) as Record<string, unknown> | null;

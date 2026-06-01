@@ -3,27 +3,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
-import { resolveProfileNames } from "@/lib/profile-names";
 import { resolveContactId } from "@/lib/resolve-entity-id";
 
 export const dynamic = "force-dynamic";
 
-type CallLogRow = {
+const MARKED_CALL_STATUS = "Επικοινώνησε";
+
+type ContactCommRow = {
   id: string;
-  contact_id: string;
-  called_at: string;
-  marked_by_user_id: string | null;
-  marked_by_name: string | null;
+  last_contacted_at: string | null;
+  last_contacted_by: string | null;
+  first_name?: string;
+  last_name?: string;
 };
 
-function enrichLog(row: CallLogRow, nameMap: Map<string, string | null>) {
-  const stored = row.marked_by_name?.trim();
-  const uid = row.marked_by_user_id;
-  const markerName = stored || (uid ? (nameMap.get(uid) ?? null) : null);
+function contactToLog(row: ContactCommRow) {
+  const at = row.last_contacted_at;
+  if (!at) return null;
+  const marker = row.last_contacted_by?.trim() || null;
   return {
-    ...row,
-    marked_by_name: stored || null,
-    marker_name: markerName,
+    id: row.id,
+    contact_id: row.id,
+    called_at: at,
+    marked_by_user_id: null,
+    marked_by_name: marker,
+    marker_name: marker,
   };
 }
 
@@ -36,19 +40,16 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     if (!contactId) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
-    const { data: rows, error } = await supabase
-      .from("calls")
-      .select("id, contact_id, called_at, marked_by_user_id, marked_by_name")
-      .eq("contact_id", contactId)
-      .not("marked_by_user_id", "is", null)
-      .order("called_at", { ascending: false })
-      .limit(1);
+    const { data: row, error } = await supabase
+      .from("contacts")
+      .select("id, last_contacted_at, last_contacted_by")
+      .eq("id", contactId)
+      .maybeSingle();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    const list = (rows ?? []) as CallLogRow[];
-    const nameMap = await resolveProfileNames(list.map((r) => r.marked_by_user_id));
-    return NextResponse.json({ logs: list.map((r) => enrichLog(r, nameMap)) });
+    const log = row ? contactToLog(row as ContactCommRow) : null;
+    return NextResponse.json({ logs: log ? [log] : [] });
   } catch (e) {
     console.error("[api/contacts/call-logs GET]", e);
     return nextJsonError();
@@ -67,25 +68,17 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     const now = new Date().toISOString();
     const markerName = profile?.full_name?.trim() || null;
 
-    const { data: row, error: insErr } = await supabase
-      .from("calls")
-      .insert({
-        contact_id: contactId,
-        called_at: now,
-        marked_by_user_id: user.id,
-        marked_by_name: markerName,
-      })
-      .select("id, contact_id, called_at, marked_by_user_id, marked_by_name")
-      .single();
-    if (insErr) {
-      return NextResponse.json({ error: insErr.message }, { status: 400 });
-    }
-
     const { data: contact, error: upErr } = await supabase
       .from("contacts")
-      .update({ last_contacted_at: now, updated_at: now, updated_by: user.id })
+      .update({
+        last_contacted_at: now,
+        last_contacted_by: markerName,
+        call_status: MARKED_CALL_STATUS,
+        updated_at: now,
+        updated_by: user.id,
+      })
       .eq("id", contactId)
-      .select("id, first_name, last_name, last_contacted_at")
+      .select("id, first_name, last_name, last_contacted_at, last_contacted_by, call_status")
       .single();
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 400 });
@@ -106,10 +99,15 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
       },
     });
 
-    const log = row as CallLogRow;
+    const log = contactToLog(contact as ContactCommRow);
     return NextResponse.json({
-      log: enrichLog(log, new Map([[user.id, markerName]])),
-      contact: contact as { id: string; last_contacted_at: string | null },
+      log,
+      contact: contact as {
+        id: string;
+        last_contacted_at: string | null;
+        last_contacted_by: string | null;
+        call_status: string | null;
+      },
     });
   } catch (e) {
     console.error("[api/contacts/call-logs POST]", e);

@@ -23,6 +23,7 @@ export type Database = {
           call_status: string | null;
           notes: string | null;
           last_contacted_at: string | null;
+          last_contacted_by: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["contacts"]["Row"]> & {
