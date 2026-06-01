@@ -66,7 +66,7 @@ export function mergeCategoryCountsWithMeta(
   const seen = new Set<string>();
   const out: RequestCategoryMeta[] = [];
 
-  for (const { name, request_count: _ } of counts) {
+  for (const { name } of counts) {
     seen.add(name);
     const meta = metaByName.get(name);
     out.push(
