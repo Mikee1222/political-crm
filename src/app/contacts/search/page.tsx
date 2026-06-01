@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Download, Filter, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Filter, Maximize2, Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
@@ -59,6 +59,26 @@ function ContactSearchPageInner() {
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [savingFilters, setSavingFilters] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+
+  const applyFocusModeDom = useCallback((val: boolean) => {
+    if (val) document.body.classList.add("focus-mode");
+    else document.body.classList.remove("focus-mode");
+  }, []);
+
+  const handleSetFocusMode = useCallback(
+    (val: boolean) => {
+      setFocusMode(val);
+      applyFocusModeDom(val);
+      const params = new URLSearchParams(window.location.search);
+      if (val) params.set("focus", "1");
+      else params.delete("focus");
+      const q = params.toString();
+      const path = window.location.pathname;
+      window.history.replaceState(null, "", q ? `${path}?${q}` : path);
+    },
+    [applyFocusModeDom],
+  );
 
   useEffect(() => {
     try {
@@ -102,6 +122,25 @@ function ContactSearchPageInner() {
   useEffect(() => {
     syncFromUrl();
   }, [syncFromUrl]);
+
+  useEffect(() => {
+    const enabled = searchParams.get("focus") === "1";
+    setFocusMode(enabled);
+    applyFocusModeDom(enabled);
+  }, [searchParams, applyFocusModeDom]);
+
+  useEffect(() => {
+    return () => document.body.classList.remove("focus-mode");
+  }, []);
+
+  useEffect(() => {
+    if (!focusMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleSetFocusMode(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [focusMode, handleSetFocusMode]);
 
   const loadResults = useCallback(async (f: ContactListFilters, pageNum: number) => {
     setLoading(true);
@@ -148,9 +187,10 @@ function ContactSearchPageInner() {
       setPage(1);
       const params = contactFiltersToSearchParams(next);
       params.set("ran", "1");
+      if (focusMode) params.set("focus", "1");
       router.replace(`/contacts/search?${params.toString()}`, { scroll: false });
     },
-    [router],
+    [router, focusMode],
   );
 
   const toggleFiltersOpen = () => {
@@ -227,7 +267,7 @@ function ContactSearchPageInner() {
     runSearch(f);
   };
 
-  const contactHref = (id: string) => `/contacts/${id}`;
+  const contactHref = (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const handleExport = () => {
@@ -283,12 +323,61 @@ function ContactSearchPageInner() {
     />
   );
 
-  return (
-    <div className={cn(lux.pageBg, lux.pageAnimated, "flex min-h-0 flex-1 flex-col")}>
-      <PageHeader title="Αναζήτηση Επαφών" subtitle="Προχωρημένα φίλτρα και στοχευμένη λίστα" />
+  const replaceSearchUrl = useCallback(
+    (params: URLSearchParams) => {
+      if (focusMode) params.set("focus", "1");
+      router.replace(`/contacts/search?${params.toString()}`, { scroll: false });
+    },
+    [router, focusMode],
+  );
 
-      <div className="relative flex min-h-0 flex-1 gap-0">
-        {/* Desktop filters */}
+  return (
+    <div
+      className={cn(
+        "transition-all duration-300",
+        focusMode && "fixed inset-0 z-[200] flex flex-col overflow-hidden bg-background",
+      )}
+    >
+      {focusMode && (
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Search className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+            <span className="font-semibold text-foreground">Αναζήτηση Επαφών</span>
+            {hasSearched ? (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {total.toLocaleString("el-GR")} επαφές
+              </span>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden text-xs text-muted-foreground sm:inline">ESC για έξοδο</span>
+            <button
+              type="button"
+              onClick={() => handleSetFocusMode(false)}
+              className="hidden items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm transition-colors hover:bg-muted sm:flex"
+            >
+              Έξοδος Εστίασης
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetFocusMode(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted"
+              aria-label="Έξοδος από λειτουργία εστίασης"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+      <div className={cn(focusMode && "flex min-h-0 flex-1 flex-col overflow-auto")}>
+        <div className={cn(lux.pageBg, lux.pageAnimated, "flex min-h-0 flex-1 flex-col", focusMode && "px-6 py-4")}>
+          {!focusMode ? (
+            <PageHeader title="Αναζήτηση Επαφών" subtitle="Προχωρημένα φίλτρα και στοχευμένη λίστα" />
+          ) : null}
+
+          <div className="relative flex min-h-0 flex-1 gap-0">
+            {/* Desktop filters */}
+            {!focusMode ? (
         <aside
           className={cn(
             "relative hidden shrink-0 flex-col border-r border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--bg-primary))] transition-[width] duration-300 ease-in-out lg:flex",
@@ -306,8 +395,9 @@ function ContactSearchPageInner() {
             {filtersOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
         </aside>
+            ) : null}
 
-        {!filtersOpen ? (
+            {!focusMode && !filtersOpen ? (
           <button
             type="button"
             onClick={toggleFiltersOpen}
@@ -316,20 +406,22 @@ function ContactSearchPageInner() {
           >
             <ChevronRight className="h-4 w-4" />
           </button>
-        ) : null}
+            ) : null}
 
-        {/* Results */}
+            {/* Results */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col p-3 sm:p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className={cn(lux.btnSecondary, "lg:hidden !py-2")}
-                onClick={() => setMobileFiltersOpen(true)}
-              >
-                <Filter className="h-4 w-4" />
-                Φίλτρα
-              </button>
+              {!focusMode ? (
+                <button
+                  type="button"
+                  className={cn(lux.btnSecondary, "lg:hidden !py-2")}
+                  onClick={() => setMobileFiltersOpen(true)}
+                >
+                  <Filter className="h-4 w-4" />
+                  Φίλτρα
+                </button>
+              ) : null}
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                 {hasSearched ? (
                   <>
@@ -341,12 +433,25 @@ function ContactSearchPageInner() {
                 )}
               </h2>
             </div>
-            {hasSearched && hasMinRole(profile?.role, "manager") ? (
-              <button type="button" className={lux.btnSecondary} onClick={handleExport} disabled={!total}>
-                <Download className="h-4 w-4" />
-                Εξαγωγή
-              </button>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {!focusMode ? (
+                <button
+                  type="button"
+                  onClick={() => handleSetFocusMode(true)}
+                  title="Λειτουργία εστίασης"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm transition-colors hover:bg-muted"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Εστίαση</span>
+                </button>
+              ) : null}
+              {hasSearched && hasMinRole(profile?.role, "manager") ? (
+                <button type="button" className={lux.btnSecondary} onClick={handleExport} disabled={!total}>
+                  <Download className="h-4 w-4" />
+                  Εξαγωγή
+                </button>
+              ) : null}
+            </div>
           </div>
 
           {chips.length > 0 ? (
@@ -394,7 +499,7 @@ function ContactSearchPageInner() {
                   if (appliedFilters) {
                     const params = contactFiltersToSearchParams({ ...appliedFilters, page: String(next) });
                     params.set("ran", "1");
-                    router.replace(`/contacts/search?${params.toString()}`, { scroll: false });
+                    replaceSearchUrl(params);
                   }
                 }}
               >
@@ -413,7 +518,7 @@ function ContactSearchPageInner() {
                   if (appliedFilters) {
                     const params = contactFiltersToSearchParams({ ...appliedFilters, page: String(next) });
                     params.set("ran", "1");
-                    router.replace(`/contacts/search?${params.toString()}`, { scroll: false });
+                    replaceSearchUrl(params);
                   }
                 }}
               >
@@ -479,6 +584,8 @@ function ContactSearchPageInner() {
           </button>
         </div>
       </CenteredModal>
+        </div>
+      </div>
     </div>
   );
 }
