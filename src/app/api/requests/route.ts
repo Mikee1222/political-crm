@@ -9,92 +9,27 @@ import { nextPaddedCode } from "@/lib/codes";
 import { addDaysYmd, computeSlaStatus } from "@/lib/request-sla";
 import { inferRequestCategoryFromDescription } from "@/lib/request-auto-category";
 import type { SupabaseClient } from "@supabase/supabase-js";
-export const dynamic = "force-dynamic";
-export const maxDuration = 60;
-
 import {
   getRequestStatusQueryValues,
   normalizeRequestStatus,
   REQUEST_STATUSES,
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
+import { searchParamsToRequestFilters } from "@/lib/requests-filters";
+import {
+  applyRequestListFiltersToBuilder,
+  resolvePhoneContactIds,
+  resolveRequestListFilters,
+} from "@/lib/requests-query";
+import type { RequestListFilters } from "@/lib/requests-filters";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const BASE_SELECT =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, contacts!contact_id(first_name,last_name,phone)";
 
 const FALLBACK_SELECT =
   "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status";
-
-function escapeIlike(q: string) {
-  return q.replace(/[%_\\,().]/g, (c) => `\\${c}`);
-}
-
-function dateFromForRange(range: string): string | null {
-  const d0 = new Date();
-  d0.setHours(0, 0, 0, 0);
-  const out = new Date(d0);
-  switch (range) {
-    case "today":
-      return out.toISOString();
-    case "7d":
-      out.setDate(out.getDate() - 7);
-      return out.toISOString();
-    case "30d":
-      out.setDate(out.getDate() - 30);
-      return out.toISOString();
-    case "90d":
-      out.setDate(out.getDate() - 90);
-      return out.toISOString();
-    default:
-      return null;
-  }
-}
-
-type RequestFilters = {
-  status: string;
-  category: string;
-  priority: string;
-  range: string;
-  assigned: string;
-  search: string;
-  contactIdsFromPhone?: string[];
-};
-
-async function resolvePhoneContactIds(supabase: SupabaseClient, search: string): Promise<string[]> {
-  const raw = search.trim();
-  if (!raw || !/^\d+/.test(raw)) return [];
-  const pat = `%${escapeIlike(raw)}%`;
-  const { data: phoneMatches } = await supabase
-    .from("contacts")
-    .select("id")
-    .or(`phone.ilike.${pat},phone2.ilike.${pat},landline.ilike.${pat}`);
-  return (phoneMatches ?? []).map((c) => (c as { id: string }).id);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyRequestFilters(query: any, f: RequestFilters, opts?: { withSearchEmbed?: boolean }) {
-  if (f.status) {
-    const statusValues = getRequestStatusQueryValues(f.status);
-    query = statusValues.length > 1 ? query.in("status", statusValues) : query.eq("status", statusValues[0]);
-  }
-  if (f.category) query = query.eq("category", f.category);
-  if (f.priority) query = query.eq("priority", f.priority);
-  const dateFrom = dateFromForRange(f.range);
-  if (dateFrom) query = query.gte("created_at", dateFrom);
-  if (f.assigned) query = query.eq("assigned_to", f.assigned);
-  if (f.search) {
-    const pat = `%${escapeIlike(f.search)}%`;
-    const parts = [`title.ilike.${pat}`];
-    if (opts?.withSearchEmbed) {
-      parts.push(`contacts.first_name.ilike.${pat}`, `contacts.last_name.ilike.${pat}`);
-    }
-    if (f.contactIdsFromPhone?.length) {
-      parts.push(`contact_id.in.(${f.contactIdsFromPhone.join(",")})`);
-    }
-    query = query.or(parts.join(","));
-  }
-  return query;
-}
 
 function mapRequestRows(data: unknown[]) {
   return (data ?? []).map((row) => {
@@ -109,12 +44,16 @@ function mapRequestRows(data: unknown[]) {
 
 async function fetchRequestsPage(
   supabase: SupabaseClient,
-  f: RequestFilters,
+  f: RequestListFilters,
   page: number,
   pageSize: number,
 ) {
+  const resolution = await resolveRequestListFilters(supabase, f);
+  if (resolution.noMatch) {
+    return { data: [], error: null, count: 0 };
+  }
+
   const contactIdsFromPhone = f.search ? await resolvePhoneContactIds(supabase, f.search) : [];
-  const filters: RequestFilters = { ...f, contactIdsFromPhone };
 
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -123,7 +62,10 @@ async function fetchRequestsPage(
     .from("requests")
     .select(BASE_SELECT, { count: "exact" })
     .order("created_at", { ascending: false });
-  query = applyRequestFilters(query, filters, { withSearchEmbed: Boolean(f.search) });
+  query = await applyRequestListFiltersToBuilder(query, supabase, f, resolution, {
+    withSearchEmbed: Boolean(f.search),
+    contactIdsFromPhone,
+  });
   query = query.range(from, to);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -142,7 +84,10 @@ async function fetchRequestsPage(
       .from("requests")
       .select(FALLBACK_SELECT, { count: "exact" })
       .order("created_at", { ascending: false });
-    q2 = applyRequestFilters(q2, filters, { withSearchEmbed: false });
+    q2 = await applyRequestListFiltersToBuilder(q2, supabase, f, resolution, {
+      withSearchEmbed: false,
+      contactIdsFromPhone,
+    });
     q2 = q2.range(from, to);
     const second = await q2;
     data = second.data;
@@ -154,7 +99,10 @@ async function fetchRequestsPage(
       .from("requests")
       .select(FALLBACK_SELECT, { count: "exact" })
       .order("created_at", { ascending: false });
-    q2 = applyRequestFilters(q2, filters, { withSearchEmbed: false });
+    q2 = await applyRequestListFiltersToBuilder(q2, supabase, f, resolution, {
+      withSearchEmbed: false,
+      contactIdsFromPhone,
+    });
     q2 = q2.range(from, to);
     const second = await q2;
     data = second.data;
@@ -175,14 +123,7 @@ export async function GET(request: NextRequest) {
     }
 
     const sp = request.nextUrl.searchParams;
-    const f: RequestFilters = {
-      status: sp.get("status")?.trim() ?? "",
-      category: sp.get("category")?.trim() ?? "",
-      priority: sp.get("priority")?.trim() ?? "",
-      range: sp.get("range")?.trim() ?? "",
-      assigned: sp.get("assigned")?.trim() ?? "",
-      search: sp.get("q")?.trim() || sp.get("search")?.trim() || "",
-    };
+    const f = searchParamsToRequestFilters(sp);
 
     const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
     const pageSize = Math.min(
