@@ -18,7 +18,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { ContactsImportWizard } from "@/components/contacts-import-wizard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -38,7 +37,6 @@ import {
   getDefaultContactFilters,
   searchParamsToFilters,
   buildContactsPageUrl,
-  contactFiltersToExportParams,
   contactFiltersToSearchParams,
   applySavedFilterJson,
   type ContactListFilters,
@@ -787,8 +785,6 @@ function ContactsPage() {
   const { profile } = useProfile();
   const canManage = hasMinRole(profile?.role, "manager");
   const isAdmin = profile?.role === "admin";
-  const pageAlexCtx = useOptionalAlexandraPageContact();
-  const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
   const { openTab } = useContactTabs();
   const [warStats, setWarStats] = useState<{
     total: number;
@@ -812,7 +808,6 @@ function ContactsPage() {
   const [savedFilters, setSavedFilters] = useState<SavedFilterApi[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const exportMenu = usePortalDropdown({ align: "right", minWidth: 220 });
   const [bulkStatus, setBulkStatus] = useState("Pending");
   const [bulkCampaign, setBulkCampaign] = useState("");
   const [campaigns, setCampaigns] = useState<Camp[]>([]);
@@ -1172,73 +1167,9 @@ function ContactsPage() {
       )}
       <PageHeader
         title="Επαφές"
-        subtitle="Διαχείριση εκλογικής βάσης — αναζήτηση, φίλτρα, εξαγωγή και μαζικές ενέργειες."
+        subtitle="Διαχείριση εκλογικής βάσης — αναζήτηση, φίλτρα και μαζικές ενέργειες."
         actions={
           <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                pageAlexCtx?.setContactPage(null);
-                openMiniFromBubble();
-                setMiniWindowMinimized(false);
-              }}
-              className="hq-contacts-alex-launch relative z-0 inline-flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3.5 py-2 text-left text-[13px] font-bold tracking-tight sm:w-auto"
-            >
-              <span className="relative z-[1] flex items-center gap-2">
-                <Sparkles className="h-4 w-4 shrink-0 opacity-95" aria-hidden />
-                <span className="hidden sm:inline">Αλεξάνδρα</span>
-                <span className="rounded-md border border-[color-mix(in_srgb,var(--text-badge-on-gold)_35%,transparent)] bg-[color-mix(in_srgb,var(--text-badge-on-gold)_18%,transparent)] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider">
-                  AI
-                </span>
-              </span>
-            </button>
-            <div className="relative w-full max-w-full sm:w-auto">
-              <button
-                type="button"
-                ref={exportMenu.triggerRef as RefObject<HTMLButtonElement>}
-                onClick={exportMenu.toggle}
-                className={lux.btnSecondary + " !py-2 text-sm inline-flex w-full items-center justify-center gap-1 sm:w-auto"}
-                aria-expanded={exportMenu.open}
-              >
-                <Download className="h-4 w-4" />
-                Εξαγωγή
-                <ChevronDown className="h-4 w-4 opacity-60" />
-              </button>
-              <PortalDropdownPanel
-                open={exportMenu.open}
-                pos={exportMenu.pos}
-                panelRef={exportMenu.panelRef}
-                role="menu"
-                className="overflow-hidden rounded-xl border border-border bg-background py-1 shadow-xl"
-              >
-                {canManage && (
-                  <a
-                    className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
-                    href="/api/contacts/export"
-                    onClick={() => exportMenu.setOpen(false)}
-                  >
-                    Εξαγωγή όλων
-                  </a>
-                )}
-                <a
-                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
-                  href={`/api/contacts/export?${contactFiltersToExportParams(f).toString()}`}
-                  onClick={() => exportMenu.setOpen(false)}
-                >
-                  Εξαγωγή φίλτρων
-                </a>
-                <a
-                  className="block px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
-                  href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
-                  onClick={(e) => {
-                    if (!selectedIds.length) e.preventDefault();
-                    else exportMenu.setOpen(false);
-                  }}
-                >
-                  Εξαγωγή επιλεγμένων
-                </a>
-              </PortalDropdownPanel>
-            </div>
             {!focusMode && (
               <button
                 type="button"
@@ -1251,19 +1182,14 @@ function ContactsPage() {
               </button>
             )}
             {canManage && (
-              <>
-                <a href="/api/contacts/import-template" className={lux.btnSecondary + " !py-2 text-sm w-full sm:w-auto"}>
-                  CSV Template
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setOpenCreate(true)}
-                  className={lux.btnPrimary + " hq-shimmer-gold !rounded-full !py-2.5 w-full text-sm !font-bold text-[var(--text-badge-on-gold)] sm:w-auto"}
-                >
-                  <Plus className="h-4 w-4" />
-                  Νέα Επαφή
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => setOpenCreate(true)}
+                className={lux.btnPrimary + " hq-shimmer-gold !rounded-full !py-2.5 w-full text-sm !font-bold text-[var(--text-badge-on-gold)] sm:w-auto"}
+              >
+                <Plus className="h-4 w-4" />
+                Νέα Επαφή
+              </button>
             )}
           </div>
         }
@@ -1596,8 +1522,6 @@ function ContactsPage() {
           )}
         </div>
       </div>
-
-      {canManage && <ContactsImportWizard onImported={load} />}
 
       {listLoading ? (
         <ContactsMobileSkeleton />
