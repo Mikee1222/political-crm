@@ -3,13 +3,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { countRequestsByCategoryName } from "@/lib/request-admin";
+import {
+  countRequestsByCategoryName,
+  deleteRequestCategoryLookup,
+} from "@/lib/request-admin";
 import type { RequestCategoryRow } from "@/lib/request-categories";
+
 export const dynamic = "force-dynamic";
 
 const HEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type Ctx = { params: { id: string } };
+
+function decodeCategoryParam(raw: string): string {
+  try {
+    return decodeURIComponent(raw).trim();
+  } catch {
+    return raw.trim();
+  }
+}
 
 export async function PUT(request: NextRequest, { params }: Ctx) {
   try {
@@ -19,8 +33,8 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
     if (profile?.role !== "admin") {
       return forbidden();
     }
-    const id = params.id;
-    if (!id) {
+    const param = decodeCategoryParam(params.id);
+    if (!param) {
       return NextResponse.json({ error: "Άκυρο" }, { status: 400 });
     }
     const body = (await request.json()) as { name?: string; color?: string; sort_order?: number | null };
@@ -45,14 +59,21 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: "Κενό" }, { status: 400 });
     }
-    const { data, error } = await supabase
-      .from("request_categories")
-      .update(patch)
-      .eq("id", id)
+
+    let query = supabase.from("request_categories").update(patch);
+    if (UUID_RE.test(param)) {
+      query = query.eq("id", param);
+    } else {
+      query = query.eq("name", param);
+    }
+    const { data, error } = await query
       .select("id, name, color, sort_order, created_at")
-      .single();
+      .maybeSingle();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!data) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
     return NextResponse.json({ category: data as RequestCategoryRow });
   } catch (e) {
@@ -69,25 +90,13 @@ export async function DELETE(_: NextRequest, { params }: Ctx) {
     if (profile?.role !== "admin") {
       return forbidden();
     }
-    const id = params.id;
-    if (!id) {
+    const name = decodeCategoryParam(params.id);
+    if (!name) {
       return NextResponse.json({ error: "Άκυρο" }, { status: 400 });
     }
 
-    const { data: row, error: loadErr } = await supabase
-      .from("request_categories")
-      .select("name")
-      .eq("id", id)
-      .maybeSingle();
-    if (loadErr) {
-      return NextResponse.json({ error: loadErr.message }, { status: 400 });
-    }
-    if (!row?.name) {
-      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
-    }
-
     const service = createServiceClient();
-    const requestCount = await countRequestsByCategoryName(service, row.name);
+    const requestCount = await countRequestsByCategoryName(service, name);
     if (requestCount > 0) {
       return NextResponse.json(
         { error: `Υπάρχουν ${requestCount} αιτήματα με αυτή την κατηγορία` },
@@ -95,12 +104,25 @@ export async function DELETE(_: NextRequest, { params }: Ctx) {
       );
     }
 
-    const { error } = await supabase.from("request_categories").delete().eq("id", id);
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    if (UUID_RE.test(name)) {
+      const { data: row } = await supabase
+        .from("request_categories")
+        .select("name")
+        .eq("id", name)
+        .maybeSingle();
+      if (row?.name) {
+        await deleteRequestCategoryLookup(supabase, row.name);
+      }
+    } else {
+      await deleteRequestCategoryLookup(supabase, name);
     }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Σφάλμα";
+    if (msg.includes("Άκυρο")) {
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
     console.error("[api/admin/request-categories id DELETE]", e);
     return nextJsonError();
   }

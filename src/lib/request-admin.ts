@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  getRequestCategoryCounts,
+  loadRequestCategoryMeta,
+  type RequestCategoryCountRow,
+} from "@/lib/request-category-counts";
+import {
   getRequestStatusQueryValues,
   isCanonicalRequestStatus,
   REQUEST_STATUSES,
@@ -9,6 +14,7 @@ import {
 export type RequestStatusWithCount = { status: RequestStatus; request_count: number };
 
 export type RequestCategoryWithCount = {
+  /** Lookup id when present in request_categories; otherwise same as name. */
   id: string;
   name: string;
   color: string;
@@ -59,33 +65,20 @@ export async function transferRequestStatus(
 
 export async function listRequestCategoriesWithCounts(
   service: SupabaseClient,
+  metaClient?: SupabaseClient,
 ): Promise<RequestCategoryWithCount[]> {
-  const { data: cats, error } = await service
-    .from("request_categories")
-    .select("id, name, color")
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
+  const counts = await getRequestCategoryCounts(service);
+  const metaByName = metaClient ? await loadRequestCategoryMeta(metaClient) : new Map();
 
-  if (error) throw error;
-
-  const results: RequestCategoryWithCount[] = [];
-  for (const cat of cats ?? []) {
-    const name = String(cat.name ?? "").trim();
-    if (!name) continue;
-    const { count, error: countErr } = await service
-      .from("requests")
-      .select("id", { count: "exact", head: true })
-      .eq("category", name);
-    if (countErr) throw countErr;
-    results.push({
-      id: String(cat.id),
-      name,
-      color: String(cat.color ?? "#6B7280"),
-      request_count: count ?? 0,
-    });
-  }
-
-  return results;
+  return counts.map((row) => {
+    const meta = metaByName.get(row.name);
+    return {
+      id: meta?.id ?? row.name,
+      name: row.name,
+      color: meta?.color ?? "#6B7280",
+      request_count: row.request_count,
+    };
+  });
 }
 
 export async function countRequestsByCategoryName(
@@ -104,35 +97,38 @@ export async function countRequestsByCategoryName(
 
 export async function transferRequestCategory(
   service: SupabaseClient,
-  fromId: string,
-  toId: string,
+  fromName: string,
+  toName: string,
 ): Promise<number> {
-  if (!fromId || !toId || fromId === toId) {
-    throw new Error("Άκυρα ids");
+  const from = fromName.trim();
+  const to = toName.trim();
+  if (!from || !to) {
+    throw new Error("Απαιτούνται ονόματα κατηγορίας");
   }
-
-  const { data: rows, error: loadErr } = await service
-    .from("request_categories")
-    .select("id, name")
-    .in("id", [fromId, toId]);
-
-  if (loadErr) throw loadErr;
-
-  const fromRow = rows?.find((r) => r.id === fromId);
-  const toRow = rows?.find((r) => r.id === toId);
-  const fromName = String(fromRow?.name ?? "").trim();
-  const toName = String(toRow?.name ?? "").trim();
-
-  if (!fromName || !toName) {
-    throw new Error("Δεν βρέθηκαν οι κατηγορίες");
+  if (from === to) {
+    throw new Error("Οι κατηγορίες πρέπει να διαφέρουν");
   }
 
   const { data: updated, error } = await service
     .from("requests")
-    .update({ category: toName })
-    .eq("category", fromName)
+    .update({ category: to })
+    .eq("category", from)
     .select("id");
 
   if (error) throw error;
   return updated?.length ?? 0;
 }
+
+export async function deleteRequestCategoryLookup(
+  supabase: SupabaseClient,
+  name: string,
+): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Άκυρο όνομα");
+  }
+  const { error } = await supabase.from("request_categories").delete().eq("name", trimmed);
+  if (error) throw error;
+}
+
+export type { RequestCategoryCountRow };

@@ -16,8 +16,15 @@ export async function GET() {
     }
 
     const service = createServiceClient();
-    const categories = await listRequestCategoriesWithCounts(service);
-    return NextResponse.json(categories);
+    const categories = await listRequestCategoriesWithCounts(service, crm.supabase);
+    return NextResponse.json(
+      categories.map(({ name, request_count, color, id }) => ({
+        name,
+        request_count,
+        color,
+        id,
+      })),
+    );
   } catch (e) {
     console.error("[api/admin/request-categories/with-counts GET]", e);
     return nextJsonError();

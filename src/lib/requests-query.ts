@@ -72,13 +72,8 @@ async function resolveContactIdsByPersonName(
   return [...ids];
 }
 
-async function resolveCategoryNames(
-  supabase: SupabaseClient,
-  categoryIds: string[],
-): Promise<string[]> {
-  if (!categoryIds.length) return [];
-  const { data } = await supabase.from("request_categories").select("name").in("id", categoryIds);
-  return (data ?? []).map((r) => String((r as { name: string }).name).trim()).filter(Boolean);
+function resolveCategoryNames(categoryValues: string[]): string[] {
+  return [...new Set(categoryValues.map((v) => v.trim()).filter(Boolean))];
 }
 
 async function requestIdsForPersonRole(
@@ -111,9 +106,9 @@ export async function resolveRequestListFilters(
 ): Promise<RequestFilterResolution> {
   const categoryNames = [
     ...(f.category?.trim() ? [f.category.trim()] : []),
-    ...(await resolveCategoryNames(supabase, f.category_ids)),
+    ...resolveCategoryNames(f.category_ids),
   ];
-  const excludeCategoryNames = await resolveCategoryNames(supabase, f.exclude_category_ids);
+  const excludeCategoryNames = resolveCategoryNames(f.exclude_category_ids);
   const requesterContactIds = await resolveContactIdsByPersonName(supabase, f.requester_name);
   const affectedContactIds = await resolveContactIdsByPersonName(supabase, f.affected_name);
   const helperContactIds = await resolveContactIdsByPersonName(supabase, f.helper_name);

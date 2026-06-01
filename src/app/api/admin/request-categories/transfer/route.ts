@@ -15,23 +15,28 @@ export async function PATCH(request: NextRequest) {
       return forbidden();
     }
 
-    const body = (await request.json()) as { from_id?: string; to_id?: string };
-    const from_id = String(body.from_id ?? "").trim();
-    const to_id = String(body.to_id ?? "").trim();
+    const body = (await request.json()) as {
+      from_name?: string;
+      to_name?: string;
+      from?: string;
+      to?: string;
+    };
+    const from_name = String(body.from_name ?? body.from ?? "").trim();
+    const to_name = String(body.to_name ?? body.to ?? "").trim();
 
-    if (!from_id || !to_id) {
-      return NextResponse.json({ error: "Απαιτούνται from_id και to_id" }, { status: 400 });
+    if (!from_name || !to_name) {
+      return NextResponse.json({ error: "Απαιτούνται from_name και to_name" }, { status: 400 });
     }
-    if (from_id === to_id) {
+    if (from_name === to_name) {
       return NextResponse.json({ error: "Οι κατηγορίες πρέπει να διαφέρουν" }, { status: 400 });
     }
 
     const service = createServiceClient();
-    const transferred = await transferRequestCategory(service, from_id, to_id);
+    const transferred = await transferRequestCategory(service, from_name, to_name);
     return NextResponse.json({ transferred });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Σφάλμα";
-    if (msg.includes("Άκυρ") || msg.includes("διαφέρουν") || msg.includes("βρέθηκαν")) {
+    if (msg.includes("Άκυρ") || msg.includes("διαφέρουν") || msg.includes("βρέθηκαν") || msg.includes("Απαιτούνται")) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     console.error("[api/admin/request-categories/transfer PATCH]", e);

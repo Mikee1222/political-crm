@@ -49,12 +49,7 @@ export function RequestSearchFiltersPanel({
   }, []);
 
   const categoryOptions = useMemo(
-    () => categories.map((c) => ({ value: c.id, label: c.name })),
-    [categories],
-  );
-
-  const categoryNameById = useMemo(
-    () => new Map(categories.map((c) => [c.id, c.name])),
+    () => categories.map((c) => ({ value: c.name, label: c.name })),
     [categories],
   );
 
@@ -113,21 +108,21 @@ export function RequestSearchFiltersPanel({
             <SearchableMultiSelect
               options={categoryOptions}
               values={draft.category_ids}
-              onToggle={(id) =>
+              onToggle={(name) =>
                 patch({
-                  category_ids: draft.category_ids.includes(id)
-                    ? draft.category_ids.filter((x) => x !== id)
-                    : [...draft.category_ids, id],
+                  category_ids: draft.category_ids.includes(name)
+                    ? draft.category_ids.filter((x) => x !== name)
+                    : [...draft.category_ids, name],
                 })
               }
               placeholder="Επιλέξτε κατηγορίες..."
             />
             <FilterFieldChips
-              items={draft.category_ids.map((id) => ({
-                key: id,
-                label: categoryNameById.get(id) ?? id,
+              items={draft.category_ids.map((name) => ({
+                key: name,
+                label: name,
               }))}
-              onRemove={(id) => patch({ category_ids: draft.category_ids.filter((x) => x !== id) })}
+              onRemove={(name) => patch({ category_ids: draft.category_ids.filter((x) => x !== name) })}
             />
           </div>
           <div>
@@ -135,22 +130,22 @@ export function RequestSearchFiltersPanel({
             <SearchableMultiSelect
               options={categoryOptions}
               values={draft.exclude_category_ids}
-              onToggle={(id) =>
+              onToggle={(name) =>
                 patch({
-                  exclude_category_ids: draft.exclude_category_ids.includes(id)
-                    ? draft.exclude_category_ids.filter((x) => x !== id)
-                    : [...draft.exclude_category_ids, id],
+                  exclude_category_ids: draft.exclude_category_ids.includes(name)
+                    ? draft.exclude_category_ids.filter((x) => x !== name)
+                    : [...draft.exclude_category_ids, name],
                 })
               }
               placeholder="Εξαίρεση..."
             />
             <FilterFieldChips
-              items={draft.exclude_category_ids.map((id) => ({
-                key: id,
-                label: categoryNameById.get(id) ?? id,
+              items={draft.exclude_category_ids.map((name) => ({
+                key: name,
+                label: name,
               }))}
-              onRemove={(id) =>
-                patch({ exclude_category_ids: draft.exclude_category_ids.filter((x) => x !== id) })
+              onRemove={(name) =>
+                patch({ exclude_category_ids: draft.exclude_category_ids.filter((x) => x !== name) })
               }
             />
           </div>

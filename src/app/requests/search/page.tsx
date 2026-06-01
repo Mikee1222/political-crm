@@ -71,7 +71,7 @@ function RequestSearchPageInner() {
     });
   }, []);
 
-  const categoryNames = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
+  const categoryNames = useMemo(() => new Map(categories.map((c) => [c.name, c.name])), [categories]);
   const handlerNames = useMemo(
     () => new Map(assignees.map((a) => [a.id, a.full_name ?? a.id])),
     [assignees],

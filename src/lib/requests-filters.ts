@@ -5,6 +5,7 @@
 export type RequestListFilters = {
   search: string;
   status: string;
+  /** Category names from requests.category (URL param category_ids kept for compat). */
   category_ids: string[];
   exclude_category_ids: string[];
   requester_name: string;

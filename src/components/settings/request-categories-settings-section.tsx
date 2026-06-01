@@ -93,7 +93,10 @@ export function RequestCategoriesSettingsSection() {
   const deleteCategory = async (row: RequestCategoryWithCount) => {
     if (row.request_count > 0) return;
     if (!confirm(`Διαγραφή κατηγορίας «${row.name}»;`)) return;
-    const res = await fetchWithTimeout(`/api/admin/request-categories/${row.id}`, { method: "DELETE" });
+    const res = await fetchWithTimeout(
+      `/api/admin/request-categories/${encodeURIComponent(row.name)}`,
+      { method: "DELETE" },
+    );
     const j = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
       showToast(j.error ?? "Σφάλμα", "error");
@@ -184,7 +187,7 @@ export function RequestCategoriesSettingsSection() {
                 </tr>
               )}
               {filtered.map((r) => (
-                <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
+                <tr key={r.name} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
                   <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">
                     <span className="inline-flex items-center gap-2">
                       <span
@@ -250,20 +253,20 @@ function RequestCategoryTransferModal({
   onTransferred: () => Promise<void>;
 }) {
   const { showToast } = useFormToast();
-  const [toId, setToId] = useState("");
+  const [toName, setToName] = useState("");
   const [busy, setBusy] = useState(false);
 
   const options = useMemo(
-    () => categories.filter((c) => c.id !== from.id).sort((a, b) => a.name.localeCompare(b.name, "el")),
-    [categories, from.id],
+    () => categories.filter((c) => c.name !== from.name).sort((a, b) => a.name.localeCompare(b.name, "el")),
+    [categories, from.name],
   );
 
   useEffect(() => {
-    setToId(options[0]?.id ?? "");
-  }, [from.id, options]);
+    setToName(options[0]?.name ?? "");
+  }, [from.name, options]);
 
   const submit = async () => {
-    if (!toId) {
+    if (!toName) {
       showToast("Επιλέξτε προορισμό.", "error");
       return;
     }
@@ -272,7 +275,7 @@ function RequestCategoryTransferModal({
       const res = await fetchWithTimeout("/api/admin/request-categories/transfer", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_id: from.id, to_id: toId }),
+        body: JSON.stringify({ from_name: from.name, to_name: toName }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; transferred?: number };
       if (!res.ok) {
@@ -286,7 +289,7 @@ function RequestCategoryTransferModal({
     }
   };
 
-  const toLabel = options.find((c) => c.id === toId)?.name ?? "";
+  const toLabel = toName;
 
   return (
     <CenteredModal
@@ -300,7 +303,7 @@ function RequestCategoryTransferModal({
           <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
             Άκυρο
           </button>
-          <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy || !toId}>
+          <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy || !toName}>
             {busy ? "…" : `Μεταφορά ${from.request_count} αιτημάτων`}
           </button>
         </>
@@ -312,10 +315,10 @@ function RequestCategoryTransferModal({
         </p>
         <div>
           <HqLabel htmlFor="rc-to">Προς</HqLabel>
-          <HqSelect id="rc-to" className={lux.select + " mt-1"} value={toId} onChange={(e) => setToId(e.target.value)}>
+          <HqSelect id="rc-to" className={lux.select + " mt-1"} value={toName} onChange={(e) => setToName(e.target.value)}>
             {options.length === 0 && <option value="">— (δεν υπάρχει άλλη κατηγορία) —</option>}
             {options.map((c) => (
-              <option key={c.id} value={c.id}>
+              <option key={c.name} value={c.name}>
                 {c.name}
               </option>
             ))}
