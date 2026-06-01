@@ -439,7 +439,6 @@ export function summarizeContactFilters(f: ContactListFilters, groupNames: Map<s
   }
   if (f.municipalities.length) parts.push(`Δήμοι: ${f.municipalities.join(", ")}`);
   if (f.toponyms.length) parts.push(`Τοπωνύμια: ${f.toponyms.join(", ")}`);
-  if (f.area) parts.push(`Περιοχή: ${f.area}`);
   f.group_ids.forEach((id) => parts.push(`Ομάδα: ${groupNames.get(id) ?? id}`));
   f.exclude_group_ids.forEach((id) => parts.push(`Χωρίς: ${groupNames.get(id) ?? id}`));
   if (f.group_id && !f.group_ids.length) parts.push(`Ομάδα: ${groupNames.get(f.group_id) ?? f.group_id}`);

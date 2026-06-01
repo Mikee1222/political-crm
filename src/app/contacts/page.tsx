@@ -214,7 +214,6 @@ function countActiveContactFilters(filters: ContactListFilters): number {
   if (filters.call_statuses.length) n += 1;
   if (filters.call_status) n += 1;
   if (filters.municipalities.length) n += 1;
-  if (filters.area) n += 1;
   if (filters.priority) n += 1;
   if (filters.tag) n += 1;
   if (filters.political_stance) n += 1;
@@ -1045,11 +1044,6 @@ function ContactsPage() {
     return () => window.removeEventListener("keydown", handler);
   }, [focusMode, handleSetFocusMode]);
 
-  const areas = useMemo(
-    () => Array.from(new Set(contacts.map((c) => c.area).filter(Boolean))) as string[],
-    [contacts],
-  );
-
   const currentPage = Math.max(1, parseInt(f.page || "1", 10) || 1);
   const totalPages = Math.max(1, Math.ceil(listTotal / pageSize));
   const rangeFrom = listTotal === 0 ? 0 : (currentPage - 1) * pageSize + 1;
@@ -1287,7 +1281,6 @@ function ContactsPage() {
             </div>
             {(f.call_statuses.length > 0 ||
               f.municipalities.length > 0 ||
-              f.area ||
               f.priority ||
               f.search ||
               f.tag) && (
@@ -1305,11 +1298,6 @@ function ContactsPage() {
                     {name}
                   </span>
                 ))}
-                {f.area ? (
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
-                    {f.area}
-                  </span>
-                ) : null}
               </div>
             )}
           </div>
@@ -1320,19 +1308,6 @@ function ContactsPage() {
                 patch({ call_statuses: v, call_status: "" });
               }}
             />
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-area">
-              Περιοχή
-            </label>
-            <HqSelect id="f-area" value={f.area} onChange={(e) => patch({ area: e.target.value })}>
-              <option value="">Όλες</option>
-              {areas.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </HqSelect>
           </div>
           <div className="min-w-0 max-w-full">
             <label className={lux.label} htmlFor="f-muni">
@@ -1850,7 +1825,6 @@ function CreateContactModal({
     phone2: "",
     landline: "",
     email: "",
-    area: "",
     age: "",
     gender: "",
     occupation: "",
@@ -2112,7 +2086,6 @@ function CreateContactModal({
               </div>
             </div>
             <FormField label="Email" value={form.email} placeholder="email@example.com" onChange={(v) => setForm({ ...form, email: v })} />
-            <FormField label="Περιοχή" value={form.area} placeholder="Περιοχή / περιφέρεια" onChange={(v) => setForm({ ...form, area: v })} />
             <FormField
               label="Υποκοριστικό"
               value={form.nickname}

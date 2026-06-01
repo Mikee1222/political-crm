@@ -240,7 +240,7 @@ function buildContactCopyText(c: Contact) {
     p2 ? `Κινητό 2: ${p2}` : null,
     ll ? `Σταθερό: ${ll}` : null,
     c.email?.trim() ? `Email: ${c.email}` : null,
-    c.municipality?.trim() || c.area?.trim() ? `Τοποθεσία: ${[c.municipality, c.area].filter(Boolean).join(" · ")}` : null,
+    c.municipality?.trim() ? `Τοποθεσία: ${c.municipality}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -940,7 +940,7 @@ function ContactDetailPage() {
         dimotologio: buf.dimotologio,
       });
     } else if (s === "comm") {
-      await patch({ phone: buf.phone, phone2: buf.phone2, landline: buf.landline, email: buf.email, area: buf.area });
+      await patch({ phone: buf.phone, phone2: buf.phone2, landline: buf.landline, email: buf.email });
     }
   };
 
@@ -1333,7 +1333,6 @@ function ContactDetailPage() {
                 {c.phone2?.trim() ? <span className="text-xs text-[var(--text-muted)]">· {c.phone2}</span> : null}
                 {c.landline?.trim() ? <span className="text-xs text-[var(--text-muted)]">· στ. {c.landline}</span> : null}
               </p>
-              {c.area?.trim() ? <p className="mt-0.5 text-xs text-[var(--text-muted)]">Περιοχή: {c.area}</p> : null}
             </div>
           </div>
 
@@ -2395,7 +2394,6 @@ function ContactDetailPage() {
                     { k: "phone2" as const, l: "Κινητό 2" },
                     { k: "landline" as const, l: "Σταθερό" },
                     { k: "email" as const, l: "Email" },
-                    { k: "area" as const, l: "Περιοχή" },
                   ] as const
                 ).map((row) => (
                   <div key={row.k} className={fieldGap}>
@@ -2409,7 +2407,7 @@ function ContactDetailPage() {
                         }
                       />
                     ) : (
-                      <p className={row.k === "email" || row.k === "area" ? val : val + " font-mono"}>
+                      <p className={row.k === "email" ? val : val + " font-mono"}>
                         {disp(c?.[row.k] as string | null)}
                       </p>
                     )}
