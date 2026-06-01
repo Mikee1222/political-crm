@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clipboard,
-  Flag,
   Gift,
   MapPin,
   Maximize2,
@@ -53,6 +52,7 @@ import { useFormToast } from "@/contexts/form-toast-context";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
 import { cn } from "@/lib/utils";
+import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 
 const card =
   "contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm";
@@ -149,9 +149,6 @@ type Contact = {
   language?: string | null;
   last_contacted_at?: string | null;
   dimotologio?: string | null;
-  may_not_have_mobile?: boolean | null;
-  may_not_have_landline?: boolean | null;
-  may_not_have_email?: boolean | null;
   is_dead?: boolean | null;
   contact_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year"> | null;
   all_groups?: Pick<ContactGroupRow, "id" | "name" | "color" | "description" | "year">[];
@@ -189,13 +186,6 @@ type ContactNavInfo = {
   position: number;
   total: number;
 };
-
-const CONTACT_FLAG_KEYS = [
-  { key: "may_not_have_mobile" as const, label: "Χωρίς κινητό" },
-  { key: "may_not_have_landline" as const, label: "Χωρίς σταθερό" },
-  { key: "may_not_have_email" as const, label: "Χωρίς email" },
-  { key: "is_dead" as const, label: "Απεβίωσε" },
-];
 
 type SupporterRow = {
   id: string;
@@ -942,6 +932,7 @@ function ContactDetailPage() {
         father_name: buf.father_name,
         mother_name: buf.mother_name,
         language: buf.language,
+        is_dead: Boolean(buf.is_dead),
       });
     } else if (s === "electoral") {
       await patch({
@@ -1135,26 +1126,6 @@ function ContactDetailPage() {
     }
   };
 
-  const handleToggleFlag = async (flagKey: (typeof CONTACT_FLAG_KEYS)[number]["key"]) => {
-    if (!c || !canManage) return;
-    const newVal = !Boolean(c[flagKey]);
-    try {
-      const res = await fetchWithTimeout(`/api/contacts/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [flagKey]: newVal }),
-      });
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        showToast(j.error ?? "Αποτυχία", "error");
-        return;
-      }
-      setContact((prev) => (prev ? { ...prev, [flagKey]: newVal } : prev));
-    } catch {
-      showToast("Σφάλμα δικτύου.", "error");
-    }
-  };
-
   const handleMarkContacted = async () => {
     if (!c) return;
     const now = new Date().toISOString();
@@ -1330,6 +1301,7 @@ function ContactDetailPage() {
               {initials}
             </div>
             <div className="min-w-0 flex-1">
+              <ContactStatusBadges contact={c} className="mb-2" />
               <h1 className="text-balance text-2xl font-bold leading-tight text-[var(--text-card-title)]" style={{ fontSize: 24, lineHeight: 1.2 }}>
                 {headNameLine}
               </h1>
@@ -1701,6 +1673,24 @@ function ContactDetailPage() {
                     )}
                   </div>
                 </div>
+                <div className="sm:col-span-2">
+                  <div className={fieldGap}>
+                    <span className={lbl}>Απεβίωσε</span>
+                    {canManage && editing === "personal" && w ? (
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-[var(--text-primary)]">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-[var(--border)] accent-[#003476]"
+                          checked={Boolean(w.is_dead)}
+                          onChange={(e) => setBuf({ ...w, is_dead: e.target.checked })}
+                        />
+                        Σημείωση απεβίωσης
+                      </label>
+                    ) : (
+                      <p className={val}>{c.is_dead ? "Ναι" : "Όχι"}</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2026,33 +2016,6 @@ function ContactDetailPage() {
                 </div>
               ) : null}
             </div>
-
-            {canManage ? (
-              <div {...animDelay(2)} className={card}>
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
-                  <Flag className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-                  Επισημάνσεις
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {CONTACT_FLAG_KEYS.map((flag) => (
-                    <button
-                      key={flag.key}
-                      type="button"
-                      onClick={() => void handleToggleFlag(flag.key)}
-                      className={cn(
-                        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                        c[flag.key]
-                          ? "border-red-500/30 bg-red-500/10 text-red-500"
-                          : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent-gold)]/40",
-                      )}
-                    >
-                      {c[flag.key] ? "✓ " : ""}
-                      {flag.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
 
             <div {...animDelay(2)} className={card}>
               <div className="mb-3 flex items-center justify-between gap-2">

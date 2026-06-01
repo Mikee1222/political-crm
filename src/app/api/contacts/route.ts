@@ -12,7 +12,7 @@ import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
 import { searchParamsToFilters, getDefaultContactFilters } from "@/lib/contacts-filters";
 import { applyContactListFiltersToBuilder } from "@/lib/contacts-query";
 import {
-  enrichContactsWithGroupCounts,
+  enrichContactsWithGroupCountsAndNames,
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
   resolveContactListFilterIds,
@@ -20,7 +20,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const SELECT_LIST =
-  "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )";
+  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, is_dead, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QueryBuilder = any;
@@ -79,7 +79,7 @@ async function enrichContactsWithGroupCount(
   rows: Array<Record<string, unknown>>,
 ) {
   if (!rows.length) return rows;
-  return enrichContactsWithGroupCounts(
+  return enrichContactsWithGroupCountsAndNames(
     supabase,
     rows as { id: string; group_id?: string | null }[],
   );

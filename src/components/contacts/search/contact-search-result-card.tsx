@@ -6,6 +6,7 @@ import { callStatusLabel, lux } from "@/lib/luxury-styles";
 import { getAgeFromBirthday } from "@/lib/contact-birthday";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { cn } from "@/lib/utils";
+import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 
 export type ContactSearchResult = {
   id: string;
@@ -13,6 +14,10 @@ export type ContactSearchResult = {
   last_name: string;
   phone: string | null;
   phone2?: string | null;
+  landline?: string | null;
+  email?: string | null;
+  is_dead?: boolean | null;
+  group_names?: string[];
   municipality: string | null;
   father_name?: string | null;
   birthday?: string | null;
@@ -95,6 +100,7 @@ export function ContactSearchResultCard({
           {initials}
         </div>
         <div className="min-w-0 flex-1">
+          <ContactStatusBadges contact={c} size="xs" className="mb-1.5" />
           <div className="truncate text-[15px] font-bold text-[var(--text-primary)]">
             {c.first_name} {c.last_name}
           </div>

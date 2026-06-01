@@ -226,6 +226,22 @@ export async function enrichContactsWithGroupCounts<T extends { id: string; grou
   return attachGroupCounts(contacts, counts);
 }
 
+/** List/search cards: membership count + all group names (for auto flags). */
+export async function enrichContactsWithGroupCountsAndNames<
+  T extends { id: string; group_id?: string | null },
+>(supabase: SupabaseClient, contacts: T[]): Promise<(T & { group_count: number; group_names: string[] })[]> {
+  const withCounts = await enrichContactsWithGroupCounts(supabase, contacts);
+  if (!withCounts.length) return [];
+  const namesMap = await fetchGroupNamesByContactId(
+    supabase,
+    withCounts.map((c) => c.id),
+  );
+  return withCounts.map((c) => ({
+    ...c,
+    group_names: namesMap.get(c.id) ?? [],
+  }));
+}
+
 export async function fetchGroupNamesByContactId(
   supabase: SupabaseClient,
   contactIds: string[],

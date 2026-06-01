@@ -61,6 +61,7 @@ import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider
 import { EmptyState } from "@/components/ui/empty-state";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 import { cn } from "@/lib/utils";
+import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 
 type Contact = {
   id: string;
@@ -69,6 +70,9 @@ type Contact = {
   phone: string;
   phone2?: string | null;
   landline?: string | null;
+  email?: string | null;
+  is_dead?: boolean | null;
+  group_names?: string[];
   area: string | null;
   municipality: string | null;
   call_status: string | null;
@@ -319,6 +323,7 @@ function ContactDesktopRowCard({
           />
         </div>
         <div className="min-w-0 flex-1">
+          <ContactStatusBadges contact={c} size="xs" className="mb-1.5" />
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
               className="h-1.5 w-1.5 shrink-0 rounded-full"
