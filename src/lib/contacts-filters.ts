@@ -2,29 +2,49 @@
  * URL query <-> /api/contacts and /contacts filter state (shared: CRM list + Alexandra).
  */
 
+/** Αδιάφορο | Έχει | Δεν έχει — τηλέφωνο, κινητό, σταθερό, email */
+export type ContactPresenceFilter = "" | "has" | "not";
+
 export type ContactListFilters = {
   search: string;
+  first_name: string;
+  last_name: string;
+  father_name: string;
   call_status: string;
   call_statuses: string[];
   area: string;
   municipality: string;
+  toponym: string;
   priority: string;
   tag: string;
   political_stance: string;
   phone: string;
+  mobile_presence: ContactPresenceFilter;
+  landline_presence: ContactPresenceFilter;
+  email_presence: ContactPresenceFilter;
   group_id: string;
   group_ids: string[];
   exclude_group_ids: string[];
+  /** OR = σε οποιαδήποτε ομάδα (default), AND = σε όλες τις επιλεγμένες */
+  group_match: "or" | "and";
+  source_ids: string[];
+  exclude_source_ids: string[];
   not_contacted_days: string;
   score_tier: string;
   is_volunteer: boolean;
   nameday_today: boolean;
+  birthday_today: boolean;
   age_min: string;
   age_max: string;
   birth_year_from: string;
   birth_year_to: string;
   volunteer_area: string;
   gender: string;
+  /** has = έχει εκλ. περιφέρεια, not = δεν έχει */
+  ekl_ar: "" | "has" | "not";
+  electoral_district: string;
+  has_request: "" | "has" | "not";
+  request_status: string;
   limit: string;
   /** 1-based page for list (50 per page when not using `limit` combobox mode) */
   page: string;
@@ -45,16 +65,32 @@ function uniq(ids: string[]): string[] {
 /** From URLSearchParams to partial filter state; merge with existing defaults. */
 export function searchParamsToFilters(sp: URLSearchParams, prev?: Partial<ContactListFilters>): ContactListFilters {
   const callStatuses = splitCsv(sp.get("call_statuses") ?? sp.get("call_status_in"));
+  const presence = (
+    key: "mobile_presence" | "landline_presence" | "email_presence",
+  ): ContactPresenceFilter => {
+    const v = sp.get(key) ?? prev?.[key];
+    return v === "has" || v === "not" ? v : "";
+  };
+  const ekl = sp.get("ekl_ar") ?? prev?.ekl_ar ?? "";
+  const hasReq = sp.get("has_request") ?? prev?.has_request ?? "";
+
   return {
     search: sp.get("search") ?? sp.get("name") ?? prev?.search ?? "",
+    first_name: sp.get("first_name") ?? prev?.first_name ?? "",
+    last_name: sp.get("last_name") ?? prev?.last_name ?? "",
+    father_name: sp.get("father_name") ?? prev?.father_name ?? "",
     call_status: sp.get("call_status") ?? prev?.call_status ?? "",
     call_statuses: callStatuses.length ? callStatuses : (prev?.call_statuses ?? []),
     area: sp.get("area") ?? prev?.area ?? "",
     municipality: sp.get("municipality") ?? prev?.municipality ?? "",
+    toponym: sp.get("toponym") ?? prev?.toponym ?? "",
     priority: sp.get("priority") ?? prev?.priority ?? "",
     tag: sp.get("tag") ?? prev?.tag ?? "",
     political_stance: sp.get("political_stance") ?? prev?.political_stance ?? "",
     phone: sp.get("phone") ?? prev?.phone ?? "",
+    mobile_presence: presence("mobile_presence"),
+    landline_presence: presence("landline_presence"),
+    email_presence: presence("email_presence"),
     group_id: sp.get("group_id") ?? prev?.group_id ?? "",
     group_ids: (() => {
       const a = sp.get("group_ids");
@@ -66,16 +102,32 @@ export function searchParamsToFilters(sp: URLSearchParams, prev?: Partial<Contac
       if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
       return prev?.exclude_group_ids ?? [];
     })(),
+    group_match: sp.get("group_match") === "and" ? "and" : (prev?.group_match ?? "or"),
+    source_ids: (() => {
+      const a = sp.get("source_ids");
+      if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
+      return prev?.source_ids ?? [];
+    })(),
+    exclude_source_ids: (() => {
+      const a = sp.get("exclude_source_ids");
+      if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
+      return prev?.exclude_source_ids ?? [];
+    })(),
     not_contacted_days: sp.get("not_contacted_days") ?? prev?.not_contacted_days ?? "",
     score_tier: sp.get("score_tier") ?? prev?.score_tier ?? "",
     is_volunteer: sp.get("is_volunteer") === "1" || sp.get("is_volunteer") === "true",
     nameday_today: sp.get("nameday_today") === "1",
+    birthday_today: sp.get("birthday_today") === "1",
     age_min: sp.get("age_min") ?? prev?.age_min ?? "",
     age_max: sp.get("age_max") ?? prev?.age_max ?? "",
     birth_year_from: sp.get("birth_year_from") ?? prev?.birth_year_from ?? "",
     birth_year_to: sp.get("birth_year_to") ?? prev?.birth_year_to ?? "",
     volunteer_area: sp.get("volunteer_area") ?? prev?.volunteer_area ?? "",
     gender: sp.get("gender") ?? prev?.gender ?? "",
+    ekl_ar: ekl === "has" || ekl === "not" ? ekl : "",
+    electoral_district: sp.get("electoral_district") ?? prev?.electoral_district ?? "",
+    has_request: hasReq === "has" || hasReq === "not" ? hasReq : "",
+    request_status: sp.get("request_status") ?? prev?.request_status ?? "",
     limit: sp.get("limit") ?? prev?.limit ?? "",
     page: sp.get("page") ?? prev?.page ?? "1",
   };
@@ -91,6 +143,9 @@ function pushIf(p: URLSearchParams, key: string, value: string | null | undefine
 export function contactFiltersToSearchParams(f: ContactListFilters, opts?: { forPage?: boolean }): URLSearchParams {
   const p = new URLSearchParams();
   pushIf(p, "search", f.search);
+  pushIf(p, "first_name", f.first_name);
+  pushIf(p, "last_name", f.last_name);
+  pushIf(p, "father_name", f.father_name);
   if (f.call_statuses && f.call_statuses.length) {
     p.set("call_statuses", f.call_statuses.join(","));
   } else {
@@ -98,23 +153,35 @@ export function contactFiltersToSearchParams(f: ContactListFilters, opts?: { for
   }
   pushIf(p, "area", f.area);
   pushIf(p, "municipality", f.municipality);
+  pushIf(p, "toponym", f.toponym);
   pushIf(p, "priority", f.priority);
   pushIf(p, "tag", f.tag);
   pushIf(p, "political_stance", f.political_stance);
   pushIf(p, "phone", f.phone);
+  pushIf(p, "mobile_presence", f.mobile_presence);
+  pushIf(p, "landline_presence", f.landline_presence);
+  pushIf(p, "email_presence", f.email_presence);
   if (f.group_ids?.length) p.set("group_ids", f.group_ids.join(","));
   if (f.exclude_group_ids?.length) p.set("exclude_group_ids", f.exclude_group_ids.join(","));
+  if (f.group_match === "and") p.set("group_match", "and");
+  if (f.source_ids?.length) p.set("source_ids", f.source_ids.join(","));
+  if (f.exclude_source_ids?.length) p.set("exclude_source_ids", f.exclude_source_ids.join(","));
   if (!f.group_ids?.length && f.group_id) p.set("group_id", f.group_id);
   pushIf(p, "not_contacted_days", f.not_contacted_days);
   pushIf(p, "score_tier", f.score_tier);
   if (f.is_volunteer) p.set("is_volunteer", "1");
   if (f.nameday_today) p.set("nameday_today", "1");
+  if (f.birthday_today) p.set("birthday_today", "1");
   pushIf(p, "age_min", f.age_min);
   pushIf(p, "age_max", f.age_max);
   pushIf(p, "birth_year_from", f.birth_year_from);
   pushIf(p, "birth_year_to", f.birth_year_to);
   pushIf(p, "volunteer_area", f.volunteer_area);
   pushIf(p, "gender", f.gender);
+  pushIf(p, "ekl_ar", f.ekl_ar);
+  pushIf(p, "electoral_district", f.electoral_district);
+  pushIf(p, "has_request", f.has_request);
+  pushIf(p, "request_status", f.request_status);
   pushIf(p, "limit", f.limit);
   if (f.page && f.page !== "1") p.set("page", f.page);
   if (opts?.forPage) p.set("vf", "1");
@@ -129,29 +196,62 @@ export function buildContactsPageUrl(f: ContactListFilters): string {
   return s ? `/contacts?${s}` : "/contacts?vf=1";
 }
 
+export function buildContactSearchPageUrl(f: ContactListFilters): string {
+  const s = contactFiltersToSearchParams(f).toString();
+  return s ? `/contacts/search?${s}` : "/contacts/search";
+}
+
+export function hasActiveContactFilters(f: ContactListFilters): boolean {
+  const d = getDefaultContactFilters();
+  const keys = Object.keys(d) as (keyof ContactListFilters)[];
+  for (const k of keys) {
+    const a = f[k];
+    const b = d[k];
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length || a.some((v, i) => v !== b[i])) return true;
+    } else if (a !== b) return true;
+  }
+  return false;
+}
+
 const DEFAULT_FILTERS: ContactListFilters = {
   search: "",
+  first_name: "",
+  last_name: "",
+  father_name: "",
   call_status: "",
   call_statuses: [],
   area: "",
   municipality: "",
+  toponym: "",
   priority: "",
   tag: "",
   political_stance: "",
   phone: "",
+  mobile_presence: "",
+  landline_presence: "",
+  email_presence: "",
   group_id: "",
   group_ids: [],
   exclude_group_ids: [],
+  group_match: "or",
+  source_ids: [],
+  exclude_source_ids: [],
   not_contacted_days: "",
   score_tier: "",
   is_volunteer: false,
   nameday_today: false,
+  birthday_today: false,
   age_min: "",
   age_max: "",
   birth_year_from: "",
   birth_year_to: "",
   volunteer_area: "",
   gender: "",
+  ekl_ar: "",
+  electoral_district: "",
+  has_request: "",
+  request_status: "",
   limit: "",
   page: "1",
 };
@@ -171,6 +271,23 @@ export function applySavedFilterJson(
   if (!j || typeof j !== "object") return base;
   const o = j as Record<string, unknown>;
   if (typeof o.search === "string") base.search = o.search;
+  if (typeof o.first_name === "string") base.first_name = o.first_name;
+  if (typeof o.last_name === "string") base.last_name = o.last_name;
+  if (typeof o.father_name === "string") base.father_name = o.father_name;
+  if (typeof o.toponym === "string") base.toponym = o.toponym;
+  if (o.mobile_presence === "has" || o.mobile_presence === "not") base.mobile_presence = o.mobile_presence;
+  if (o.landline_presence === "has" || o.landline_presence === "not") {
+    base.landline_presence = o.landline_presence;
+  }
+  if (o.email_presence === "has" || o.email_presence === "not") base.email_presence = o.email_presence;
+  if (o.group_match === "and") base.group_match = "and";
+  if (Array.isArray(o.source_ids)) base.source_ids = o.source_ids.map(String);
+  if (Array.isArray(o.exclude_source_ids)) base.exclude_source_ids = o.exclude_source_ids.map(String);
+  if (o.birthday_today === true) base.birthday_today = true;
+  if (o.ekl_ar === "has" || o.ekl_ar === "not") base.ekl_ar = o.ekl_ar;
+  if (typeof o.electoral_district === "string") base.electoral_district = o.electoral_district;
+  if (o.has_request === "has" || o.has_request === "not") base.has_request = o.has_request;
+  if (typeof o.request_status === "string") base.request_status = o.request_status;
   if (Array.isArray(o.call_statuses)) base.call_statuses = o.call_statuses.map(String);
   if (Array.isArray(o.call_status) && o.call_status.length) {
     base.call_statuses = o.call_status.map(String);

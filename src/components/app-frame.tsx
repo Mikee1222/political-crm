@@ -70,6 +70,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon; minRole: Role };
 const NAV_CONFIG: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: ChartColumnBig, minRole: "manager" },
   { href: "/contacts", label: "Επαφές", icon: Users, minRole: "caller" },
+  { href: "/contacts/search", label: "Αναζήτηση", icon: Search, minRole: "caller" },
   { href: "/map", label: "Χάρτης", icon: MapIcon, minRole: "manager" },
   { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager" },
   { href: "/requests-scheduler", label: "Πρόγραμμα Αιτημάτων", icon: CalendarClock, minRole: "manager" },
@@ -89,7 +90,7 @@ const NAV_CONFIG: NavItem[] = [
 ];
 
 const groupDefs: { id: string; label: string; hrefs: string[] }[] = [
-  { id: "kyria", label: "ΚΥΡΙΑ", hrefs: ["/dashboard", "/contacts", "/map"] },
+  { id: "kyria", label: "ΚΥΡΙΑ", hrefs: ["/dashboard", "/contacts", "/contacts/search", "/map"] },
   { id: "politika", label: "ΠΟΛΙΤΙΚΑ", hrefs: ["/requests", "/requests-scheduler", "/campaigns", "/events"] },
   { id: "organosi", label: "ΟΡΓΑΝΩΣΗ", hrefs: ["/tasks", "/volunteers", "/analytics", "/namedays"] },
   { id: "ergaleia", label: "ΕΡΓΑΛΕΙΑ", hrefs: ["/schedule", "/data-tools", "/qrcode", "/polls", "/documents", "/content"] },
@@ -112,6 +113,7 @@ const settingsItem: NavItem = navItemByHref.get("/settings")!;
 
 function pageTitle(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "Dashboard";
+  if (pathname.startsWith("/contacts/search")) return "Αναζήτηση επαφών";
   if (pathname.startsWith("/contacts")) return "Επαφές";
   if (pathname.startsWith("/map") || pathname.startsWith("/heatmap")) return "Χάρτης";
   if (pathname.startsWith("/namedays")) return "Εορτολόγιο";
@@ -210,7 +212,10 @@ function NavItemRow({
   showLabels: boolean;
 }) {
   const Icon = item.icon;
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const active =
+    pathname === item.href ||
+    (pathname.startsWith(`${item.href}/`) &&
+      !(item.href === "/contacts" && pathname.startsWith("/contacts/search")));
   return (
     <Link
       href={item.href}

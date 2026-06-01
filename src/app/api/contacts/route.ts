@@ -15,7 +15,7 @@ import {
   enrichContactsWithGroupCounts,
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
-  resolveGroupFilterContactIds,
+  resolveContactListFilterIds,
 } from "@/lib/contact-group-members";
 export const dynamic = "force-dynamic";
 
@@ -51,7 +51,7 @@ function applyBirthdayAgeFilters(query: QueryBuilder, ageMin: string, ageMax: st
 function applyApiContactFilters(
   query: QueryBuilder,
   f: ReturnType<typeof getDefaultContactFilters>,
-  groupResolution: Awaited<ReturnType<typeof resolveGroupFilterContactIds>>,
+  groupResolution: Awaited<ReturnType<typeof resolveContactListFilterIds>>,
 ) {
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
   query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution);
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 
     const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
     console.log("contacts query filters:", JSON.stringify(f));
-    const groupResolution = await resolveGroupFilterContactIds(supabase, f);
+    const groupResolution = await resolveContactListFilterIds(supabase, f);
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;
     const listLimit = Number.isFinite(parsedLimit) ? Math.min(10_000, Math.max(1, parsedLimit)) : null;

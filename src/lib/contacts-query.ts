@@ -39,9 +39,42 @@ export function applyContactListFiltersToBuilder(
   } else if (callStatuses.length > 1) {
     query = query.in("call_status", callStatuses);
   }
+  if (f.first_name?.trim()) query = query.ilike("first_name", `%${f.first_name.trim()}%`);
+  if (f.last_name?.trim()) query = query.ilike("last_name", `%${f.last_name.trim()}%`);
+  if (f.father_name?.trim()) query = query.ilike("father_name", `%${f.father_name.trim()}%`);
   if (f.area) query = query.eq("area", f.area);
   if (f.municipality) query = query.eq("municipality", f.municipality);
+  if (f.toponym?.trim()) query = query.ilike("toponym", `%${f.toponym.trim()}%`);
   if (f.gender) query = query.eq("gender", f.gender);
+  if (f.birthday_today) {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    query = query.like("birthday", `%-${mm}-${dd}`);
+  }
+  if (f.ekl_ar === "has") {
+    query = query.not("electoral_district", "is", null).neq("electoral_district", "");
+  } else if (f.ekl_ar === "not") {
+    query = query.or("electoral_district.is.null,electoral_district.eq.");
+  }
+  if (f.electoral_district?.trim()) {
+    query = query.ilike("electoral_district", `%${f.electoral_district.trim()}%`);
+  }
+  if (f.mobile_presence === "has") {
+    query = query.or("phone.neq.,phone2.neq.").not("may_not_have_mobile", "eq", true);
+  } else if (f.mobile_presence === "not") {
+    query = query.or("may_not_have_mobile.eq.true,and(phone.is.null,phone2.is.null),and(phone.eq.,phone2.eq.)");
+  }
+  if (f.landline_presence === "has") {
+    query = query.not("landline", "is", null).neq("landline", "").not("may_not_have_landline", "eq", true);
+  } else if (f.landline_presence === "not") {
+    query = query.or("may_not_have_landline.eq.true,landline.is.null,landline.eq.");
+  }
+  if (f.email_presence === "has") {
+    query = query.not("email", "is", null).neq("email", "").not("may_not_have_email", "eq", true);
+  } else if (f.email_presence === "not") {
+    query = query.or("may_not_have_email.eq.true,email.is.null,email.eq.");
+  }
   if (f.priority) query = query.eq("priority", f.priority);
   if (f.tag) query = query.contains("tags", [f.tag]);
   if (f.political_stance) query = query.eq("political_stance", f.political_stance);

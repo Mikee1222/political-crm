@@ -15,20 +15,54 @@ export type GroupFilterResolution = {
 
 const NO_MATCH_ID = "00000000-0000-0000-0000-000000000000";
 
+function intersectIdSets(sets: string[][]): string[] {
+  if (!sets.length) return [];
+  const [first, ...rest] = sets;
+  const base = new Set(first);
+  for (const s of rest) {
+    const next = new Set(s);
+    for (const id of base) {
+      if (!next.has(id)) base.delete(id);
+    }
+  }
+  return [...base];
+}
+
+async function contactIdsForGroups(
+  supabase: SupabaseClient,
+  groupIds: string[],
+): Promise<string[]> {
+  if (!groupIds.length) return [];
+  const { data, error } = await supabase
+    .from("contact_group_members")
+    .select("contact_id, group_id")
+    .in("group_id", groupIds);
+  if (error) throw error;
+  return [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)))];
+}
+
 export async function resolveGroupFilterContactIds(
   supabase: SupabaseClient,
-  f: Pick<ContactListFilters, "group_id" | "group_ids" | "exclude_group_ids">,
+  f: Pick<ContactListFilters, "group_id" | "group_ids" | "exclude_group_ids" | "group_match">,
 ): Promise<GroupFilterResolution> {
   const includeGroupIds = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
 
   let includeContactIds: string[] | null = null;
   if (includeGroupIds.length) {
-    const { data, error } = await supabase
-      .from("contact_group_members")
-      .select("contact_id")
-      .in("group_id", includeGroupIds);
-    if (error) throw error;
-    includeContactIds = [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)))];
+    if (f.group_match === "and" && includeGroupIds.length > 1) {
+      const perGroup: string[][] = [];
+      for (const gid of includeGroupIds) {
+        const { data, error } = await supabase
+          .from("contact_group_members")
+          .select("contact_id")
+          .eq("group_id", gid);
+        if (error) throw error;
+        perGroup.push((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)));
+      }
+      includeContactIds = intersectIdSets(perGroup);
+    } else {
+      includeContactIds = await contactIdsForGroups(supabase, includeGroupIds);
+    }
   }
 
   let excludeContactIds: string[] = [];
@@ -42,6 +76,72 @@ export async function resolveGroupFilterContactIds(
   }
 
   return { includeContactIds, excludeContactIds };
+}
+
+function intersectInclude(
+  current: string[] | null,
+  next: string[],
+): string[] {
+  if (!next.length) return [];
+  if (current === null) return [...new Set(next)];
+  const allow = new Set(next);
+  return current.filter((id) => allow.has(id));
+}
+
+async function contactIdsForSources(supabase: SupabaseClient, sourceIds: string[]): Promise<string[]> {
+  if (!sourceIds.length) return [];
+  const { data, error } = await supabase
+    .from("contact_source_members")
+    .select("contact_id")
+    .in("source_id", sourceIds);
+  if (error) throw error;
+  return [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)))];
+}
+
+async function contactIdsWithRequests(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase.from("requests").select("contact_id").not("contact_id", "is", null);
+  if (error) throw error;
+  return [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)).filter(Boolean))];
+}
+
+/** Merges group, source, and request id-based filters into one resolution. */
+export async function resolveContactListFilterIds(
+  supabase: SupabaseClient,
+  f: ContactListFilters,
+): Promise<GroupFilterResolution> {
+  const groupRes = await resolveGroupFilterContactIds(supabase, f);
+  let includeContactIds = groupRes.includeContactIds;
+  const excludeSet = new Set(groupRes.excludeContactIds);
+
+  if (f.source_ids.length) {
+    const ids = await contactIdsForSources(supabase, f.source_ids);
+    includeContactIds = intersectInclude(includeContactIds, ids);
+  }
+  if (f.exclude_source_ids.length) {
+    const ids = await contactIdsForSources(supabase, f.exclude_source_ids);
+    for (const id of ids) excludeSet.add(id);
+  }
+  if (f.has_request === "has") {
+    const ids = await contactIdsWithRequests(supabase);
+    includeContactIds = intersectInclude(includeContactIds, ids);
+  } else if (f.has_request === "not") {
+    const ids = await contactIdsWithRequests(supabase);
+    for (const id of ids) excludeSet.add(id);
+  }
+  if (f.request_status.trim()) {
+    const { getRequestStatusQueryValues } = await import("@/lib/request-statuses");
+    const statuses = getRequestStatusQueryValues(f.request_status);
+    const { data, error } = await supabase
+      .from("requests")
+      .select("contact_id")
+      .in("status", statuses)
+      .not("contact_id", "is", null);
+    if (error) throw error;
+    const ids = [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)).filter(Boolean))];
+    includeContactIds = intersectInclude(includeContactIds, ids);
+  }
+
+  return { includeContactIds, excludeContactIds: [...excludeSet] };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

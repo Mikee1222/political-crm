@@ -13,7 +13,7 @@ import { callStatusLabel } from "@/lib/luxury-styles";
 import { nextJsonError } from "@/lib/api-resilience";
 import {
   fetchGroupNamesByContactId,
-  resolveGroupFilterContactIds,
+  resolveContactListFilterIds,
 } from "@/lib/contact-group-members";
 
 export const dynamic = "force-dynamic";
@@ -72,11 +72,11 @@ export async function GET(request: NextRequest) {
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
-        qn = applyContactListFiltersToBuilder(qn, f, await resolveGroupFilterContactIds(supabase, f));
+        qn = applyContactListFiltersToBuilder(qn, f, await resolveContactListFilterIds(supabase, f));
         query = qn;
       }
     } else if (filtered) {
-      const groupResolution = await resolveGroupFilterContactIds(supabase, f);
+      const groupResolution = await resolveContactListFilterIds(supabase, f);
       query = applyContactListFiltersToBuilder(
         supabase.from("contacts").select(SELECT_EXPORT),
         f,
