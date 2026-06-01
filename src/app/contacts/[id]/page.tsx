@@ -202,6 +202,16 @@ type ContactNoteItem = {
   author_full_name: string;
 };
 
+type ContactCallLogItem = {
+  id: string;
+  contact_id: string;
+  contacted_at: string;
+  marked_by_user_id: string | null;
+  marked_by_name: string | null;
+  marker_name: string | null;
+  created_at: string;
+};
+
 const CALL_OPTS = CONTACT_CALL_STATUS_OPTIONS;
 
 function disp(v: string | null | undefined) {
@@ -372,6 +382,8 @@ function ContactDetailPage() {
   const { openTab } = useContactTabs();
   const isCaller = profile?.role === "caller";
   const canManage = hasMinRole(profile?.role, "manager");
+  const canDeleteCommLogs =
+    profile?.role === "admin" && profile?.permissions?.["communication_logs_delete"] === true;
   const { showToast } = useFormToast();
   const [contact, setContact] = useState<Contact | null>(null);
   const [buf, setBuf] = useState<Contact | null>(null);
@@ -399,6 +411,8 @@ function ContactDetailPage() {
   const [supporters, setSupporters] = useState<SupporterRow[]>([]);
   const [newSup, setNewSup] = useState({ support_type: "Οικονομική", amount: "", date: "", notes: "" });
   const [contactNotes, setContactNotes] = useState<ContactNoteItem[]>([]);
+  const [callLogs, setCallLogs] = useState<ContactCallLogItem[]>([]);
+  const [markingContacted, setMarkingContacted] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSending, setNoteSending] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -473,9 +487,10 @@ function ContactDetailPage() {
         });
       };
       try {
-        const [res, notesRes] = await Promise.all([
+        const [res, notesRes, logsRes] = await Promise.all([
           fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}`, { signal }),
           fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/notes`, { signal }),
+          fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/call-logs`, { signal }),
         ]);
         if (dead()) return;
         const data = (await res.json().catch(() => ({}))) as {
@@ -494,11 +509,21 @@ function ContactDetailPage() {
             notes = [];
           }
         }
+        let logs: ContactCallLogItem[] = [];
+        if (logsRes.ok) {
+          try {
+            const ljson = (await logsRes.json()) as { logs?: ContactCallLogItem[] };
+            logs = ljson.logs ?? [];
+          } catch {
+            logs = [];
+          }
+        }
         if (dead()) return;
         if (data.error) {
           apply(() => {
             setContact(null);
             setContactNotes([]);
+            setCallLogs([]);
             setBuf(null);
             setEditing(null);
             setCalls([]);
@@ -534,6 +559,7 @@ function ContactDetailPage() {
         if (dead()) return;
         apply(() => {
           setContactNotes(notes);
+          setCallLogs(logs);
           if (raw) {
             const g = raw.contact_groups;
             const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
@@ -566,6 +592,7 @@ function ContactDetailPage() {
         apply(() => {
           setContact(null);
           setContactNotes([]);
+          setCallLogs([]);
           setSupporters([]);
           setCalls([]);
           setTasks([]);
@@ -864,6 +891,9 @@ function ContactDetailPage() {
 
   const c = contact;
   const w = buf ?? c;
+  const latestCommLog = callLogs[0] ?? null;
+  const lastCommAt = latestCommLog?.contacted_at ?? c?.last_contacted_at ?? null;
+  const lastCommMarker = latestCommLog?.marker_name?.trim() || null;
 
   const startEdit = (s: Exclude<Section, null>) => {
     if (!c || !canManage) return;
@@ -1125,21 +1155,54 @@ function ContactDetailPage() {
   };
 
   const handleMarkContacted = async () => {
-    if (!c) return;
-    const now = new Date().toISOString();
+    if (!c || !id || markingContacted) return;
+    setMarkingContacted(true);
     try {
-      const res = await fetchWithTimeout(`/api/contacts/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ last_contacted_at: now }),
+      const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/call-logs`, {
+        method: "POST",
       });
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        log?: ContactCallLogItem;
+        contact?: { last_contacted_at?: string | null };
+      };
       if (!res.ok) {
         showToast(j.error ?? "Αποτυχία", "error");
         return;
       }
-      setContact((prev) => (prev ? { ...prev, last_contacted_at: now } : prev));
+      const lastAt = j.contact?.last_contacted_at ?? j.log?.contacted_at ?? new Date().toISOString();
+      setContact((prev) => (prev ? { ...prev, last_contacted_at: lastAt } : prev));
+      if (j.log) {
+        setCallLogs((prev) => [j.log as ContactCallLogItem, ...prev]);
+      } else {
+        await load();
+      }
       showToast("Σημειώθηκε επικοινωνία.", "success");
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setMarkingContacted(false);
+    }
+  };
+
+  const handleDeleteCallLog = async (logId: string) => {
+    if (!id || !canDeleteCommLogs) return;
+    if (!confirm("Διαγραφή αυτής της επικοινωνίας;")) return;
+    try {
+      const res = await fetchWithTimeout(
+        `/api/contacts/${encodeURIComponent(id)}/call-logs/${encodeURIComponent(logId)}`,
+        { method: "DELETE" },
+      );
+      const j = (await res.json().catch(() => ({}))) as { error?: string; last_contacted_at?: string | null };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία διαγραφής", "error");
+        return;
+      }
+      setCallLogs((prev) => prev.filter((x) => x.id !== logId));
+      setContact((prev) =>
+        prev ? { ...prev, last_contacted_at: j.last_contacted_at ?? null } : prev,
+      );
+      showToast("Η καταγραφή διαγράφηκε.", "success");
     } catch {
       showToast("Σφάλμα δικτύου.", "error");
     }
@@ -2438,23 +2501,57 @@ function ContactDetailPage() {
                 <Phone className="h-4 w-4 shrink-0 text-[#10B981]" aria-hidden />
                 Τελευταία επικοινωνία
               </h2>
-              {c.last_contacted_at ? (
+              {lastCommAt ? (
                 <div>
-                  <p className="text-sm font-medium text-[var(--text-primary)]">{fmtDateTime(c.last_contacted_at)}</p>
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{fmtDateTime(lastCommAt)}</p>
                   <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                    {formatDistanceToNow(new Date(c.last_contacted_at), { locale: el, addSuffix: true })}
+                    {formatDistanceToNow(new Date(lastCommAt), { locale: el, addSuffix: true })}
                   </p>
+                  {lastCommMarker ? (
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">από: {lastCommMarker}</p>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">Δεν υπάρχει καταγεγραμμένη επικοινωνία.</p>
               )}
+              {callLogs.length > 0 ? (
+                <ul className="mt-3 space-y-0 border-t border-[var(--border)]/60 pt-3">
+                  {callLogs.map((log) => (
+                    <li
+                      key={log.id}
+                      className="flex items-start justify-between gap-2 border-b border-[var(--border)]/40 py-2 last:border-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-[var(--text-primary)]">{fmtDateTime(log.contacted_at)}</p>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          {formatDistanceToNow(new Date(log.contacted_at), { locale: el, addSuffix: true })}
+                        </p>
+                        {log.marker_name?.trim() ? (
+                          <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">από: {log.marker_name.trim()}</p>
+                        ) : null}
+                      </div>
+                      {canDeleteCommLogs ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteCallLog(log.id)}
+                          className="shrink-0 rounded-md p-1 text-[var(--text-muted)] transition hover:bg-red-500/10 hover:text-red-400"
+                          aria-label="Διαγραφή καταγραφής επικοινωνίας"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <button
                 type="button"
+                disabled={markingContacted}
                 onClick={() => void handleMarkContacted()}
-                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#003476] hover:underline"
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#003476] hover:underline disabled:opacity-50"
               >
                 <Check className="h-3 w-3" aria-hidden />
-                Σήμανση ως επικοινωνία τώρα
+                {markingContacted ? "Αποθήκευση…" : "Σήμανση ως επικοινωνία τώρα"}
               </button>
             </div>
 

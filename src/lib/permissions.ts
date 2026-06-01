@@ -59,6 +59,7 @@ export const ALL_PERMISSION_KEYS = [
   "data_tools_export_excel",
   "access_code_view",
   "access_code_revoke",
+  "communication_logs_delete",
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSION_KEYS)[number];
@@ -123,6 +124,7 @@ export const PERMISSION_ROLE_DEFAULTS: Record<PermissionKey, readonly ("admin" |
   data_tools_export_excel: ["admin", "manager"],
   access_code_view: ["admin"],
   access_code_revoke: ["admin"],
+  communication_logs_delete: ["admin"],
 };
 
 export type PermissionCategoryId =
@@ -198,6 +200,7 @@ export const PERMISSION_TOOLTIPS: Record<PermissionKey, string> = {
   alexandra_tool_delete_data: "Εργαλείο: διαγραφή δεδομένων από chat",
   access_code_view: "Προβολή κλειδαριθμού τρέχουσας ώρας",
   access_code_revoke: "Ανάκληση πρόσβασης χρηστών",
+  communication_logs_delete: "Διαγραφή καταγραφών επικοινωνίας από την καρτέλα επαφής",
   settings_view: "Προβολή σελίδας ρυθμίσεων",
   settings_edit: "Επεξεργασία ρυθμίσεων CRM",
   users_manage: "Διαχείριση χρηστών (προσθήκη/διαγραφή)",
@@ -216,6 +219,7 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
       "contacts_export",
       "contacts_import",
       "contacts_bulk",
+      "communication_logs_delete",
     ],
   },
   {
@@ -340,6 +344,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   data_tools_export_excel: "Εξαγωγή Excel",
   access_code_view: "Κλειδαριθμός — προβολή",
   access_code_revoke: "Κλειδαριθμός — ανάκληση",
+  communication_logs_delete: "Διαγραφή καταγραφών επικοινωνίας",
   campaigns_view: "Προβολή καμπανιών",
   campaigns_create: "Δημιουργία καμπανιών",
   campaigns_start: "Εκκίνηση κλήσεων καμπάνιας",

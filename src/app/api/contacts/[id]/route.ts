@@ -118,6 +118,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (Object.keys(updatePayload).length === 0) {
       return NextResponse.json({ error: "Κενό" }, { status: 400 });
     }
+    if (updatePayload.last_contacted_at) {
+      const markerName = profile?.full_name?.trim() || null;
+      await supabase.from("contact_call_logs").insert({
+        contact_id: params.id,
+        contacted_at: updatePayload.last_contacted_at,
+        marked_by_user_id: user.id,
+        marked_by_name: markerName,
+      });
+    }
     const { data: beforeC } = await supabase.from("contacts").select("*").eq("id", params.id).single();
     const beforeR = (beforeC ?? null) as Record<string, unknown> | null;
     const now = new Date().toISOString();
