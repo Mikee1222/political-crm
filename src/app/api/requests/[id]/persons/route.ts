@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
-import { resolveRequestId } from "@/lib/resolve-entity-id";
+import { resolveContactId, resolveRequestId } from "@/lib/resolve-entity-id";
 
 export const dynamic = "force-dynamic";
 
@@ -19,15 +19,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const body = (await request.json()) as { contact_id?: string; role?: string };
-    const contactId = String(body.contact_id ?? "").trim();
     const role = String(body.role ?? "").trim();
-    if (!contactId || !ROLES.has(role)) {
+    if (!ROLES.has(role)) {
       return NextResponse.json({ error: "Άκυρα στοιχεία" }, { status: 400 });
     }
 
     const requestId = await resolveRequestId(supabase, params.id);
     if (!requestId) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
+    const contactId = await resolveContactId(supabase, String(body.contact_id ?? "").trim());
+    if (!contactId) {
+      return NextResponse.json({ error: "Άκυρη επαφή" }, { status: 400 });
     }
 
     const { data, error } = await supabase

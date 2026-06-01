@@ -185,6 +185,14 @@ export default function RequestDetailPage() {
 
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
 
+  const assignedDisplayName = useMemo(() => {
+    const raw = data?.assigned_to?.trim();
+    if (!raw) return null;
+    const byId = staffUsers.find((u) => u.id === raw);
+    if (byId) return byId.full_name?.trim() || byId.email || raw;
+    return raw;
+  }, [data?.assigned_to, staffUsers]);
+
   useEffect(() => {
     if (!canManage) return;
     void fetchWithTimeout("/api/team/assignees")
@@ -471,7 +479,8 @@ export default function RequestDetailPage() {
                   type="button"
                   onClick={() => {
                     setAssignErr("");
-                    setAssignUserId("");
+                    const current = data.assigned_to?.trim() ?? "";
+                    setAssignUserId(staffUsers.some((u) => u.id === current) ? current : "");
                     setAssignOpen(true);
                   }}
                   className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
@@ -481,13 +490,13 @@ export default function RequestDetailPage() {
                 </button>
               )}
             </div>
-            {data.assigned_to ? (
+            {assignedDisplayName ? (
               <div className="flex items-start gap-2.5">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-xs font-bold text-[var(--text-primary)]">
-                  {authorInitials(data.assigned_to)}
+                  {authorInitials(assignedDisplayName)}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{data.assigned_to}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{assignedDisplayName}</p>
                   <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Στέλεχος (εσωτερική ανάθεση)</p>
                 </div>
               </div>
@@ -526,16 +535,12 @@ export default function RequestDetailPage() {
                       setAssignSaving(true);
                       setAssignErr("");
                       try {
-                        const assignee = staffUsers.find((u) => u.id === assignUserId);
-                        const assignedName = assignee
-                          ? assignee.full_name?.trim() || assignee.email || null
-                          : null;
                         const res = await fetchWithTimeout(
                           `/api/requests/${encodeURIComponent(requestApiId)}`,
                           {
-                            method: "PUT",
+                            method: "PATCH",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ assigned_to: assignedName }),
+                            body: JSON.stringify({ assigned_to: assignUserId }),
                           },
                         );
                         const j = (await res.json()) as { error?: string; request?: RequestDetail };

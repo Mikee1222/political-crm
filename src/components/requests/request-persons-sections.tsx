@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { isUuid } from "@/lib/resolve-entity-id";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -19,6 +20,27 @@ export type RequestPersonContact = {
 };
 
 type PersonRole = "requester" | "affected" | "helper" | "handler";
+
+async function addRequestPerson(
+  requestId: string,
+  contactId: string,
+  role: PersonRole,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const trimmed = contactId.trim();
+  if (!isUuid(trimmed)) {
+    return { ok: false, error: "Επιλέξτε έγκυρη επαφή από τη λίστα." };
+  }
+  const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestId)}/persons`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contact_id: trimmed, role }),
+  });
+  const j = (await res.json()) as { error?: string };
+  if (!res.ok) {
+    return { ok: false, error: j.error ?? "Σφάλμα" };
+  }
+  return { ok: true };
+}
 
 const SECTIONS: { role: PersonRole; title: string }[] = [
   { role: "requester", title: "Πρόσωπα που αιτούνται" },
@@ -101,14 +123,9 @@ function PersonSection({
     setSaving(true);
     setErr("");
     try {
-      const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestId)}/persons`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contact_id: contactId, role }),
-      });
-      const j = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+      const result = await addRequestPerson(requestId, contactId, role);
+      if (!result.ok) {
+        setErr(result.error);
         return;
       }
       setAddOpen(false);
@@ -238,14 +255,9 @@ function HandlersSection({
     setSaving(true);
     setErr("");
     try {
-      const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestId)}/persons`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contact_id: contactId, role: "handler" }),
-      });
-      const j = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setErr(j.error ?? "Σφάλμα");
+      const result = await addRequestPerson(requestId, contactId, "handler");
+      if (!result.ok) {
+        setErr(result.error);
         return;
       }
       setAddOpen(false);

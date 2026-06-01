@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useCallback, useEffect, useId, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { isUuid } from "@/lib/resolve-entity-id";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 
 type ContactRow = { id: string; first_name: string; last_name: string; phone: string | null };
@@ -158,6 +159,7 @@ export function ContactSearchCombobox({
             open={open}
             pos={pos}
             panelRef={panelRef}
+            onMouseDown={(e) => e.preventDefault()}
             className="max-h-52 border border-border bg-background py-1 text-sm shadow-xl"
           >
             <ul id={listId + "list"} className="m-0 list-none p-0">
@@ -178,7 +180,9 @@ export function ContactSearchCombobox({
                       type="button"
                       className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-accent"
                       onClick={() => {
-                        onChange(c.id, displayName(c));
+                        const contactUuid = String(c.id ?? "").trim();
+                        if (!isUuid(contactUuid)) return;
+                        onChange(contactUuid, displayName(c));
                         setSelectedLabel(displayName(c));
                         setOpen(false);
                         setQ("");
