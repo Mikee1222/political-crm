@@ -45,24 +45,24 @@ export function ContactLocationSettingsSection() {
         fetchWithTimeout("/api/admin/municipalities/with-counts"),
         fetchWithTimeout("/api/admin/toponyms/with-counts"),
       ]);
+      const errors: string[] = [];
       if (rm.ok) {
         const data = (await rm.json()) as { municipalities?: MunicipalityWithCount[] };
         setMunis(data.municipalities || []);
       } else {
         setMunis([]);
         const j = (await rm.json().catch(() => ({}))) as { error?: string };
-        setLoadErr(j.error ?? "Φόρτωση δήμων");
+        errors.push(j.error ?? "Φόρτωση δήμων");
       }
       if (rt.ok) {
-        const data = (await rt.json()) as ToponymWithCount[] | { toponyms?: ToponymWithCount[] };
-        setTops(
-          (!Array.isArray(data) && data.toponyms) ||
-            (Array.isArray(data) ? data : []) ||
-            [],
-        );
+        const data = (await rt.json()) as { toponyms?: ToponymWithCount[] };
+        setTops(data.toponyms ?? []);
       } else {
         setTops([]);
+        const j = (await rt.json().catch(() => ({}))) as { error?: string };
+        errors.push(j.error ?? "Φόρτωση τοπωνυμίων");
       }
+      if (errors.length) setLoadErr(errors.join(" · "));
     } catch {
       setLoadErr("Σφάλμα δικτύου");
     } finally {

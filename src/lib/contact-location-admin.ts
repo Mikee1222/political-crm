@@ -53,17 +53,60 @@ export async function countContactsByMunicipality(service: SupabaseClient, name:
   return count ?? 0;
 }
 
+const TOPONYM_PAGE = 1500;
+
+/** Contacts store toponym as text (not toponym_id); counts match contacts.toponym to toponyms.name. */
 export async function listToponymsWithContactCounts(service: SupabaseClient): Promise<ToponymWithCount[]> {
-  const { data: tops, error } = await service.from("toponyms").select("id, name").order("name", { ascending: true });
-  if (error) throw error;
+  const countsByName = new Map<string, number>();
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await service
+      .from("contacts")
+      .select("toponym")
+      .not("toponym", "is", null)
+      .range(from, from + BATCH - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const row of data) {
+      const name = String(row.toponym ?? "").trim();
+      if (!name) continue;
+      countsByName.set(name, (countsByName.get(name) ?? 0) + 1);
+    }
+
+    if (data.length < BATCH) break;
+    from += BATCH;
+  }
 
   const rows: ToponymWithCount[] = [];
-  for (const t of tops ?? []) {
-    const name = String(t.name ?? "").trim();
-    if (!name) continue;
-    const contact_count = await countContactsByToponymName(service, name);
-    rows.push({ id: t.id as string, name, contact_count });
+  let topFrom = 0;
+
+  while (true) {
+    const { data: tops, error } = await service
+      .from("toponyms")
+      .select("id, name")
+      .order("name", { ascending: true })
+      .range(topFrom, topFrom + TOPONYM_PAGE - 1);
+
+    if (error) throw error;
+    if (!tops?.length) break;
+
+    for (const t of tops) {
+      const name = String(t.name ?? "").trim();
+      if (!name || name.length <= 2) continue;
+      rows.push({
+        id: t.id as string,
+        name,
+        contact_count: countsByName.get(name) ?? 0,
+      });
+    }
+
+    if (tops.length < TOPONYM_PAGE) break;
+    topFrom += TOPONYM_PAGE;
   }
+
   return rows;
 }
 

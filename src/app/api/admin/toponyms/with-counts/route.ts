@@ -5,6 +5,7 @@ import { requireManagerApi } from "@/lib/require-manager-api";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { listToponymsWithContactCounts } from "@/lib/contact-location-admin";
 
+/** GET toponyms with contact counts (contacts.toponym text matched to toponyms.name). */
 export const dynamic = "force-dynamic";
 
 export async function GET() {
