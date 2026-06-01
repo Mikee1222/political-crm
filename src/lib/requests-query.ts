@@ -35,6 +35,9 @@ export type RequestFilterResolution = {
   requesterContactIds: string[];
   affectedContactIds: string[];
   helperContactIds: string[];
+  requesterRequestIds: string[] | null;
+  affectedRequestIds: string[] | null;
+  helperRequestIds: string[] | null;
   notesRequestIds: string[] | null;
   noMatch: boolean;
 };
@@ -122,12 +125,31 @@ export async function resolveRequestListFilters(
   if (f.helper_name.trim() && helperContactIds.length === 0) noMatch = true;
   if (notesRequestIds && notesRequestIds.length === 0) noMatch = true;
 
+  const requesterRequestIds = f.requester_name.trim()
+    ? await collectRequestIdsForContacts(supabase, requesterContactIds, {
+        column: "contact_id",
+        role: "requester",
+      })
+    : null;
+  const affectedRequestIds = f.affected_name.trim()
+    ? await collectRequestIdsForContacts(supabase, affectedContactIds, {
+        column: "affected_contact_id",
+        role: "affected",
+      })
+    : null;
+  const helperRequestIds = f.helper_name.trim()
+    ? await collectRequestIdsForContacts(supabase, helperContactIds, { role: "helper" })
+    : null;
+
   return {
     categoryNames: [...new Set(categoryNames)],
     excludeCategoryNames: [...new Set(excludeCategoryNames)],
     requesterContactIds,
     affectedContactIds,
     helperContactIds,
+    requesterRequestIds,
+    affectedRequestIds,
+    helperRequestIds,
     notesRequestIds,
     noMatch,
   };
@@ -161,10 +183,9 @@ async function collectRequestIdsForContacts(
   return [...ids];
 }
 
-export async function applyRequestListFiltersToBuilder(
+export function applyRequestListFiltersToBuilder(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
-  supabase: SupabaseClient,
   f: RequestListFilters,
   resolution: RequestFilterResolution,
   opts?: { withSearchEmbed?: boolean; contactIdsFromPhone?: string[] },
@@ -203,27 +224,22 @@ export async function applyRequestListFiltersToBuilder(
     query = query.ilike("request_code", pat);
   }
 
-  if (f.requester_name.trim()) {
-    const ids = await collectRequestIdsForContacts(supabase, resolution.requesterContactIds, {
-      column: "contact_id",
-      role: "requester",
-    });
-    query = ids.length ? query.in("id", ids) : query.eq("id", EMPTY_UUID);
+  if (resolution.requesterRequestIds) {
+    query = resolution.requesterRequestIds.length
+      ? query.in("id", resolution.requesterRequestIds)
+      : query.eq("id", EMPTY_UUID);
   }
 
-  if (f.affected_name.trim()) {
-    const ids = await collectRequestIdsForContacts(supabase, resolution.affectedContactIds, {
-      column: "affected_contact_id",
-      role: "affected",
-    });
-    query = ids.length ? query.in("id", ids) : query.eq("id", EMPTY_UUID);
+  if (resolution.affectedRequestIds) {
+    query = resolution.affectedRequestIds.length
+      ? query.in("id", resolution.affectedRequestIds)
+      : query.eq("id", EMPTY_UUID);
   }
 
-  if (f.helper_name.trim()) {
-    const ids = await collectRequestIdsForContacts(supabase, resolution.helperContactIds, {
-      role: "helper",
-    });
-    query = ids.length ? query.in("id", ids) : query.eq("id", EMPTY_UUID);
+  if (resolution.helperRequestIds) {
+    query = resolution.helperRequestIds.length
+      ? query.in("id", resolution.helperRequestIds)
+      : query.eq("id", EMPTY_UUID);
   }
 
   if (resolution.notesRequestIds) {

@@ -58,15 +58,12 @@ async function fetchRequestsPage(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  let query = supabase
-    .from("requests")
-    .select(BASE_SELECT, { count: "exact" })
-    .order("created_at", { ascending: false });
-  query = await applyRequestListFiltersToBuilder(query, supabase, f, resolution, {
+  let query = supabase.from("requests").select(BASE_SELECT, { count: "exact" });
+  query = applyRequestListFiltersToBuilder(query, f, resolution, {
     withSearchEmbed: Boolean(f.search),
     contactIdsFromPhone,
   });
-  query = query.range(from, to);
+  query = query.order("created_at", { ascending: false }).range(from, to);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any[] | null = null;
@@ -80,30 +77,24 @@ async function fetchRequestsPage(
   count = first.count;
 
   if (error && f.search) {
-    let q2 = supabase
-      .from("requests")
-      .select(FALLBACK_SELECT, { count: "exact" })
-      .order("created_at", { ascending: false });
-    q2 = await applyRequestListFiltersToBuilder(q2, supabase, f, resolution, {
+    let q2 = supabase.from("requests").select(FALLBACK_SELECT, { count: "exact" });
+    q2 = applyRequestListFiltersToBuilder(q2, f, resolution, {
       withSearchEmbed: false,
       contactIdsFromPhone,
     });
-    q2 = q2.range(from, to);
+    q2 = q2.order("created_at", { ascending: false }).range(from, to);
     const second = await q2;
     data = second.data;
     error = second.error;
     count = second.count;
   } else if (error) {
     console.warn("[api/requests GET] embed failed, falling back without contacts:", error.message);
-    let q2 = supabase
-      .from("requests")
-      .select(FALLBACK_SELECT, { count: "exact" })
-      .order("created_at", { ascending: false });
-    q2 = await applyRequestListFiltersToBuilder(q2, supabase, f, resolution, {
+    let q2 = supabase.from("requests").select(FALLBACK_SELECT, { count: "exact" });
+    q2 = applyRequestListFiltersToBuilder(q2, f, resolution, {
       withSearchEmbed: false,
       contactIdsFromPhone,
     });
-    q2 = q2.range(from, to);
+    q2 = q2.order("created_at", { ascending: false }).range(from, to);
     const second = await q2;
     data = second.data;
     error = second.error;
