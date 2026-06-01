@@ -46,14 +46,8 @@ export function ContactLocationSettingsSection() {
         fetchWithTimeout("/api/admin/toponyms/with-counts"),
       ]);
       if (rm.ok) {
-        const data = (await rm.json()) as
-          | MunicipalityWithCount[]
-          | { municipalities?: MunicipalityWithCount[] };
-        setMunis(
-          (!Array.isArray(data) && data.municipalities) ||
-            (Array.isArray(data) ? data : []) ||
-            [],
-        );
+        const data = (await rm.json()) as { municipalities?: MunicipalityWithCount[] };
+        setMunis(data.municipalities || []);
       } else {
         setMunis([]);
         const j = (await rm.json().catch(() => ({}))) as { error?: string };
