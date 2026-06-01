@@ -41,7 +41,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
       .select("id, contact_id, called_at, marked_by_user_id, marked_by_name")
       .eq("contact_id", contactId)
       .not("marked_by_user_id", "is", null)
-      .order("called_at", { ascending: false });
+      .order("called_at", { ascending: false })
+      .limit(1);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }

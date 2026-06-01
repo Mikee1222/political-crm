@@ -276,6 +276,30 @@ function fmtDateTime(s: string | null | undefined) {
   });
 }
 
+const ATHENS_TZ = "Europe/Athens";
+
+function fmtCallLogDateTime(calledAt: string | null | undefined) {
+  if (calledAt == null || String(calledAt).trim() === "") return "—";
+  const d = new Date(calledAt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("el-GR", {
+    timeZone: ATHENS_TZ,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Relative elapsed time from called_at (absolute instant; display is Athens wall clock). */
+function fmtCallLogRelative(calledAt: string | null | undefined) {
+  if (calledAt == null || String(calledAt).trim() === "") return "";
+  const then = new Date(calledAt);
+  if (Number.isNaN(then.getTime())) return "";
+  return formatDistanceToNow(then, { locale: el, addSuffix: true });
+}
+
 function formatDate(s: string | null | undefined) {
   return fmtDateTime(s);
 }
@@ -1172,7 +1196,7 @@ function ContactDetailPage() {
       const lastAt = j.contact?.last_contacted_at ?? j.log?.called_at ?? new Date().toISOString();
       setContact((prev) => (prev ? { ...prev, last_contacted_at: lastAt } : prev));
       if (j.log) {
-        setCallLogs((prev) => [j.log as ContactCallLogItem, ...prev]);
+        setCallLogs([j.log as ContactCallLogItem]);
       } else {
         await load();
       }
@@ -2501,48 +2525,28 @@ function ContactDetailPage() {
                 Τελευταία επικοινωνία
               </h2>
               {lastCommAt ? (
-                <div>
-                  <p className="text-sm font-medium text-[var(--text-primary)]">{fmtDateTime(lastCommAt)}</p>
-                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                    {formatDistanceToNow(new Date(lastCommAt), { locale: el, addSuffix: true })}
-                  </p>
-                  {lastCommMarker ? (
-                    <p className="mt-1 text-xs text-[var(--text-secondary)]">από: {lastCommMarker}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-[var(--text-primary)]">{fmtCallLogDateTime(lastCommAt)}</p>
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">{fmtCallLogRelative(lastCommAt)}</p>
+                    {lastCommMarker ? (
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">από: {lastCommMarker}</p>
+                    ) : null}
+                  </div>
+                  {canDeleteCommLogs && latestCommLog ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteCallLog(latestCommLog.id)}
+                      className="shrink-0 rounded-md p-1 text-[var(--text-muted)] transition hover:bg-red-500/10 hover:text-red-400"
+                      aria-label="Διαγραφή καταγραφής επικοινωνίας"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </button>
                   ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">Δεν υπάρχει καταγεγραμμένη επικοινωνία.</p>
               )}
-              {callLogs.length > 0 ? (
-                <ul className="mt-3 space-y-0 border-t border-[var(--border)]/60 pt-3">
-                  {callLogs.map((log) => (
-                    <li
-                      key={log.id}
-                      className="flex items-start justify-between gap-2 border-b border-[var(--border)]/40 py-2 last:border-0"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-[var(--text-primary)]">{fmtDateTime(log.called_at)}</p>
-                        <p className="text-[11px] text-[var(--text-muted)]">
-                          {formatDistanceToNow(new Date(log.called_at), { locale: el, addSuffix: true })}
-                        </p>
-                        {log.marker_name?.trim() ? (
-                          <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">από: {log.marker_name.trim()}</p>
-                        ) : null}
-                      </div>
-                      {canDeleteCommLogs ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteCallLog(log.id)}
-                          className="shrink-0 rounded-md p-1 text-[var(--text-muted)] transition hover:bg-red-500/10 hover:text-red-400"
-                          aria-label="Διαγραφή καταγραφής επικοινωνίας"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
               <button
                 type="button"
                 disabled={markingContacted}
