@@ -48,6 +48,7 @@ import { useFormToast } from "@/contexts/form-toast-context";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
 import { cn } from "@/lib/utils";
+import { getGroupChipStyle } from "@/lib/color-utils";
 import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 
 const card =
@@ -1758,11 +1759,8 @@ function ContactDetailPage() {
                                 }}
                               />
                               <span
-                                className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
-                                style={{
-                                  borderColor: g.color || "#003476",
-                                  color: g.color || "#003476",
-                                }}
+                                className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                                style={getGroupChipStyle(g.color)}
                               >
                                 {g.name}
                                 {g.year != null ? ` · ${g.year}` : ""}
@@ -1796,12 +1794,8 @@ function ContactDetailPage() {
                           {c.all_groups.map((g) => (
                             <span
                               key={g.id}
-                              className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-semibold"
-                              style={{
-                                borderColor: g.color || "#003476",
-                                color: g.color || "#003476",
-                                background: "var(--bg-elevated)",
-                              }}
+                              className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                              style={getGroupChipStyle(g.color)}
                               title={g.description ?? undefined}
                             >
                               {g.name}

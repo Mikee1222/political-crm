@@ -61,6 +61,7 @@ import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider
 import { EmptyState } from "@/components/ui/empty-state";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
 import { cn } from "@/lib/utils";
+import { getGroupChipStyle } from "@/lib/color-utils";
 import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 
 type Contact = {
@@ -97,12 +98,8 @@ function ContactGroupBadge({ c }: { c: Contact }) {
     <span className="inline-flex items-center gap-1">
       {c.contact_groups ? (
         <span
-          className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-          style={{
-            borderColor: c.contact_groups.color || "#003476",
-            color: c.contact_groups.color || "#003476",
-            background: "var(--bg-elevated)",
-          }}
+          className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+          style={getGroupChipStyle(c.contact_groups.color)}
         >
           {c.contact_groups.name}
         </span>

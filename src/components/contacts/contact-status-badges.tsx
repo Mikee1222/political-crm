@@ -12,25 +12,25 @@ const BADGE_DEFS = [
     key: "noMobile" as const,
     label: "Χωρίς κινητό",
     className:
-      "border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-200",
+      "border-amber-500/45 bg-amber-950/85 text-amber-100 [data-theme='light']:border-amber-600/35 [data-theme='light']:bg-amber-100 [data-theme='light']:text-amber-950",
   },
   {
     key: "noLandline" as const,
     label: "Χωρίς σταθερό",
     className:
-      "border-yellow-500/40 bg-yellow-500/15 text-yellow-900 dark:text-yellow-100",
+      "border-yellow-500/45 bg-yellow-950/85 text-yellow-100 [data-theme='light']:border-yellow-600/35 [data-theme='light']:bg-yellow-100 [data-theme='light']:text-yellow-950",
   },
   {
     key: "noEmail" as const,
     label: "Χωρίς email",
     className:
-      "border-blue-500/40 bg-blue-500/15 text-blue-900 dark:text-blue-100",
+      "border-blue-500/45 bg-blue-950/85 text-blue-100 [data-theme='light']:border-blue-600/35 [data-theme='light']:bg-blue-100 [data-theme='light']:text-blue-950",
   },
   {
     key: "deceased" as const,
     label: "Απεβίωσε",
     className:
-      "border-zinc-700/50 bg-zinc-900/90 text-zinc-100 dark:border-zinc-500/40 dark:bg-zinc-950/90",
+      "border-zinc-500/45 bg-zinc-950/90 text-zinc-100 [data-theme='light']:border-zinc-500/40 [data-theme='light']:bg-zinc-800 [data-theme='light']:text-zinc-50",
   },
 ] as const;
 
