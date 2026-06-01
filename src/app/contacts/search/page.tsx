@@ -108,6 +108,7 @@ function ContactSearchPageInner() {
     try {
       const params = contactFiltersToSearchParams({ ...f, page: String(pageNum) });
       params.set("page_size", String(PAGE_SIZE));
+      console.log("Search params:", params);
       const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
       const data = (await res.json().catch(() => ({}))) as {
         contacts?: ContactSearchResult[];
@@ -141,6 +142,7 @@ function ContactSearchPageInner() {
   const runSearch = useCallback(
     (f: ContactListFilters) => {
       const next = { ...f, page: "1" };
+      setDraftFilters(next);
       setAppliedFilters(next);
       setHasSearched(true);
       setPage(1);
@@ -234,23 +236,26 @@ function ContactSearchPageInner() {
     window.open(`/api/contacts/export?${p.toString()}`, "_blank", "noopener,noreferrer");
   };
 
-  const handleSaveFilters = async () => {
+  const [filtersToSave, setFiltersToSave] = useState<ContactListFilters | null>(null);
+
+  const handleSaveFilters = (f: ContactListFilters) => {
     if (!isAdmin) {
       showToast("Η αποθήκευση φίλτρων απαιτεί δικαιώματα διαχειριστή.", "error");
       return;
     }
+    setFiltersToSave(f);
     setSaveModalOpen(true);
   };
 
   const submitSaveFilter = async () => {
     const name = saveName.trim();
-    if (!name) return;
+    if (!name || !filtersToSave) return;
     setSavingFilters(true);
     try {
       const res = await fetchWithTimeout("/api/saved-filters", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, filters: draftFilters }),
+        body: JSON.stringify({ name, filters: filtersToSave }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
@@ -271,7 +276,7 @@ function ContactSearchPageInner() {
     <ContactSearchFiltersPanel
       filters={draftFilters}
       onChange={setDraftFilters}
-      onSearch={() => runSearch(draftFilters)}
+      onSearch={runSearch}
       onClear={clearFilters}
       onSaveFilters={handleSaveFilters}
       savingFilters={savingFilters}

@@ -28,7 +28,7 @@ function draftFromFilters(f: ContactListFilters): Draft {
   return { ...f, ageGroups };
 }
 
-function filtersFromDraft(d: Draft): ContactListFilters {
+export function filtersFromDraft(d: Draft): ContactListFilters {
   const next = { ...d };
   delete (next as { ageGroups?: string[] }).ageGroups;
   if (d.ageGroups.length === 1) {
@@ -86,9 +86,9 @@ export function ContactSearchFiltersPanel({
 }: {
   filters: ContactListFilters;
   onChange: (f: ContactListFilters) => void;
-  onSearch: () => void;
+  onSearch: (f: ContactListFilters) => void;
   onClear: () => void;
-  onSaveFilters: () => void;
+  onSaveFilters: (f: ContactListFilters) => void;
   savingFilters?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftFromFilters(filters));
@@ -447,8 +447,9 @@ export function ContactSearchFiltersPanel({
           type="button"
           className={lux.btnPrimary + " w-full !rounded-xl !py-3"}
           onClick={() => {
+            const f = filtersFromDraft(draft);
             applyDraft();
-            onSearch();
+            onSearch(f);
           }}
         >
           Αναζήτηση
@@ -460,8 +461,9 @@ export function ContactSearchFiltersPanel({
           type="button"
           className={lux.btnSecondary + " w-full"}
           onClick={() => {
+            const f = filtersFromDraft(draft);
             applyDraft();
-            onSaveFilters();
+            onSaveFilters(f);
           }}
           disabled={savingFilters}
         >
