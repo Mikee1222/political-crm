@@ -49,22 +49,36 @@ export function GeographicDataSection() {
         fetchWithTimeout("/api/admin/toponyms"),
       ]);
       if (rm.ok) {
-        const d = (await rm.json()) as { municipalities?: MunicipalityRow[] };
-        setMunis(d.municipalities ?? []);
+        const data = (await rm.json()) as MunicipalityRow[] | { municipalities?: MunicipalityRow[] };
+        setMunis(
+          (!Array.isArray(data) && data.municipalities) ||
+            (Array.isArray(data) ? data : []) ||
+            [],
+        );
       } else {
         setMunis([]);
         const j = (await rm.json().catch(() => ({}))) as { error?: string };
         setLoadErr(j.error ?? "Φόρτωση δήμων");
       }
       if (rd.ok) {
-        const d = (await rd.json()) as { districts?: ElectoralDistrictAdminRow[] };
-        setDists(d.districts ?? []);
+        const data = (await rd.json()) as
+          | ElectoralDistrictAdminRow[]
+          | { districts?: ElectoralDistrictAdminRow[] };
+        setDists(
+          (!Array.isArray(data) && data.districts) ||
+            (Array.isArray(data) ? data : []) ||
+            [],
+        );
       } else {
         setDists([]);
       }
       if (rt.ok) {
-        const d = (await rt.json()) as { toponyms?: ToponymAdminRow[] };
-        setTops(d.toponyms ?? []);
+        const data = (await rt.json()) as ToponymAdminRow[] | { toponyms?: ToponymAdminRow[] };
+        setTops(
+          (!Array.isArray(data) && data.toponyms) ||
+            (Array.isArray(data) ? data : []) ||
+            [],
+        );
       } else {
         setTops([]);
       }

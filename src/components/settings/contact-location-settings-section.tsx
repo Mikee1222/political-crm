@@ -46,16 +46,26 @@ export function ContactLocationSettingsSection() {
         fetchWithTimeout("/api/admin/toponyms/with-counts"),
       ]);
       if (rm.ok) {
-        const d = (await rm.json()) as { municipalities?: MunicipalityWithCount[] };
-        setMunis(d.municipalities ?? []);
+        const data = (await rm.json()) as
+          | MunicipalityWithCount[]
+          | { municipalities?: MunicipalityWithCount[] };
+        setMunis(
+          (!Array.isArray(data) && data.municipalities) ||
+            (Array.isArray(data) ? data : []) ||
+            [],
+        );
       } else {
         setMunis([]);
         const j = (await rm.json().catch(() => ({}))) as { error?: string };
         setLoadErr(j.error ?? "Φόρτωση δήμων");
       }
       if (rt.ok) {
-        const d = (await rt.json()) as { toponyms?: ToponymWithCount[] };
-        setTops(d.toponyms ?? []);
+        const data = (await rt.json()) as ToponymWithCount[] | { toponyms?: ToponymWithCount[] };
+        setTops(
+          (!Array.isArray(data) && data.toponyms) ||
+            (Array.isArray(data) ? data : []) ||
+            [],
+        );
       } else {
         setTops([]);
       }
