@@ -285,7 +285,7 @@ function ContactSearchPageInner() {
 
   return (
     <div className={cn(lux.pageBg, lux.pageAnimated, "flex min-h-0 flex-1 flex-col")}>
-      <PageHeader title="Αναζήτηση επαφών" subtitle="Προχωρημένα φίλτρα και στοχευμένη λίστα" />
+      <PageHeader title="Αναζήτηση Επαφών" subtitle="Προχωρημένα φίλτρα και στοχευμένη λίστα" />
 
       <div className="relative flex min-h-0 flex-1 gap-0">
         {/* Desktop filters */}
@@ -337,7 +337,7 @@ function ContactSearchPageInner() {
                     επαφές βρέθηκαν
                   </>
                 ) : (
-                  "Αναζήτηση επαφών"
+                  "Αναζήτηση Επαφών"
                 )}
               </h2>
             </div>

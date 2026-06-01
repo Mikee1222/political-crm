@@ -25,8 +25,10 @@ import {
   Megaphone,
   NotebookText,
   PenLine,
+  FileSearch,
   Search,
   Sparkles,
+  UserSearch,
   Users,
   Wrench,
   BarChart3,
@@ -65,15 +67,15 @@ import { normalizeRequestStatus, REQUEST_STATUS_OPEN } from "@/lib/request-statu
 const STORAGE_SIDEBAR = "crm-sidebar-expanded";
 const STORAGE_NAV_GROUPS = "crm-nav-groups";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; minRole: Role };
+type NavItem = { href: string; label: string; icon: LucideIcon; minRole: Role; subOf?: string };
 
 const NAV_CONFIG: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: ChartColumnBig, minRole: "manager" },
   { href: "/contacts", label: "Επαφές", icon: Users, minRole: "caller" },
-  { href: "/contacts/search", label: "Αναζήτηση", icon: Search, minRole: "caller" },
+  { href: "/contacts/search", label: "Αναζήτηση Επαφών", icon: UserSearch, minRole: "caller", subOf: "/contacts" },
   { href: "/map", label: "Χάρτης", icon: MapIcon, minRole: "manager" },
   { href: "/requests", label: "Αιτήματα", icon: NotebookText, minRole: "manager" },
-  { href: "/requests/search", label: "Αναζήτηση", icon: Search, minRole: "manager" },
+  { href: "/requests/search", label: "Αναζήτηση Αιτημάτων", icon: FileSearch, minRole: "manager", subOf: "/requests" },
   { href: "/requests-scheduler", label: "Πρόγραμμα Αιτημάτων", icon: CalendarClock, minRole: "manager" },
   { href: "/campaigns", label: "Καμπάνιες", icon: Megaphone, minRole: "manager" },
   { href: "/events", label: "Εκδηλώσεις", icon: CalendarCheck, minRole: "manager" },
@@ -118,7 +120,7 @@ const settingsItem: NavItem = navItemByHref.get("/settings")!;
 
 function pageTitle(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "Dashboard";
-  if (pathname.startsWith("/contacts/search")) return "Αναζήτηση επαφών";
+  if (pathname.startsWith("/contacts/search")) return "Αναζήτηση Επαφών";
   if (pathname.startsWith("/contacts")) return "Επαφές";
   if (pathname.startsWith("/map") || pathname.startsWith("/heatmap")) return "Χάρτης";
   if (pathname.startsWith("/namedays")) return "Εορτολόγιο";
@@ -127,7 +129,7 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/volunteers")) return "Εθελοντές";
   if (pathname.startsWith("/analytics")) return "Αναλυτικά";
   if (pathname.startsWith("/requests-scheduler")) return "Πρόγραμμα Αιτημάτων";
-  if (pathname.startsWith("/requests/search")) return "Αναζήτηση αιτημάτων";
+  if (pathname.startsWith("/requests/search")) return "Αναζήτηση Αιτημάτων";
   if (pathname.startsWith("/requests")) return "Αιτήματα";
   if (pathname.startsWith("/tasks")) return "Εργασίες";
   if (pathname.startsWith("/schedule")) return "Πρόγραμμα";
@@ -218,6 +220,7 @@ function NavItemRow({
   showLabels: boolean;
 }) {
   const Icon = item.icon;
+  const isSub = Boolean(item.subOf);
   const active =
     pathname === item.href ||
     (pathname.startsWith(`${item.href}/`) &&
@@ -230,16 +233,31 @@ function NavItemRow({
       className={[
         navItemBase,
         "relative",
+        isSub && "ml-3 h-10 max-h-10 gap-2.5 rounded-lg border-l-0 pl-3 pr-3 opacity-95",
         !showLabels && "min-w-0 justify-center pl-0 pr-0",
+        !showLabels && isSub && "ml-0",
         active ? navItemActive : navItemInactive,
+        isSub && !active && "text-[var(--text-muted)] [&>span]:text-[var(--text-muted)]",
       ].join(" ")}
       title={!showLabels ? item.label : undefined}
     >
+      {isSub && showLabels ? (
+        <span
+          className="absolute left-0 top-1/2 h-3 w-px -translate-y-1/2 bg-[var(--accent-gold)]/25"
+          aria-hidden
+        />
+      ) : null}
       <Icon
-        className={["h-5 w-5 shrink-0 transition-colors duration-200 ease-out", active ? navItemIconActive : navItemIconInactive].join(" ")}
+        className={[
+          "shrink-0 transition-colors duration-200 ease-out",
+          isSub ? "h-4 w-4" : "h-5 w-5",
+          active ? navItemIconActive : navItemIconInactive,
+        ].join(" ")}
       />
       {showLabels && (
-        <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{item.label}</span>
+        <span className={["min-w-0 flex-1 truncate font-medium", isSub ? "text-[13px]" : "text-[14px]"].join(" ")}>
+          {item.label}
+        </span>
       )}
     </Link>
   );

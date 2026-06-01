@@ -205,7 +205,7 @@ function RequestSearchPageInner() {
 
   return (
     <div className={cn(lux.pageBg, lux.pageAnimated, "flex min-h-0 flex-1 flex-col")}>
-      <PageHeader title="Αναζήτηση αιτημάτων" subtitle="Προχωρημένα φίλτρα και στοχευμένη λίστα" />
+      <PageHeader title="Αναζήτηση Αιτημάτων" subtitle="Προχωρημένα φίλτρα και στοχευμένη λίστα" />
 
       <div className="relative flex min-h-0 flex-1 gap-0">
         <aside
@@ -255,7 +255,7 @@ function RequestSearchPageInner() {
                     αιτήματα βρέθηκαν
                   </>
                 ) : (
-                  "Αναζήτηση αιτημάτων"
+                  "Αναζήτηση Αιτημάτων"
                 )}
               </h2>
             </div>
