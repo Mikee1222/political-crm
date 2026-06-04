@@ -26,7 +26,7 @@ export function ContactTabsBar() {
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-card px-4 py-1.5 scrollbar-hide">
+    <div className="flex min-h-[44px] shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-card px-4 py-1.5 scrollbar-hide">
       {tabs.map((tab) => (
         <div
           key={tab.id}
@@ -45,7 +45,7 @@ export function ContactTabsBar() {
             }
           }}
           className={cn(
-            "group flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+            "group flex min-h-[44px] flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
             activeTab === tab.id
               ? "bg-primary text-primary-foreground"
               : "bg-muted text-muted-foreground hover:bg-muted/80",

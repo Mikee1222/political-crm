@@ -28,16 +28,12 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
   const mgr = hasMinRole(role, "manager");
   const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
 
-  const isActive = (path: string, exact = false) => {
-    if (exact) return pathname === path;
-    return pathname === path || pathname.startsWith(`${path}/`);
-  };
-
+  const isTabActive = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   const alexActive = pathname.startsWith("/alexandra");
 
   const tabClass = (on: boolean) =>
     [
-      "hq-press-mobile flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-[10px] font-semibold tracking-tight transition-transform duration-200",
+      "hq-press-mobile flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-[10px] font-semibold tracking-tight transition-transform duration-200",
       on ? active : inactive,
       on ? "hq-bottom-nav-item-active" : "opacity-90",
     ].join(" ");
@@ -46,40 +42,29 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
     return (
       <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
         <div className={innerBar}>
-          <Link href="/dashboard" prefetch className={tabClass(isActive("/dashboard", true))}>
-            <Home className={`h-5 w-5 shrink-0 ${isActive("/dashboard", true) ? active : inactive}`} />
+          <Link href="/dashboard" prefetch className={tabClass(pathname === "/dashboard")} aria-current={pathname === "/dashboard" ? "page" : undefined}>
+            <Home className={`h-5 w-5 shrink-0 ${pathname === "/dashboard" ? active : inactive}`} />
             <span>Dashboard</span>
           </Link>
-          <Link href="/contacts" prefetch className={tabClass(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}>
-            <Users className={`h-5 w-5 shrink-0 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? active : inactive}`} />
+          <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
+            <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
             <span>Επαφές</span>
           </Link>
-          <Link href="/requests" prefetch className={`${tabClass(isActive("/requests", true))} relative`}>
-            <Inbox className={`h-5 w-5 shrink-0 ${isActive("/requests", true) ? active : inactive}`} />
+          <Link href="/requests" prefetch className={`${tabClass(isTabActive("/requests"))} relative`} aria-current={isTabActive("/requests") ? "page" : undefined}>
+            <Inbox className={`h-5 w-5 shrink-0 ${isTabActive("/requests") ? active : inactive}`} />
             <span>Αιτήματα</span>
             {openRequestsCount > 0 && (
-              <span
-                className="absolute right-1 top-0 min-w-[1.1rem] rounded-full px-1 text-center text-[9px] font-bold leading-tight"
-                style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}
-              >
+              <span className="absolute right-1 top-0 min-w-[1.1rem] rounded-full px-1 text-center text-[9px] font-bold leading-tight" style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}>
                 {openRequestsCount > 9 ? "9+" : openRequestsCount}
               </span>
             )}
           </Link>
-          <Link href="/campaigns" prefetch className={tabClass(isActive("/campaigns", true))}>
-            <Megaphone className={`h-5 w-5 shrink-0 ${isActive("/campaigns", true) ? active : inactive}`} />
+          <Link href="/campaigns" prefetch className={tabClass(isTabActive("/campaigns"))} aria-current={isTabActive("/campaigns") ? "page" : undefined}>
+            <Megaphone className={`h-5 w-5 shrink-0 ${isTabActive("/campaigns") ? active : inactive}`} />
             <span>Καμπάνιες</span>
           </Link>
           {hasMinRole(role, "caller") ? (
-            <button
-              type="button"
-              className={tabClass(alexActive)}
-              onClick={() => {
-                openMiniFromBubble();
-                setMiniWindowMinimized(false);
-              }}
-              aria-current={alexActive ? "page" : undefined}
-            >
+            <button type="button" className={tabClass(alexActive)} onClick={() => { openMiniFromBubble(); setMiniWindowMinimized(false); }} aria-current={alexActive ? "page" : undefined}>
               <Sparkles className={`h-5 w-5 shrink-0 ${alexActive ? active : inactive}`} />
               <span>Αλεξάνδρα</span>
             </button>
@@ -97,24 +82,16 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
   return (
     <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
       <div className={innerBarVolunteer}>
-        <Link href="/contacts" prefetch className={tabClass(isActive("/contacts", true) || pathname.startsWith("/contacts/"))}>
-          <Users className={`h-5 w-5 shrink-0 ${isActive("/contacts", true) || pathname.startsWith("/contacts/") ? active : inactive}`} />
+        <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
+          <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
           <span>Επαφές</span>
         </Link>
-        <Link href="/namedays" prefetch className={tabClass(isActive("/namedays", true))}>
-          <CalendarDays className={`h-5 w-5 shrink-0 ${isActive("/namedays", true) ? active : inactive}`} />
+        <Link href="/namedays" prefetch className={tabClass(isTabActive("/namedays"))} aria-current={isTabActive("/namedays") ? "page" : undefined}>
+          <CalendarDays className={`h-5 w-5 shrink-0 ${isTabActive("/namedays") ? active : inactive}`} />
           <span>Εορτ.</span>
         </Link>
         {hasMinRole(role, "caller") ? (
-          <button
-            type="button"
-            className={tabClass(alexActive)}
-            onClick={() => {
-              openMiniFromBubble();
-              setMiniWindowMinimized(false);
-            }}
-            aria-current={alexActive ? "page" : undefined}
-          >
+          <button type="button" className={tabClass(alexActive)} onClick={() => { openMiniFromBubble(); setMiniWindowMinimized(false); }} aria-current={alexActive ? "page" : undefined}>
             <Sparkles className={`h-5 w-5 shrink-0 ${alexActive ? active : inactive}`} />
             <span>Αλεξάνδρα</span>
           </button>
@@ -124,12 +101,7 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
             <span>Αλεξάνδρα</span>
           </span>
         )}
-        <button
-          type="button"
-          className={`${tabClass(false)} border-0 bg-transparent text-[var(--nav-mobile-inactive)]`}
-          onClick={onOpenMore}
-          aria-label="Περισσότερα"
-        >
+        <button type="button" className={`${tabClass(false)} border-0 bg-transparent text-[var(--nav-mobile-inactive)]`} onClick={onOpenMore} aria-label="Περισσότερα">
           <Menu className="h-5 w-5" />
           <span>Περισσ.</span>
         </button>

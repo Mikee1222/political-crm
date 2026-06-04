@@ -740,6 +740,31 @@ textarea::placeholder {
   .hq-press-mobile:active {
     transform: scale(0.95);
   }
+  .crm-filter-chips-row {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.375rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.25rem;
+    scrollbar-width: none;
+  }
+  .crm-filter-chips-row::-webkit-scrollbar { display: none; }
+  .crm-filter-chips-row > * { flex-shrink: 0; max-width: min(85vw, 18rem); }
+  .crm-mobile-filter-fab {
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+  }
+  body.focus-mode .crm-mobile-filter-fab { bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)); }
+  .crm-settings-tabs {
+    display: flex; flex-wrap: nowrap; gap: 0.25rem; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .crm-settings-tabs::-webkit-scrollbar { display: none; }
+  .crm-settings-tabs > button { flex-shrink: 0; min-height: 44px; }
+  .hq-form-control, .hq-touch-target { min-height: 44px; }
+  .btn-scale:not(.hq-touch-compact) { min-height: 44px; }
+  .hq-mobile-route-shell { font-size: max(14px, 1rem); }
   .hq-card-tap-feedback:active .hq-card-tap-inner {
     background-color: color-mix(in srgb, var(--accent-gold) 12%, var(--bg-card));
   }

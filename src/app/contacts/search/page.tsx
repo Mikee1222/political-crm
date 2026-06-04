@@ -15,6 +15,7 @@ import {
 } from "@/components/contacts/search/contact-search-result-card";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MobileFilterFab } from "@/components/mobile/mobile-filter-fab";
 import { PageHeader } from "@/components/ui/page-header";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useFormToast } from "@/contexts/form-toast-context";
@@ -409,13 +410,13 @@ function ContactSearchPageInner() {
             ) : null}
 
             {/* Results */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-3 sm:p-4">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-3 pb-20 sm:p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               {!focusMode ? (
                 <button
                   type="button"
-                  className={cn(lux.btnSecondary, "lg:hidden !py-2")}
+                  className={cn(lux.btnSecondary, "hidden sm:inline-flex lg:hidden !py-2")}
                   onClick={() => setMobileFiltersOpen(true)}
                 >
                   <Filter className="h-4 w-4" />
@@ -528,6 +529,8 @@ function ContactSearchPageInner() {
           ) : null}
         </div>
       </div>
+
+      <MobileFilterFab onClick={() => setMobileFiltersOpen(true)} />
 
       {/* Mobile bottom sheet */}
       {mobileFiltersOpen ? (

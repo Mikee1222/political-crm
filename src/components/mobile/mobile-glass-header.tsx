@@ -118,7 +118,7 @@ export function MobileGlassHeader({
             <button
               type="button"
               onClick={onInstallClick}
-              className="hq-press-mobile inline-flex h-8 items-center justify-center rounded-md border border-[var(--accent-gold)]/45 bg-[color-mix(in_srgb,var(--accent-gold)_22%,var(--bg-elevated))] px-2 text-[10px] font-bold text-[var(--text-primary)]"
+              className="hq-press-mobile hidden min-[400px]:inline-flex h-8 items-center justify-center rounded-md border border-[var(--accent-gold)]/45 bg-[color-mix(in_srgb,var(--accent-gold)_22%,var(--bg-elevated))] px-2 text-[10px] font-bold text-[var(--text-primary)]"
             >
               Εγκατάσταση ↓
             </button>

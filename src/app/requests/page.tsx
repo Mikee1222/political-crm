@@ -116,7 +116,7 @@ function filtersToSearchParams(f: RequestFilters): URLSearchParams {
 
 function RequestsMobileSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3" aria-hidden>
       {Array.from({ length: 6 }, (_, i) => (
         <div
           key={i}
@@ -290,7 +290,7 @@ export default function RequestsPage() {
   const rangeTo = Math.min(currentPage * pageSize, listTotal);
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden px-4 pb-24 md:px-0 md:pb-6">
       <PageHeader
         title="Αιτήματα"
         subtitle="Φιλτράρισμα και διαχείριση αιτημάτων πολιτών — κάρτες με SLA και κατάσταση."
@@ -298,7 +298,7 @@ export default function RequestsPage() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className={lux.btnGold + " hq-shimmer-gold !rounded-full !px-5 !py-2.5 !text-sm"}
+            className={lux.btnGold + " hq-shimmer-gold w-full !rounded-full !px-5 !py-2.5 !text-sm sm:w-auto"}
           >
             <Inbox className="h-4 w-4" />
             Νέο αίτημα
@@ -434,7 +434,7 @@ export default function RequestsPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {rows.map((r, i) => (
             <div
               key={r.id}

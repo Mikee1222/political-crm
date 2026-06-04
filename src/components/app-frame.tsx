@@ -898,7 +898,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileNavOpen(false)}
           />
           <div
-            className="fixed left-0 top-0 z-[45] box-border h-full w-[min(100vw,280px)] max-w-full overflow-y-auto border-r border-border bg-[var(--sidebar-bg)] p-3 shadow-[var(--card-shadow)]"
+            className="fixed inset-y-0 left-0 z-[45] box-border w-full max-w-full overflow-y-auto border-r border-border bg-[var(--sidebar-bg)] p-3 shadow-[var(--card-shadow)] sm:max-w-[min(100vw,320px)]"
             style={{
               backgroundImage:
                 "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.035) 1px, transparent 0), linear-gradient(to bottom, rgba(255,255,255,0.015), transparent)",
@@ -923,7 +923,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 type="button"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)]"
+                className="flex h-11 min-h-[44px] w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)]"
                 onClick={() => setMobileNavOpen(false)}
                 aria-label="Κλείσιμο"
               >

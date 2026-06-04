@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 
 /** CRM standard dialog layer: above nav/sheets, below command palette (400). */
 const MODAL_OVERLAY_CLASS =
-  "fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm sm:p-4";
+  "fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm max-sm:items-stretch max-sm:justify-stretch sm:p-4";
 
 export type ModalShellProps = {
   open: boolean;
@@ -130,8 +130,9 @@ export function CenteredModal({
         {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
         className={clsx(
           "relative flex max-h-[min(90dvh,90vh)] w-[min(680px,calc(100vw-2rem))] max-w-full flex-col overflow-hidden rounded-none border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl sm:border",
-          sheetOnMobile &&
-            "max-sm:mt-auto max-sm:max-h-[min(95dvh,95vh)] max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none max-sm:rounded-t-3xl max-sm:border-x-0 max-sm:border-b-0",
+          sheetOnMobile
+            ? "max-sm:mt-auto max-sm:max-h-[min(95dvh,95vh)] max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none max-sm:rounded-t-3xl max-sm:border-x-0 max-sm:border-b-0"
+            : "max-sm:fixed max-sm:inset-0 max-sm:z-[9999] max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-0",
           className,
         )}
       >

@@ -1301,7 +1301,7 @@ function ContactDetailPage() {
         </div>
       ) : null}
       <div className={cn(focusMode && "max-w-6xl mx-auto px-6 py-4")}>
-    <div className="min-h-full -m-6 bg-[var(--bg-primary)] p-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8">
+    <div className="min-h-full -m-6 overflow-x-hidden bg-[var(--bg-primary)] p-4 pb-28 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8 md:pb-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
@@ -1407,9 +1407,9 @@ function ContactDetailPage() {
             </div>
           </div>
 
-          <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:max-w-[min(100%,380px)] lg:items-end">
+          <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:max-w-[min(100%,380px)] max-md:fixed max-md:bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] max-md:left-0 max-md:right-0 max-md:z-30 max-md:max-w-none max-md:border-t max-md:border-[var(--border)] max-md:bg-[var(--surface-bulk)] max-md:p-3 max-md:backdrop-blur-xl lg:items-end">
             {isCaller ? (
-              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <div className="flex w-full flex-col gap-2 max-md:items-stretch sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                 <span
                   className={
                     "inline-flex rounded-md px-2.5 py-0.5 text-xs font-semibold " +
@@ -1435,7 +1435,7 @@ function ContactDetailPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => void saveCallerStatus()}
-                  className="h-9 rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white hover:bg-[#002255] disabled:opacity-50"
+                  className="min-h-[44px] w-full rounded-lg bg-[#003476] px-3 text-sm font-semibold text-white hover:bg-[#002255] disabled:opacity-50 sm:h-9 sm:w-auto sm:text-xs"
                 >
                   Αποθήκευση
                 </button>
@@ -1457,7 +1457,7 @@ function ContactDetailPage() {
                 </button>
               </div>
             ) : (
-              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <div className="flex w-full flex-col gap-2 max-md:items-stretch sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                 {c.phone?.trim() ? (
                   <a
                     href={`tel:${c.phone.replace(/\s/g, "")}`}
@@ -1490,7 +1490,7 @@ function ContactDetailPage() {
                 <button
                   type="button"
                   onClick={() => void triggerCall()}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50 sm:h-9 sm:w-auto sm:text-xs"
                 >
                   <Phone className="h-3.5 w-3.5" />
                   Retell
@@ -1498,7 +1498,7 @@ function ContactDetailPage() {
                 <button
                   type="button"
                   onClick={() => void copyHeaderInfo()}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-xs font-semibold text-[var(--text-primary)]"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-sm font-semibold text-[var(--text-primary)] sm:h-9 sm:w-auto sm:text-xs"
                 >
                   <Clipboard className="h-3.5 w-3.5" />
                   {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
@@ -2101,7 +2101,7 @@ function ContactDetailPage() {
                     onChange={(e) => setNewAddress((p) => ({ ...p, odos: e.target.value }))}
                     className={inputSm}
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input
                       placeholder="Πόλη"
                       value={newAddress.poli}
@@ -2649,7 +2649,7 @@ function ContactDetailPage() {
                         onChange={(e) => setNewRequest({ ...newRequest, title: e.target.value })}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div>
                         <label className={inlineFormLabel}>Κατηγορία</label>
                         <HqSelect

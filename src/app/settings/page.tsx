@@ -181,7 +181,7 @@ export default function SettingsPage() {
 
   if (!canAccess) {
     return (
-      <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+      <div className="w-full min-w-0 max-w-full overflow-x-hidden px-4 pb-24 md:px-0 md:pb-6">
         <div className={lux.card + " w-full min-w-0 max-w-full !border-amber-500/40 !bg-[var(--status-noanswer-bg)] !shadow-sm"}>
           <p className="text-sm text-[var(--status-noanswer-text)]">Δεν έχετε πρόσβαση.</p>
         </div>
@@ -190,10 +190,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-    <div className="w-full min-w-0 max-w-full space-y-6 [&>section]:w-full [&>section]:min-w-0 [&>section]:max-w-full">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden px-4 pb-24 md:px-0 md:pb-6">
+    <div className="w-full min-w-0 max-w-full space-y-6 [&>section]:w-full [&>section]:min-w-0 [&>section]:max-w-full [&>form]:w-full [&>form]:min-w-0 [&>form]:max-w-full">
       {showTabBar && (
-        <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
+        <div className="crm-settings-tabs rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
           <button
             type="button"
             onClick={() => setSettingsTab("settings")}
@@ -364,69 +364,135 @@ export default function SettingsPage() {
                 {err}
               </p>
             )}
-            <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-                    <th className="sticky left-0 z-10 min-w-[140px] bg-[var(--bg-elevated)] p-3 pl-4">Όνομα</th>
-                    <th className="p-3">Email</th>
-                    <th className="p-3 min-w-[200px]">Ρόλος (επεξεργασία)</th>
-                    <th className="p-3">Τελ. σύνδεση</th>
-                    <th className="p-3 pr-4">Ημ/νία</th>
-                    <th className="p-3 pr-4 text-right">Ενέργειες</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
-                      <td className="sticky left-0 z-10 bg-[var(--bg-card)] p-3 pl-4 font-medium text-[var(--text-primary)]">
-                        {u.full_name ?? "—"}
-                      </td>
-                      <td className="p-3 text-[var(--text-secondary)]">{u.email}</td>
-                      <td className="p-3">
-                        <HqSelect
-                          className="!h-9 max-w-[200px]"
-                          value={u.role}
-                          onChange={(e) => void setRole(u.id, e.target.value)}
-                          disabled={u.id === profile?.id}
-                          aria-label={`Ρόλος για ${u.email}`}
-                        >
-                          {crmRoles.map((o) => (
-                            <option key={o.name} value={o.name}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </HqSelect>
-                      </td>
-                      <td className="p-3 text-[var(--text-secondary)]">
+            <ul className="space-y-3 md:hidden">
+              {users.map((u) => (
+                <li
+                  key={u.id}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-4"
+                >
+                  <p className="font-medium text-[var(--text-primary)]">{u.full_name ?? "—"}</p>
+                  <p className="mt-1 break-all text-sm text-[var(--text-secondary)]">{u.email}</p>
+                  <div className="mt-3">
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                      Ρόλος
+                    </p>
+                    <HqSelect
+                      className="!h-11 w-full max-w-full"
+                      value={u.role}
+                      onChange={(e) => void setRole(u.id, e.target.value)}
+                      disabled={u.id === profile?.id}
+                      aria-label={`Ρόλος για ${u.email}`}
+                    >
+                      {crmRoles.map((o) => (
+                        <option key={o.name} value={o.name}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </HqSelect>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                        Τελ. σύνδεση
+                      </dt>
+                      <dd className="text-[var(--text-secondary)]">
                         {u.last_sign_in_at ? formatDateTimeAthens(u.last_sign_in_at) : "—"}
-                      </td>
-                      <td className="p-3 text-[var(--text-secondary)]">
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                        Ημ/νία
+                      </dt>
+                      <dd className="text-[var(--text-secondary)]">
                         {u.joined_at ? formatDateAthens(u.joined_at) : "—"}
-                      </td>
-                      <td className="p-3 pr-4 text-right">
-                        <div className="flex flex-wrap justify-end gap-1">
-                          <button
-                            type="button"
-                            className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
-                            onClick={() => void resetPassword(u.id)}
-                          >
-                            Επαναφορά κωδικού
-                          </button>
-                          <button
-                            type="button"
-                            className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
-                            disabled={u.id === profile?.id}
-                            onClick={() => setDeleteId(u.id)}
-                          >
-                            Διαγραφή
-                          </button>
-                        </div>
-                      </td>
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      className={lux.btnSecondary + " w-full !py-2.5 text-xs sm:flex-1"}
+                      onClick={() => void resetPassword(u.id)}
+                    >
+                      Επαναφορά κωδικού
+                    </button>
+                    <button
+                      type="button"
+                      className={lux.btnDanger + " w-full !py-2.5 text-xs sm:flex-1"}
+                      disabled={u.id === profile?.id}
+                      onClick={() => setDeleteId(u.id)}
+                    >
+                      Διαγραφή
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden w-full min-w-0 md:block">
+              <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead>
+                    <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                      <th className="sticky left-0 z-10 min-w-[140px] bg-[var(--bg-elevated)] p-3 pl-4">Όνομα</th>
+                      <th className="p-3">Email</th>
+                      <th className="p-3 min-w-[200px]">Ρόλος (επεξεργασία)</th>
+                      <th className="p-3">Τελ. σύνδεση</th>
+                      <th className="p-3 pr-4">Ημ/νία</th>
+                      <th className="p-3 pr-4 text-right">Ενέργειες</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]">
+                        <td className="sticky left-0 z-10 bg-[var(--bg-card)] p-3 pl-4 font-medium text-[var(--text-primary)]">
+                          {u.full_name ?? "—"}
+                        </td>
+                        <td className="p-3 text-[var(--text-secondary)]">{u.email}</td>
+                        <td className="p-3">
+                          <HqSelect
+                            className="!h-9 max-w-[200px]"
+                            value={u.role}
+                            onChange={(e) => void setRole(u.id, e.target.value)}
+                            disabled={u.id === profile?.id}
+                            aria-label={`Ρόλος για ${u.email}`}
+                          >
+                            {crmRoles.map((o) => (
+                              <option key={o.name} value={o.name}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </HqSelect>
+                        </td>
+                        <td className="p-3 text-[var(--text-secondary)]">
+                          {u.last_sign_in_at ? formatDateTimeAthens(u.last_sign_in_at) : "—"}
+                        </td>
+                        <td className="p-3 text-[var(--text-secondary)]">
+                          {u.joined_at ? formatDateAthens(u.joined_at) : "—"}
+                        </td>
+                        <td className="p-3 pr-4 text-right">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <button
+                              type="button"
+                              className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                              onClick={() => void resetPassword(u.id)}
+                            >
+                              Επαναφορά κωδικού
+                            </button>
+                            <button
+                              type="button"
+                              className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
+                              disabled={u.id === profile?.id}
+                              onClick={() => setDeleteId(u.id)}
+                            >
+                              Διαγραφή
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
 
