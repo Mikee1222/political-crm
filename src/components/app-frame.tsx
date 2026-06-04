@@ -156,20 +156,21 @@ function initials(fullName: string | null, fallback: string) {
 }
 
 const navItemBase =
-  "group flex h-12 max-h-12 shrink-0 items-center gap-3 rounded-[10px] border-l-2 border-transparent px-4 text-sm transition duration-200 ease-out";
+  "group flex h-11 max-h-11 shrink-0 items-center gap-3 rounded-lg px-3 text-sm transition-colors duration-200 ease-out";
 const navItemInactive = [
-  "text-muted-foreground",
-  "[&>span]:text-muted-foreground",
-  "hover:border-transparent hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)] hover:[&>span]:text-[var(--nav-ink-hover)]",
+  "text-[var(--nav-ink)]",
+  "[&>span]:text-[var(--nav-ink)]",
+  "hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)] hover:[&>span]:text-[var(--nav-ink-hover)]",
 ].join(" ");
 const navItemIconInactive =
-  "text-[var(--nav-icon-inactive)] group-hover:text-[var(--nav-icon-hover)] group-hover:opacity-100";
+  "text-[var(--nav-icon-inactive)] group-hover:text-[var(--nav-icon-hover)]";
 const navItemActive = [
-  "border-[var(--nav-item-active-border)] bg-[var(--nav-item-active-bg)]",
-  "!text-[var(--nav-item-active-fg)] [&>span]:!text-[var(--nav-item-active-fg)] font-semibold",
+  "bg-[var(--nav-item-active-bg)]",
+  "!text-[var(--nav-item-active-fg)] [&>span]:!text-[var(--nav-item-active-fg)] font-medium",
 ].join(" ");
 const navItemIconActive = "text-[var(--nav-icon-active)]";
-const groupHeaderClass = "relative flex items-center gap-2 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-amber-500/40 before:content-[''] before:h-px before:w-4 before:bg-amber-500/30";
+const groupHeaderClass =
+  "flex items-center gap-2 px-1 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent-gold)]/55 before:content-[''] before:h-px before:w-3 before:shrink-0 before:bg-[var(--accent-gold)]/35";
 
 const MOBILE_TAB_ORDER = ["/dashboard", "/contacts", "/requests", "/campaigns", "/alexandra"] as const;
 
@@ -232,21 +233,14 @@ function NavItemRow({
       onClick={onNavigate}
       className={[
         navItemBase,
-        "relative",
-        isSub && "ml-3 h-10 max-h-10 gap-2.5 rounded-lg border-l-0 pl-3 pr-3 opacity-95",
-        !showLabels && "min-w-0 justify-center pl-0 pr-0",
-        !showLabels && isSub && "ml-0",
+        isSub && showLabels && "ml-3 h-9 max-h-9 gap-2.5 pl-2",
+        isSub && !showLabels && "h-9 max-h-9",
+        !showLabels && "min-w-0 justify-center px-0",
         active ? navItemActive : navItemInactive,
-        isSub && !active && "text-[var(--text-muted)] [&>span]:text-[var(--text-muted)]",
+        isSub && !active && "text-[var(--nav-ink)]/80 [&>span]:text-[var(--nav-ink)]/80",
       ].join(" ")}
       title={!showLabels ? item.label : undefined}
     >
-      {isSub && showLabels ? (
-        <span
-          className="absolute left-0 top-1/2 h-3 w-px -translate-y-1/2 bg-[var(--accent-gold)]/25"
-          aria-hidden
-        />
-      ) : null}
       <Icon
         className={[
           "shrink-0 transition-colors duration-200 ease-out",
@@ -255,7 +249,7 @@ function NavItemRow({
         ].join(" ")}
       />
       {showLabels && (
-        <span className={["min-w-0 flex-1 truncate font-medium", isSub ? "text-[13px]" : "text-[14px]"].join(" ")}>
+        <span className={["min-w-0 flex-1 truncate", isSub ? "text-[13px] font-normal" : "text-sm font-medium"].join(" ")}>
           {item.label}
         </span>
       )}
@@ -283,12 +277,9 @@ function AlexandraRow({
       onClick={onNavigate}
       className={[
         navItemBase,
-        "relative",
-        "mt-0.5 border-[var(--border)]/50 bg-[var(--nav-alex-row-bg)]",
-        !showLabels && "justify-center pl-0 pr-0",
-        pathname.startsWith("/alexandra")
-          ? `${navItemActive} !bg-[var(--nav-alex-row-active-boost)]`
-          : navItemInactive,
+        "mt-1",
+        !showLabels && "justify-center px-0",
+        pathname.startsWith("/alexandra") ? navItemActive : navItemInactive,
       ].join(" ")}
       title={!showLabels ? "Αλεξάνδρα" : undefined}
     >
@@ -301,25 +292,14 @@ function AlexandraRow({
       {showLabels && (
         <span
           className={[
-            "flex min-w-0 flex-1 items-center justify-between gap-1.5 text-[14px] font-semibold",
+            "flex min-w-0 flex-1 items-center justify-between gap-1.5 text-sm font-medium",
             pathname.startsWith("/alexandra")
               ? "text-[var(--nav-item-active-fg)]"
-              : "text-[var(--text-primary)]",
+              : "text-[var(--nav-ink)]",
           ].join(" ")}
         >
-          <span
-            className={pathname.startsWith("/alexandra") ? "text-[var(--nav-item-active-fg)]" : "text-[var(--accent-gold)]"}
-          >
-            Αλεξάνδρα
-          </span>
-          <span
-            className="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-            style={{
-              borderColor: "var(--nav-alex-pill-border)",
-              background: "var(--nav-alex-pill-bg)",
-              color: "var(--nav-alex-pill-fg)",
-            }}
-          >
+          <span>Αλεξάνδρα</span>
+          <span className="shrink-0 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--accent-gold)]/80">
             AI
           </span>
         </span>
@@ -352,20 +332,20 @@ function GroupBlock({
 
   if (showGroupHeaders) {
     return (
-      <div className="mb-0.5">
+      <div className="mb-3">
         <button
           type="button"
           onClick={onToggleGroup}
-          className="flex w-full min-w-0 items-center justify-between gap-1 rounded-md px-1.5 py-0.5 text-left transition hover:bg-white/[0.04]"
+          className="flex w-full min-w-0 items-center justify-between gap-1 rounded-md px-0.5 py-0.5 text-left transition hover:opacity-90"
         >
           <span className={groupHeaderClass}>{group.label}</span>
           <ChevronsDown
-            className={["h-3.5 w-3.5 shrink-0 text-[var(--text-muted)] transition", groupOpen ? "rotate-0" : "rotate-[-90deg]"].join(" ")}
+            className={["h-3 w-3 shrink-0 text-[var(--accent-gold)]/40 transition", groupOpen ? "rotate-0" : "rotate-[-90deg]"].join(" ")}
             aria-hidden
           />
         </button>
         {groupOpen && (
-          <div className="mt-0.5 flex flex-col gap-0.5">
+          <div className="mt-1 flex flex-col gap-1">
             {items.map((item) => (
               <NavItemRow
                 key={item.href}
@@ -381,7 +361,7 @@ function GroupBlock({
     );
   }
   return (
-    <div className="mb-0.5 flex flex-col gap-0.5">
+    <div className="mb-1 flex flex-col gap-1">
       {items.map((item) => (
         <NavItemRow
           key={item.href}
@@ -422,7 +402,7 @@ function SidebarContent({
     const order = flatOrderedNavItems(role).filter((it) => it.href !== "/settings");
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
           {order.map((item) => (
             <NavItemRow
               key={item.href}
@@ -439,7 +419,7 @@ function SidebarContent({
   }
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
         {groupDefs.map((g) => (
           <GroupBlock
             key={g.id}
@@ -795,13 +775,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [isCrmLoginPublic, isPortal, role]);
 
   const pinBottom = (opts: { onNavigate?: () => void; showLabels: boolean }) => (
-    <div className="mt-auto space-y-0.5 border-t border-[var(--border)]/40 pt-1.5">
+    <div className="mt-auto space-y-1 border-t border-[var(--border)]/30 pt-2">
       <button
         type="button"
         onClick={() => setShortcutsOpen(true)}
         className={[
-          "group flex h-10 w-full max-w-full shrink-0 items-center gap-2 rounded-lg pl-1.5 pr-2 text-left text-sm text-[var(--nav-ink)] transition hover:bg-[var(--nav-item-hover-bg)]",
-          !opts.showLabels && "min-w-0 justify-center pl-0 pr-0",
+          "group flex h-11 w-full max-w-full shrink-0 items-center gap-3 rounded-lg px-3 text-left text-sm text-[var(--nav-ink)] transition-colors hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)]",
+          !opts.showLabels && "min-w-0 justify-center px-0",
         ].join(" ")}
         title="Συντομεύσεις"
         aria-label="Βοήθεια συντομεύσεων"
@@ -844,39 +824,34 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       style={shellStyle}
     >
       <aside
-        className="crm-sidebar app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 hidden h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)] px-2 py-3 pb-2 lg:flex"
+        className="crm-sidebar app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 hidden h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)]/50 px-3 py-4 pb-3 lg:flex"
         style={{ background: "var(--sidebar-bg)" }}
         aria-label="Πλοήγηση"
       >
         <div
           className={[
-            "mb-2 flex w-full min-w-0 items-center pl-0.5",
-            showDesktopWideNav ? "justify-start" : "justify-center",
+            "mb-4 flex w-full min-w-0 items-center",
+            showDesktopWideNav ? "justify-start pl-0.5" : "justify-center",
           ].join(" ")}
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
             <div
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-bold tracking-tight text-[var(--text-badge-on-gold)] shadow-[0_0_24px_rgba(201,168,76,0.25)]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[var(--accent-gold)]/50 text-sm font-bold text-[var(--text-badge-on-gold)]"
               style={{ background: "linear-gradient(145deg, #c9a84c 0%, #8b6914 100%)" }}
             >
               ΚΚ
             </div>
             {showDesktopWideNav && (
               <div className="min-w-0">
-                <p className="text-[15px] font-semibold leading-tight" style={{ color: "var(--sidebar-brand-title)" }}>
-                  Καραγκούνης
-                </p>
-                <p
-                  className="mt-0.5 text-[10px] font-medium uppercase leading-tight tracking-[0.1em] text-[var(--text-muted)]"
-                >
-                  ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ
+                <p className="text-sm font-semibold leading-tight text-[var(--sidebar-brand-title)]">Καραγκούνης</p>
+                <p className="mt-0.5 text-[10px] font-medium uppercase leading-tight tracking-widest text-[var(--sidebar-tagline)]">
+                  Πολιτικό Γραφείο
                 </p>
               </div>
             )}
           </div>
         </div>
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.04] via-transparent to-black/20" />
-        <div className="relative z-10 mb-1 h-px flex-shrink-0 bg-gradient-to-r from-transparent via-[var(--accent-gold)]/40 to-transparent" />
+        <div className="relative z-10 mb-3 h-px flex-shrink-0 bg-gradient-to-r from-transparent via-[var(--accent-gold)]/50 to-transparent" />
 
         <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col">
           {showSidebarNavSkeleton ? (
@@ -898,11 +873,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        <div className="relative z-10 mt-auto flex w-full flex-shrink-0 border-t border-[var(--border)]/50 pt-1.5">
+        <div className="relative z-10 mt-auto flex w-full flex-shrink-0 border-t border-[var(--border)]/30 pt-2">
           <button
             type="button"
             onClick={onSidebarToggle}
-            className="mx-auto flex h-10 w-full min-w-0 max-w-full items-center justify-center rounded-lg text-[var(--nav-ink)] transition hover:bg-[var(--nav-item-hover-bg)]"
+            className="mx-auto flex h-10 w-full min-w-0 max-w-full items-center justify-center rounded-lg text-[var(--nav-ink)] transition-colors hover:bg-[var(--nav-item-hover-bg)] hover:text-[var(--nav-ink-hover)]"
             title={isLg ? (sidebarUserExpanded ? "Σύμπτυξη" : "Ανάπτυξη") : (mobileNavOpen ? "Κλείσιμο" : "Μενού")}
             aria-label={isLg ? (sidebarUserExpanded ? "Σύμπτυξη πλευρικής μπάρας" : "Ανάπτυξη πλευρικής μπάρας") : (mobileNavOpen ? "Κλείσιμο" : "Άνοιγμα μενού")}
           >

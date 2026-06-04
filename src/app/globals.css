@@ -124,9 +124,9 @@ html {
   --topbar-bg: rgba(5, 13, 26, 0.9);
   --nav-ink: #8fa3bf;
   --nav-ink-hover: #f0f4ff;
-  --nav-item-hover-bg: rgba(201, 168, 76, 0.1);
+  --nav-item-hover-bg: rgba(201, 168, 76, 0.08);
   --nav-item-active-border: #c9a84c;
-  --nav-item-active-bg: rgba(201, 168, 76, 0.12);
+  --nav-item-active-bg: rgba(201, 168, 76, 0.1);
   --nav-item-active-fg: #ffffff;
   --nav-icon-inactive: #8fa3bf;
   --nav-icon-hover: #c9a84c;
@@ -222,9 +222,9 @@ html {
   --topbar-bg: rgba(245, 240, 232, 0.95);
   --nav-ink: rgba(255, 255, 255, 0.6);
   --nav-ink-hover: #ffffff;
-  --nav-item-hover-bg: rgba(255, 255, 255, 0.1);
+  --nav-item-hover-bg: rgba(255, 255, 255, 0.08);
   --nav-item-active-border: #c9a84c;
-  --nav-item-active-bg: rgba(255, 255, 255, 0.15);
+  --nav-item-active-bg: rgba(255, 255, 255, 0.1);
   --nav-item-active-fg: #ffffff;
   --nav-icon-inactive: rgba(255, 255, 255, 0.7);
   --nav-icon-hover: #c9a84c;
