@@ -417,6 +417,14 @@ body {
   line-height: 1.6;
 }
 
+/* Group/category chips: luminance-based text in light mode, always white in dark */
+.group-chip {
+  color: #ffffff;
+}
+[data-theme="light"] .group-chip {
+  color: var(--group-chip-text, #1a1a1a);
+}
+
 /* Cards: high-contrast default text on dark card surfaces */
 [data-hq-card] {
   color: var(--text-primary);

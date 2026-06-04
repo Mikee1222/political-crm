@@ -6,7 +6,7 @@ import { callStatusLabel, lux } from "@/lib/luxury-styles";
 import { getAgeFromBirthday } from "@/lib/contact-birthday";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { cn } from "@/lib/utils";
-import { getGroupChipStyle } from "@/lib/color-utils";
+import { getGroupChipStyle, GROUP_CHIP_CLASS } from "@/lib/color-utils";
 import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 
 export type ContactSearchResult = {
@@ -119,7 +119,7 @@ export function ContactSearchResultCard({
             <div className="mt-1.5 line-clamp-1 text-[11px] text-[var(--text-muted)]">
               {c.contact_groups ? (
                 <span
-                  className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                  className={`${GROUP_CHIP_CLASS} inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[10px] font-semibold`}
                   style={getGroupChipStyle(c.contact_groups.color)}
                 >
                   {c.contact_groups.name}

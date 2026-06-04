@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Users, X } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { getGroupChipStyle } from "@/lib/color-utils";
+import { getGroupChipStyle, GROUP_CHIP_CLASS } from "@/lib/color-utils";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import type { ContactGroupSummary } from "@/lib/contact-group-members";
 
@@ -113,7 +113,7 @@ export function ContactGroupsSection({
                 type="button"
                 disabled={saving}
                 onClick={() => void handleRemove(g.id)}
-                className="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className={`${GROUP_CHIP_CLASS} inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60`}
                 style={getGroupChipStyle(g.color)}
                 title={g.description ?? undefined}
               >
@@ -126,7 +126,7 @@ export function ContactGroupsSection({
             ) : (
               <span
                 key={g.id}
-                className="inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                className={`${GROUP_CHIP_CLASS} inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs font-semibold`}
                 style={getGroupChipStyle(g.color)}
                 title={g.description ?? undefined}
               >

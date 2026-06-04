@@ -39,13 +39,19 @@ export function getChipTextColor(bgHex: string): string {
   return luminance > 0.5 ? "#1a1a1a" : "#ffffff";
 }
 
+/** Shared class for group/category pills (pairs with getGroupChipStyle). */
+export const GROUP_CHIP_CLASS = "group-chip";
+
 /** Inline styles for group/tag pills with a custom hex background. */
 export function getGroupChipStyle(hex?: string | null): {
   backgroundColor: string;
-  color: string;
+  ["--group-chip-text"]: string;
 } {
   const backgroundColor = hex?.trim() || "#003476";
-  return { backgroundColor, color: getChipTextColor(backgroundColor) };
+  return {
+    backgroundColor,
+    "--group-chip-text": getChipTextColor(backgroundColor),
+  };
 }
 
 export function normalizeHexColor(input: string): string | null {
