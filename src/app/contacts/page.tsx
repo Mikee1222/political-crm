@@ -4,8 +4,6 @@ import {
   ArrowUpDown,
   Bell,
   Cake,
-  Check,
-  ChevronDown,
   Download,
   LayoutPanelTop,
   Maximize2,
@@ -18,6 +16,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -29,7 +28,6 @@ import {
   useState,
   startTransition,
   type CSSProperties,
-  type RefObject,
 } from "react";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
@@ -38,7 +36,6 @@ import {
   searchParamsToFilters,
   buildContactsPageUrl,
   contactFiltersToSearchParams,
-  applySavedFilterJson,
   type ContactListFilters,
 } from "@/lib/contacts-filters";
 import { useProfile } from "@/contexts/profile-context";
@@ -49,7 +46,6 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { callStatusLabel, lux } from "@/lib/luxury-styles";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
-import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -703,80 +699,12 @@ function ContactSwipeCard({
   );
 }
 
-const CALL_STATUS_OPTS = CONTACT_CALL_STATUS_OPTIONS.map((o) => ({ v: o.value, l: o.label }));
-
 const AGE_GROUPS: Record<string, { min: number; max: number }> = {
   "17-20": { min: 17, max: 20 },
   "20-40": { min: 20, max: 40 },
   "40-70": { min: 40, max: 70 },
   "70+": { min: 70, max: 120 },
 };
-
-function CallStatusMultiSelect({
-  value,
-  onChange,
-}: {
-  value: string[];
-  onChange: (v: string[]) => void;
-}) {
-  const { triggerRef, panelRef, open, pos, toggle } = usePortalDropdown({ minWidth: 176 });
-  const labelText =
-    value.length === 0
-      ? "Όλες"
-      : value.length === 1
-        ? CALL_STATUS_OPTS.find((o) => o.v === value[0])?.l ?? value[0]!
-        : `${value.length} status`;
-  const toggleStatus = (s: string) => {
-    if (value.includes(s)) onChange(value.filter((x) => x !== s));
-    else onChange([...value, s]);
-  };
-  return (
-    <div className="relative min-w-0 max-w-full">
-      <label className={lux.label} htmlFor="f-call-m">
-        Κατάσταση
-      </label>
-      <button
-        type="button"
-        id="f-call-m"
-        ref={triggerRef as RefObject<HTMLButtonElement>}
-        className={lux.select + " flex w-full min-w-0 items-center justify-between gap-2 text-left"}
-        onClick={toggle}
-        aria-expanded={open}
-      >
-        <span className="min-w-0 flex-1 truncate text-left text-[var(--text-primary)]">{labelText}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-      </button>
-      <PortalDropdownPanel open={open} pos={pos} panelRef={panelRef} role="listbox">
-        <ul className="m-0 list-none p-0">
-          {CALL_STATUS_OPTS.map((o) => {
-            const on = value.includes(o.v);
-            return (
-              <li key={o.v}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-accent"
-                  onClick={() => toggleStatus(o.v)}
-                >
-                  <span
-                    className={
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border " +
-                      (on ? "border-[var(--accent-gold)] bg-[var(--accent-gold)]/20" : "border-[var(--border)]")
-                    }
-                  >
-                    {on ? <Check className="h-3 w-3 text-[var(--accent-gold)]" aria-hidden /> : null}
-                  </span>
-                  {o.l}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </PortalDropdownPanel>
-    </div>
-  );
-}
-
-type SavedFilterApi = { id: string; name: string; description: string | null; filters: Record<string, unknown> };
 
 function contactDisplayName(c: Contact): string {
   return `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Επαφή";
@@ -806,7 +734,6 @@ function ContactsPage() {
   const [filterMunicipalities, setFilterMunicipalities] = useState<string[]>(() =>
     MUNICIPALITIES.map((m) => m.name),
   );
-  const [savedFilters, setSavedFilters] = useState<SavedFilterApi[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState("Pending");
@@ -816,7 +743,6 @@ function ContactsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bulkWaMessage, setBulkWaMessage] = useState("");
-  const [savedFilterMenuKey, setSavedFilterMenuKey] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const filtersUrlKeyRef = useRef<string | null>(null);
   const { showToast: showListToast } = useFormToast();
@@ -844,12 +770,6 @@ function ContactsPage() {
     (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`),
     [focusMode],
   );
-
-  const groupNameToId = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const g of groups) m.set(g.name.toLowerCase(), g.id);
-    return m;
-  }, [groups]);
 
   const groupSelectOptions = useMemo(
     () =>
@@ -967,13 +887,6 @@ function ContactsPage() {
         /* keep static fallback */
       }
     })();
-  }, []);
-
-  useEffect(() => {
-    fetchWithTimeout("/api/saved-filters")
-      .then((r) => r.json())
-      .then((d: { saved_filters?: SavedFilterApi[] }) => setSavedFilters(d.saved_filters ?? []))
-      .catch(() => setSavedFilters([]));
   }, []);
 
   useEffect(() => {
@@ -1223,37 +1136,8 @@ function ContactsPage() {
       />
 
       <div className={lux.card + " !py-4 w-full min-w-0 max-w-full overflow-visible"}>
-        <div className="mb-3 min-w-0 max-w-full sm:max-w-md">
-          <label className={lux.label} htmlFor="f-saved-m">
-            Αποθηκευμένα φίλτρα
-          </label>
-          <HqSelect
-            key={savedFilterMenuKey}
-            id="f-saved-m"
-            defaultValue=""
-            onChange={(e) => {
-              const v = e.target.value;
-              if (!v) return;
-              const row = savedFilters.find((r) => r.id === v);
-              if (row) {
-                const next = applySavedFilterJson(row.filters, groupNameToId);
-                setF(next);
-                startTransition(() => router.replace(buildContactsPageUrl(next), { scroll: false }));
-              }
-              setSavedFilterMenuKey((k) => k + 1);
-            }}
-          >
-            <option value="">— επιλέξτε —</option>
-            {savedFilters.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-                {s.description ? ` — ${s.description}` : ""}
-              </option>
-            ))}
-          </HqSelect>
-        </div>
-        <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,11.5rem),1fr))]">
-          <div className="min-w-0 max-w-full sm:col-span-2">
+        <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="min-w-0 flex-1 sm:min-w-[12rem]">
             <label className={lux.label} htmlFor="f-search">
               Αναζήτηση
             </label>
@@ -1279,37 +1163,8 @@ function ContactsPage() {
                 </span>
               ) : null}
             </div>
-            {(f.call_statuses.length > 0 ||
-              f.municipalities.length > 0 ||
-              f.priority ||
-              f.search ||
-              f.tag) && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {f.search.trim() ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-2.5 py-0.5 text-[10px] font-bold text-[var(--text-primary)]">
-                    Ζ: {f.search}
-                  </span>
-                ) : null}
-                {f.municipalities.map((name) => (
-                  <span
-                    key={name}
-                    className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]"
-                  >
-                    {name}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
-          <div className="min-w-0 max-w-full">
-            <CallStatusMultiSelect
-              value={f.call_statuses.length ? f.call_statuses : f.call_status ? [f.call_status] : []}
-              onChange={(v) => {
-                patch({ call_statuses: v, call_status: "" });
-              }}
-            />
-          </div>
-          <div className="min-w-0 max-w-full">
+          <div className="min-w-0 w-full sm:w-auto sm:min-w-[10rem]">
             <label className={lux.label} htmlFor="f-muni">
               Δήμος
             </label>
@@ -1326,102 +1181,7 @@ function ContactsPage() {
               ))}
             </HqSelect>
           </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-age-from">
-              Ηλικία
-            </label>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="f-age-from"
-                type="number"
-                placeholder="Από"
-                min={17}
-                max={120}
-                value={f.age_min}
-                onChange={(e) => patch({ age_min: e.target.value.replace(/[^\d]/g, "") })}
-                className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--text-input)]"
-              />
-              <span className="text-[var(--text-muted)]">—</span>
-              <input
-                id="f-age-to"
-                type="number"
-                placeholder="Έως"
-                min={17}
-                max={120}
-                value={f.age_max}
-                onChange={(e) => patch({ age_max: e.target.value.replace(/[^\d]/g, "") })}
-                className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--text-input)]"
-              />
-            </div>
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground font-medium">Ηλικία:</span>
-              {[
-                { label: "17-20", min: 17, max: 20 },
-                { label: "20-40", min: 20, max: 40 },
-                { label: "40-70", min: 40, max: 70 },
-                { label: "70+", min: 70, max: 120 },
-              ].map((g) => (
-                <button
-                  key={g.label}
-                  type="button"
-                  onClick={() => {
-                    const nextGroup = ageGroup === g.label ? "" : g.label;
-                    setAgeGroup(nextGroup);
-                    patch(
-                      nextGroup
-                        ? {
-                            age_min: String(AGE_GROUPS[nextGroup].min),
-                            age_max: String(AGE_GROUPS[nextGroup].max),
-                          }
-                        : { age_min: "", age_max: "" },
-                    );
-                  }}
-                  className={cn(
-                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
-                    ageGroup === g.label
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "border-border text-muted-foreground hover:border-primary/40",
-                  )}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-gender">
-              Φύλο
-            </label>
-            <HqSelect id="f-gender" value={f.gender} onChange={(e) => patch({ gender: e.target.value })}>
-              <option value="">Όλα</option>
-              <option value="Άνδρας">Άνδρας</option>
-              <option value="Γυναίκα">Γυναίκα</option>
-            </HqSelect>
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-pri">
-              Προτεραιότητα
-            </label>
-            <HqSelect id="f-pri" value={f.priority} onChange={(e) => patch({ priority: e.target.value })}>
-              <option value="">Όλες</option>
-              <option value="High">Υψηλή</option>
-              <option value="Medium">Μεσαία</option>
-              <option value="Low">Χαμηλή</option>
-            </HqSelect>
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-tag">
-              Ετικέτα
-            </label>
-            <input
-              id="f-tag"
-              className={lux.input}
-              placeholder="Φίλτρο tag"
-              value={f.tag}
-              onChange={(e) => patch({ tag: e.target.value })}
-            />
-          </div>
-          <div className="min-w-0 max-w-full sm:col-span-2">
+          <div className="min-w-0 w-full sm:w-auto sm:min-w-[11rem]">
             <label className={lux.label} htmlFor="f-groups">
               Ομάδα
             </label>
@@ -1440,70 +1200,57 @@ function ContactsPage() {
               searchPlaceholder="Αναζήτηση ομάδας..."
             />
           </div>
-          <div className="min-w-0 max-w-full sm:col-span-2">
-            <label className={lux.label} htmlFor="f-groups-ex">
-              Εξαίρεση ομάδας
+          <div className="min-w-0 w-full sm:w-auto sm:min-w-[8rem]">
+            <label className={lux.label} htmlFor="f-gender">
+              Φύλο
             </label>
-            <SearchableSelect
-              id="f-groups-ex"
-              className="mt-1 hq-input-elevated"
-              options={groupSelectOptions}
-              value={f.exclude_group_ids[0] ?? ""}
-              onChange={(v) => patch({ exclude_group_ids: v ? [v] : [] })}
-              placeholder="Χωρίς εξαίρεση"
-              searchPlaceholder="Αναζήτηση ομάδας..."
-            />
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-byrf">
-              Έτος γέννησης από
-            </label>
-            <input
-              id="f-byrf"
-              className={lux.input}
-              inputMode="numeric"
-              placeholder="π.χ. 1960"
-              value={f.birth_year_from}
-              onChange={(e) => patch({ birth_year_from: e.target.value.replace(/[^\d]/g, "") })}
-            />
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-byrt">
-              Έτος γέννησης έως
-            </label>
-            <input
-              id="f-byrt"
-              className={lux.input}
-              inputMode="numeric"
-              placeholder="π.χ. 1990"
-              value={f.birth_year_to}
-              onChange={(e) => patch({ birth_year_to: e.target.value.replace(/[^\d]/g, "") })}
-            />
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label className={lux.label} htmlFor="f-score">
-              Σκορ (πειθω)
-            </label>
-            <HqSelect id="f-score" value={f.score_tier} onChange={(e) => patch({ score_tier: e.target.value })}>
+            <HqSelect id="f-gender" value={f.gender} onChange={(e) => patch({ gender: e.target.value })}>
               <option value="">Όλα</option>
-              <option value="low">0–33 (χαμηλό)</option>
-              <option value="mid">34–66 (μέτριο)</option>
-              <option value="high">67–100 (υψηλό)</option>
+              <option value="Άνδρας">Άνδρας</option>
+              <option value="Γυναίκα">Γυναίκα</option>
             </HqSelect>
           </div>
-          {canManage && (
-            <div className="min-w-0 max-w-full flex items-end">
-              <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-[var(--text-primary)]">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-[var(--border)]"
-                  checked={f.is_volunteer}
-                  onChange={(e) => patch({ is_volunteer: e.target.checked })}
-                />
-                Μόνο εθελοντές
-              </label>
-            </div>
-          )}
+        </div>
+        <div className="mt-3 flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className={lux.label + " !mb-0 shrink-0"} id="f-age-label">
+              Ηλικία
+            </span>
+            {Object.keys(AGE_GROUPS).map((label) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={ageGroup === label}
+                aria-labelledby="f-age-label"
+                onClick={() => {
+                  const nextGroup = ageGroup === label ? "" : label;
+                  setAgeGroup(nextGroup);
+                  patch(
+                    nextGroup
+                      ? {
+                          age_min: String(AGE_GROUPS[nextGroup].min),
+                          age_max: String(AGE_GROUPS[nextGroup].max),
+                        }
+                      : { age_min: "", age_max: "" },
+                  );
+                }}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  ageGroup === label
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border text-muted-foreground hover:border-primary/40",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <Link
+            href="/contacts/search"
+            className="shrink-0 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:text-[var(--text-primary)] hover:underline"
+          >
+            🔍 Προχωρημένη αναζήτηση →
+          </Link>
         </div>
       </div>
 
