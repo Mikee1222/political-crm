@@ -4,12 +4,14 @@ import {
   ArrowUpDown,
   Bell,
   Cake,
+  ChevronRight,
   Download,
   LayoutPanelTop,
   Maximize2,
   Phone,
   Plus,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   User,
@@ -1247,9 +1249,11 @@ function ContactsPage() {
           </div>
           <Link
             href="/contacts/search"
-            className="shrink-0 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:text-[var(--text-primary)] hover:underline"
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:text-[var(--text-primary)] hover:underline"
           >
-            🔍 Προχωρημένη αναζήτηση →
+            <SlidersHorizontal className="h-4 w-4" aria-hidden />
+            Προχωρημένη αναζήτηση
+            <ChevronRight className="h-4 w-4" aria-hidden />
           </Link>
         </div>
       </div>
