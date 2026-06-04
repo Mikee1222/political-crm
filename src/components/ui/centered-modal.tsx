@@ -5,9 +5,9 @@ import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { X } from "lucide-react";
 
-/** CRM standard dialog layer: above header/side sheets (&lt;50), below command palette (400). */
+/** CRM standard dialog layer: above nav/sheets, below command palette (400). */
 const MODAL_OVERLAY_CLASS =
-  "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm sm:p-4";
+  "fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm sm:p-4";
 
 export type ModalShellProps = {
   open: boolean;

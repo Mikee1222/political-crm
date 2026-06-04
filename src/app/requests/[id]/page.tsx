@@ -182,11 +182,11 @@ export default function RequestDetailPage() {
 
   useEffect(() => {
     if (!canManage) return;
-    void fetchWithTimeout("/api/team/assignees")
+    void fetchWithTimeout("/api/admin/users")
       .then(async (r) => {
         if (!r.ok) return;
-        const j = (await r.json()) as { assignees?: StaffUser[] };
-        setStaffUsers((j.assignees ?? []) as StaffUser[]);
+        const j = (await r.json()) as { users?: StaffUser[] };
+        setStaffUsers(j.users ?? []);
       })
       .catch(() => setStaffUsers([]));
   }, [canManage]);
@@ -326,7 +326,7 @@ export default function RequestDetailPage() {
 
           {canManage && (
             <div
-              className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-blue-500/50 bg-[var(--bg-card)]/95 p-5 shadow-sm"
+              className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-[color-mix(in_srgb,var(--accent)_55%,var(--border))] bg-[var(--bg-card)]/95 p-5 shadow-sm"
               data-hq-card
             >
               <h2 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">Μήνυμα στον πολίτη</h2>
@@ -535,9 +535,9 @@ export default function RequestDetailPage() {
                           setAssignErr(j.error ?? "Σφάλμα");
                           return;
                         }
-                        if (j.request) setData(j.request);
                         setAssignOpen(false);
                         setAssignUserId("");
+                        await load();
                       } finally {
                         setAssignSaving(false);
                       }

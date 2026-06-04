@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
 
 export type PortalDropdownPosition = { top: number; left: number; width: number };
 
-const PANEL_Z_INDEX = 9999;
+/** Above CenteredModal overlay (9998). */
+const PANEL_Z_INDEX = 10000;
 
 export const PORTAL_DROPDOWN_PANEL_CLASS =
   "max-h-64 overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-background py-1 shadow-lg";
@@ -83,13 +84,16 @@ export function usePortalDropdown(opts?: UsePortalDropdownOptions): PortalDropdo
       setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
     };
   }, [open, setOpen]);
 

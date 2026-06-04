@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { isUuid } from "@/lib/resolve-entity-id";
@@ -118,23 +118,32 @@ function PersonSection({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const add = async () => {
-    if (!contactId) return;
-    setSaving(true);
+  const closeModal = useCallback(() => {
+    setAddOpen(false);
+    setContactId("");
     setErr("");
-    try {
-      const result = await addRequestPerson(requestId, contactId, role);
-      if (!result.ok) {
-        setErr(result.error);
-        return;
+  }, []);
+
+  const add = useCallback(
+    async (pickedId?: string) => {
+      const id = (pickedId ?? contactId).trim();
+      if (!id) return;
+      setSaving(true);
+      setErr("");
+      try {
+        const result = await addRequestPerson(requestId, id, role);
+        if (!result.ok) {
+          setErr(result.error);
+          return;
+        }
+        closeModal();
+        onChanged();
+      } finally {
+        setSaving(false);
       }
-      setAddOpen(false);
-      setContactId("");
-      onChanged();
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    [closeModal, contactId, onChanged, requestId, role],
+  );
 
   const remove = async (id: string) => {
     const res = await fetchWithTimeout(
@@ -151,7 +160,11 @@ function PersonSection({
         {canManage && (
           <button
             type="button"
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              setErr("");
+              setContactId("");
+              setAddOpen(true);
+            }}
             className={"flex items-center gap-1 " + lux.linkAction}
           >
             <Plus className="h-3 w-3" aria-hidden />
@@ -162,25 +175,34 @@ function PersonSection({
       <PersonList contacts={contacts} canManage={canManage} onRemove={(id) => void remove(id)} />
       <CenteredModal
         open={addOpen}
-        onClose={() => {
-          setAddOpen(false);
-          setContactId("");
-        }}
+        onClose={closeModal}
         title={title}
         ariaLabel={`Προσθήκη — ${title}`}
         className="!max-w-md"
         footer={
           <>
-            <button type="button" className={lux.btnSecondary} onClick={() => setAddOpen(false)} disabled={saving}>
+            <button type="button" className={lux.btnSecondary} onClick={closeModal} disabled={saving}>
               Άκυρο
             </button>
-            <FormSubmitButton type="button" variant="gold" loading={saving} disabled={!contactId} onClick={() => void add()}>
+            <FormSubmitButton
+              type="button"
+              variant="gold"
+              loading={saving}
+              disabled={!contactId}
+              onClick={() => void add()}
+            >
               Προσθήκη
             </FormSubmitButton>
           </>
         }
       >
-        <ContactSearchCombobox label="Επαφή" valueId={contactId} onChange={(id) => setContactId(id)} />
+        <ContactSearchCombobox
+          key={`${role}-${addOpen ? "open" : "closed"}`}
+          label="Επαφή"
+          valueId={contactId}
+          onChange={(id) => setContactId(id)}
+          onSelect={(id) => void add(id)}
+        />
         {err && <p className="mt-2 text-sm text-red-400">{err}</p>}
       </CenteredModal>
     </div>
@@ -250,23 +272,32 @@ function HandlersSection({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const add = async () => {
-    if (!contactId) return;
-    setSaving(true);
+  const closeModal = useCallback(() => {
+    setAddOpen(false);
+    setContactId("");
     setErr("");
-    try {
-      const result = await addRequestPerson(requestId, contactId, "handler");
-      if (!result.ok) {
-        setErr(result.error);
-        return;
+  }, []);
+
+  const add = useCallback(
+    async (pickedId?: string) => {
+      const id = (pickedId ?? contactId).trim();
+      if (!id) return;
+      setSaving(true);
+      setErr("");
+      try {
+        const result = await addRequestPerson(requestId, id, "handler");
+        if (!result.ok) {
+          setErr(result.error);
+          return;
+        }
+        closeModal();
+        onChanged();
+      } finally {
+        setSaving(false);
       }
-      setAddOpen(false);
-      setContactId("");
-      onChanged();
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    [closeModal, contactId, onChanged, requestId],
+  );
 
   const remove = async (id: string) => {
     const res = await fetchWithTimeout(
@@ -285,7 +316,11 @@ function HandlersSection({
         {canManage && (
           <button
             type="button"
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              setErr("");
+              setContactId("");
+              setAddOpen(true);
+            }}
             className={"flex items-center gap-1 " + lux.linkAction}
           >
             <Plus className="h-3 w-3" aria-hidden />
@@ -296,25 +331,34 @@ function HandlersSection({
       <PersonList contacts={handlers} canManage={canManage} onRemove={(id) => void remove(id)} />
       <CenteredModal
         open={addOpen}
-        onClose={() => {
-          setAddOpen(false);
-          setContactId("");
-        }}
+        onClose={closeModal}
         title="Χειριστές αιτήματος"
         ariaLabel="Προσθήκη χειριστή"
         className="!max-w-md"
         footer={
           <>
-            <button type="button" className={lux.btnSecondary} onClick={() => setAddOpen(false)} disabled={saving}>
+            <button type="button" className={lux.btnSecondary} onClick={closeModal} disabled={saving}>
               Άκυρο
             </button>
-            <FormSubmitButton type="button" variant="gold" loading={saving} disabled={!contactId} onClick={() => void add()}>
+            <FormSubmitButton
+              type="button"
+              variant="gold"
+              loading={saving}
+              disabled={!contactId}
+              onClick={() => void add()}
+            >
               Προσθήκη
             </FormSubmitButton>
           </>
         }
       >
-        <ContactSearchCombobox label="Επαφή χειριστή" valueId={contactId} onChange={(id) => setContactId(id)} />
+        <ContactSearchCombobox
+          key={`handler-${addOpen ? "open" : "closed"}`}
+          label="Επαφή χειριστή"
+          valueId={contactId}
+          onChange={(id) => setContactId(id)}
+          onSelect={(id) => void add(id)}
+        />
         {err && <p className="mt-2 text-sm text-red-400">{err}</p>}
       </CenteredModal>
     </div>

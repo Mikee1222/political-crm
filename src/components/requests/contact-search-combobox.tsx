@@ -13,6 +13,8 @@ type Props = {
   label: string;
   valueId: string;
   onChange: (id: string, displayName?: string) => void;
+  /** Called after a valid UUID contact is picked from search results. */
+  onSelect?: (id: string, displayName?: string) => void;
   required?: boolean;
   placeholder?: string;
   error?: string | null;
@@ -33,6 +35,7 @@ export function ContactSearchCombobox({
   label,
   valueId,
   onChange,
+  onSelect,
   required,
   placeholder = "Αναζήτηση ονόματος ή τηλεφώνου…",
   error,
@@ -107,6 +110,21 @@ export function ContactSearchCombobox({
     triggerRef.current = el;
   };
 
+  const pickContact = (c: ContactRow) => {
+    const contactUuid = String(c.id ?? "").trim();
+    if (!isUuid(contactUuid)) {
+      console.warn("[ContactSearchCombobox] ignored non-UUID contact id:", c.id);
+      return;
+    }
+    const name = displayName(c);
+    onChange(contactUuid, name);
+    onSelect?.(contactUuid, name);
+    setSelectedLabel(name);
+    setOpen(false);
+    setQ("");
+    setList([]);
+  };
+
   return (
     <div className="relative">
       <label className={lux.label} htmlFor={listId + "in"}>
@@ -179,15 +197,7 @@ export function ContactSearchCombobox({
                     <button
                       type="button"
                       className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-accent"
-                      onClick={() => {
-                        const contactUuid = String(c.id ?? "").trim();
-                        if (!isUuid(contactUuid)) return;
-                        onChange(contactUuid, displayName(c));
-                        setSelectedLabel(displayName(c));
-                        setOpen(false);
-                        setQ("");
-                        setList([]);
-                      }}
+                      onClick={() => pickContact(c)}
                     >
                       <span className="font-medium">{displayName(c)}</span>
                       {ph && <span className="ml-2 text-xs text-[var(--text-muted)]">{ph}</span>}

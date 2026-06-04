@@ -70,7 +70,7 @@ export function RequestSearchResultCard({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           {r.request_code ? (
-            <span className="font-mono text-[11px] text-[var(--text-muted)]">{r.request_code}</span>
+            <span className="font-mono text-[11px] opacity-65">{r.request_code}</span>
           ) : null}
           <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold", badge)}>
             {status}
@@ -82,7 +82,7 @@ export function RequestSearchResultCard({
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] opacity-75">
           {r.category?.trim() ? (
-            <span className="inline-flex max-w-full truncate rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-0.5 font-medium text-[var(--text-secondary)]">
+            <span className="inline-flex max-w-full truncate rounded-full border border-current/25 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2.5 py-0.5 font-medium opacity-80">
               {r.category}
             </span>
           ) : null}

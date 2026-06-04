@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import {
   CheckCircle2,
+  ChevronRight,
   FileText,
+  HelpCircle,
   Inbox,
   Pencil,
   Search,
+  SlidersHorizontal,
   Stethoscope,
   Wrench,
-  HelpCircle,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateAthens } from "@/lib/date-format";
@@ -58,8 +61,6 @@ type RequestRow = {
   contacts: { first_name: string; last_name: string; phone?: string | null } | null;
 };
 
-type Assignee = { id: string; full_name: string | null; role: string };
-
 type RequestFilters = {
   status: string;
   category: string;
@@ -90,6 +91,15 @@ function filtersFromSearchParams(sp: URLSearchParams): RequestFilters {
     search: sp.get("q") ?? sp.get("search") ?? "",
     page: sp.get("page") ?? "1",
   };
+}
+
+/** Hidden quick-filter fields still applied from URL (advanced search / deep links). */
+function countActiveHiddenRequestFilters(f: RequestFilters): number {
+  let n = 0;
+  if (f.priority) n += 1;
+  if (f.range) n += 1;
+  if (f.assigned) n += 1;
+  return n;
 }
 
 function filtersToSearchParams(f: RequestFilters): URLSearchParams {
@@ -135,7 +145,6 @@ export default function RequestsPage() {
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
-  const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [searchQ, setSearchQ] = useState(
     () => searchParams.get("q") ?? searchParams.get("search") ?? "",
   );
@@ -178,6 +187,7 @@ export default function RequestsPage() {
   }, [searchQ, f.search, patch]);
 
   const currentPage = Math.max(1, parseInt(f.page || "1", 10) || 1);
+  const hiddenFilterCount = useMemo(() => countActiveHiddenRequestFilters(f), [f]);
 
   const load = useCallback(async () => {
     const q = new URLSearchParams();
@@ -218,19 +228,10 @@ export default function RequestsPage() {
 
   useEffect(() => {
     void (async () => {
-      const [catRes, teamRes] = await Promise.all([
-        fetchWithTimeout("/api/request-categories"),
-        fetchWithTimeout("/api/team/assignees"),
-      ]);
+      const catRes = await fetchWithTimeout("/api/request-categories");
       if (catRes.ok) {
         const j = (await catRes.json()) as { categories?: string[] };
         setCategoryOptions(j.categories ?? []);
-      }
-      if (teamRes.ok) {
-        const j = (await teamRes.json()) as { assignees?: Assignee[] };
-        setAssignees(
-          (j.assignees ?? []).filter((a) => a.full_name && hasMinRole(a.role, "caller")),
-        );
       }
     })();
   }, []);
@@ -350,33 +351,39 @@ export default function RequestsPage() {
         </div>
       ) : null}
 
-      <div className={lux.card + " !p-4 sm:!p-5"}>
-        <div className="mb-4">
-          <label className={lux.label} htmlFor="r-search">
-            Αναζήτηση
-          </label>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
-              aria-hidden
-            />
-            <input
-              id="r-search"
-              type="text"
-              placeholder="Αναζήτηση τίτλου, ονόματος ή τηλεφώνου..."
-              value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-              className={
-                lux.input +
-                " hq-input-elevated w-full !py-2.5 !pl-9 !pr-4 text-sm focus:!ring-2 focus:!ring-[var(--accent-gold)]/40"
-              }
-            />
+      <div className={lux.card + " !py-4 !px-4 sm:!p-5 w-full min-w-0 max-w-full"}>
+        <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="min-w-0 w-full flex-1 sm:min-w-[12rem]">
+            <label className={lux.label} htmlFor="r-search">
+              Αναζήτηση
+            </label>
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                aria-hidden
+              />
+              <input
+                id="r-search"
+                type="text"
+                placeholder="Αναζήτηση τίτλου, ονόματος ή τηλεφώνου..."
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                className={
+                  lux.input +
+                  " hq-input-elevated w-full !py-2.5 !pl-9 text-sm focus:!ring-2 focus:!ring-[var(--accent-gold)]/40 " +
+                  (hiddenFilterCount > 0 ? "!pr-28 sm:!pr-32" : "!pr-4")
+                }
+              />
+              {hiddenFilterCount > 0 ? (
+                <span className="pointer-events-none absolute right-2.5 top-1/2 inline-flex max-w-[5.5rem] -translate-y-1/2 truncate rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_42%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent-gold)] sm:max-w-none sm:px-2.5 sm:text-[11px]">
+                  {hiddenFilterCount} φίλτρα
+                </span>
+              ) : null}
+            </div>
           </div>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
+          <div className="min-w-0 w-full sm:w-auto sm:min-w-[10rem]">
             <label className={lux.label} htmlFor="r-st">
-              Κατάσταση
+              ΚΑΤΑΣΤΑΣΗ
             </label>
             <SearchableSelect
               id="r-st"
@@ -387,9 +394,9 @@ export default function RequestsPage() {
               options={REQUEST_STATUSES.map((s) => ({ value: s, label: s }))}
             />
           </div>
-          <div>
+          <div className="min-w-0 w-full sm:w-auto sm:min-w-[11rem]">
             <label className={lux.label} htmlFor="r-cat">
-              Κατηγορία
+              ΚΑΤΗΓΟΡΙΑ
             </label>
             <SearchableSelect
               id="r-cat"
@@ -400,55 +407,16 @@ export default function RequestsPage() {
               options={categoryOptions.map((c) => ({ value: c, label: c }))}
             />
           </div>
-          <div>
-            <label className={lux.label} htmlFor="r-priority">
-              Προτεραιότητα
-            </label>
-            <HqSelect
-              id="r-priority"
-              className="hq-input-elevated"
-              value={f.priority}
-              onChange={(e) => patch({ priority: e.target.value })}
-            >
-              <option value="">Όλες</option>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-              <option value="Urgent">Urgent</option>
-            </HqSelect>
-          </div>
-          <div>
-            <label className={lux.label} htmlFor="r-range">
-              Χρονικό διάστημα
-            </label>
-            <HqSelect
-              id="r-range"
-              className="hq-input-elevated"
-              value={f.range}
-              onChange={(e) => patch({ range: e.target.value })}
-            >
-              <option value="">Όλα</option>
-              <option value="today">Σήμερα</option>
-              <option value="7d">Τελευταίες 7 μέρες</option>
-              <option value="30d">Τελευταίες 30 μέρες</option>
-              <option value="90d">Τελευταίες 90 μέρες</option>
-            </HqSelect>
-          </div>
-          <div>
-            <label className={lux.label} htmlFor="r-assigned">
-              Ανάθεση
-            </label>
-            <SearchableSelect
-              id="r-assigned"
-              className="hq-input-elevated"
-              value={f.assigned}
-              onChange={(v) => patch({ assigned: v })}
-              placeholder="Όλα"
-              options={assignees
-                .filter((a) => a.full_name)
-                .map((a) => ({ value: a.full_name!, label: a.full_name! }))}
-            />
-          </div>
+        </div>
+        <div className="mt-3 flex w-full justify-end">
+          <Link
+            href="/requests/search"
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:text-[var(--text-primary)] hover:underline"
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden />
+            Προχωρημένη αναζήτηση
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </Link>
         </div>
       </div>
 
@@ -523,24 +491,24 @@ export default function RequestsPage() {
   );
 }
 
+const CATEGORY_ICON_CLASS = "h-5 w-5 shrink-0 opacity-80";
+
 function categoryStyle(cat: string | null | undefined): {
   left: string;
   Icon: LucideIcon;
-  iconClass: string;
 } {
   const c = (cat || "").toLowerCase();
   if (c.includes("υγεία"))
-    return { left: "border-l-4 border-l-emerald-500", Icon: Stethoscope, iconClass: "text-emerald-400" };
+    return { left: "border-l-4 border-l-emerald-500", Icon: Stethoscope };
   if (c.includes("εκπαίδευ"))
-    return { left: "border-l-4 border-l-sky-500", Icon: FileText, iconClass: "text-sky-400" };
+    return { left: "border-l-4 border-l-[var(--accent)]", Icon: FileText };
   if (c.includes("δημόσια") || c.includes("υπηρεσ"))
-    return { left: "border-l-4 border-l-blue-600", Icon: Wrench, iconClass: "text-[var(--text-secondary)]" };
+    return { left: "border-l-4 border-l-[var(--accent)]", Icon: Wrench };
   if (c.includes("άλλο"))
-    return { left: "border-l-4 border-l-slate-500", Icon: HelpCircle, iconClass: "text-slate-400" };
+    return { left: "border-l-4 border-l-slate-500", Icon: HelpCircle };
   return {
     left: "border-l-4 border-l-[var(--accent-gold)]",
     Icon: Inbox,
-    iconClass: "text-[var(--accent-gold)]",
   };
 }
 
@@ -562,7 +530,7 @@ function daysLeftSla(due: string | null | undefined, status: string) {
 
 function SlaDonut({ daysLeft, max = 14 }: { daysLeft: number | null; max?: number }) {
   if (daysLeft == null) {
-    return <span className="text-xs text-[var(--text-muted)]">SLA</span>;
+    return <span className="text-xs opacity-65">SLA</span>;
   }
   const r = 16;
   const c = 2 * Math.PI * r;
@@ -588,7 +556,7 @@ function SlaDonut({ daysLeft, max = 14 }: { daysLeft: number | null; max?: numbe
           className="transition-all duration-500"
         />
       </svg>
-      <span className="absolute text-[9px] font-bold tabular-nums text-[var(--text-primary)]">
+      <span className="absolute text-[9px] font-bold tabular-nums opacity-90">
         {daysLeft < 0 ? "!" : daysLeft}
       </span>
     </div>
@@ -615,6 +583,7 @@ function RequestCard({
   const Icon = st.Icon;
   const status = normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN);
   const cardStyle = requestCardStatusStyle(status, statusColors);
+  const cardMuted = "opacity-65";
   const days = daysLeftSla(r.sla_due_date, status);
   const isCompleted = isSuccessfulRequestStatus(status);
   const isRejected = isFailedRequestStatus(status);
@@ -653,8 +622,8 @@ function RequestCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 pr-24">
-          <Icon className={`h-5 w-5 shrink-0 ${st.iconClass}`} aria-hidden />
-          <span className="font-mono text-[11px] text-[var(--text-muted)]">{r.request_code ?? "—"}</span>
+          <Icon className={CATEGORY_ICON_CLASS} aria-hidden />
+          <span className={`font-mono text-[11px] ${cardMuted}`}>{r.request_code ?? "—"}</span>
         </div>
         <div className="absolute right-3 top-3 flex items-center gap-1">
           {isCompleted ? (
@@ -722,22 +691,22 @@ function RequestCard({
           </button>
         </div>
       </div>
-      <h2 className="line-clamp-2 flex-1 text-base font-bold leading-snug text-[var(--text-primary)]">{r.title}</h2>
+      <h2 className="line-clamp-2 flex-1 text-base font-bold leading-snug">{r.title}</h2>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent-gold)] to-[#8b6914] text-xs font-bold text-white shadow-sm">
             {contactInitials(r.contacts)}
           </div>
-          <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+          <p className="truncate text-sm font-medium">
             {r.contacts ? `${r.contacts.first_name} ${r.contacts.last_name}` : "—"}
           </p>
         </div>
         <SlaDonut daysLeft={days} />
       </div>
-      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--border)]/60 pt-2">
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-current/20 pt-2">
         <RequestStatusBadge status={status} withDot />
         <PriorityPill p={r.priority} />
-        <span className="ml-auto text-[10px] text-[var(--text-muted)]">
+        <span className={`ml-auto text-[10px] ${cardMuted}`}>
           {r.created_at ? formatDateAthens(r.created_at) : ""}
         </span>
       </div>
