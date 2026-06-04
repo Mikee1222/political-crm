@@ -83,11 +83,10 @@ const val = "text-sm text-[var(--text-primary)]";
 const fieldGap = "flex flex-col gap-2";
 const grid2 = "grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2";
 const inputSm =
-  "h-9 w-full min-h-[44px] max-w-full rounded-lg border border-[var(--border)] px-2.5 text-sm text-[var(--text-primary)] focus:border-[#003476] focus:outline-none focus:ring-1 focus:ring-[#003476]/20 max-md:min-h-[48px] max-md:text-base";
+  "h-9 w-full min-h-[44px] max-w-full rounded-lg border border-[var(--border)] px-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-gold)]/20 max-md:min-h-[48px] max-md:text-base";
 const mobileEditOverlay =
   "max-md:fixed max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:top-0 z-[100] m-0 max-h-[100dvh] w-full max-w-full max-md:overflow-y-auto max-md:overflow-x-hidden max-md:rounded-none max-md:border-0 max-md:shadow-2xl max-md:p-4 max-md:pt-[max(0.5rem,env(safe-area-inset-top,0px))] max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))]";
-const btnEdit =
-  "text-xs font-semibold text-[#003476] hover:underline";
+const btnEdit = lux.linkAction;
 
 type Call = {
   id: string;
@@ -2043,7 +2042,7 @@ function ContactDetailPage() {
                   <button
                     type="button"
                     onClick={() => setShowAddAddress(true)}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
+                    className={"inline-flex items-center gap-1 " + lux.linkAction}
                   >
                     <Plus className="h-3 w-3" aria-hidden />
                     Προσθήκη
@@ -2061,7 +2060,7 @@ function ContactDetailPage() {
                     >
                       <div className="min-w-0 flex-1">
                         <div className="mb-0.5 flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold uppercase text-[#003476]">{addr.type}</span>
+                          <span className="text-xs font-semibold uppercase text-[var(--accent)]">{addr.type}</span>
                           {addr.send_post ? (
                             <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
                               Αποστέλλεται αλληλογραφία
@@ -2269,7 +2268,7 @@ function ContactDetailPage() {
               {canManage && (
                 <div className="mt-1 flex flex-col gap-2">
                   <textarea
-                    className="min-h-[80px] w-full resize-y rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[#003476] focus:outline-none focus:ring-1 focus:ring-[#003476]/20"
+                    className="min-h-[80px] w-full resize-y rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-gold)]/20"
                     placeholder="Νέα σημείωση…"
                     value={noteDraft}
                     onChange={(e) => setNoteDraft(e.target.value)}
@@ -2528,7 +2527,7 @@ function ContactDetailPage() {
                 type="button"
                 disabled={markingContacted}
                 onClick={() => void handleMarkContacted()}
-                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#003476] hover:underline disabled:opacity-50"
+                className={"mt-2 inline-flex items-center gap-1.5 " + lux.linkAction + " disabled:opacity-50"}
               >
                 <Check className="h-3 w-3" aria-hidden />
                 {markingContacted ? "Αποθήκευση…" : "Σήμανση ως επικοινωνία τώρα"}
@@ -2743,7 +2742,7 @@ function ContactDetailPage() {
                     >
                       <input
                         type="checkbox"
-                        className="mt-1 h-3.5 w-3.5 rounded border-[var(--border)] text-[#003476] focus:ring-[#003476]/30"
+                        className="mt-1 h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]/30"
                         checked={t.completed}
                         onChange={() => void toggleTask(t)}
                       />

@@ -225,7 +225,7 @@ function EventsBody() {
                       {e.title}
                     </h3>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--text-secondary)]">
-                      <MapPin className="h-3.5 w-3.5 shrink-0 text-[#1e5fa8]/90" />
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]/90" />
                       <span className="line-clamp-1">{e.location || "—"}</span>
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -375,7 +375,7 @@ function EventsBody() {
                     <span className="text-xs text-[var(--text-muted)]">{detail.status || "—"}</span>
                   </div>
                   <p className="mt-2 flex items-start gap-2 text-sm text-[var(--text-secondary)]">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#1e5fa8]" />
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
                     {detail.location || "—"}
                   </p>
                   {detail.start_time && (

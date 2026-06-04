@@ -115,7 +115,7 @@ function VolunteersBody() {
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Περιοχές</p>
-          <p className="mt-1 text-lg font-semibold text-[#1e5fa8]">{Object.keys(stats.byArea).length || "—"}</p>
+          <p className="mt-1 text-lg font-semibold text-[var(--accent)]">{Object.keys(stats.byArea).length || "—"}</p>
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Κορυφαίος ρόλος</p>
@@ -142,7 +142,7 @@ function VolunteersBody() {
           </ul>
         </div>
         <div className={lux.card + " !p-4"}>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#1e5fa8]">Κατανομή περιοχών</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">Κατανομή περιοχών</h3>
           <ul className="space-y-1.5 text-sm text-[var(--text-secondary)]">
             {stats.topAreas.length === 0 ? (
               <li className="text-[var(--text-muted)]">Χωρίς δεδομένα</li>
@@ -276,7 +276,7 @@ function VolunteersBody() {
                   <span className="font-mono text-xs">{v.phone || "—"}</span>
                 </p>
                 <p className="flex items-start gap-2">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#1e5fa8]/80" />
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]/80" />
                   <span className="min-w-0">{v.volunteer_area || "—"}</span>
                 </p>
                 <div className="flex items-center justify-between gap-2 border-t border-[var(--border)]/50 pt-2 text-xs">

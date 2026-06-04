@@ -116,12 +116,12 @@ export function ContactRelatedPersonsSection({
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm" data-hq-card>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-[#003476]">Σχετικά πρόσωπα</h2>
+        <h2 className={lux.sectionLabel}>Σχετικά πρόσωπα</h2>
         {canManage && (
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
+            className={"flex items-center gap-1 " + lux.linkAction}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden />
             Προσθήκη
@@ -145,7 +145,7 @@ export function ContactRelatedPersonsSection({
                 key={r.id}
                 className="flex items-center gap-2 border-b border-[var(--border)]/50 py-2 last:border-0"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#003476]/10 text-[10px] font-bold text-[#003476]">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[10px] font-bold text-[var(--accent)]">
                   {name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -159,7 +159,7 @@ export function ContactRelatedPersonsSection({
                 </div>
                 <Link
                   href={`/contacts/${c.id}`}
-                  className="text-xs text-[var(--text-muted)] hover:text-[#003476]"
+                  className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)]"
                   aria-label={`Άνοιγμα ${name}`}
                 >
                   →

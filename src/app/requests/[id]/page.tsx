@@ -470,7 +470,7 @@ export default function RequestDetailPage() {
                     setAssignUserId(staffUsers.some((u) => u.id === current) ? current : "");
                     setAssignOpen(true);
                   }}
-                  className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
+                  className={"flex items-center gap-1 " + lux.linkAction}
                 >
                   <Plus className="h-3 w-3" aria-hidden />
                   {data.assigned_to ? "Αλλαγή" : "Προσθήκη"}

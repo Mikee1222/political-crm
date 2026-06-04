@@ -59,7 +59,7 @@ export function RequestDocumentsSection({ requestId, canManage }: { requestId: s
   return (
     <section className={card} aria-label="Έγγραφα αιτήματος">
       <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Έγγραφα</h2>
-      <label className="mb-3 inline-flex cursor-pointer text-xs text-[#003476]">
+      <label className="mb-3 inline-flex cursor-pointer text-xs font-semibold text-[var(--accent)] hover:text-[var(--accent-gold-light)]">
         <input type="file" className="hidden" onChange={(e) => void upload(e)} disabled={uploading} />
         <span className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5">
           {uploading ? "Μεταφόρτωση…" : "Ανέβασμα εγγράφου"}
@@ -74,7 +74,7 @@ export function RequestDocumentsSection({ requestId, canManage }: { requestId: s
             </span>
             <div className="flex gap-1">
               {d.signed_url ? (
-                <a href={d.signed_url} target="_blank" rel="noreferrer" className="p-1.5 text-[#003476]" title="Λήψη">
+                <a href={d.signed_url} target="_blank" rel="noreferrer" className="p-1.5 text-[var(--accent)] hover:text-[var(--accent-gold-light)]" title="Λήψη">
                   <Download className="h-4 w-4" />
                 </a>
               ) : null}

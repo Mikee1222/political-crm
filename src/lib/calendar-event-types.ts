@@ -64,7 +64,7 @@ export const CALENDAR_EVENT_TYPES: Record<
     label: "Συνάντηση",
     color: "bg-blue-100 border-blue-200 text-blue-800",
     block:
-      "bg-blue-500/20 text-blue-100 ring-1 ring-inset ring-blue-400/30 shadow-[0_0_12px_rgba(59,130,246,0.12)]",
+      "bg-[color-mix(in_srgb,var(--accent-blue-bright)_18%,transparent)] text-[var(--text-primary)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--accent-blue-bright)_35%,transparent)] shadow-[0_0_12px_rgba(59,130,246,0.12)]",
   },
   event: {
     label: "Εκδήλωση",

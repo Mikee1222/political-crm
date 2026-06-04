@@ -534,7 +534,7 @@ function categoryStyle(cat: string | null | undefined): {
   if (c.includes("εκπαίδευ"))
     return { left: "border-l-4 border-l-sky-500", Icon: FileText, iconClass: "text-sky-400" };
   if (c.includes("δημόσια") || c.includes("υπηρεσ"))
-    return { left: "border-l-4 border-l-blue-600", Icon: Wrench, iconClass: "text-blue-300" };
+    return { left: "border-l-4 border-l-blue-600", Icon: Wrench, iconClass: "text-[var(--text-secondary)]" };
   if (c.includes("άλλο"))
     return { left: "border-l-4 border-l-slate-500", Icon: HelpCircle, iconClass: "text-slate-400" };
   return {

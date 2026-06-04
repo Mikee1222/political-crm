@@ -112,7 +112,7 @@ function EventDetail() {
 
   return (
     <div className="w-full min-w-0 max-w-3xl space-y-4">
-      <Link href="/events" className="text-sm text-[#003476] hover:underline dark:text-[var(--accent-blue-bright)]">
+      <Link href="/events" className="text-sm text-[var(--accent)] hover:text-[var(--accent-gold-light)] hover:underline">
         ← Όλες οι εκδηλώσεις
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -188,7 +188,7 @@ function EventDetail() {
             <span>
               {r.contact ? (
                 <Link
-                  className="font-medium text-[#003476] hover:underline dark:text-[var(--accent-blue-bright)]"
+                  className="font-medium text-[var(--accent)] hover:text-[var(--accent-gold-light)] hover:underline"
                   href={`/contacts/${r.contact_id}`}
                 >
                   {r.contact.first_name} {r.contact.last_name}

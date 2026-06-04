@@ -32,6 +32,13 @@ export const lux = {
     "btn-scale inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/20 px-4 py-2.5 text-sm font-semibold text-red-200 transition duration-150 hover:bg-red-500/30 active:scale-[0.98] disabled:opacity-50",
   btnGold:
     "btn-scale hq-btn-gold-glow inline-flex items-center justify-center gap-2 rounded-lg border border-[#C9A84C] bg-gradient-to-b from-[#C9A84C] to-[#8b6914] px-4 py-2.5 text-sm font-bold text-[var(--text-badge-on-gold)] shadow-sm transition duration-150 hover:brightness-110 active:scale-[0.97] disabled:opacity-50",
+  /** Theme-aware text links / inline actions (readable on dark + light) */
+  linkAction:
+    "text-xs font-semibold text-[var(--accent)] hover:text-[var(--accent-gold-light)] hover:underline",
+  linkActionSm:
+    "text-[10px] font-semibold text-[var(--accent)] hover:text-[var(--accent-gold-light)] hover:underline",
+  sectionLabel:
+    "text-[10px] font-bold uppercase tracking-widest text-[var(--accent)]",
   /** Primary action on blue: #003476, white text */
   btnBlue:
     "btn-scale inline-flex items-center justify-center gap-2 rounded-lg border border-[#003476] bg-[#003476] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-150 hover:brightness-110 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",

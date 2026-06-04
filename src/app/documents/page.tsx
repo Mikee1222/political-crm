@@ -93,7 +93,7 @@ function FileTypeIconV2({ ft, name }: { ft: string | null; name: string }) {
   }
   if (k === "word") {
     return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/30">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--accent-blue-bright)_15%,transparent)] text-[var(--accent)] ring-1 ring-[color-mix(in_srgb,var(--accent-blue-bright)_30%,transparent)]">
         <FileType className="h-6 w-6" />
       </div>
     );

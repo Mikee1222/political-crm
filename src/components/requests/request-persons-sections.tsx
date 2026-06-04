@@ -74,11 +74,11 @@ function PersonList({
             key={c.id}
             className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
           >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#003476]/10 text-[10px] font-bold text-[#003476]">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[10px] font-bold text-[var(--accent)]">
               {initials(c)}
             </div>
             <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
-            <Link href={`/contacts/${c.id}`} className="text-xs text-[var(--text-muted)] hover:text-[#003476]">
+            <Link href={`/contacts/${c.id}`} className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)]">
               →
             </Link>
             {canManage && (
@@ -147,12 +147,12 @@ function PersonSection({
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#003476]">{title}</h3>
+        <h3 className={lux.sectionLabel}>{title}</h3>
         {canManage && (
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
+            className={"flex items-center gap-1 " + lux.linkAction}
           >
             <Plus className="h-3 w-3" aria-hidden />
             Προσθήκη
@@ -286,7 +286,7 @@ function HandlersSection({
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1 text-xs font-semibold text-[#003476] hover:underline"
+            className={"flex items-center gap-1 " + lux.linkAction}
           >
             <Plus className="h-3 w-3" aria-hidden />
             Προσθήκη

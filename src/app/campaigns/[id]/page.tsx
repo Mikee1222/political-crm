@@ -490,7 +490,7 @@ export default function CampaignDetailPage() {
                           <div className="font-medium text-[var(--text-primary)]">
                             {n ? [n.first_name, n.last_name].filter(Boolean).join(" ") : "—"}
                           </div>
-                          <Link className="text-[10px] text-[#1e5fa8] hover:underline" href={`/contacts/${row.contact_id}`}>
+                          <Link className={lux.linkActionSm} href={`/contacts/${row.contact_id}`}>
                             Προφίλ
                           </Link>
                         </td>
@@ -669,7 +669,7 @@ export default function CampaignDetailPage() {
                             {n ? [n.first_name, n.last_name].filter(Boolean).join(" ") : "—"}
                           </div>
                           <Link
-                            className="mt-0.5 text-[10px] text-[#1e5fa8] hover:underline"
+                            className={"mt-0.5 " + lux.linkActionSm}
                             href={`/contacts/${call.contact_id}`}
                           >
                             Προφίλ

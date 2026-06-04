@@ -175,7 +175,7 @@ export function ContactExtraSections({
       <div className={card}>
         <h2 className="mb-3 text-sm font-semibold">Έγγραφα</h2>
         <div className="mb-3">
-          <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-[#003476]">
+          <label className={"inline-flex cursor-pointer items-center gap-2 " + lux.linkAction}>
             <input type="file" className="hidden" onChange={(e) => void upload(e)} disabled={uploading} />
             <span className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5">
               {uploading ? "Μεταφόρτωση…" : "Ανέβασμα εγγράφου"}
@@ -198,7 +198,7 @@ export function ContactExtraSections({
                     href={d.signed_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="p-1.5 text-[#003476]"
+                    className={"p-1.5 " + lux.linkAction}
                     title="Λήψη/προβολή"
                   >
                     <Download className="h-4 w-4" />

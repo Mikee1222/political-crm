@@ -147,8 +147,9 @@ const PRIORITY_FILTER_OPTIONS = [
   {
     value: "Low",
     label: "Χαμηλή",
-    chipClass: "text-blue-500 border-blue-400/50 bg-blue-400/10",
-    dotClass: "bg-blue-400",
+    chipClass:
+      "text-[var(--accent)] border-[color-mix(in_srgb,var(--accent-blue-bright)_50%,transparent)] bg-[color-mix(in_srgb,var(--accent-blue-bright)_10%,transparent)]",
+    dotClass: "bg-[var(--accent-blue-bright)]",
   },
 ] as const;
 

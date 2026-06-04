@@ -58,6 +58,7 @@ html {
   --bg-secondary: #0a1628;
   --bg-card: #0f1e35;
   --bg-elevated: #162540;
+  --accent: var(--accent-gold);
   --accent-gold: #c9a84c;
   --accent-gold-light: #e8c96b;
   --accent-blue: #003476;
@@ -157,6 +158,7 @@ html {
   --bg-secondary: #ede8dc;
   --bg-card: #ffffff;
   --bg-elevated: #f9f6f0;
+  --accent: var(--accent-gold);
   --accent-gold: #8b6914;
   --accent-gold-light: #c9a84c;
   --accent-blue: #003476;

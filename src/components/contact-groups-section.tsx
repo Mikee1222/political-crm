@@ -9,7 +9,7 @@ import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-gro
 import type { ContactGroupSummary } from "@/lib/contact-group-members";
 
 const inputSm =
-  "h-9 w-full min-h-[44px] max-w-full rounded-lg border border-[var(--border)] px-2.5 text-sm text-[var(--text-primary)] focus:border-[#003476] focus:outline-none focus:ring-1 focus:ring-[#003476]/20 max-md:min-h-[48px] max-md:text-base";
+  "h-9 w-full min-h-[44px] max-w-full rounded-lg border border-[var(--border)] px-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-gold)]/20 max-md:min-h-[48px] max-md:text-base";
 
 type Props = {
   contactId: string;
