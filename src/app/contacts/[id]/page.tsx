@@ -23,15 +23,14 @@ import {
   User,
   X,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
 import {
   formatCalendarDateOnly,
   formatCallLogDateTime,
   formatDateAthens,
   formatDateTimeAthens,
   formatDateTimeEnGb,
+  formatRelativeAthens,
 } from "@/lib/date-format";
-import { el } from "date-fns/locale";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -261,14 +260,6 @@ function buildContactCopyText(c: Contact) {
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-/** Relative elapsed time from called_at (absolute instant; display is Athens wall clock). */
-function fmtCallLogRelative(calledAt: string | null | undefined) {
-  if (calledAt == null || String(calledAt).trim() === "") return "";
-  const then = new Date(calledAt);
-  if (Number.isNaN(then.getTime())) return "";
-  return formatDistanceToNow(then, { locale: el, addSuffix: true });
 }
 
 function formatDate(s: string | null | undefined) {
@@ -2514,7 +2505,7 @@ function ContactDetailPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-[var(--text-primary)]">{formatCallLogDateTime(lastCommAt)}</p>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">{fmtCallLogRelative(lastCommAt)}</p>
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">{formatRelativeAthens(lastCommAt)}</p>
                     {lastCommMarker ? (
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">από: {lastCommMarker}</p>
                     ) : null}

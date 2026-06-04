@@ -1,12 +1,37 @@
 /** Display helpers: UTC instants → Europe/Athens; calendar dates stay shift-free. */
 
+import { formatDistanceToNow } from "date-fns";
+import { el } from "date-fns/locale";
+
 export const ATHENS_TZ = "Europe/Athens";
 
-function parseInstant(value: string | Date | null | undefined): Date | null {
+const HAS_TZ_OFFSET = /(?:Z|[+-]\d{2}(?::?\d{2})?)$/i;
+/** e.g. Postgres/admin "2026-06-04 12:13 UTC" — not matched by HAS_TZ_OFFSET alone. */
+const NAMED_UTC_SUFFIX = /\s+(?:UTC|GMT)\s*$/i;
+
+/** Parse DB/API timestamps as UTC when no offset is present (Postgres timestamp/timestamptz). */
+export function parseInstant(value: string | Date | null | undefined): Date | null {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (value == null || String(value).trim() === "") return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+  const raw = String(value).trim();
+
+  if (NAMED_UTC_SUFFIX.test(raw)) {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+
+  if (HAS_TZ_OFFSET.test(raw)) {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const iso = raw.includes("T") ? raw : raw.replace(" ", "T");
+  const asUtc = iso.endsWith("Z") ? iso : `${iso}Z`;
+  const d = new Date(asUtc);
+  if (!Number.isNaN(d.getTime())) return d;
+
+  const fallback = new Date(raw);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
 
 /** Format a UTC instant as datetime in Europe/Athens (el-GR). */
@@ -74,7 +99,7 @@ export function formatCalendarDateOnly(
   return d.toLocaleDateString("el-GR", options);
 }
 
-/** Call-log datetime (el-GR, Athens). */
+/** Call-log / last_contacted_at datetime (el-GR, Athens wall clock). */
 export function formatCallLogDateTime(calledAt: string | null | undefined): string {
   return formatDateTimeAthens(calledAt, {
     day: "2-digit",
@@ -82,7 +107,17 @@ export function formatCallLogDateTime(calledAt: string | null | undefined): stri
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
+}
+
+/** Relative elapsed time from a UTC instant (Greek copy for very recent marks). */
+export function formatRelativeAthens(value: string | Date | null | undefined): string {
+  const then = parseInstant(value);
+  if (!then) return "";
+  const diffMs = Date.now() - then.getTime();
+  if (diffMs >= 0 && diffMs < 60_000) return "λιγότερο από ένα λεπτό πριν";
+  return formatDistanceToNow(then, { locale: el, addSuffix: true });
 }
 
 /** Compact chat / activity timestamp. */

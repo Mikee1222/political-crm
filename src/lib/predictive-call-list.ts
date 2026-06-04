@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { todayYmdAthens } from "@/lib/athens-ranges";
+import { parseInstant } from "@/lib/date-format";
 
 export type ScoreBreakdown = { points: number; reason: string };
 
@@ -109,8 +110,8 @@ export async function buildPredictiveCallList(
       breakdown.push({ points: 20, reason: "Ποτέ κλήση" });
       score += 20;
     } else {
-      const dLast = new Date(lastIso);
-      if (!Number.isNaN(dLast.getTime())) {
+      const dLast = parseInstant(lastIso);
+      if (dLast) {
         const d = daysBetween(now, dLast);
         if (d > 90) {
           breakdown.push({ points: 15, reason: "Τελευταία κλήση > 90 ημέρες" });

@@ -1,5 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { el } from "date-fns/locale";
+import { parseInstant } from "@/lib/date-format";
 import type { ActivityAction } from "@/lib/activity-log";
 
 export function activityGreekLine(params: {
@@ -36,8 +37,10 @@ export function activityGreekLine(params: {
 }
 
 export function formatTimeAgo(iso: string): string {
+  const then = parseInstant(iso);
+  if (!then) return "";
   try {
-    return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: el });
+    return formatDistanceToNow(then, { addSuffix: true, locale: el });
   } catch {
     return "";
   }
