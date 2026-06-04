@@ -1530,7 +1530,7 @@ function ContactDetailPage() {
             <ContactRelatedPersonsSection contactId={c.id} canManage={canManage} />
           </div>
         )}
-          <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-5 overflow-visible">
             {/* A Personal */}
             <div
               {...animDelay(0)}
@@ -1767,13 +1767,12 @@ function ContactDetailPage() {
             {/* B Electoral */}
             <div
               {...animDelay(2)}
-              className={[
+              className={cn(
                 cardBlue,
+                "relative min-w-0 w-full",
                 canManage && editing === "electoral" && mobileEditOverlay,
-                canManage && editing === "electoral" ? "pb-6" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+                canManage && editing === "electoral" && "h-auto overflow-visible pb-6",
+              )}
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
@@ -1802,30 +1801,32 @@ function ContactDetailPage() {
                 )}
               </div>
               <div
-                className={
-                  canManage && editing === "electoral" && w
-                    ? "flex flex-col gap-4"
-                    : cn(grid2, "gap-y-3")
-                }
+                className={cn(
+                  grid2,
+                  "min-w-0 w-full gap-y-3",
+                  canManage && editing === "electoral" && w && "gap-y-4",
+                )}
               >
                 {canManage && editing === "electoral" && w ? (
-                  <ContactElectoralLocationEdit
-                    values={{
-                      municipality: w.municipality,
-                      electoral_district: w.electoral_district,
-                      toponym: w.toponym,
-                    }}
-                    onChange={(v) =>
-                      setBuf({
-                        ...w,
-                        municipality: v.municipality,
-                        electoral_district: v.electoral_district,
-                        toponym: v.toponym,
-                      } as Contact)
-                    }
-                    inputClassName={inputSm + " !pr-9"}
-                    labelClassName={lbl}
-                  />
+                  <div className="min-w-0 sm:col-span-2">
+                    <ContactElectoralLocationEdit
+                      values={{
+                        municipality: w.municipality,
+                        electoral_district: w.electoral_district,
+                        toponym: w.toponym,
+                      }}
+                      onChange={(v) =>
+                        setBuf({
+                          ...w,
+                          municipality: v.municipality,
+                          electoral_district: v.electoral_district,
+                          toponym: v.toponym,
+                        } as Contact)
+                      }
+                      inputClassName={inputSm + " !pr-9"}
+                      labelClassName={lbl}
+                    />
+                  </div>
                 ) : null}
                 {!(canManage && editing === "electoral" && w)
                   ? (["municipality", "electoral_district", "toponym"] as const).map((k) => {
@@ -1946,12 +1947,6 @@ function ContactDetailPage() {
                       />
                       <input
                         className={inputSm}
-                        placeholder="Περιοχή"
-                        value={String((w as Contact).volunteer_area ?? "")}
-                        onChange={(e) => setBuf({ ...w, volunteer_area: e.target.value || null } as Contact)}
-                      />
-                      <input
-                        className={inputSm}
                         type="date"
                         value={((w as Contact).volunteer_since ?? "").toString().slice(0, 10)}
                         onChange={(e) => setBuf({ ...w, volunteer_since: e.target.value || null } as Contact)}
@@ -1961,14 +1956,17 @@ function ContactDetailPage() {
                     <p className="text-sm text-[var(--text-primary)]">
                       {(c as Contact).is_volunteer ? "Ναι" : "Όχι"}
                       {((c as Contact).volunteer_role ?? "") ? ` · Ρόλος: ${(c as Contact).volunteer_role}` : ""}
-                      {((c as Contact).volunteer_area ?? "") ? ` · ${(c as Contact).volunteer_area}` : ""}
                     </p>
                   )}
                 </div>
               </div>
             </div>
 
-            <div {...animDelay(3)} className={card}>
+            {/* Contact sources — separate card below electoral info */}
+            <div
+              {...animDelay(3)}
+              className={cn(card, "relative z-[1] min-w-0 w-full shrink-0 overflow-visible")}
+            >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                   <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
@@ -2032,7 +2030,7 @@ function ContactDetailPage() {
               ) : null}
             </div>
 
-            <div {...animDelay(3)} className={card}>
+            <div {...animDelay(4)} className={cn(card, "relative min-w-0 w-full overflow-visible")}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                   <MapPin className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
