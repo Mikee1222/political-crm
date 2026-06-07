@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
+import clsx from "clsx";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { isUuid } from "@/lib/resolve-entity-id";
-import { CenteredModal } from "@/components/ui/centered-modal";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
-import { FormSubmitButton } from "@/components/ui/form-submit-button";
 
 export type RequestPersonContact = {
   id: string;
+  person_id?: string | null;
   first_name: string;
   last_name: string;
   phone: string | null;
@@ -42,10 +42,34 @@ async function addRequestPerson(
   return { ok: true };
 }
 
-const SECTIONS: { role: PersonRole; title: string }[] = [
+async function removeRequestPerson(
+  requestId: string,
+  contact: RequestPersonContact,
+  role: PersonRole,
+): Promise<boolean> {
+  const personId = contact.person_id?.trim();
+  if (personId && isUuid(personId)) {
+    const res = await fetchWithTimeout(
+      `/api/requests/${encodeURIComponent(requestId)}/persons/${encodeURIComponent(personId)}`,
+      { method: "DELETE" },
+    );
+    return res.ok;
+  }
+
+  const contactId = contact.id.trim();
+  if (!isUuid(contactId)) return false;
+  const res = await fetchWithTimeout(
+    `/api/requests/${encodeURIComponent(requestId)}/persons?contact_id=${encodeURIComponent(contactId)}&role=${role}`,
+    { method: "DELETE" },
+  );
+  return res.ok;
+}
+
+const SECTIONS: { role: PersonRole; title: string; elevated?: boolean }[] = [
   { role: "requester", title: "Πρόσωπα που αιτούνται" },
   { role: "affected", title: "Πρόσωπα που αφορά" },
   { role: "helper", title: "Πρόσωπα που βοηθούν" },
+  { role: "handler", title: "Χειριστές αιτήματος", elevated: true },
 ];
 
 function initials(c: RequestPersonContact) {
@@ -53,25 +77,54 @@ function initials(c: RequestPersonContact) {
   return a.toUpperCase() || "?";
 }
 
+function initialsFromName(name: string) {
+  const w = name.trim().split(/\s+/).filter(Boolean);
+  if (w.length === 0) return "?";
+  if (w.length === 1) return w[0]!.slice(0, 2).toUpperCase() || "?";
+  return `${w[0]![0] ?? ""}${w[1]![0] ?? ""}`.toUpperCase() || "?";
+}
+
+function LegacyHandlerList({ names }: { names: string[] }) {
+  if (names.length === 0) return null;
+  return (
+    <ul className="space-y-0">
+      {names.map((name, index) => (
+        <li
+          key={`legacy-handler-${index}-${name}`}
+          className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
+        >
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[10px] font-bold text-[var(--accent)]">
+            {initialsFromName(name)}
+          </div>
+          <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function PersonList({
   contacts,
   canManage,
   onRemove,
+  hideWhenEmpty,
 }: {
   contacts: RequestPersonContact[];
   canManage: boolean;
-  onRemove: (contactId: string) => void;
+  onRemove: (contact: RequestPersonContact) => void;
+  hideWhenEmpty?: boolean;
 }) {
   if (contacts.length === 0) {
-    return <p className="text-xs text-[var(--text-muted)]">—</p>;
+    return hideWhenEmpty ? null : <p className="text-xs text-[var(--text-muted)]">—</p>;
   }
   return (
     <ul className="space-y-0">
       {contacts.map((c) => {
         const name = `${c.first_name} ${c.last_name}`.trim() || "—";
+        const rowKey = c.person_id ?? `${c.id}-${name}`;
         return (
           <li
-            key={c.id}
+            key={rowKey}
             className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
           >
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[10px] font-bold text-[var(--accent)]">
@@ -86,7 +139,7 @@ function PersonList({
                 type="button"
                 className="rounded p-0.5 text-[var(--text-muted)] hover:text-red-400"
                 aria-label={`Αφαίρεση ${name}`}
-                onClick={() => onRemove(c.id)}
+                onClick={() => onRemove(c)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -98,27 +151,53 @@ function PersonList({
   );
 }
 
+function HandlerList({
+  legacyNames,
+  contacts,
+  canManage,
+  onRemove,
+}: {
+  legacyNames: string[];
+  contacts: RequestPersonContact[];
+  canManage: boolean;
+  onRemove: (contact: RequestPersonContact) => void;
+}) {
+  if (legacyNames.length === 0 && contacts.length === 0) {
+    return <p className="text-xs text-[var(--text-muted)]">—</p>;
+  }
+  return (
+    <>
+      <LegacyHandlerList names={legacyNames} />
+      <PersonList contacts={contacts} canManage={canManage} onRemove={onRemove} hideWhenEmpty />
+    </>
+  );
+}
+
 function PersonSection({
   title,
   role,
   contacts,
+  legacyHandlerNames,
   canManage,
   requestId,
   onChanged,
+  elevated,
 }: {
   title: string;
   role: PersonRole;
   contacts: RequestPersonContact[];
+  legacyHandlerNames?: string[];
   canManage: boolean;
   requestId: string;
   onChanged: () => void;
+  elevated?: boolean;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [contactId, setContactId] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const closeModal = useCallback(() => {
+  const closeAdd = useCallback(() => {
     setAddOpen(false);
     setContactId("");
     setErr("");
@@ -136,75 +215,78 @@ function PersonSection({
           setErr(result.error);
           return;
         }
-        closeModal();
+        closeAdd();
         onChanged();
       } finally {
         setSaving(false);
       }
     },
-    [closeModal, contactId, onChanged, requestId, role],
+    [closeAdd, contactId, onChanged, requestId, role],
   );
 
-  const remove = async (id: string) => {
-    const res = await fetchWithTimeout(
-      `/api/requests/${encodeURIComponent(requestId)}/persons?contact_id=${encodeURIComponent(id)}&role=${role}`,
-      { method: "DELETE" },
-    );
-    if (res.ok) onChanged();
-  };
+  const remove = useCallback(
+    async (contact: RequestPersonContact) => {
+      const ok = await removeRequestPerson(requestId, contact, role);
+      if (ok) onChanged();
+    },
+    [onChanged, requestId, role],
+  );
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className={lux.sectionLabel}>{title}</h3>
+    <div
+      className={clsx(
+        "rounded-xl border border-[var(--border)] p-4",
+        elevated ? "bg-[var(--bg-elevated)]/30" : "bg-[var(--bg-card)]",
+      )}
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className={elevated ? "text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]" : lux.sectionLabel}>
+          {title}
+        </h3>
         {canManage && (
           <button
             type="button"
             onClick={() => {
+              if (addOpen) {
+                closeAdd();
+                return;
+              }
               setErr("");
               setContactId("");
               setAddOpen(true);
             }}
             className={"flex items-center gap-1 " + lux.linkAction}
+            aria-expanded={addOpen}
           >
             <Plus className="h-3 w-3" aria-hidden />
-            Προσθήκη
+            {addOpen ? "Άκυρο" : "Προσθήκη"}
           </button>
         )}
       </div>
-      <PersonList contacts={contacts} canManage={canManage} onRemove={(id) => void remove(id)} />
-      <CenteredModal
-        open={addOpen}
-        onClose={closeModal}
-        title={title}
-        ariaLabel={`Προσθήκη — ${title}`}
-        className="!max-w-md"
-        footer={
-          <>
-            <button type="button" className={lux.btnSecondary} onClick={closeModal} disabled={saving}>
-              Άκυρο
-            </button>
-            <FormSubmitButton
-              type="button"
-              variant="gold"
-              loading={saving}
-              disabled={!contactId}
-              onClick={() => void add()}
-            >
-              Προσθήκη
-            </FormSubmitButton>
-          </>
-        }
-      >
-        <ContactSearchCombobox
-          key={`${role}-${addOpen ? "open" : "closed"}`}
-          label="Επαφή"
-          valueId={contactId}
-          onChange={(id) => setContactId(id)}
-          onSelect={(id) => void add(id)}
+      {addOpen && canManage && (
+        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3">
+          <ContactSearchCombobox
+            key={`${role}-add`}
+            label="Επαφή"
+            valueId={contactId}
+            onChange={(id) => setContactId(id)}
+            onSelect={(id) => void add(id)}
+            disabled={saving}
+          />
+          {err ? <p className="mt-2 text-sm text-red-400">{err}</p> : null}
+          {saving ? <p className="mt-2 text-xs text-[var(--text-muted)]">Αποθήκευση…</p> : null}
+        </div>
+      )}
+      {role === "handler" ? (
+        <HandlerList
+          legacyNames={legacyHandlerNames ?? []}
+          contacts={contacts}
+          canManage={canManage}
+          onRemove={(c) => void remove(c)}
         />
-        {err && <p className="mt-2 text-sm text-red-400">{err}</p>}
-      </CenteredModal>
+      ) : (
+        <PersonList contacts={contacts} canManage={canManage} onRemove={(c) => void remove(c)} />
+      )}
     </div>
   );
 }
@@ -215,6 +297,7 @@ export function RequestPersonsSections({
   affected,
   helpers,
   handlers,
+  legacyHandlers,
   canManage,
   onChanged,
 }: {
@@ -223,6 +306,7 @@ export function RequestPersonsSections({
   affected: RequestPersonContact[];
   helpers: RequestPersonContact[];
   handlers: RequestPersonContact[];
+  legacyHandlers?: string[];
   canManage: boolean;
   onChanged: () => void;
 }) {
@@ -241,126 +325,13 @@ export function RequestPersonsSections({
           title={s.title}
           role={s.role}
           contacts={lists[s.role]}
+          legacyHandlerNames={s.role === "handler" ? legacyHandlers : undefined}
           canManage={canManage}
           requestId={requestId}
           onChanged={onChanged}
+          elevated={s.elevated}
         />
       ))}
-      <HandlersSection
-        requestId={requestId}
-        handlers={handlers}
-        canManage={canManage}
-        onChanged={onChanged}
-      />
-    </div>
-  );
-}
-
-function HandlersSection({
-  requestId,
-  handlers,
-  canManage,
-  onChanged,
-}: {
-  requestId: string;
-  handlers: RequestPersonContact[];
-  canManage: boolean;
-  onChanged: () => void;
-}) {
-  const [addOpen, setAddOpen] = useState(false);
-  const [contactId, setContactId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  const closeModal = useCallback(() => {
-    setAddOpen(false);
-    setContactId("");
-    setErr("");
-  }, []);
-
-  const add = useCallback(
-    async (pickedId?: string) => {
-      const id = (pickedId ?? contactId).trim();
-      if (!id) return;
-      setSaving(true);
-      setErr("");
-      try {
-        const result = await addRequestPerson(requestId, id, "handler");
-        if (!result.ok) {
-          setErr(result.error);
-          return;
-        }
-        closeModal();
-        onChanged();
-      } finally {
-        setSaving(false);
-      }
-    },
-    [closeModal, contactId, onChanged, requestId],
-  );
-
-  const remove = async (id: string) => {
-    const res = await fetchWithTimeout(
-      `/api/requests/${encodeURIComponent(requestId)}/persons?contact_id=${encodeURIComponent(id)}&role=handler`,
-      { method: "DELETE" },
-    );
-    if (res.ok) onChanged();
-  };
-
-  return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-          Χειριστές αιτήματος
-        </h3>
-        {canManage && (
-          <button
-            type="button"
-            onClick={() => {
-              setErr("");
-              setContactId("");
-              setAddOpen(true);
-            }}
-            className={"flex items-center gap-1 " + lux.linkAction}
-          >
-            <Plus className="h-3 w-3" aria-hidden />
-            Προσθήκη
-          </button>
-        )}
-      </div>
-      <PersonList contacts={handlers} canManage={canManage} onRemove={(id) => void remove(id)} />
-      <CenteredModal
-        open={addOpen}
-        onClose={closeModal}
-        title="Χειριστές αιτήματος"
-        ariaLabel="Προσθήκη χειριστή"
-        className="!max-w-md"
-        footer={
-          <>
-            <button type="button" className={lux.btnSecondary} onClick={closeModal} disabled={saving}>
-              Άκυρο
-            </button>
-            <FormSubmitButton
-              type="button"
-              variant="gold"
-              loading={saving}
-              disabled={!contactId}
-              onClick={() => void add()}
-            >
-              Προσθήκη
-            </FormSubmitButton>
-          </>
-        }
-      >
-        <ContactSearchCombobox
-          key={`handler-${addOpen ? "open" : "closed"}`}
-          label="Επαφή χειριστή"
-          valueId={contactId}
-          onChange={(id) => setContactId(id)}
-          onSelect={(id) => void add(id)}
-        />
-        {err && <p className="mt-2 text-sm text-red-400">{err}</p>}
-      </CenteredModal>
     </div>
   );
 }

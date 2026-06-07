@@ -13,12 +13,11 @@ import { RequestDocumentsSection } from "@/components/request-documents-section"
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
 import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
-import { CenteredModal } from "@/components/ui/centered-modal";
-import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 
 type ContactCard = {
   id: string;
+  person_id?: string | null;
   first_name: string;
   last_name: string;
   phone: string | null;
@@ -455,6 +454,7 @@ export default function RequestDetailPage() {
             affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
             helpers={data.helpers ?? []}
             handlers={data.person_handlers ?? []}
+            legacyHandlers={data.handlers ?? []}
             canManage={canManage}
             onChanged={() => void load()}
           />
@@ -465,18 +465,91 @@ export default function RequestDetailPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (assignOpen) {
+                      setAssignOpen(false);
+                      setAssignUserId("");
+                      setAssignErr("");
+                      return;
+                    }
                     setAssignErr("");
                     const current = data.assigned_to?.trim() ?? "";
                     setAssignUserId(staffUsers.some((u) => u.id === current) ? current : "");
                     setAssignOpen(true);
                   }}
                   className={"flex items-center gap-1 " + lux.linkAction}
+                  aria-expanded={assignOpen}
                 >
                   <Plus className="h-3 w-3" aria-hidden />
-                  {data.assigned_to ? "Αλλαγή" : "Προσθήκη"}
+                  {assignOpen ? "Άκυρο" : data.assigned_to ? "Αλλαγή" : "Προσθήκη"}
                 </button>
               )}
             </div>
+            {assignOpen && canManage && (
+              <div className="mb-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3">
+                <label className={lux.label}>Στέλεχος</label>
+                <SearchableSelect
+                  value={assignUserId}
+                  onChange={setAssignUserId}
+                  options={staffUsers.map((u) => ({
+                    value: u.id,
+                    label: u.full_name?.trim() || u.email || u.id,
+                  }))}
+                  placeholder="Αναζήτηση στελέχους…"
+                  searchPlaceholder="Αναζήτηση…"
+                  aria-label="Στέλεχος"
+                  disabled={assignSaving}
+                />
+                {assignErr && <p className="text-sm text-red-400">{assignErr}</p>}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    className={lux.btnSecondary + " !min-h-[38px] !py-2 !text-xs"}
+                    onClick={() => {
+                      setAssignOpen(false);
+                      setAssignUserId("");
+                      setAssignErr("");
+                    }}
+                    disabled={assignSaving}
+                  >
+                    Άκυρο
+                  </button>
+                  <button
+                    type="button"
+                    className={lux.btnPrimary + " !min-h-[38px] !py-2 !text-xs"}
+                    disabled={!assignUserId || assignSaving}
+                    onClick={() => {
+                      void (async () => {
+                        if (!requestApiId || !assignUserId) return;
+                        setAssignSaving(true);
+                        setAssignErr("");
+                        try {
+                          const res = await fetchWithTimeout(
+                            `/api/requests/${encodeURIComponent(requestApiId)}`,
+                            {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ assigned_to: assignUserId }),
+                            },
+                          );
+                          const j = (await res.json()) as { error?: string };
+                          if (!res.ok) {
+                            setAssignErr(j.error ?? "Σφάλμα");
+                            return;
+                          }
+                          setAssignOpen(false);
+                          setAssignUserId("");
+                          await load();
+                        } finally {
+                          setAssignSaving(false);
+                        }
+                      })();
+                    }}
+                  >
+                    {assignSaving ? "…" : "Αποθήκευση"}
+                  </button>
+                </div>
+              </div>
+            )}
             {assignedDisplayName ? (
               <div className="flex items-start gap-2.5">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-xs font-bold text-[var(--text-primary)]">
@@ -491,77 +564,6 @@ export default function RequestDetailPage() {
               <p className="text-sm text-[var(--text-muted)]">Χωρίς ανάθεση</p>
             )}
           </div>
-          <CenteredModal
-            open={assignOpen}
-            onClose={() => {
-              setAssignOpen(false);
-              setAssignUserId("");
-              setAssignErr("");
-            }}
-            title="Ανάθεση αιτήματος"
-            ariaLabel="Ανάθεση αιτήματος"
-            className="!max-w-md"
-            footer={
-              <>
-                <button
-                  type="button"
-                  className={lux.btnSecondary}
-                  onClick={() => setAssignOpen(false)}
-                  disabled={assignSaving}
-                >
-                  Άκυρο
-                </button>
-                <FormSubmitButton
-                  type="button"
-                  variant="gold"
-                  loading={assignSaving}
-                  disabled={!assignUserId}
-                  onClick={() => {
-                    void (async () => {
-                      if (!requestApiId || !assignUserId) return;
-                      setAssignSaving(true);
-                      setAssignErr("");
-                      try {
-                        const res = await fetchWithTimeout(
-                          `/api/requests/${encodeURIComponent(requestApiId)}`,
-                          {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ assigned_to: assignUserId }),
-                          },
-                        );
-                        const j = (await res.json()) as { error?: string; request?: RequestDetail };
-                        if (!res.ok) {
-                          setAssignErr(j.error ?? "Σφάλμα");
-                          return;
-                        }
-                        setAssignOpen(false);
-                        setAssignUserId("");
-                        await load();
-                      } finally {
-                        setAssignSaving(false);
-                      }
-                    })();
-                  }}
-                >
-                  Αποθήκευση
-                </FormSubmitButton>
-              </>
-            }
-          >
-            <label className={lux.label}>Στέλεχος</label>
-            <SearchableSelect
-              value={assignUserId}
-              onChange={setAssignUserId}
-              options={staffUsers.map((u) => ({
-                value: u.id,
-                label: u.full_name?.trim() || u.email || u.id,
-              }))}
-              placeholder="Επιλέξτε στέλεχος…"
-              aria-label="Στέλεχος"
-            />
-            {assignErr && <p className="mt-2 text-sm text-red-400">{assignErr}</p>}
-          </CenteredModal>
         </aside>
       </div>
 

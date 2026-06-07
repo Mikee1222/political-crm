@@ -19,6 +19,7 @@ type Props = {
   placeholder?: string;
   error?: string | null;
   onBlurValidate?: () => void;
+  disabled?: boolean;
 };
 
 const DEBOUNCE_MS = 280;
@@ -40,6 +41,7 @@ export function ContactSearchCombobox({
   placeholder = "Αναζήτηση ονόματος ή τηλεφώνου…",
   error,
   onBlurValidate,
+  disabled,
 }: Props) {
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -63,7 +65,7 @@ export function ContactSearchCombobox({
     try {
       const u = new URLSearchParams();
       u.set("search", search.trim());
-      u.set("limit", "30");
+      u.set("limit", "10");
       const res = await fetchWithTimeout(`/api/contacts?${u.toString()}`);
       const j = (await res.json()) as { contacts?: ContactRow[] };
       setList(j.contacts ?? []);
@@ -162,12 +164,14 @@ export function ContactSearchCombobox({
             placeholder={placeholder}
             value={q}
             onChange={(e) => {
+              if (disabled) return;
               setQ(e.target.value);
               if (!open) setOpen(true);
             }}
-            onFocus={() => setOpen(true)}
+            onFocus={() => !disabled && setOpen(true)}
             onBlur={() => onBlurValidate?.()}
             autoComplete="off"
+            disabled={disabled}
             role="combobox"
             aria-expanded={open}
             aria-controls={listId + "list"}
@@ -197,7 +201,10 @@ export function ContactSearchCombobox({
                     <button
                       type="button"
                       className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-accent"
-                      onClick={() => pickContact(c)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickContact(c);
+                      }}
                     >
                       <span className="font-medium">{displayName(c)}</span>
                       {ph && <span className="ml-2 text-xs text-[var(--text-muted)]">{ph}</span>}

@@ -65,15 +65,20 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return forbidden();
     }
 
-    const contactId = request.nextUrl.searchParams.get("contact_id")?.trim() ?? "";
+    const contactRaw = request.nextUrl.searchParams.get("contact_id")?.trim() ?? "";
     const role = request.nextUrl.searchParams.get("role")?.trim() ?? "";
-    if (!contactId || !ROLES.has(role)) {
+    if (!contactRaw || !ROLES.has(role)) {
       return NextResponse.json({ error: "Άκυρα στοιχεία" }, { status: 400 });
     }
 
     const requestId = await resolveRequestId(supabase, params.id);
     if (!requestId) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
+    const contactId = await resolveContactId(supabase, contactRaw);
+    if (!contactId) {
+      return NextResponse.json({ error: "Άκυρη επαφή" }, { status: 400 });
     }
 
     const { error } = await supabase

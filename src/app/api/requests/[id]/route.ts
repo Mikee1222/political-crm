@@ -29,6 +29,7 @@ function noteAuthorDisplay(row: RequestNoteRow, nameMap: Map<string, string | nu
 
 type ContactBrief = {
   id: string;
+  person_id: string | null;
   first_name: string;
   last_name: string;
   phone: string | null;
@@ -37,15 +38,20 @@ type ContactBrief = {
 };
 
 type PersonRow = {
+  id: string;
   role: string;
   contact_id: string;
-  contacts: ContactBrief | ContactBrief[] | null;
+  contacts: Omit<ContactBrief, "person_id"> | Omit<ContactBrief, "person_id">[] | null;
 };
 
-function contactFromPersonRow(p: PersonRow): ContactBrief | null {
+function contactFromPersonRow(p: PersonRow): Omit<ContactBrief, "person_id"> | null {
   const c = p.contacts;
   if (c == null) return null;
   return Array.isArray(c) ? c[0] ?? null : c;
+}
+
+function withPersonId(c: Omit<ContactBrief, "person_id">, personId: string | null): ContactBrief {
+  return { ...c, person_id: personId };
 }
 
 function groupPersons(rows: PersonRow[]) {
@@ -64,16 +70,16 @@ function groupPersons(rows: PersonRow[]) {
     if (!c) continue;
     if (p.role === "requester" && !seen.requester.has(c.id)) {
       seen.requester.add(c.id);
-      requesters.push(c);
+      requesters.push(withPersonId(c, p.id));
     } else if (p.role === "affected" && !seen.affected.has(c.id)) {
       seen.affected.add(c.id);
-      affected.push(c);
+      affected.push(withPersonId(c, p.id));
     } else if (p.role === "helper" && !seen.helper.has(c.id)) {
       seen.helper.add(c.id);
-      helpers.push(c);
+      helpers.push(withPersonId(c, p.id));
     } else if (p.role === "handler" && !seen.handler.has(c.id)) {
       seen.handler.add(c.id);
-      handlers.push(c);
+      handlers.push(withPersonId(c, p.id));
     }
   }
   return { requesters, affected, helpers, handlers };
@@ -110,7 +116,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const { data: personRows } = await supabase
     .from("request_persons")
     .select(
-      "role, contact_id, contacts(id, first_name, last_name, phone, phone2, landline)",
+      "id, role, contact_id, contacts(id, first_name, last_name, phone, phone2, landline)",
     )
     .eq("request_id", requestId);
 
@@ -120,23 +126,23 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     (x): x is string => x != null && x !== "",
   );
   const uniqCids = [...new Set(cids)];
-  let cRows: ContactBrief[] = [];
+  let cRows: Omit<ContactBrief, "person_id">[] = [];
   if (uniqCids.length > 0) {
     const { data } = await supabase
       .from("contacts")
       .select("id, first_name, last_name, phone, phone2, landline")
       .in("id", uniqCids);
-    cRows = (data ?? []) as ContactBrief[];
+    cRows = (data ?? []) as Omit<ContactBrief, "person_id">[];
   }
   const byId = new Map(cRows.map((c) => [c.id, c] as const));
 
   if (grouped.requesters.length === 0 && r.contact_id) {
     const c = byId.get(r.contact_id);
-    if (c) grouped = { ...grouped, requesters: [c] };
+    if (c) grouped = { ...grouped, requesters: [withPersonId(c, null)] };
   }
   if (grouped.affected.length === 0 && r.affected_contact_id) {
     const c = byId.get(r.affected_contact_id);
-    if (c) grouped = { ...grouped, affected: [c] };
+    if (c) grouped = { ...grouped, affected: [withPersonId(c, null)] };
   }
 
   const requester = grouped.requesters[0] ?? byId.get(r.contact_id) ?? null;
