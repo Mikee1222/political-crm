@@ -1,17 +1,22 @@
 "use client";
 
+import { Calendar, FileText, FolderOpen, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSection } from "@/components/contacts/search/filter-section";
 import { FilterFieldChips } from "@/components/contacts/search/filter-field-chips";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
-import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SearchFilterActions } from "@/components/search/search-filter-actions";
+import { SearchFilterInput, searchFilterInputClass } from "@/components/search/search-filter-input";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { lux } from "@/lib/luxury-styles";
 import type { RequestCategoryRow } from "@/lib/request-categories";
 import type { RequestListFilters } from "@/lib/requests-filters";
 import { REQUEST_STATUSES } from "@/lib/request-statuses";
+import { cn } from "@/lib/utils";
 
 type Assignee = { id: string; full_name: string | null; role: string };
+
+const filterLabelClass = "mb-1.5 block text-xs font-medium text-[var(--text-secondary)]";
 
 export function RequestSearchFiltersPanel({
   filters,
@@ -53,6 +58,16 @@ export function RequestSearchFiltersPanel({
     [categories],
   );
 
+  const statusOptions = useMemo(
+    () => REQUEST_STATUSES.map((s) => ({ value: s, label: s })),
+    [],
+  );
+
+  const assigneeOptions = useMemo(
+    () => assignees.map((a) => ({ value: a.id, label: a.full_name ?? a.id })),
+    [assignees],
+  );
+
   const patch = (p: Partial<RequestListFilters>) => setDraft((prev) => ({ ...prev, ...p }));
 
   const applyAndSearch = () => {
@@ -62,39 +77,39 @@ export function RequestSearchFiltersPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-3">
-        <FilterSection title="Πρόσωπα Αιτήματος">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 pb-4">
+        <FilterSection title="Πρόσωπα Αιτήματος" icon={Users}>
           <div>
-            <label className={lux.label} htmlFor="rs-requester">
+            <label className={filterLabelClass} htmlFor="rs-requester">
               Αιτών (επαφή)
             </label>
-            <input
+            <SearchFilterInput
               id="rs-requester"
-              className={lux.input}
+              withSearchIcon
               value={draft.requester_name}
               onChange={(e) => patch({ requester_name: e.target.value })}
               placeholder="Όνομα ή επώνυμο..."
             />
           </div>
           <div>
-            <label className={lux.label} htmlFor="rs-affected">
+            <label className={filterLabelClass} htmlFor="rs-affected">
               Επηρεαζόμενος
             </label>
-            <input
+            <SearchFilterInput
               id="rs-affected"
-              className={lux.input}
+              withSearchIcon
               value={draft.affected_name}
               onChange={(e) => patch({ affected_name: e.target.value })}
               placeholder="Όνομα ή επώνυμο..."
             />
           </div>
           <div>
-            <label className={lux.label} htmlFor="rs-helper">
+            <label className={filterLabelClass} htmlFor="rs-helper">
               Βοηθός
             </label>
-            <input
+            <SearchFilterInput
               id="rs-helper"
-              className={lux.input}
+              withSearchIcon
               value={draft.helper_name}
               onChange={(e) => patch({ helper_name: e.target.value })}
               placeholder="Όνομα ή επώνυμο..."
@@ -102,9 +117,9 @@ export function RequestSearchFiltersPanel({
           </div>
         </FilterSection>
 
-        <FilterSection title="Κατηγορίες Αιτήματος">
+        <FilterSection title="Κατηγορίες Αιτήματος" icon={FolderOpen}>
           <div>
-            <label className={lux.label}>Συμπερίληψη κατηγοριών</label>
+            <label className={filterLabelClass}>Συμπερίληψη κατηγοριών</label>
             <SearchableMultiSelect
               options={categoryOptions}
               values={draft.category_ids}
@@ -126,7 +141,7 @@ export function RequestSearchFiltersPanel({
             />
           </div>
           <div>
-            <label className={lux.label}>Εξαίρεση κατηγοριών</label>
+            <label className={filterLabelClass}>Εξαίρεση κατηγοριών</label>
             <SearchableMultiSelect
               options={categoryOptions}
               values={draft.exclude_category_ids}
@@ -151,72 +166,60 @@ export function RequestSearchFiltersPanel({
           </div>
         </FilterSection>
 
-        <FilterSection title="Στοιχεία Αιτήματος">
+        <FilterSection title="Στοιχεία Αιτήματος" icon={FileText}>
           <div>
-            <label className={lux.label} htmlFor="rs-code">
+            <label className={filterLabelClass} htmlFor="rs-code">
               Κωδικός αιτήματος
             </label>
-            <input
+            <SearchFilterInput
               id="rs-code"
-              className={lux.input}
               value={draft.request_code}
               onChange={(e) => patch({ request_code: e.target.value })}
               placeholder="π.χ. AIT-00042"
             />
           </div>
           <div>
-            <label className={lux.label} htmlFor="rs-status">
+            <label className={filterLabelClass} htmlFor="rs-status">
               Κατάσταση
             </label>
-            <HqSelect
+            <SearchableSelect
               id="rs-status"
+              options={statusOptions}
               value={draft.status}
-              onChange={(e) => patch({ status: e.target.value })}
-            >
-              <option value="">— όλες —</option>
-              {REQUEST_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </HqSelect>
+              onChange={(status) => patch({ status })}
+              placeholder="— όλες —"
+            />
           </div>
           <div>
-            <label className={lux.label} htmlFor="rs-handler">
+            <label className={filterLabelClass} htmlFor="rs-handler">
               Υπεύθυνος
             </label>
-            <HqSelect
+            <SearchableSelect
               id="rs-handler"
+              options={assigneeOptions}
               value={draft.handler_id}
-              onChange={(e) => patch({ handler_id: e.target.value })}
-            >
-              <option value="">— όλοι —</option>
-              {assignees.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.full_name}
-                </option>
-              ))}
-            </HqSelect>
+              onChange={(handler_id) => patch({ handler_id })}
+              placeholder="— όλοι —"
+            />
           </div>
           <div>
-            <label className={lux.label} htmlFor="rs-search">
+            <label className={filterLabelClass} htmlFor="rs-search">
               Γενική αναζήτηση
             </label>
-            <input
+            <SearchFilterInput
               id="rs-search"
-              className={lux.input}
+              withSearchIcon
               value={draft.search}
               onChange={(e) => patch({ search: e.target.value })}
               placeholder="Τίτλος, περιγραφή..."
             />
           </div>
           <div>
-            <label className={lux.label} htmlFor="rs-notes">
+            <label className={filterLabelClass} htmlFor="rs-notes">
               Σημειώσεις
             </label>
-            <input
+            <SearchFilterInput
               id="rs-notes"
-              className={lux.input}
               value={draft.notes}
               onChange={(e) => patch({ notes: e.target.value })}
               placeholder="Κείμενο σημείωσης..."
@@ -224,27 +227,27 @@ export function RequestSearchFiltersPanel({
           </div>
         </FilterSection>
 
-        <FilterSection title="Ημερομηνίες">
+        <FilterSection title="Ημερομηνίες" icon={Calendar}>
           <div>
-            <label className={lux.label} htmlFor="rs-from">
+            <label className={filterLabelClass} htmlFor="rs-from">
               Δημιουργία από
             </label>
             <input
               id="rs-from"
               type="date"
-              className={lux.input}
+              className={cn(searchFilterInputClass, "px-3 [color-scheme:dark]")}
               value={draft.created_from}
               onChange={(e) => patch({ created_from: e.target.value })}
             />
           </div>
           <div>
-            <label className={lux.label} htmlFor="rs-to">
+            <label className={filterLabelClass} htmlFor="rs-to">
               Δημιουργία έως
             </label>
             <input
               id="rs-to"
               type="date"
-              className={lux.input}
+              className={cn(searchFilterInputClass, "px-3 [color-scheme:dark]")}
               value={draft.created_to}
               onChange={(e) => patch({ created_to: e.target.value })}
             />
@@ -252,14 +255,7 @@ export function RequestSearchFiltersPanel({
         </FilterSection>
       </div>
 
-      <div className="shrink-0 space-y-2 border-t border-[var(--border)] bg-[var(--bg-elevated)]/80 pt-3">
-        <button type="button" className={lux.btnPrimary + " w-full !rounded-xl !py-3"} onClick={applyAndSearch}>
-          Αναζήτηση
-        </button>
-        <button type="button" className={lux.btnSecondary + " w-full"} onClick={onClear}>
-          Καθαρισμός
-        </button>
-      </div>
+      <SearchFilterActions onSearch={applyAndSearch} onClear={onClear} />
     </div>
   );
 }

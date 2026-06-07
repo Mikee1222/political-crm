@@ -1,5 +1,14 @@
 "use client";
 
+import {
+  FileText,
+  MapPin,
+  Phone,
+  User,
+  Users,
+  Vote,
+  Database,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import type { ContactListFilters } from "@/lib/contacts-filters";
@@ -13,10 +22,14 @@ import {
 import { REQUEST_STATUSES } from "@/lib/request-statuses";
 import { FilterSection } from "@/components/contacts/search/filter-section";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { FilterFieldChips } from "@/components/contacts/search/filter-field-chips";
-import { HqSelect } from "@/components/ui/hq-select";
+import { SearchFilterActions } from "@/components/search/search-filter-actions";
+import { SearchFilterInput } from "@/components/search/search-filter-input";
+import { SegmentedControl } from "@/components/search/segmented-control";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
+import { cn } from "@/lib/utils";
 
 type Draft = ContactListFilters & { ageGroups: string[] };
 
@@ -46,34 +59,7 @@ export function filtersFromDraft(d: Draft): ContactListFilters {
   return next;
 }
 
-function RadioRow({
-  name,
-  options,
-  value,
-  onChange,
-}: {
-  name: string;
-  options: readonly { value: string; label: string }[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-3">
-      {options.map((o) => (
-        <label key={o.value || "any"} className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-[var(--text-secondary)]">
-          <input
-            type="radio"
-            name={name}
-            className="accent-[var(--accent-gold)]"
-            checked={value === o.value}
-            onChange={() => onChange(o.value)}
-          />
-          {o.label}
-        </label>
-      ))}
-    </div>
-  );
-}
+const filterLabelClass = "mb-1.5 block text-xs font-medium text-[var(--text-secondary)]";
 
 export function ContactSearchFiltersPanel({
   filters,
@@ -142,6 +128,11 @@ export function ContactSearchFiltersPanel({
     [sources],
   );
 
+  const statusOptions = useMemo(
+    () => REQUEST_STATUSES.map((s) => ({ value: s, label: s })),
+    [],
+  );
+
   const patch = (p: Partial<Draft>) => setDraft((prev) => ({ ...prev, ...p }));
 
   const toggleAgeGroup = (key: string) => {
@@ -154,55 +145,95 @@ export function ContactSearchFiltersPanel({
 
   const applyDraft = () => onChange(filtersFromDraft(draft));
 
+  const runSearch = () => {
+    const f = filtersFromDraft(draft);
+    applyDraft();
+    onSearch(f);
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-3">
-        <FilterSection title="Προσωπικά Στοιχεία">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 pb-4">
+        <FilterSection title="Προσωπικά Στοιχεία" icon={User}>
           <div>
-            <label className={lux.label} htmlFor="cs-first">Όνομα</label>
-            <input id="cs-first" className={lux.input} value={draft.first_name} onChange={(e) => patch({ first_name: e.target.value })} />
+            <label className={filterLabelClass} htmlFor="cs-first">
+              Όνομα
+            </label>
+            <SearchFilterInput
+              id="cs-first"
+              withSearchIcon
+              value={draft.first_name}
+              onChange={(e) => patch({ first_name: e.target.value })}
+              placeholder="Αναζήτηση ονόματος..."
+            />
           </div>
           <div>
-            <label className={lux.label} htmlFor="cs-last">Επώνυμο</label>
-            <input id="cs-last" className={lux.input} value={draft.last_name} onChange={(e) => patch({ last_name: e.target.value })} />
+            <label className={filterLabelClass} htmlFor="cs-last">
+              Επώνυμο
+            </label>
+            <SearchFilterInput
+              id="cs-last"
+              withSearchIcon
+              value={draft.last_name}
+              onChange={(e) => patch({ last_name: e.target.value })}
+              placeholder="Αναζήτηση επωνύμου..."
+            />
           </div>
           <div>
-            <label className={lux.label} htmlFor="cs-father">Πατρώνυμο</label>
-            <input id="cs-father" className={lux.input} value={draft.father_name} onChange={(e) => patch({ father_name: e.target.value })} />
+            <label className={filterLabelClass} htmlFor="cs-father">
+              Πατρώνυμο
+            </label>
+            <SearchFilterInput
+              id="cs-father"
+              value={draft.father_name}
+              onChange={(e) => patch({ father_name: e.target.value })}
+              placeholder="Πατρώνυμο..."
+            />
           </div>
           <div>
-            <span className={lux.label}>Φύλο</span>
-            <RadioRow name="gender" options={GENDER_OPTIONS} value={draft.gender} onChange={(gender) => patch({ gender })} />
+            <span className={filterLabelClass}>Φύλο</span>
+            <SegmentedControl
+              options={GENDER_OPTIONS}
+              value={draft.gender}
+              onChange={(gender) => patch({ gender })}
+            />
           </div>
           <div>
-            <span className={lux.label}>Ηλικιακές ομάδες</span>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {Object.entries(CONTACT_SEARCH_AGE_GROUPS).map(([key, g]) => (
-                <label key={key} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
-                  <input
-                    type="checkbox"
-                    className="accent-[var(--accent-gold)]"
-                    checked={draft.ageGroups.includes(key)}
-                    onChange={() => toggleAgeGroup(key)}
-                  />
-                  {g.label}
-                </label>
-              ))}
+            <span className={filterLabelClass}>Ηλικιακές ομάδες</span>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(CONTACT_SEARCH_AGE_GROUPS).map(([key, g]) => {
+                const active = draft.ageGroups.includes(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleAgeGroup(key)}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200",
+                      active
+                        ? "bg-[var(--accent)] text-white shadow-sm"
+                        : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[color-mix(in_srgb,var(--accent)_40%,var(--border))]",
+                    )}
+                  >
+                    {g.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)]/50">
             <input
               type="checkbox"
-              className="accent-[var(--accent-gold)]"
+              className="h-4 w-4 rounded border-[var(--border)] accent-[var(--accent)]"
               checked={draft.birthday_today}
               onChange={(e) => patch({ birthday_today: e.target.checked })}
             />
             Γενέθλια σήμερα
           </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)]/50">
             <input
               type="checkbox"
-              className="accent-[var(--accent-gold)]"
+              className="h-4 w-4 rounded border-[var(--border)] accent-[var(--accent)]"
               checked={draft.nameday_today}
               onChange={(e) => patch({ nameday_today: e.target.checked })}
             />
@@ -210,9 +241,9 @@ export function ContactSearchFiltersPanel({
           </label>
         </FilterSection>
 
-        <FilterSection title="Τοπωνύμιο & Δήμος">
+        <FilterSection title="Τοπωνύμιο & Δήμος" icon={MapPin}>
           <div>
-            <label className={lux.label}>Δήμος</label>
+            <label className={filterLabelClass}>Δήμος</label>
             <SearchableMultiSelect
               options={municipalities.map((name) => ({ value: name, label: name }))}
               values={draft.municipalities}
@@ -231,7 +262,7 @@ export function ContactSearchFiltersPanel({
             />
           </div>
           <div>
-            <label className={lux.label}>Τοπωνύμιο</label>
+            <label className={filterLabelClass}>Τοπωνύμιο</label>
             <SearchableMultiSelect
               options={toponyms.map((name) => ({ value: name, label: name }))}
               values={draft.toponyms}
@@ -251,33 +282,40 @@ export function ContactSearchFiltersPanel({
           </div>
         </FilterSection>
 
-        <FilterSection title="Επικοινωνία">
+        <FilterSection title="Επικοινωνία" icon={Phone}>
           <div>
-            <label className={lux.label} htmlFor="cs-phone">Τηλέφωνο</label>
-            <input id="cs-phone" className={lux.input} value={draft.phone} onChange={(e) => patch({ phone: e.target.value })} />
+            <label className={filterLabelClass} htmlFor="cs-phone">
+              Τηλέφωνο
+            </label>
+            <SearchFilterInput
+              id="cs-phone"
+              withSearchIcon
+              value={draft.phone}
+              onChange={(e) => patch({ phone: e.target.value })}
+              placeholder="Αριθμός τηλεφώνου..."
+            />
           </div>
           <div>
-            <span className={lux.label}>Κινητό</span>
-            <RadioRow
-              name="mobile"
+            <span className={filterLabelClass}>Κινητό</span>
+            <SegmentedControl
               options={PRESENCE_OPTIONS}
               value={draft.mobile_presence}
               onChange={(mobile_presence) => patch({ mobile_presence: mobile_presence as Draft["mobile_presence"] })}
             />
           </div>
           <div>
-            <span className={lux.label}>Σταθερό</span>
-            <RadioRow
-              name="landline"
+            <span className={filterLabelClass}>Σταθερό</span>
+            <SegmentedControl
               options={PRESENCE_OPTIONS}
               value={draft.landline_presence}
-              onChange={(landline_presence) => patch({ landline_presence: landline_presence as Draft["landline_presence"] })}
+              onChange={(landline_presence) =>
+                patch({ landline_presence: landline_presence as Draft["landline_presence"] })
+              }
             />
           </div>
           <div>
-            <span className={lux.label}>Email</span>
-            <RadioRow
-              name="email"
+            <span className={filterLabelClass}>Email</span>
+            <SegmentedControl
               options={PRESENCE_OPTIONS}
               value={draft.email_presence}
               onChange={(email_presence) => patch({ email_presence: email_presence as Draft["email_presence"] })}
@@ -285,9 +323,9 @@ export function ContactSearchFiltersPanel({
           </div>
         </FilterSection>
 
-        <FilterSection title="Ομάδες">
+        <FilterSection title="Ομάδες" icon={Users}>
           <div>
-            <label className={lux.label}>Συμπερίληψη ομάδων</label>
+            <label className={filterLabelClass}>Συμπερίληψη ομάδων</label>
             <SearchableMultiSelect
               options={groupOptions}
               values={draft.group_ids}
@@ -300,9 +338,16 @@ export function ContactSearchFiltersPanel({
               }
               placeholder="Επιλέξτε ομάδες..."
             />
+            <FilterFieldChips
+              items={draft.group_ids.map((id) => {
+                const g = groups.find((x) => x.id === id);
+                return { key: id, label: g?.name ?? id, color: g?.color ?? undefined };
+              })}
+              onRemove={(id) => patch({ group_ids: draft.group_ids.filter((x) => x !== id) })}
+            />
           </div>
           <div>
-            <label className={lux.label}>Εξαίρεση ομάδων</label>
+            <label className={filterLabelClass}>Εξαίρεση ομάδων</label>
             <SearchableMultiSelect
               options={groupOptions}
               values={draft.exclude_group_ids}
@@ -315,14 +360,20 @@ export function ContactSearchFiltersPanel({
               }
               placeholder="Εξαίρεση..."
             />
+            <FilterFieldChips
+              items={draft.exclude_group_ids.map((id) => {
+                const g = groups.find((x) => x.id === id);
+                return { key: id, label: g?.name ?? id, color: g?.color ?? undefined };
+              })}
+              onRemove={(id) => patch({ exclude_group_ids: draft.exclude_group_ids.filter((x) => x !== id) })}
+            />
           </div>
           <div>
-            <span className={lux.label}>Σύνδεση ομάδων</span>
-            <RadioRow
-              name="group_match"
+            <span className={filterLabelClass}>Σύνδεση ομάδων</span>
+            <SegmentedControl
               options={[
-                { value: "or", label: "Να ανήκει σε ΤΟΥΛΑΧΙΣΤΟΝ ΜΙΑ ομάδα (OR)" },
-                { value: "and", label: "Να ανήκει σε ΟΛΕΣ τις ομάδες (AND)" },
+                { value: "or", label: "OR (μία+)" },
+                { value: "and", label: "AND (όλες)" },
               ]}
               value={draft.group_match}
               onChange={(group_match) => patch({ group_match: group_match as Draft["group_match"] })}
@@ -330,9 +381,9 @@ export function ContactSearchFiltersPanel({
           </div>
         </FilterSection>
 
-        <FilterSection title="Πηγές">
+        <FilterSection title="Πηγές" icon={Database}>
           <div>
-            <label className={lux.label}>Να έχει</label>
+            <label className={filterLabelClass}>Να έχει</label>
             <SearchableMultiSelect
               options={sourceOptions}
               values={draft.source_ids}
@@ -354,7 +405,7 @@ export function ContactSearchFiltersPanel({
             />
           </div>
           <div>
-            <label className={lux.label}>Να ΜΗΝ έχει</label>
+            <label className={filterLabelClass}>Να ΜΗΝ έχει</label>
             <SearchableMultiSelect
               options={sourceOptions}
               values={draft.exclude_source_ids}
@@ -377,83 +428,71 @@ export function ContactSearchFiltersPanel({
           </div>
         </FilterSection>
 
-        <FilterSection title="Εκλογικά">
+        <FilterSection title="Εκλογικά" icon={Vote}>
           <div>
-            <span className={lux.label}>Εκλ. περιφέρεια (ekl_ar)</span>
-            <RadioRow
-              name="ekl"
+            <span className={filterLabelClass}>Εκλ. περιφέρεια (ekl_ar)</span>
+            <SegmentedControl
               options={EKL_AR_OPTIONS}
               value={draft.ekl_ar}
               onChange={(ekl_ar) => patch({ ekl_ar: ekl_ar as Draft["ekl_ar"] })}
             />
           </div>
           <div>
-            <label className={lux.label} htmlFor="cs-ed">Εκλ. διαμέρισμα</label>
-            <input
+            <label className={filterLabelClass} htmlFor="cs-ed">
+              Εκλ. διαμέρισμα
+            </label>
+            <SearchFilterInput
               id="cs-ed"
-              className={lux.input}
               value={draft.electoral_district}
               onChange={(e) => patch({ electoral_district: e.target.value })}
+              placeholder="Διαμέρισμα..."
             />
           </div>
         </FilterSection>
 
-        <FilterSection title="Αιτήματα">
+        <FilterSection title="Αιτήματα" icon={FileText}>
           <div>
-            <span className={lux.label}>Έχει αίτημα</span>
-            <RadioRow
-              name="has_req"
+            <span className={filterLabelClass}>Έχει αίτημα</span>
+            <SegmentedControl
               options={HAS_REQUEST_OPTIONS}
               value={draft.has_request}
               onChange={(has_request) => patch({ has_request: has_request as Draft["has_request"] })}
             />
           </div>
           <div>
-            <label className={lux.label} htmlFor="cs-req-st">Κατάσταση αιτήματος</label>
-            <HqSelect
+            <label className={filterLabelClass} htmlFor="cs-req-st">
+              Κατάσταση αιτήματος
+            </label>
+            <SearchableSelect
               id="cs-req-st"
+              options={statusOptions}
               value={draft.request_status}
-              onChange={(e) => patch({ request_status: e.target.value })}
-            >
-              <option value="">— όλες —</option>
-              {REQUEST_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </HqSelect>
+              onChange={(request_status) => patch({ request_status })}
+              placeholder="— όλες —"
+            />
           </div>
         </FilterSection>
       </div>
 
-      <div className="shrink-0 space-y-2 border-t border-[var(--border)] bg-[var(--bg-elevated)]/80 pt-3">
-        <button
-          type="button"
-          className={lux.btnPrimary + " w-full !rounded-xl !py-3"}
-          onClick={() => {
-            const f = filtersFromDraft(draft);
-            applyDraft();
-            onSearch(f);
-          }}
-        >
-          Αναζήτηση
-        </button>
-        <button type="button" className={lux.btnSecondary + " w-full"} onClick={onClear}>
-          Καθαρισμός φίλτρων
-        </button>
-        <button
-          type="button"
-          className={lux.btnSecondary + " w-full"}
-          onClick={() => {
-            const f = filtersFromDraft(draft);
-            applyDraft();
-            onSaveFilters(f);
-          }}
-          disabled={savingFilters}
-        >
-          Αποθήκευση φίλτρων
-        </button>
-      </div>
+      <SearchFilterActions
+        onSearch={runSearch}
+        onClear={onClear}
+        clearLabel="Καθαρισμός φίλτρων"
+        extraActions={
+          <button
+            type="button"
+            className={lux.btnSecondary + " w-full !h-10 !rounded-lg !py-0 text-sm"}
+            onClick={() => {
+              const f = filtersFromDraft(draft);
+              applyDraft();
+              onSaveFilters(f);
+            }}
+            disabled={savingFilters}
+          >
+            Αποθήκευση φίλτρων
+          </button>
+        }
+      />
     </div>
   );
 }

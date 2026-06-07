@@ -1,11 +1,11 @@
 "use client";
 
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
-import { requestCardStatusStyle } from "@/lib/request-status-card-style";
-import { getRequestStatusBadgeClasses, normalizeRequestStatus } from "@/lib/request-statuses";
-import type { RequestStatusColorsMap } from "@/lib/request-status-colors";
-import { cn } from "@/lib/utils";
 import { formatDateAthens } from "@/lib/date-format";
+import { requestCardStatusStyle } from "@/lib/request-status-card-style";
+import type { RequestStatusColorsMap } from "@/lib/request-status-colors";
+import { getRequestStatusBadgeClasses, normalizeRequestStatus } from "@/lib/request-statuses";
+import { cn } from "@/lib/utils";
 
 export type RequestSearchResult = {
   id: string;
@@ -39,7 +39,6 @@ export function RequestSearchResultCard({
 }: {
   request: RequestSearchResult;
   onNavigate: () => void;
-  /** Optional — pass from parent to avoid per-card fetch. */
   statusColors?: RequestStatusColorsMap;
 }) {
   const { colors: fetchedColors } = useRequestStatusColors();
@@ -47,7 +46,6 @@ export function RequestSearchResultCard({
   const status = normalizeRequestStatus(r.status);
   const badge = getRequestStatusBadgeClasses(status);
   const cardStyle = requestCardStatusStyle(status, statusColors);
-  const desc = r.description?.trim();
 
   return (
     <div
@@ -60,37 +58,40 @@ export function RequestSearchResultCard({
           onNavigate();
         }
       }}
-      className="group/request-card relative flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-xl border border-[var(--border)] border-l-4 p-4 shadow-[var(--card-shadow)] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-px hover:border-[color-mix(in_srgb,var(--accent-gold)_48%,var(--border))] hover:shadow-[var(--card-shadow-hover)] sm:flex-row sm:items-start sm:justify-between"
-      style={{
-        backgroundColor: cardStyle.backgroundColor,
-        borderLeftColor: cardStyle.borderLeftColor,
-        color: cardStyle.color,
-      }}
+      className="group/request-card relative flex w-full min-w-0 cursor-pointer gap-3 border-b border-[var(--border)] bg-[var(--bg-card)] px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors duration-200 first:rounded-t-xl last:rounded-b-xl last:border-b-0 hover:bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg-elevated))]"
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          {r.request_code ? (
-            <span className="font-mono text-[11px] opacity-65">{r.request_code}</span>
-          ) : null}
-          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold", badge)}>
+      <div
+        className="w-1 shrink-0 self-stretch rounded-full"
+        style={{ backgroundColor: cardStyle.borderLeftColor }}
+        aria-hidden
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {r.request_code ? (
+              <span className="font-mono text-[10px] text-[var(--text-muted)]">{r.request_code}</span>
+            ) : null}
+            {r.category?.trim() ? (
+              <div className="mt-0.5 truncate text-sm font-bold text-[var(--text-primary)]">{r.category}</div>
+            ) : (
+              <div className="mt-0.5 truncate text-sm font-bold text-[var(--text-primary)]">{r.title}</div>
+            )}
+          </div>
+          <span className={cn("inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold", badge)}>
             {status}
           </span>
         </div>
-        <h3 className="mt-1 truncate text-[15px] font-bold">{r.title}</h3>
-        {desc ? (
-          <p className="mt-1 line-clamp-2 text-sm opacity-80">{desc}</p>
+
+        {r.category?.trim() && r.title ? (
+          <p className="line-clamp-1 text-sm text-[var(--text-secondary)]">{r.title}</p>
         ) : null}
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] opacity-75">
-          {r.category?.trim() ? (
-            <span className="inline-flex max-w-full truncate rounded-full border border-current/25 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2.5 py-0.5 font-medium opacity-80">
-              {r.category}
-            </span>
-          ) : null}
-          <span>{contactLabel(r.contacts)}</span>
-        </div>
+
+        <div className="text-sm text-[var(--text-secondary)]">{contactLabel(r.contacts)}</div>
       </div>
-      <div className="shrink-0 text-right text-[11px] opacity-75 sm:pl-3">
-        {formatDate(r.created_at)}
+
+      <div className="flex shrink-0 flex-col items-end justify-end self-stretch text-right">
+        <span className="text-[11px] text-[var(--text-muted)]">{formatDate(r.created_at)}</span>
       </div>
     </div>
   );

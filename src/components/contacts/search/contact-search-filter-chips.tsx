@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ActiveFilterChips } from "@/components/search/active-filter-chips";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import {
   CONTACT_SEARCH_AGE_GROUPS,
@@ -9,7 +9,6 @@ import {
   HAS_REQUEST_OPTIONS,
   PRESENCE_OPTIONS,
 } from "@/lib/contact-search-constants";
-import { REQUEST_STATUSES } from "@/lib/request-statuses";
 
 type Chip = { key: string; label: string };
 
@@ -63,31 +62,13 @@ export function buildContactSearchFilterChips(
 export function ContactSearchFilterChips({
   chips,
   onDismiss,
+  onClearAll,
 }: {
   chips: Chip[];
   onDismiss: (key: string) => void;
+  onClearAll?: () => void;
 }) {
-  if (!chips.length) return null;
-  return (
-    <div className="crm-filter-chips-row">
-      {chips.map((chip) => (
-        <span
-          key={chip.key}
-          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_42%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_10%,var(--bg-elevated))] py-0.5 pl-2.5 pr-0.5 text-xs font-medium text-[var(--text-primary)]"
-        >
-          <span className="truncate">{chip.label}</span>
-          <button
-            type="button"
-            className="inline-flex h-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-card)] hover:text-[var(--text-primary)]"
-            onClick={() => onDismiss(chip.key)}
-            aria-label={`Αφαίρεση ${chip.label}`}
-          >
-            <X className="h-3.5 w-3.5" aria-hidden />
-          </button>
-        </span>
-      ))}
-    </div>
-  );
+  return <ActiveFilterChips chips={chips} onDismiss={onDismiss} onClearAll={onClearAll} />;
 }
 
-export { REQUEST_STATUSES };
+export { REQUEST_STATUSES } from "@/lib/request-statuses";
