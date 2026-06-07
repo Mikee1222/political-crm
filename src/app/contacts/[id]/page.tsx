@@ -1301,38 +1301,38 @@ function ContactDetailPage() {
         </div>
       ) : null}
       <div className={cn(focusMode && "max-w-6xl mx-auto px-6 py-4")}>
-    <div className="min-h-full -m-6 overflow-x-hidden bg-[var(--bg-primary)] p-4 pb-28 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8 md:pb-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="min-h-full -m-6 overflow-x-hidden bg-[var(--bg-primary)] p-4 pb-20 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8 md:pb-8">
+      <div className="mb-4 flex min-w-0 items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => router.push(focusMode ? "/contacts?focus=1" : "/contacts")}
-          className={lux.btnSecondary + " inline-flex w-fit items-center gap-2 !py-2 text-sm"}
+          className={lux.btnSecondary + " inline-flex shrink-0 items-center gap-1.5 !py-1.5 text-xs sm:gap-2 sm:!py-2 sm:text-sm"}
         >
           <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
           Επαφές
         </button>
         {navInfo ? (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 shrink items-center gap-1 sm:gap-2">
             <button
               type="button"
               onClick={() => navInfo.prev && router.push(contactDetailHref(navInfo.prev))}
               disabled={!navInfo.prev}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:px-3 sm:py-1.5 sm:text-sm"
             >
-              <ChevronLeft className="h-4 w-4" aria-hidden />
-              Προηγούμενο
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+              <span className="sm:inline">Προηγούμενο</span>
             </button>
-            <span className="text-xs text-[var(--text-muted)]">
+            <span className="shrink-0 whitespace-nowrap text-[11px] text-[var(--text-muted)] sm:text-xs">
               {navInfo.position} / {navInfo.total}
             </span>
             <button
               type="button"
               onClick={() => navInfo.next && router.push(contactDetailHref(navInfo.next))}
               disabled={!navInfo.next}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:px-3 sm:py-1.5 sm:text-sm"
             >
-              Επόμενο
-              <ChevronRight className="h-4 w-4" aria-hidden />
+              <span className="sm:inline">Επόμενο</span>
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
             </button>
           </div>
         ) : null}
@@ -1355,61 +1355,164 @@ function ContactDetailPage() {
           aria-hidden
         />
         <div className="pointer-events-none absolute bottom-0 left-0 h-32 w-48 bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent)] opacity-70" aria-hidden />
-        <div className="relative flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-lg font-bold text-white shadow-lg ring-2 ring-[var(--accent-gold)] ring-offset-2 ring-offset-[var(--bg-card)]">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <ContactStatusBadges contact={c} className="mb-2" />
-              <h1 className="text-balance text-2xl font-bold leading-tight text-[var(--text-card-title)]" style={{ fontSize: 24, lineHeight: 1.2 }}>
-                {headNameLine}
-              </h1>
-              {headPatronym ? <p className="mt-1.5 text-base italic text-[var(--accent-gold)]">του {headPatronym}</p> : null}
-              {motherGreek ? <p className="mt-1 text-sm text-[var(--text-muted)]">{motherGreek}</p> : null}
-              <div
-                className="mt-3 h-0.5 w-14 rounded-full bg-gradient-to-r from-[var(--accent-gold)] to-transparent"
-                aria-hidden
-              />
-              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
-                <span
-                  className={
-                    "inline-flex min-h-7 max-w-full items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold " +
-                    (callStatusPill[st] ?? callStatusPill.Pending)
-                  }
-                >
-                  {callStatusLabel(c.call_status)}
-                </span>
-                <span
-                  className={
-                    "inline-flex min-h-7 items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold " +
-                    (priorityPill[pr] ?? priorityPill.Medium)
-                  }
-                >
-                  {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
-                </span>
-                {c.contact_code ? (
-                  <span className="inline-flex min-h-7 max-w-full items-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-0.5 font-mono text-[10px] font-medium text-[var(--text-secondary)]">
-                    {c.contact_code}
-                  </span>
-                ) : null}
-                {((c as Contact).language ?? "el") !== "el" ? (
-                  <span className="inline-flex min-h-7 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                    {(c as Contact).language}
-                  </span>
-                ) : null}
+        <div className="relative flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between lg:items-center">
+          <button
+            type="button"
+            onClick={() => handleSetFocusMode(!focusMode)}
+            title={focusMode ? "Έξοδος εστίασης (ESC)" : "Λειτουργία εστίασης"}
+            className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-xl border border-border transition-colors hover:bg-muted md:hidden"
+            aria-label={focusMode ? "Έξοδος από λειτουργία εστίασης" : "Λειτουργία εστίασης"}
+          >
+            {focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+          <div className="flex min-w-0 flex-col gap-3 pr-11 md:pr-0">
+            <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-base font-bold text-white shadow-lg ring-2 ring-[var(--accent-gold)] ring-offset-2 ring-offset-[var(--bg-card)] sm:h-16 sm:w-16 sm:text-lg">
+                {initials}
               </div>
-              <p className="mt-2.5 flex flex-wrap items-baseline gap-x-1.5 font-mono text-sm text-[var(--text-secondary)]">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-balance text-xl font-bold leading-tight text-[var(--text-card-title)] sm:text-2xl" style={{ lineHeight: 1.2 }}>
+                  {headNameLine}
+                </h1>
+                {headPatronym ? <p className="mt-1 text-sm italic text-[var(--accent-gold)] sm:mt-1.5 sm:text-base">του {headPatronym}</p> : null}
+                {motherGreek ? <p className="mt-0.5 text-xs text-[var(--text-muted)] sm:mt-1 sm:text-sm">{motherGreek}</p> : null}
+              </div>
+            </div>
+            <ContactStatusBadges contact={c} />
+            <div
+              className="h-0.5 w-14 rounded-full bg-gradient-to-r from-[var(--accent-gold)] to-transparent"
+              aria-hidden
+            />
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span
+                className={
+                  "inline-flex min-h-7 max-w-full items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold " +
+                  (callStatusPill[st] ?? callStatusPill.Pending)
+                }
+              >
+                {callStatusLabel(c.call_status)}
+              </span>
+              <span
+                className={
+                  "inline-flex min-h-7 items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold " +
+                  (priorityPill[pr] ?? priorityPill.Medium)
+                }
+              >
+                {pr === "High" ? "Υψηλή" : pr === "Low" ? "Χαμηλή" : "Μεσαία"}
+              </span>
+              {c.contact_code ? (
+                <span className="inline-flex min-h-7 max-w-full items-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-0.5 font-mono text-[10px] font-medium text-[var(--text-secondary)]">
+                  {c.contact_code}
+                </span>
+              ) : null}
+              {((c as Contact).language ?? "el") !== "el" ? (
+                <span className="inline-flex min-h-7 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                  {(c as Contact).language}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 font-mono text-sm text-[var(--text-secondary)]">
                 <span>{disp(c.phone)}</span>
                 {c.phone2?.trim() ? <span className="text-xs text-[var(--text-muted)]">· {c.phone2}</span> : null}
                 {c.landline?.trim() ? <span className="text-xs text-[var(--text-muted)]">· στ. {c.landline}</span> : null}
               </p>
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5 md:hidden">
+                {c.phone?.trim() ? (
+                  <a
+                    href={`tel:${c.phone.replace(/\s/g, "")}`}
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    title="Κλήση"
+                    aria-label="Κλήση τηλεφώνου"
+                  >
+                    <Phone className="h-4 w-4" />
+                  </a>
+                ) : null}
+                {!isCaller ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void triggerCall()}
+                      className="inline-flex min-h-[44px] w-auto items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-2.5 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    >
+                      <Phone className="h-3.5 w-3.5 shrink-0" />
+                      Retell
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyHeaderInfo()}
+                      className="inline-flex min-h-[44px] w-auto items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-2.5 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    >
+                      <Clipboard className="h-3.5 w-3.5 shrink-0" />
+                      {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
+            {!isCaller ? (
+              <p className="text-[10px] leading-snug text-[var(--text-muted)] md:hidden">Retell: εξερχόμενη κλήση</p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 md:hidden">
+                <HqSelect
+                  aria-label="Κατάσταση κλήσης"
+                  wrapperClassName="inline-block w-auto max-w-full min-w-0 flex-1"
+                  className={inputSm + " !pr-9 w-full min-w-[120px] max-w-full"}
+                  value={c.call_status ?? "Pending"}
+                  onChange={(e) => setContact({ ...c, call_status: e.target.value })}
+                >
+                  {CALL_OPTS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </HqSelect>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void saveCallerStatus()}
+                  className="inline-flex min-h-[44px] w-auto shrink-0 items-center justify-center rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white hover:bg-[#002255] disabled:opacity-50"
+                >
+                  Αποθήκευση
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyHeaderInfo()}
+                  className="inline-flex min-h-[44px] w-auto shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-2.5 text-xs font-semibold text-[var(--text-primary)]"
+                >
+                  <Clipboard className="h-3.5 w-3.5 shrink-0" />
+                  {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
+                </button>
+              </div>
+            )}
+            {!isCaller ? (
+              <div className="flex flex-wrap items-center gap-1.5 md:hidden">
+                {canManage ? (
+                  <button
+                    type="button"
+                    onClick={() => startEdit("personal")}
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    title="Επεξεργασία"
+                    aria-label="Επεξεργασία"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                ) : null}
+                <Link
+                  href="/alexandra"
+                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--accent-gold)]/35 bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)] text-[var(--accent-gold)] transition hover:brightness-110"
+                  title="Αλεξάνδρα"
+                  aria-label="Ανοιχτό Αλεξάνδρα"
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : null}
           </div>
 
-          <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:max-w-[min(100%,380px)] max-md:fixed max-md:bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] max-md:left-0 max-md:right-0 max-md:z-30 max-md:max-w-none max-md:border-t max-md:border-[var(--border)] max-md:bg-[var(--surface-bulk)] max-md:p-3 max-md:backdrop-blur-xl lg:items-end">
+          <div className="hidden w-full min-w-0 flex-col items-stretch gap-2 sm:max-w-[min(100%,380px)] md:flex lg:items-end">
             {isCaller ? (
-              <div className="flex w-full flex-col gap-2 max-md:items-stretch sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2">
                 <span
                   className={
                     "inline-flex rounded-md px-2.5 py-0.5 text-xs font-semibold " +
@@ -1435,7 +1538,7 @@ function ContactDetailPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => void saveCallerStatus()}
-                  className="min-h-[44px] w-full rounded-lg bg-[#003476] px-3 text-sm font-semibold text-white hover:bg-[#002255] disabled:opacity-50 sm:h-9 sm:w-auto sm:text-xs"
+                  className="h-9 rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white hover:bg-[#002255] disabled:opacity-50"
                 >
                   Αποθήκευση
                 </button>
@@ -1457,7 +1560,7 @@ function ContactDetailPage() {
                 </button>
               </div>
             ) : (
-              <div className="flex w-full flex-col gap-2 max-md:items-stretch sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2">
                 {c.phone?.trim() ? (
                   <a
                     href={`tel:${c.phone.replace(/\s/g, "")}`}
@@ -1490,7 +1593,7 @@ function ContactDetailPage() {
                 <button
                   type="button"
                   onClick={() => void triggerCall()}
-                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50 sm:h-9 sm:w-auto sm:text-xs"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
                 >
                   <Phone className="h-3.5 w-3.5" />
                   Retell
@@ -1498,7 +1601,7 @@ function ContactDetailPage() {
                 <button
                   type="button"
                   onClick={() => void copyHeaderInfo()}
-                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-sm font-semibold text-[var(--text-primary)] sm:h-9 sm:w-auto sm:text-xs"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-3 text-xs font-semibold text-[var(--text-primary)]"
                 >
                   <Clipboard className="h-3.5 w-3.5" />
                   {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
@@ -1511,8 +1614,7 @@ function ContactDetailPage() {
                 >
                   {focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
-                <p className="w-full text-right text-[10px] text-[var(--text-muted)] sm:hidden">Retell: εξερχόμενη κλήση</p>
-                <p className="hidden w-full text-right text-[10px] text-[var(--text-muted)] sm:block">Retell: εξερχόμενη κλήση (Outbound)</p>
+                <p className="w-full text-right text-[10px] text-[var(--text-muted)]">Retell: εξερχόμενη κλήση (Outbound)</p>
               </div>
             )}
           </div>
