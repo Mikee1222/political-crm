@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, Home, Inbox, Megaphone, Menu, Sparkles, Users } from "lucide-react";
+import type { Profile } from "@/contexts/profile-context";
+import { can } from "@/lib/can";
 import { hasMinRole } from "@/lib/roles";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 
 type MobileBottomNavProps = {
-  role: string;
+  profile: Profile | null;
   onOpenMore: () => void;
   openRequestsCount: number;
 };
@@ -23,9 +25,14 @@ const innerBar =
 const innerBarVolunteer =
   "grid w-full min-w-0 max-w-full grid-cols-4 grid-flow-row bg-white/80 pb-[env(safe-area-inset-bottom,0px)] pt-1 dark:bg-gray-900/80";
 
-export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileBottomNavProps) {
+export function MobileBottomNav({ profile, onOpenMore, openRequestsCount }: MobileBottomNavProps) {
   const pathname = usePathname();
-  const mgr = hasMinRole(role, "manager");
+  const role = profile?.role ?? "caller";
+  const mgr = hasMinRole(role, "manager", profile?.access_tier);
+  const canContacts = can(profile, "contacts_view");
+  const canRequests = can(profile, "requests_view");
+  const canCampaigns = can(profile, "campaigns_view");
+  const canAlex = can(profile, "alexandra_use");
   const { openMiniFromBubble, setMiniWindowMinimized } = useAlexandraChat();
 
   const isTabActive = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
@@ -38,6 +45,26 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
       on ? "hq-bottom-nav-item-active" : "opacity-90",
     ].join(" ");
 
+  const alexTab = canAlex ? (
+    <button
+      type="button"
+      className={tabClass(alexActive)}
+      onClick={() => {
+        openMiniFromBubble();
+        setMiniWindowMinimized(false);
+      }}
+      aria-current={alexActive ? "page" : undefined}
+    >
+      <Sparkles className={`h-5 w-5 shrink-0 ${alexActive ? active : inactive}`} />
+      <span>Αλεξάνδρα</span>
+    </button>
+  ) : (
+    <span className={`${tabClass(false)} cursor-not-allowed opacity-40`} aria-disabled>
+      <Sparkles className="h-5 w-5 shrink-0" />
+      <span>Αλεξάνδρα</span>
+    </span>
+  );
+
   if (mgr) {
     return (
       <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
@@ -46,34 +73,36 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
             <Home className={`h-5 w-5 shrink-0 ${pathname === "/dashboard" ? active : inactive}`} />
             <span>Dashboard</span>
           </Link>
-          <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
-            <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
-            <span>Επαφές</span>
-          </Link>
-          <Link href="/requests" prefetch className={`${tabClass(isTabActive("/requests"))} relative`} aria-current={isTabActive("/requests") ? "page" : undefined}>
-            <Inbox className={`h-5 w-5 shrink-0 ${isTabActive("/requests") ? active : inactive}`} />
-            <span>Αιτήματα</span>
-            {openRequestsCount > 0 && (
-              <span className="absolute right-1 top-0 min-w-[1.1rem] rounded-full px-1 text-center text-[9px] font-bold leading-tight" style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}>
-                {openRequestsCount > 9 ? "9+" : openRequestsCount}
-              </span>
-            )}
-          </Link>
-          <Link href="/campaigns" prefetch className={tabClass(isTabActive("/campaigns"))} aria-current={isTabActive("/campaigns") ? "page" : undefined}>
-            <Megaphone className={`h-5 w-5 shrink-0 ${isTabActive("/campaigns") ? active : inactive}`} />
-            <span>Καμπάνιες</span>
-          </Link>
-          {hasMinRole(role, "caller") ? (
-            <button type="button" className={tabClass(alexActive)} onClick={() => { openMiniFromBubble(); setMiniWindowMinimized(false); }} aria-current={alexActive ? "page" : undefined}>
-              <Sparkles className={`h-5 w-5 shrink-0 ${alexActive ? active : inactive}`} />
-              <span>Αλεξάνδρα</span>
-            </button>
+          {canContacts ? (
+            <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
+              <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
+              <span>Επαφές</span>
+            </Link>
           ) : (
-            <span className={`${tabClass(false)} cursor-not-allowed opacity-40`} aria-disabled>
-              <Sparkles className="h-5 w-5 shrink-0" />
-              <span>Αλεξάνδρα</span>
-            </span>
+            <span className={`${tabClass(false)} opacity-40`} aria-hidden />
           )}
+          {canRequests ? (
+            <Link href="/requests" prefetch className={`${tabClass(isTabActive("/requests"))} relative`} aria-current={isTabActive("/requests") ? "page" : undefined}>
+              <Inbox className={`h-5 w-5 shrink-0 ${isTabActive("/requests") ? active : inactive}`} />
+              <span>Αιτήματα</span>
+              {openRequestsCount > 0 && (
+                <span className="absolute right-1 top-0 min-w-[1.1rem] rounded-full px-1 text-center text-[9px] font-bold leading-tight" style={{ background: "var(--nav-badge-bg)", color: "var(--nav-badge-fg)" }}>
+                  {openRequestsCount > 9 ? "9+" : openRequestsCount}
+                </span>
+              )}
+            </Link>
+          ) : (
+            <span className={`${tabClass(false)} opacity-40`} aria-hidden />
+          )}
+          {canCampaigns ? (
+            <Link href="/campaigns" prefetch className={tabClass(isTabActive("/campaigns"))} aria-current={isTabActive("/campaigns") ? "page" : undefined}>
+              <Megaphone className={`h-5 w-5 shrink-0 ${isTabActive("/campaigns") ? active : inactive}`} />
+              <span>Καμπάνιες</span>
+            </Link>
+          ) : (
+            <span className={`${tabClass(false)} opacity-40`} aria-hidden />
+          )}
+          {alexTab}
         </div>
       </nav>
     );
@@ -82,25 +111,19 @@ export function MobileBottomNav({ role, onOpenMore, openRequestsCount }: MobileB
   return (
     <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
       <div className={innerBarVolunteer}>
-        <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
-          <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
-          <span>Επαφές</span>
-        </Link>
+        {canContacts ? (
+          <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
+            <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
+            <span>Επαφές</span>
+          </Link>
+        ) : (
+          <span className={`${tabClass(false)} opacity-40`} aria-hidden />
+        )}
         <Link href="/namedays" prefetch className={tabClass(isTabActive("/namedays"))} aria-current={isTabActive("/namedays") ? "page" : undefined}>
           <CalendarDays className={`h-5 w-5 shrink-0 ${isTabActive("/namedays") ? active : inactive}`} />
           <span>Εορτ.</span>
         </Link>
-        {hasMinRole(role, "caller") ? (
-          <button type="button" className={tabClass(alexActive)} onClick={() => { openMiniFromBubble(); setMiniWindowMinimized(false); }} aria-current={alexActive ? "page" : undefined}>
-            <Sparkles className={`h-5 w-5 shrink-0 ${alexActive ? active : inactive}`} />
-            <span>Αλεξάνδρα</span>
-          </button>
-        ) : (
-          <span className={`${tabClass(false)} opacity-40`} aria-hidden>
-            <Sparkles className="h-5 w-5 shrink-0" />
-            <span>Αλεξάνδρα</span>
-          </span>
-        )}
+        {alexTab}
         <button type="button" className={`${tabClass(false)} border-0 bg-transparent text-[var(--nav-mobile-inactive)]`} onClick={onOpenMore} aria-label="Περισσότερα">
           <Menu className="h-5 w-5" />
           <span>Περισσ.</span>

@@ -8,7 +8,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { computeSlaStatus } from "@/lib/request-sla";
 import { formatCalendarDateOnly, formatDateTimeEnGb } from "@/lib/date-format";
 import { useProfile } from "@/contexts/profile-context";
-import { hasMinRole } from "@/lib/roles";
+import { can } from "@/lib/can";
 import { RequestDocumentsSection } from "@/components/request-documents-section";
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
 import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
@@ -148,7 +148,7 @@ export default function RequestDetailPage() {
   const router = useRouter();
   const { profile } = useProfile();
   const id = typeof params?.id === "string" ? params.id : "";
-  const canManage = hasMinRole(profile?.role, "manager");
+  const canEdit = can(profile, "requests_edit");
 
   const [data, setData] = useState<RequestDetail | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -257,7 +257,7 @@ export default function RequestDetailPage() {
             <PriorityBadge p={data.priority} />
           </div>
         </div>
-        {canManage && (
+        {canEdit && (
           <>
             <button
               type="button"
@@ -294,7 +294,7 @@ export default function RequestDetailPage() {
             </p>
           </div>
 
-          {canManage && (
+          {canEdit && (
             <div
               className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-[color-mix(in_srgb,var(--accent)_55%,var(--border))] bg-[var(--bg-card)]/95 p-5 shadow-sm"
               data-hq-card
@@ -338,7 +338,7 @@ export default function RequestDetailPage() {
             </div>
           )}
 
-          <RequestDocumentsSection requestId={requestApiId} canManage={canManage} />
+          <RequestDocumentsSection requestId={requestApiId} canManage={canEdit} />
 
           <div
             className="rounded-2xl border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-card)]/95 p-5 shadow-sm"
@@ -375,7 +375,7 @@ export default function RequestDetailPage() {
                 ))
               )}
             </ul>
-            {canManage && (
+            {canEdit && (
               <div className="mt-1 flex flex-col gap-2 border-t border-[var(--border)]/80 pt-3">
                 <textarea
                   className="min-h-[80px] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--input-bg)] p-3 text-sm text-[var(--text-input)] placeholder:text-[var(--text-placeholder)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20"
@@ -425,7 +425,7 @@ export default function RequestDetailPage() {
             affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
             helpers={data.helpers ?? []}
             handlerNames={data.handlers ?? []}
-            canManage={canManage}
+            canManage={canEdit}
             onChanged={() => void load()}
           />
         </aside>

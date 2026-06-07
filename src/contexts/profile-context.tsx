@@ -12,6 +12,8 @@ export type Profile = {
   id: string;
   full_name: string | null;
   role: Role | string;
+  /** Navigation tier for custom roles (`roles.access_tier`). */
+  access_tier?: Role | string;
   is_portal?: boolean;
   created_at?: string;
   email?: string | null;

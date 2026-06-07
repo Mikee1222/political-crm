@@ -20,8 +20,18 @@ export async function GET() {
     const roleName = (row?.role as string) ?? profile?.role ?? "caller";
     const permissions: Record<string, boolean> = {};
     for (const k of ALL_PERMISSION_KEYS) permissions[k] = false;
+    let accessTier: string | undefined;
     try {
       const admin = createServiceClient();
+      const { data: tierRow } = await admin
+        .from("roles")
+        .select("access_tier")
+        .eq("name", roleName)
+        .maybeSingle();
+      const t = (tierRow as { access_tier?: string } | null)?.access_tier;
+      if (t === "caller" || t === "manager" || t === "admin") {
+        accessTier = t;
+      }
       const { data: prow } = await admin
         .from("role_permissions")
         .select("permission_key, allowed")
@@ -33,11 +43,15 @@ export async function GET() {
     } catch {
       /* migration not applied — leave all false */
     }
+    if (!accessTier && (roleName === "caller" || roleName === "manager" || roleName === "admin")) {
+      accessTier = roleName;
+    }
     return NextResponse.json({
       profile: {
         id: user.id,
         full_name: row?.full_name ?? profile?.full_name ?? null,
         role: roleName,
+        access_tier: accessTier,
         is_portal: Boolean((row as { is_portal?: boolean } | null)?.is_portal),
         email: user.email ?? null,
         avatar_url: row?.avatar_url ?? profile?.avatar_url ?? null,

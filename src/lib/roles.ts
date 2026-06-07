@@ -12,8 +12,16 @@ export const ROLE_BADGE: Record<Role, string> = {
   admin: "Διαχειριστής",
 };
 
-export function hasMinRole(userRole: string | null | undefined, min: Role): boolean {
+export function hasMinRole(
+  userRole: string | null | undefined,
+  min: Role,
+  accessTier?: string | null,
+): boolean {
   const r = userRole ?? "caller";
-  if (!(r in ROLE_ORDER)) return false;
-  return ROLE_ORDER[r as Role] >= ROLE_ORDER[min];
+  if (r in ROLE_ORDER) {
+    return ROLE_ORDER[r as Role] >= ROLE_ORDER[min];
+  }
+  const tier = accessTier ?? "caller";
+  if (!(tier in ROLE_ORDER)) return false;
+  return ROLE_ORDER[tier as Role] >= ROLE_ORDER[min];
 }

@@ -43,7 +43,7 @@ import {
 import { useProfile } from "@/contexts/profile-context";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
-import { hasMinRole } from "@/lib/roles";
+import { can } from "@/lib/can";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { callStatusLabel, lux } from "@/lib/luxury-styles";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
@@ -444,12 +444,12 @@ function ContactsMobileSkeleton() {
 function ContactSwipeCard({
   c,
   onNavigateDetail,
-  isAdmin,
+  canDelete,
   onDeleted,
 }: {
   c: Contact;
   onNavigateDetail: () => void;
-  isAdmin: boolean;
+  canDelete: boolean;
   onDeleted: () => void;
 }) {
   const tel = contactTelHref(c);
@@ -461,7 +461,7 @@ function ContactSwipeCard({
   const drag = useRef<{ x0: number; tx0: number } | null>(null);
   const skipTapNav = useRef(false);
 
-  const delW = isAdmin ? SW_DEL : 0;
+  const delW = canDelete ? SW_DEL : 0;
   const minTx = -(SW_CALL + delW);
   const maxTx = SW_ALEX;
   const clamp = (n: number) => Math.max(minTx, Math.min(maxTx, n));
@@ -537,7 +537,7 @@ function ContactSwipeCard({
             <span className="text-[9px] font-bold uppercase">Κλήση</span>
           </button>
         )}
-        {isAdmin ? (
+        {canDelete ? (
           <button
             type="button"
             className="hq-press-mobile flex w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 text-[var(--text-primary)]"
@@ -714,8 +714,10 @@ function contactDisplayName(c: Contact): string {
 
 function ContactsPage() {
   const { profile } = useProfile();
-  const canManage = hasMinRole(profile?.role, "manager");
-  const isAdmin = profile?.role === "admin";
+  const canCreate = can(profile, "contacts_create");
+  const canBulk = can(profile, "contacts_bulk");
+  const canExport = can(profile, "contacts_export");
+  const canDelete = can(profile, "contacts_delete");
   const { openTab } = useContactTabs();
   const [warStats, setWarStats] = useState<{
     total: number;
@@ -824,12 +826,12 @@ function ContactsPage() {
 
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
-    if (canManage) setOpenCreate(true);
+    if (canCreate) setOpenCreate(true);
     const p = new URLSearchParams(searchParams.toString());
     p.delete("new");
     const q = p.toString();
     startTransition(() => router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false }));
-  }, [searchParams, router, pathname, canManage]);
+  }, [searchParams, router, pathname, canCreate]);
 
   useEffect(() => {
     const enabled = searchParams.get("focus") === "1";
@@ -937,14 +939,14 @@ function ContactsPage() {
   }, []);
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canBulk) return;
     fetchWithTimeout("/api/campaigns")
       .then((r) => r.json())
       .then((d) => {
         setCampaigns((d.campaigns as Camp[] | undefined) ?? []);
       })
       .catch(() => setCampaigns([]));
-  }, [canManage]);
+  }, [canBulk]);
 
   useEffect(() => {
     return () => document.body.classList.remove("focus-mode");
@@ -1092,7 +1094,7 @@ function ContactsPage() {
                 <span className="hidden sm:inline">Εστίαση</span>
               </button>
             )}
-            {canManage && (
+            {canCreate && (
               <button
                 type="button"
                 onClick={() => setOpenCreate(true)}
@@ -1267,7 +1269,7 @@ function ContactsPage() {
               <li key={c.id}>
                 <ContactSwipeCard
                   c={c}
-                  isAdmin={isAdmin}
+                  canDelete={canDelete}
                   onNavigateDetail={() => router.push(contactDetailHref(c.id))}
                   onDeleted={() => void load()}
                 />
@@ -1283,7 +1285,7 @@ function ContactsPage() {
             title="Δεν βρέθηκαν επαφές"
             subtitle="Προσαρμόστε τα φίλτρα ή προσθέστε νέα επαφή για να ξεκινήσετε την καμπάνια σας."
             action={
-              canManage ? (
+              canCreate ? (
                 <button type="button" onClick={() => setOpenCreate(true)} className={lux.btnGold}>
                   Νέα επαφή
                 </button>
@@ -1411,7 +1413,7 @@ function ContactsPage() {
               </div>
               <div className="hidden h-6 w-px shrink-0 bg-[var(--border)] md:block" aria-hidden />
               <div className="flex min-w-0 flex-1 flex-col flex-wrap items-stretch gap-2 md:flex-row md:items-center md:justify-end">
-                {canManage && (
+                {canBulk && (
                   <>
                     <div className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center">
                       <label className="sr-only" htmlFor="bulk-status">
@@ -1489,17 +1491,19 @@ function ContactsPage() {
                     </div>
                   </>
                 )}
-                <a
-                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--border))] px-3.5 text-[13px] font-medium text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--text-primary)_6%,var(--bg-elevated))] sm:w-auto"
-                  href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
-                  onClick={(e) => {
-                    if (!selectedIds.length) e.preventDefault();
-                  }}
-                >
-                  <Download className="h-4 w-4" />
-                  Εξαγωγή
-                </a>
-                {isAdmin && canManage && (
+                {canExport ? (
+                  <a
+                    className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--border))] px-3.5 text-[13px] font-medium text-[var(--text-primary)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--text-primary)_6%,var(--bg-elevated))] sm:w-auto"
+                    href={selectedIds.length ? `/api/contacts/export?${new URLSearchParams({ ids: selectedIds.join(",") }).toString()}` : "#"}
+                    onClick={(e) => {
+                      if (!selectedIds.length) e.preventDefault();
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                    Εξαγωγή
+                  </a>
+                ) : null}
+                {canDelete && (
                   <button
                     type="button"
                     className={lux.btnDanger + " h-9 w-full !py-0 text-[13px] sm:w-auto sm:!px-3"}
@@ -1525,7 +1529,7 @@ function ContactsPage() {
         </div>
       )}
 
-      {deleteOpen && isAdmin && (
+      {deleteOpen && canDelete && (
         <CenteredModal
           open
           onClose={() => setDeleteOpen(false)}

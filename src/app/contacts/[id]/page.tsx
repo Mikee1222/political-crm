@@ -37,6 +37,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
+import { can } from "@/lib/can";
 import { hasMinRole } from "@/lib/roles";
 import { REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
@@ -365,9 +366,9 @@ function ContactDetailPage() {
   const { profile } = useProfile();
   const { openTab } = useContactTabs();
   const isCaller = profile?.role === "caller";
-  const canManage = hasMinRole(profile?.role, "manager");
-  const canDeleteCommLogs =
-    profile?.role === "admin" && profile?.permissions?.["communication_logs_delete"] === true;
+  const canManage = hasMinRole(profile?.role, "manager", profile?.access_tier);
+  const canEdit = can(profile, "contacts_edit");
+  const canDeleteCommLogs = can(profile, "communication_logs_delete");
   const { showToast } = useFormToast();
   const [contact, setContact] = useState<Contact | null>(null);
   const [buf, setBuf] = useState<Contact | null>(null);
@@ -881,7 +882,7 @@ function ContactDetailPage() {
     latestCommLog?.marker_name?.trim() || c?.last_contacted_by?.trim() || latestCommLog?.marked_by_name?.trim() || null;
 
   const startEdit = (s: Exclude<Section, null>) => {
-    if (!c || !canManage) return;
+    if (!c || !canEdit) return;
     setBuf({ ...c });
     setEditing(s);
   };
@@ -1039,7 +1040,7 @@ function ContactDetailPage() {
   };
 
   const handleAddAddress = async () => {
-    if (!id || !canManage) return;
+    if (!id || !canEdit) return;
     try {
       const res = await fetchWithTimeout(`/api/contacts/${id}/addresses`, {
         method: "POST",
@@ -1061,7 +1062,7 @@ function ContactDetailPage() {
   };
 
   const handleAddSource = async (sourceId: string) => {
-    if (!id || !canManage || sourcesSaving) return;
+    if (!id || !canEdit || sourcesSaving) return;
     setSourcesSaving(true);
     try {
       const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/sources`, {
@@ -1090,7 +1091,7 @@ function ContactDetailPage() {
   };
 
   const handleRemoveSource = async (sourceId: string) => {
-    if (!id || !canManage || sourcesSaving) return;
+    if (!id || !canEdit || sourcesSaving) return;
     setSourcesSaving(true);
     try {
       const res = await fetchWithTimeout(
@@ -1120,7 +1121,7 @@ function ContactDetailPage() {
   };
 
   const handleDeleteAddress = async (addressId: string) => {
-    if (!id || !canManage) return;
+    if (!id || !canEdit) return;
     if (!confirm("Να διαγραφεί η διεύθυνση;")) return;
     try {
       const res = await fetchWithTimeout(`/api/contacts/${id}/addresses`, {
@@ -1487,7 +1488,7 @@ function ContactDetailPage() {
             )}
             {!isCaller ? (
               <div className="flex flex-wrap items-center gap-1.5 md:hidden">
-                {canManage ? (
+                {canEdit ? (
                   <button
                     type="button"
                     onClick={() => startEdit("personal")}
@@ -1571,7 +1572,7 @@ function ContactDetailPage() {
                     <Phone className="h-4 w-4" />
                   </a>
                 ) : null}
-                {canManage && (
+                {canEdit && (
                   <button
                     type="button"
                     onClick={() => startEdit("personal")}
@@ -1636,19 +1637,19 @@ function ContactDetailPage() {
             {/* A Personal */}
             <div
               {...animDelay(0)}
-              className={[cardGold, canManage && editing === "personal" && mobileEditOverlay].filter(Boolean).join(" ")}
+              className={[cardGold, canEdit && editing === "personal" && mobileEditOverlay].filter(Boolean).join(" ")}
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <User className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
                   <h2 className={cardTitle + " m-0 flex-1 !mb-0 border-0 p-0"}>Προσωπικά στοιχεία</h2>
                 </div>
-                {canManage && editing !== "personal" && (
+                {canEdit && editing !== "personal" && (
                   <button type="button" onClick={() => startEdit("personal")} className={btnEdit}>
                     Επεξεργασία
                   </button>
                 )}
-                {canManage && editing === "personal" && (
+                {canEdit && editing === "personal" && (
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -1680,7 +1681,7 @@ function ContactDetailPage() {
                 ).map((row) => {
                   const isDate = "date" in row && row.date;
                   const isNum = "num" in row && row.num;
-                  const inEdit = canManage && editing === "personal" && w;
+                  const inEdit = canEdit && editing === "personal" && w;
                   const raw = c?.[row.k];
                   const displayVal = isNum
                     ? c?.age != null
@@ -1729,7 +1730,7 @@ function ContactDetailPage() {
                 );
                 })}
                 <div className="sm:col-span-2">
-                  {canManage && editing === "personal" && w ? (
+                  {canEdit && editing === "personal" && w ? (
                     <div className={fieldGap}>
                       <span className={lbl}>Γενέθλια</span>
                       <input
@@ -1796,7 +1797,7 @@ function ContactDetailPage() {
                 <div className="sm:col-span-2">
                   <div className={fieldGap}>
                     <span className={lbl}>Ετικέτες</span>
-                    {canManage && editing === "personal" && w ? (
+                    {canEdit && editing === "personal" && w ? (
                       <input
                         className={inputSm}
                         value={Array.isArray(w.tags) ? w.tags.join(", ") : ""}
@@ -1820,7 +1821,7 @@ function ContactDetailPage() {
                 <div className="sm:col-span-2">
                   <div className={fieldGap}>
                     <span className={lbl}>Γλώσσα</span>
-                    {canManage && editing === "personal" && w ? (
+                    {canEdit && editing === "personal" && w ? (
                       <input
                         className={inputSm}
                         placeholder="el, en, de…"
@@ -1837,7 +1838,7 @@ function ContactDetailPage() {
                 <div className="sm:col-span-2">
                   <div className={fieldGap}>
                     <span className={lbl}>Απεβίωσε</span>
-                    {canManage && editing === "personal" && w ? (
+                    {canEdit && editing === "personal" && w ? (
                       <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-[var(--text-primary)]">
                         <input
                           type="checkbox"
@@ -1860,7 +1861,7 @@ function ContactDetailPage() {
                 contactId={c.id}
                 groups={c.all_groups ?? []}
                 groupOptions={groupOptions}
-                canManage={canManage}
+                canManage={canEdit}
                 onGroupsChange={handleGroupsChange}
                 onToast={showToast}
               />
@@ -1872,8 +1873,8 @@ function ContactDetailPage() {
               className={cn(
                 cardBlue,
                 "relative min-w-0 w-full",
-                canManage && editing === "electoral" && mobileEditOverlay,
-                canManage && editing === "electoral" && "h-auto overflow-visible pb-6",
+                canEdit && editing === "electoral" && mobileEditOverlay,
+                canEdit && editing === "electoral" && "h-auto overflow-visible pb-6",
               )}
             >
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -1881,12 +1882,12 @@ function ContactDetailPage() {
                   <Building2 className="h-4 w-4 shrink-0 text-[var(--accent-blue)]" aria-hidden />
                   <h2 className={cardTitle + " m-0 border-0 p-0 !mb-0 text-[var(--accent-blue-bright)]"}>Εκλογική πληροφόρηση</h2>
                 </div>
-                {canManage && editing !== "electoral" && (
+                {canEdit && editing !== "electoral" && (
                   <button type="button" onClick={() => startEdit("electoral")} className={btnEdit}>
                     Επεξεργασία
                   </button>
                 )}
-                {canManage && editing === "electoral" && (
+                {canEdit && editing === "electoral" && (
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -1906,10 +1907,10 @@ function ContactDetailPage() {
                 className={cn(
                   grid2,
                   "min-w-0 w-full gap-y-3",
-                  canManage && editing === "electoral" && w && "gap-y-4",
+                  canEdit && editing === "electoral" && w && "gap-y-4",
                 )}
               >
-                {canManage && editing === "electoral" && w ? (
+                {canEdit && editing === "electoral" && w ? (
                   <div className="min-w-0 sm:col-span-2">
                     <ContactElectoralLocationEdit
                       values={{
@@ -1930,7 +1931,7 @@ function ContactDetailPage() {
                     />
                   </div>
                 ) : null}
-                {!(canManage && editing === "electoral" && w)
+                {!(canEdit && editing === "electoral" && w)
                   ? (["municipality", "electoral_district", "toponym"] as const).map((k) => {
                       const labels: Record<typeof k, string> = {
                         municipality: "Δήμος",
@@ -1947,7 +1948,7 @@ function ContactDetailPage() {
                   : null}
                 <div className={fieldGap + " sm:col-span-2"}>
                   <span className={lbl}>Δημοτολόγιο</span>
-                  {canManage && editing === "electoral" && w ? (
+                  {canEdit && editing === "electoral" && w ? (
                     <input
                       type="text"
                       className={inputSm}
@@ -1966,7 +1967,7 @@ function ContactDetailPage() {
                 ).map((row) => (
                   <div key={row.k} className={fieldGap}>
                     <span className={lbl}>{row.l}</span>
-                    {canManage && editing === "electoral" && w ? (
+                    {canEdit && editing === "electoral" && w ? (
                       <input
                         type="text"
                         className={
@@ -1985,7 +1986,7 @@ function ContactDetailPage() {
                 ))}
                 <div className={fieldGap}>
                   <span className={lbl}>Προτεραιότητα</span>
-                  {canManage && editing === "electoral" && w ? (
+                  {canEdit && editing === "electoral" && w ? (
                     <HqSelect className={inputSm + " !pr-9"} value={w.priority ?? "Medium"} onChange={(e) => setBuf({ ...w, priority: e.target.value })}>
                       <option value="High">Υψηλή</option>
                       <option value="Medium">Μεσαία</option>
@@ -1997,7 +1998,7 @@ function ContactDetailPage() {
                 </div>
                 <div className={fieldGap}>
                   <span className={lbl}>Κατάσταση κλήσης</span>
-                  {canManage && editing === "electoral" && w ? (
+                  {canEdit && editing === "electoral" && w ? (
                     <SearchableSelect
                       className={inputSm + " !pr-9"}
                       value={w.call_status ?? "Pending"}
@@ -2011,7 +2012,7 @@ function ContactDetailPage() {
                 </div>
                 <div className="sm:col-span-2">
                   <label className="flex items-center gap-2">
-                    {canManage && editing === "electoral" && w ? (
+                    {canEdit && editing === "electoral" && w ? (
                       <>
                         <input
                           type="checkbox"
@@ -2030,7 +2031,7 @@ function ContactDetailPage() {
                 </div>
                 <div className="sm:col-span-2">
                   <span className={lbl + " mb-1 block"}>Εθελοντική συμμετοχή</span>
-                  {canManage && editing === "electoral" && w ? (
+                  {canEdit && editing === "electoral" && w ? (
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-sm">
                         <input
@@ -2082,7 +2083,7 @@ function ContactDetailPage() {
               {contactSources.length > 0 ? (
                 <div className="mb-3 flex flex-wrap gap-2">
                   {contactSources.map((source) =>
-                    canManage ? (
+                    canEdit ? (
                       <button
                         key={source.id}
                         type="button"
@@ -2109,7 +2110,7 @@ function ContactDetailPage() {
                 </p>
               )}
 
-              {canManage ? (
+              {canEdit ? (
                 <div className="space-y-2">
                   <span className={lbl}>Προσθήκη / αφαίρεση</span>
                   <SearchableMultiSelect
@@ -2138,7 +2139,7 @@ function ContactDetailPage() {
                   <MapPin className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
                   Διευθύνσεις
                 </h2>
-                {canManage ? (
+                {canEdit ? (
                   <button
                     type="button"
                     onClick={() => setShowAddAddress(true)}
@@ -2172,7 +2173,7 @@ function ContactDetailPage() {
                           {[addr.poli, addr.tk].filter(Boolean).join(" ") || "—"}
                         </p>
                       </div>
-                      {canManage ? (
+                      {canEdit ? (
                         <button
                           type="button"
                           onClick={() => void handleDeleteAddress(addr.id)}
@@ -2186,7 +2187,7 @@ function ContactDetailPage() {
                   ))}
                 </ul>
               )}
-              {canManage && showAddAddress ? (
+              {canEdit && showAddAddress ? (
                 <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
                   <HqSelect
                     className={inputSm + " !pr-9"}
@@ -2365,7 +2366,7 @@ function ContactDetailPage() {
                   );
                 })}
               </ul>
-              {canManage && (
+              {canEdit && (
                 <div className="mt-1 flex flex-col gap-2">
                   <textarea
                     className="min-h-[80px] w-full resize-y rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-gold)]/20"
@@ -2408,7 +2409,7 @@ function ContactDetailPage() {
               )}
             </div>
 
-            {canManage && (
+            {canEdit && (
               <div {...animDelay(3)} className={card}>
                 <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Υποστήριξη / δωρεές</h2>
                 <ul className="mb-3 space-y-2 text-sm">
@@ -2493,19 +2494,19 @@ function ContactDetailPage() {
             {/* C Comm — right column, above αιτήματα */}
             <div
               {...animDelay(4)}
-              className={[cardGreen, canManage && editing === "comm" && mobileEditOverlay].filter(Boolean).join(" ")}
+              className={[cardGreen, canEdit && editing === "comm" && mobileEditOverlay].filter(Boolean).join(" ")}
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <Phone className="h-4 w-4 shrink-0 text-[#10B981]" aria-hidden />
                   <h2 className={cardTitle + " m-0 !mb-0 border-0 p-0 text-[#34d399]"}>Επικοινωνία</h2>
                 </div>
-                {canManage && editing !== "comm" && (
+                {canEdit && editing !== "comm" && (
                   <button type="button" onClick={() => startEdit("comm")} className={btnEdit}>
                     Επεξεργασία
                   </button>
                 )}
-                {canManage && editing === "comm" && (
+                {canEdit && editing === "comm" && (
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -2532,7 +2533,7 @@ function ContactDetailPage() {
                 ).map((row) => (
                   <div key={row.k} className={fieldGap}>
                     <span className={lbl}>{row.l}</span>
-                    {canManage && editing === "comm" && w ? (
+                    {canEdit && editing === "comm" && w ? (
                       <input
                         className={inputSm}
                         value={String((w as unknown as Record<string, string | null>)[row.k] ?? "")}

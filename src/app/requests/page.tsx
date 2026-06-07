@@ -41,7 +41,7 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
-import { hasMinRole } from "@/lib/roles";
+import { can } from "@/lib/can";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 
 type RequestRow = {
@@ -132,7 +132,10 @@ export default function RequestsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { profile } = useProfile();
-  const canQuickComplete = hasMinRole(profile?.role, "manager");
+  const canCreate = can(profile, "requests_create");
+  const canEdit = can(profile, "requests_edit");
+  const canComplete = can(profile, "requests_complete");
+  const canDelete = can(profile, "requests_delete");
   const { colors: statusColors } = useRequestStatusColors();
 
   const [f, setF] = useState<RequestFilters>(DEFAULT_FILTERS);
@@ -295,14 +298,16 @@ export default function RequestsPage() {
         title="Αιτήματα"
         subtitle="Φιλτράρισμα και διαχείριση αιτημάτων πολιτών — κάρτες με SLA και κατάσταση."
         actions={
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className={lux.btnGold + " hq-shimmer-gold w-full !rounded-full !px-5 !py-2.5 !text-sm sm:w-auto"}
-          >
-            <Inbox className="h-4 w-4" />
-            Νέο αίτημα
-          </button>
+          canCreate ? (
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className={lux.btnGold + " hq-shimmer-gold w-full !rounded-full !px-5 !py-2.5 !text-sm sm:w-auto"}
+            >
+              <Inbox className="h-4 w-4" />
+              Νέο αίτημα
+            </button>
+          ) : null
         }
       />
 
@@ -428,9 +433,11 @@ export default function RequestsPage() {
           title="Δεν υπάρχουν αιτήματα ακόμα"
           subtitle="Δημιουργήστε το πρώτο αίτημα για να εμφανιστεί εδώ με κωδικό, SLA και επαφή."
           action={
-            <button type="button" onClick={() => setCreateOpen(true)} className={lux.btnPrimary}>
-              Νέο αίτημα
-            </button>
+            canCreate ? (
+              <button type="button" onClick={() => setCreateOpen(true)} className={lux.btnPrimary}>
+                Νέο αίτημα
+              </button>
+            ) : undefined
           }
         />
       ) : (
@@ -444,7 +451,8 @@ export default function RequestsPage() {
               <RequestCard
                 r={r}
                 statusColors={statusColors}
-                canQuickComplete={canQuickComplete}
+                canQuickComplete={canComplete}
+                canEdit={canEdit}
                 onOpen={() => router.push(`/requests/${r.id}`)}
                 onEdit={() => setSelected(r)}
                 onQuickComplete={handleQuickComplete}
@@ -485,7 +493,12 @@ export default function RequestsPage() {
 
       <NewRequestModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
       {selected && (
-        <EditRequestModal request={selected} onClose={() => setSelected(null)} onSaved={load} />
+        <EditRequestModal
+          request={selected}
+          canDelete={canDelete}
+          onClose={() => setSelected(null)}
+          onSaved={load}
+        />
       )}
     </div>
   );
@@ -567,6 +580,7 @@ function RequestCard({
   r,
   statusColors,
   canQuickComplete,
+  canEdit,
   onOpen,
   onEdit,
   onQuickComplete,
@@ -574,6 +588,7 @@ function RequestCard({
   r: RequestRow;
   statusColors: RequestStatusColorsMap;
   canQuickComplete: boolean;
+  canEdit: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onQuickComplete: (id: string) => Promise<void>;
@@ -679,16 +694,18 @@ function RequestCard({
               </PortalDropdownPanel>
             </div>
           ) : null}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            className={lux.btnIcon}
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              className={lux.btnIcon}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
       </div>
       <h2 className="line-clamp-2 flex-1 text-base font-bold leading-snug">{r.title}</h2>
@@ -730,10 +747,12 @@ function PriorityPill({ p }: { p: string | null | undefined }) {
 
 function EditRequestModal({
   request,
+  canDelete,
   onClose,
   onSaved,
 }: {
   request: RequestRow;
+  canDelete: boolean;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -897,16 +916,18 @@ function EditRequestModal({
           />
         </div>
       </div>
-      <div className="mt-6 border-t border-[var(--border)] pt-4">
-        <button
-          type="button"
-          onClick={() => void remove()}
-          className="text-sm font-medium text-[#DC2626] hover:underline"
-          disabled={saving}
-        >
-          Διαγραφή αιτήματος
-        </button>
-      </div>
+      {canDelete ? (
+        <div className="mt-6 border-t border-[var(--border)] pt-4">
+          <button
+            type="button"
+            onClick={() => void remove()}
+            className="text-sm font-medium text-[#DC2626] hover:underline"
+            disabled={saving}
+          >
+            Διαγραφή αιτήματος
+          </button>
+        </div>
+      ) : null}
     </CenteredModal>
   );
 }

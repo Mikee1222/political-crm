@@ -57,9 +57,11 @@ import { MobilePullToRefresh } from "@/components/mobile/mobile-pull-to-refresh"
 import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
-import { useProfile } from "@/contexts/profile-context";
+import { useProfile, type Profile } from "@/contexts/profile-context";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { can } from "@/lib/can";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import type { PermissionKey } from "@/lib/permissions";
 import { hasMinRole, ROLE_BADGE, type Role } from "@/lib/roles";
 import type { LucideIcon } from "lucide-react";
 import { normalizeRequestStatus, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
@@ -118,6 +120,29 @@ const DEFAULT_GROUP_STATE: Record<string, boolean> = {
 
 const settingsItem: NavItem = navItemByHref.get("/settings")!;
 
+const NAV_PERMISSION_BY_HREF: Partial<Record<string, PermissionKey>> = {
+  "/contacts": "contacts_view",
+  "/contacts/search": "contacts_view",
+  "/requests": "requests_view",
+  "/requests/search": "requests_view",
+  "/requests-scheduler": "requests_scheduler_view",
+  "/campaigns": "campaigns_view",
+  "/events": "events_view",
+  "/tasks": "tasks_view",
+  "/volunteers": "volunteers_view",
+  "/analytics": "analytics_view",
+  "/polls": "polls_view",
+  "/documents": "documents_view",
+  "/data-tools": "data_tools_view",
+  "/settings": "settings_view",
+};
+
+function navItemAllowed(profile: Profile | null, item: NavItem): boolean {
+  const perm = NAV_PERMISSION_BY_HREF[item.href];
+  if (perm) return can(profile, perm);
+  return hasMinRole(profile?.role, item.minRole, profile?.access_tier);
+}
+
 function pageTitle(pathname: string) {
   if (pathname.startsWith("/dashboard")) return "Dashboard";
   if (pathname.startsWith("/contacts/search")) return "Αναζήτηση Επαφών";
@@ -174,8 +199,8 @@ const groupHeaderClass =
 
 const MOBILE_TAB_ORDER = ["/dashboard", "/contacts", "/requests", "/campaigns", "/alexandra"] as const;
 
-function mainTabHrefsForRole(r: string | null | undefined): Set<string> {
-  if (hasMinRole(r, "manager")) {
+function mainTabHrefsForProfile(profile: Profile | null): Set<string> {
+  if (hasMinRole(profile?.role, "manager", profile?.access_tier)) {
     return new Set(["/dashboard", "/contacts", "/alexandra", "/requests", "/campaigns"]);
   }
   return new Set(["/contacts", "/namedays", "/alexandra"]);
@@ -191,21 +216,21 @@ function mobilePrimaryTabRank(pathname: string): number {
   return -1;
 }
 
-function resolveItemsForGroup(hrefs: string[], role: string | null | undefined) {
+function resolveItemsForGroup(hrefs: string[], profile: Profile | null) {
   const out: NavItem[] = [];
   for (const h of hrefs) {
     const it = navItemByHref.get(h);
-    if (it && hasMinRole(role, it.minRole)) out.push(it);
+    if (it && navItemAllowed(profile, it)) out.push(it);
   }
   return out;
 }
 
-function flatOrderedNavItems(role: string | null | undefined) {
+function flatOrderedNavItems(profile: Profile | null) {
   const all: NavItem[] = [];
   for (const g of groupDefs) {
-    for (const it of resolveItemsForGroup(g.hrefs, role)) all.push(it);
+    for (const it of resolveItemsForGroup(g.hrefs, profile)) all.push(it);
   }
-  if (hasMinRole(role, settingsItem.minRole)) all.push(settingsItem);
+  if (navItemAllowed(profile, settingsItem)) all.push(settingsItem);
   return all;
 }
 
@@ -258,17 +283,17 @@ function NavItemRow({
 }
 
 function AlexandraRow({
-  role,
+  profile,
   pathname,
   onNavigate,
   showLabels,
 }: {
-  role: string;
+  profile: Profile | null;
   pathname: string;
   onNavigate?: () => void;
   showLabels: boolean;
 }) {
-  if (!hasMinRole(role, "caller")) {
+  if (!can(profile, "alexandra_use")) {
     return null;
   }
   return (
@@ -313,7 +338,7 @@ function GroupBlock({
   groupOpen,
   onToggleGroup,
   pathname,
-  role,
+  profile,
   onNavigate,
   showLabels,
   showGroupHeaders,
@@ -322,12 +347,12 @@ function GroupBlock({
   groupOpen: boolean;
   onToggleGroup: () => void;
   pathname: string;
-  role: string;
+  profile: Profile | null;
   onNavigate?: () => void;
   showLabels: boolean;
   showGroupHeaders: boolean;
 }) {
-  const items = resolveItemsForGroup(group.hrefs, role);
+  const items = resolveItemsForGroup(group.hrefs, profile);
   if (items.length === 0) return null;
 
   if (showGroupHeaders) {
@@ -377,7 +402,7 @@ function GroupBlock({
 
 type SidebarContentProps = {
   pathname: string;
-  role: string;
+  profile: Profile | null;
   onNavigate?: () => void;
   showLabels: boolean;
   showGroupHeaders: boolean;
@@ -389,7 +414,7 @@ type SidebarContentProps = {
 
 function SidebarContent({
   pathname,
-  role,
+  profile,
   onNavigate,
   showLabels,
   showGroupHeaders,
@@ -399,7 +424,7 @@ function SidebarContent({
   flatRail,
 }: SidebarContentProps) {
   if (flatRail) {
-    const order = flatOrderedNavItems(role).filter((it) => it.href !== "/settings");
+    const order = flatOrderedNavItems(profile).filter((it) => it.href !== "/settings");
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
@@ -427,7 +452,7 @@ function SidebarContent({
             groupOpen={groupState[g.id] !== false}
             onToggleGroup={() => onToggleGroup(g.id)}
             pathname={pathname}
-            role={role}
+            profile={profile}
             onNavigate={onNavigate}
             showLabels={showLabels}
             showGroupHeaders={showGroupHeaders}
@@ -486,13 +511,14 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [isCrmLoginPublic, isPortal]);
 
   const role = profile?.role ?? "caller";
+  const accessTier = profile?.access_tier;
   const depth = pathname.split("/").filter(Boolean).length;
   const showBackMobile = depth >= 2;
 
   const moreMenuItems: MoreNavItem[] = useMemo(() => {
-    const main = mainTabHrefsForRole(role);
-    return NAV_CONFIG.filter((i) => hasMinRole(role, i.minRole) && !main.has(i.href));
-  }, [role]);
+    const main = mainTabHrefsForProfile(profile);
+    return NAV_CONFIG.filter((i) => navItemAllowed(profile, i) && !main.has(i.href));
+  }, [profile]);
 
   const sidebarW = !isLg ? 64 : sidebarUserExpanded ? 240 : 64;
   const showDesktopWideNav = isLg && sidebarUserExpanded;
@@ -680,12 +706,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        if (hasMinRole(role, "manager")) {
+        if (can(profile, "contacts_view")) {
           setSearchOpen(true);
         }
         return;
       }
-      if (e.key === "n" && (e.metaKey || e.ctrlKey) && hasMinRole(role, "manager") && pathname.startsWith("/contacts") && !inputLike(e.target)) {
+      if (e.key === "n" && (e.metaKey || e.ctrlKey) && can(profile, "contacts_create") && pathname.startsWith("/contacts") && !inputLike(e.target)) {
         e.preventDefault();
         router.push("/contacts?new=1");
         return;
@@ -702,7 +728,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       }
       if (e.key.toLowerCase() === "a" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
         e.preventDefault();
-        if (!hasMinRole(role, "caller")) {
+        if (!can(profile, "alexandra_use")) {
           return;
         }
         window.dispatchEvent(new Event("alexandra-voice-shortcut"));
@@ -729,7 +755,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           clearTimeout(gNavTimerRef.current);
           gNavTimerRef.current = null;
         }
-        if (!hasMinRole(role, "manager")) {
+        if (!hasMinRole(role, "manager", accessTier)) {
           return;
         }
         const c = e.key.toLowerCase();
@@ -755,11 +781,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       }
       window.removeEventListener("keydown", onKey);
     };
-  }, [isCrmLoginPublic, isPortal, role, router, pathname]);
+  }, [isCrmLoginPublic, isPortal, profile, role, accessTier, router, pathname]);
 
   useEffect(() => {
     if (isCrmLoginPublic || isPortal) return;
-    if (!hasMinRole(role, "manager")) {
+    if (!can(profile, "requests_view")) {
       return;
     }
     fetchWithTimeout("/api/requests")
@@ -772,7 +798,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         setOpenRequestsCount(count);
       })
       .catch(() => setOpenRequestsCount(0));
-  }, [isCrmLoginPublic, isPortal, role]);
+  }, [isCrmLoginPublic, isPortal, profile]);
 
   const pinBottom = (opts: { onNavigate?: () => void; showLabels: boolean }) => (
     <div className="mt-auto space-y-1 border-t border-[var(--border)]/30 pt-2">
@@ -789,7 +815,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <HelpCircle className="h-5 w-5 shrink-0 text-[var(--nav-icon-inactive)] group-hover:text-[var(--nav-icon-hover)]" />
         {opts.showLabels && <span className="text-[14px] font-medium">Βοήθεια</span>}
       </button>
-      {hasMinRole(role, settingsItem.minRole) && (
+      {navItemAllowed(profile, settingsItem) && (
         <NavItemRow
           item={settingsItem}
           pathname={pathname}
@@ -798,7 +824,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         />
       )}
       <AlexandraRow
-        role={role}
+        profile={profile}
         pathname={pathname}
         onNavigate={opts.onNavigate}
         showLabels={opts.showLabels}
@@ -861,7 +887,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           ) : (
             <SidebarContent
               pathname={pathname}
-              role={role}
+              profile={profile}
               onNavigate={undefined}
               showLabels={showLabels}
               showGroupHeaders={showGroupHeaders}
@@ -936,7 +962,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             ) : (
               <SidebarContent
                 pathname={pathname}
-                role={role}
+                profile={profile}
                 onNavigate={() => setMobileNavOpen(false)}
                 showLabels
                 showGroupHeaders
@@ -964,9 +990,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             onBack={() => router.back()}
             mobileNavOpen={mobileNavOpen}
             onToggleMenu={() => setMobileNavOpen((o) => !o)}
-            canGlobalSearch={hasMinRole(role, "manager")}
+            canGlobalSearch={can(profile, "contacts_view")}
             onOpenSearch={() => setSearchOpen(true)}
-            requestsHref={hasMinRole(role, "manager") ? "/requests" : undefined}
+            requestsHref={can(profile, "requests_view") ? "/requests" : undefined}
             hidden={mobileGlassHeaderHidden}
             canInstall={installable && !installed}
             onInstallClick={() => void triggerInstallPrompt()}
@@ -978,7 +1004,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2 pl-2">
-              {hasMinRole(role, "manager") ? (
+              {can(profile, "contacts_view") ? (
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
@@ -1109,7 +1135,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         )}
         <FloatingActions role={role} />
         <div className="crm-bottom-nav lg:hidden">
-          <MobileBottomNav role={role} onOpenMore={() => setMoreOpen(true)} openRequestsCount={openRequestsCount} />
+          <MobileBottomNav profile={profile} onOpenMore={() => setMoreOpen(true)} openRequestsCount={openRequestsCount} />
         </div>
         <MobileMoreSheet
           open={moreOpen}
