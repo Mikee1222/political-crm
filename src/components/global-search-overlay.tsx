@@ -15,6 +15,7 @@ type SContact = {
   phone: string | null;
   municipality: string | null;
   contact_code?: string | null;
+  group_names?: string[];
   matchReasons?: string[];
   aiMatch?: boolean;
 };
@@ -24,9 +25,13 @@ type SRequest = {
   title: string;
   status: string | null;
   snippet?: string | null;
+  requester_name?: string | null;
 };
 type STask = { id: string; title: string; due_date: string | null; completed: boolean | null };
 type SCampaign = { id: string; name: string; status: string | null };
+
+const RECENT_KEY = "crm-global-search-recent";
+const MAX_RECENT = 5;
 
 const overlay =
   "fixed inset-0 z-[400] flex flex-col items-center bg-black/80 backdrop-blur-sm pt-[min(18vh,100px)] px-4";
@@ -43,6 +48,31 @@ function av(fn: string, ln: string) {
   return `${(fn[0] ?? "?").toUpperCase()}${(ln[0] ?? "?").toUpperCase()}`;
 }
 
+function loadRecentSearches(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0).slice(0, MAX_RECENT);
+  } catch {
+    return [];
+  }
+}
+
+function persistRecentSearch(query: string): string[] {
+  const q = query.trim();
+  if (q.length < 1) return loadRecentSearches();
+  try {
+    const prev = loadRecentSearches().filter((x) => x !== q);
+    const next = [q, ...prev].slice(0, MAX_RECENT);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    return next;
+  } catch {
+    return loadRecentSearches();
+  }
+}
+
 export function GlobalSearchOverlay({ open, onClose, role }: Props) {
   const router = useRouter();
   const canSearch = hasMinRole(role, "caller");
@@ -53,7 +83,9 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
   const [r, setR] = useState<SRequest[]>([]);
   const [t, setT] = useState<STask[]>([]);
   const [ca, setCa] = useState<SCampaign[]>([]);
+  const [recent, setRecent] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [active, setActive] = useState(0);
 
   const entries: Entry[] = useMemo(() => {
@@ -93,26 +125,32 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
   const total = entries.length;
 
   useEffect(() => {
-    const id = window.setTimeout(() => setDeb(q), 300);
+    const id = window.setTimeout(() => setDeb(q), 150);
     return () => clearTimeout(id);
   }, [q]);
 
   const load = useCallback(
     async (query: string) => {
       if (!canSearch) return;
-      if (query.length < 2) {
+      abortRef.current?.abort();
+      if (query.length < 1) {
         setC([]);
         setR([]);
         setT([]);
         setCa([]);
+        setLoading(false);
         return;
       }
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
       setLoading(true);
       try {
         const res = await fetchWithTimeout(`/api/search?q=${encodeURIComponent(query)}`, {
           credentials: "same-origin",
           timeoutMs: CLIENT_FETCH_TIMEOUT_MS,
+          signal: ctrl.signal,
         });
+        if (ctrl.signal.aborted) return;
         if (!res.ok) {
           return;
         }
@@ -122,14 +160,17 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
           tasks?: STask[];
           campaigns?: SCampaign[];
         };
+        if (ctrl.signal.aborted) return;
         setC(d.contacts ?? []);
-        setR((d.requests ?? []).slice(0, 8));
-        setT((d.tasks ?? []).slice(0, 8));
-        setCa((d.campaigns ?? []).slice(0, 8));
-      } catch {
+        setR(d.requests ?? []);
+        setT(d.tasks ?? []);
+        setCa(d.campaigns ?? []);
+        setRecent(persistRecentSearch(query));
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
         // ignore
       } finally {
-        setLoading(false);
+        if (!ctrl.signal.aborted) setLoading(false);
       }
     },
     [canSearch],
@@ -150,13 +191,26 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
       setT([]);
       setCa([]);
       setActive(0);
+      setRecent(loadRecentSearches());
       window.setTimeout(() => inputRef.current?.focus(), 50);
     }
+    return () => {
+      abortRef.current?.abort();
+    };
   }, [open]);
 
   useEffect(() => {
     setActive(0);
   }, [entries.length, deb]);
+
+  const clearRecent = useCallback(() => {
+    try {
+      localStorage.removeItem(RECENT_KEY);
+    } catch {
+      // ignore
+    }
+    setRecent([]);
+  }, []);
 
   const go = useCallback(
     (e: Entry) => {
@@ -248,9 +302,46 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
         {loading && <p className="mt-2 text-center text-sm text-[var(--text-muted)]">Φόρτωση…</p>}
 
         <div className="mt-4 max-h-[min(62dvh,480px)] space-y-5 overflow-y-auto rounded-xl border border-[var(--border)]/60 bg-background p-4 text-left shadow-xl">
-          {deb.length < 2 && <p className="px-1 py-2 text-sm text-[var(--text-secondary)]">Πληκτρολογήστε τουλάχιστον 2 χαρακτήρες…</p>}
-          {deb.length >= 2 && total === 0 && !loading && (
-            <p className="px-1 py-2 text-sm text-[var(--text-secondary)]">Δεν βρέθηκαν αποτελέσματα.</p>
+          {deb.length < 1 && recent.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className={sectionTitle}>Πρόσφατες αναζητήσεις</p>
+                <button
+                  type="button"
+                  onClick={clearRecent}
+                  className="shrink-0 text-[11px] text-[var(--text-muted)] transition hover:text-[var(--text-secondary)]"
+                >
+                  Καθαρισμός
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {recent.map((term) => (
+                  <button
+                    key={term}
+                    type="button"
+                    onClick={() => setQ(term)}
+                    className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)]/80 px-3 py-1.5 text-xs text-[var(--text-primary)] transition hover:border-[#C9A84C]/40 hover:bg-[#C9A84C]/10"
+                  >
+                    {term}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {deb.length >= 1 && total === 0 && !loading && (
+            <div className="px-1 py-4 text-center">
+              <p className="text-sm text-[var(--text-secondary)]">Δεν βρέθηκαν αποτελέσματα για «{deb}».</p>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">Δοκιμάστε μικρότερη ή πιο συγκεκριμένη αναζήτηση.</p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-sm">
+                <Link href="/contacts/search" onClick={onClose} className="text-[#C9A84C] underline underline-offset-2">
+                  Αναζήτηση επαφών
+                </Link>
+                <Link href="/requests/search" onClick={onClose} className="text-[#C9A84C] underline underline-offset-2">
+                  Αναζήτηση αιτημάτων
+                </Link>
+              </div>
+            </div>
           )}
 
           {c.length > 0 && (
@@ -260,7 +351,8 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                 const e = entries.find((x) => x.k === "c" && x.id === g.id);
                 if (!e) return null;
                 const idx = entries.findIndex((x) => x === e);
-                const reasons = g.matchReasons?.length ? g.matchReasons : [];
+                const matchBadge = g.matchReasons?.[0];
+                const groupChips = (g.group_names ?? []).slice(0, 2);
                 return (
                   <div key={g.id} className="mb-2">
                     <button
@@ -279,22 +371,37 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold">{e.title}</span>
+                          <span className="font-bold">{e.title}</span>
+                          {g.contact_code ? (
+                            <span className="text-xs font-normal text-[var(--text-muted)]">{g.contact_code}</span>
+                          ) : null}
                           {g.aiMatch ? (
                             <span className="inline-flex items-center gap-0.5 rounded-full border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#C9A84C]">
                               <Sparkles className="h-3 w-3" aria-hidden />
                               AI
                             </span>
                           ) : null}
+                          {matchBadge ? (
+                            <span className="inline-flex max-w-[min(100%,220px)] truncate rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                              {matchBadge}
+                            </span>
+                          ) : null}
                         </span>
-                        <span className="mt-0.5 block text-xs text-[var(--text-muted)]">{e.sub}</span>
-                        {reasons.length > 0 && (
-                          <ul className="mt-1.5 space-y-0.5 border-l-2 border-[#C9A84C]/30 pl-2 text-[11px] leading-snug text-[var(--text-secondary)]">
-                            {reasons.slice(0, 3).map((line, i) => (
-                              <li key={i}>{line}</li>
+                        <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
+                          {[g.phone, g.municipality].filter(Boolean).join(" · ") || "—"}
+                        </span>
+                        {groupChips.length > 0 ? (
+                          <span className="mt-1.5 flex flex-wrap gap-1">
+                            {groupChips.map((name) => (
+                              <span
+                                key={name}
+                                className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/70 px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]"
+                              >
+                                {name}
+                              </span>
                             ))}
-                          </ul>
-                        )}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   </div>
@@ -322,6 +429,9 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     onMouseEnter={() => setActive(idx)}
                   >
                     <span className="font-medium">{e.title}</span>
+                    {req.requester_name ? (
+                      <p className="mt-0.5 text-xs text-[var(--text-muted)]">Αιτών: {req.requester_name}</p>
+                    ) : null}
                     {req.snippet ? <p className="mt-0.5 line-clamp-2 text-xs text-[var(--text-muted)]">{req.snippet}</p> : null}
                   </button>
                 );

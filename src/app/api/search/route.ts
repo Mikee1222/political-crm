@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+import { fetchGroupNamesByContactId } from "@/lib/contact-group-members";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export type SearchContactHit = {
   phone: string | null;
   municipality: string | null;
   contact_code?: string | null;
+  group_names?: string[];
   matchReasons: string[];
   aiMatch?: boolean;
 };
@@ -52,6 +54,7 @@ export type SearchRequestHit = {
   title: string;
   status: string | null;
   snippet: string | null;
+  requester_name?: string | null;
 };
 
 export type SearchTaskHit = { id: string; title: string; due_date: string | null; completed: boolean | null };
@@ -100,6 +103,24 @@ function contactFieldReasons(row: Record<string, unknown>, raw: string): { reaso
   return { reasons, aiMatch };
 }
 
+function contactMatchTier(row: { first_name: string; last_name: string }, raw: string): number {
+  const q = raw.toLowerCase().trim();
+  const fn = String(row.first_name ?? "").toLowerCase().trim();
+  const ln = String(row.last_name ?? "").toLowerCase().trim();
+  const full = `${fn} ${ln}`.trim();
+  if (fn === q || ln === q) return 0;
+  if (full.startsWith(q)) return 1;
+  return 2;
+}
+
+function requesterNameFromRow(row: Record<string, unknown>): string | null {
+  const c = row.contacts;
+  const contact = (Array.isArray(c) ? c[0] : c) as { first_name?: string; last_name?: string } | null | undefined;
+  if (!contact) return null;
+  const name = `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim();
+  return name || null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
@@ -110,7 +131,7 @@ export async function GET(request: NextRequest) {
     }
 
     const raw = normQ(request.nextUrl.searchParams.get("q") ?? "");
-    if (raw.length < 2) {
+    if (raw.length < 1) {
       return NextResponse.json({
         contacts: [] as SearchContactHit[],
         requests: [] as SearchRequestHit[],
@@ -118,7 +139,10 @@ export async function GET(request: NextRequest) {
         campaigns: [] as SearchCampaignHit[],
       });
     }
-    const p = `%${escapeIlike(raw)}%`;
+    const esc = escapeIlike(raw);
+    const isPhone = /^\d{6,}$/.test(raw);
+    const phonePattern = isPhone ? `${esc}%` : `%${esc}%`;
+    const p = `%${esc}%`;
 
     const [
       cDirect,
@@ -137,9 +161,9 @@ export async function GET(request: NextRequest) {
             `last_name.ilike.${p}`,
             `father_name.ilike.${p}`,
             `mother_name.ilike.${p}`,
-            `phone.ilike.${p}`,
-            `phone2.ilike.${p}`,
-            `landline.ilike.${p}`,
+            `phone.ilike.${phonePattern}`,
+            `phone2.ilike.${phonePattern}`,
+            `landline.ilike.${phonePattern}`,
             `email.ilike.${p}`,
             `contact_code.ilike.${p}`,
             `municipality.ilike.${p}`,
@@ -147,7 +171,7 @@ export async function GET(request: NextRequest) {
             `notes.ilike.${p}`,
           ].join(","),
         )
-        .limit(28),
+        .limit(35),
       supabase.from("contact_notes").select("contact_id, content").ilike("content", p).limit(45),
       supabase
         .from("requests")
@@ -156,11 +180,11 @@ export async function GET(request: NextRequest) {
         .limit(45),
       supabase
         .from("requests")
-        .select("id, request_code, title, status, description")
+        .select("id, request_code, title, status, description, contact_id, contacts!contact_id(first_name, last_name)")
         .or(`title.ilike.${p},request_code.ilike.${p},description.ilike.${p}`)
-        .limit(14),
-      supabase.from("tasks").select("id, title, due_date, completed").or(`title.ilike.${p},description.ilike.${p}`).limit(14),
-      supabase.from("campaigns").select("id, name, status").or(`name.ilike.${p},description.ilike.${p}`).limit(14),
+        .limit(10),
+      supabase.from("tasks").select("id, title, due_date, completed").or(`title.ilike.${p},description.ilike.${p}`).limit(5),
+      supabase.from("campaigns").select("id, name, status").or(`name.ilike.${p},description.ilike.${p}`).limit(5),
     ]);
 
     if (cDirect.error) {
@@ -292,7 +316,16 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const contacts = [...byId.values()].slice(0, 12);
+    const contactIds = [...byId.keys()];
+    const groupNamesMap = contactIds.length ? await fetchGroupNamesByContactId(supabase, contactIds) : new Map<string, string[]>();
+
+    const contacts = [...byId.values()]
+      .map((hit) => ({
+        ...hit,
+        group_names: groupNamesMap.get(hit.id) ?? [],
+      }))
+      .sort((a, b) => contactMatchTier(a, raw) - contactMatchTier(b, raw))
+      .slice(0, 15);
 
     const requests: SearchRequestHit[] = ((rRes.data ?? []) as Record<string, unknown>[]).map((row) => ({
       id: String(row.id),
@@ -300,6 +333,7 @@ export async function GET(request: NextRequest) {
       title: String(row.title ?? ""),
       status: (row.status as string | null) ?? null,
       snippet: snippet(String(row.description ?? row.title ?? ""), raw),
+      requester_name: requesterNameFromRow(row),
     }));
 
     const tasks: SearchTaskHit[] = (tRes.data ?? []) as SearchTaskHit[];

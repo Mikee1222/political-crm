@@ -1008,11 +1008,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
+                  className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)]/60 px-2.5 text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
                   aria-label="Καθολική αναζήτηση"
                   title="Αναζήτηση (⌘K)"
                 >
                   <Search className="h-[18px] w-[18px]" />
+                  <kbd className="hidden text-[10px] font-medium text-[var(--text-muted)] sm:inline">⌘K</kbd>
                 </button>
               ) : (
                 <Link
