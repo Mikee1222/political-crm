@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
@@ -13,7 +13,6 @@ import { RequestDocumentsSection } from "@/components/request-documents-section"
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
 import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 
 type ContactCard = {
   id: string;
@@ -47,7 +46,6 @@ type RequestDetail = {
   requesters: ContactCard[];
   affected_list: ContactCard[];
   helpers: ContactCard[];
-  person_handlers: ContactCard[];
   handlers: string[];
   notes?: Note[];
 };
@@ -60,8 +58,6 @@ type Note = {
   author_name?: string | null;
   author_full_name: string;
 };
-
-type StaffUser = { id: string; full_name: string | null; email: string; role: string };
 
 const OPEN = OPEN_REQUEST_STATUSES;
 
@@ -163,32 +159,7 @@ export default function RequestDetailPage() {
   const [savingMsg, setSavingMsg] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [assignUserId, setAssignUserId] = useState("");
-  const [assignSaving, setAssignSaving] = useState(false);
-  const [assignErr, setAssignErr] = useState("");
-
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
-
-  const assignedDisplayName = useMemo(() => {
-    const raw = data?.assigned_to?.trim();
-    if (!raw) return null;
-    const byId = staffUsers.find((u) => u.id === raw);
-    if (byId) return byId.full_name?.trim() || byId.email || raw;
-    return raw;
-  }, [data?.assigned_to, staffUsers]);
-
-  useEffect(() => {
-    if (!canManage) return;
-    void fetchWithTimeout("/api/admin/users")
-      .then(async (r) => {
-        if (!r.ok) return;
-        const j = (await r.json()) as { users?: StaffUser[] };
-        setStaffUsers(j.users ?? []);
-      })
-      .catch(() => setStaffUsers([]));
-  }, [canManage]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -453,117 +424,10 @@ export default function RequestDetailPage() {
             requesters={data.requesters ?? (data.requester ? [data.requester] : [])}
             affected={data.affected_list ?? (data.affected ? [data.affected] : [])}
             helpers={data.helpers ?? []}
-            handlers={data.person_handlers ?? []}
-            legacyHandlers={data.handlers ?? []}
+            handlerNames={data.handlers ?? []}
             canManage={canManage}
             onChanged={() => void load()}
           />
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Ανατέθηκε σε</p>
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (assignOpen) {
-                      setAssignOpen(false);
-                      setAssignUserId("");
-                      setAssignErr("");
-                      return;
-                    }
-                    setAssignErr("");
-                    const current = data.assigned_to?.trim() ?? "";
-                    setAssignUserId(staffUsers.some((u) => u.id === current) ? current : "");
-                    setAssignOpen(true);
-                  }}
-                  className={"flex items-center gap-1 " + lux.linkAction}
-                  aria-expanded={assignOpen}
-                >
-                  <Plus className="h-3 w-3" aria-hidden />
-                  {assignOpen ? "Άκυρο" : data.assigned_to ? "Αλλαγή" : "Προσθήκη"}
-                </button>
-              )}
-            </div>
-            {assignOpen && canManage && (
-              <div className="mb-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3">
-                <label className={lux.label}>Στέλεχος</label>
-                <SearchableSelect
-                  value={assignUserId}
-                  onChange={setAssignUserId}
-                  options={staffUsers.map((u) => ({
-                    value: u.id,
-                    label: u.full_name?.trim() || u.email || u.id,
-                  }))}
-                  placeholder="Αναζήτηση στελέχους…"
-                  searchPlaceholder="Αναζήτηση…"
-                  aria-label="Στέλεχος"
-                  disabled={assignSaving}
-                />
-                {assignErr && <p className="text-sm text-red-400">{assignErr}</p>}
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    className={lux.btnSecondary + " !min-h-[38px] !py-2 !text-xs"}
-                    onClick={() => {
-                      setAssignOpen(false);
-                      setAssignUserId("");
-                      setAssignErr("");
-                    }}
-                    disabled={assignSaving}
-                  >
-                    Άκυρο
-                  </button>
-                  <button
-                    type="button"
-                    className={lux.btnPrimary + " !min-h-[38px] !py-2 !text-xs"}
-                    disabled={!assignUserId || assignSaving}
-                    onClick={() => {
-                      void (async () => {
-                        if (!requestApiId || !assignUserId) return;
-                        setAssignSaving(true);
-                        setAssignErr("");
-                        try {
-                          const res = await fetchWithTimeout(
-                            `/api/requests/${encodeURIComponent(requestApiId)}`,
-                            {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ assigned_to: assignUserId }),
-                            },
-                          );
-                          const j = (await res.json()) as { error?: string };
-                          if (!res.ok) {
-                            setAssignErr(j.error ?? "Σφάλμα");
-                            return;
-                          }
-                          setAssignOpen(false);
-                          setAssignUserId("");
-                          await load();
-                        } finally {
-                          setAssignSaving(false);
-                        }
-                      })();
-                    }}
-                  >
-                    {assignSaving ? "…" : "Αποθήκευση"}
-                  </button>
-                </div>
-              </div>
-            )}
-            {assignedDisplayName ? (
-              <div className="flex items-start gap-2.5">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-xs font-bold text-[var(--text-primary)]">
-                  {authorInitials(assignedDisplayName)}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{assignedDisplayName}</p>
-                  <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Στέλεχος (εσωτερική ανάθεση)</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--text-muted)]">Χωρίς ανάθεση</p>
-            )}
-          </div>
         </aside>
       </div>
 

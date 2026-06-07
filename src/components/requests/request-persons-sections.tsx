@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
-import clsx from "clsx";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { isUuid } from "@/lib/resolve-entity-id";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 export type RequestPersonContact = {
   id: string;
@@ -19,7 +19,26 @@ export type RequestPersonContact = {
   landline?: string | null;
 };
 
-type PersonRole = "requester" | "affected" | "helper" | "handler";
+type PersonRole = "requester" | "affected" | "helper";
+
+type StaffUser = { id: string; full_name: string | null; email: string };
+
+function parseHandlerName(content: string): string | null {
+  const match = content.match(/\[Χειριστής: (.+?)\]/);
+  return match ? match[1].trim() : null;
+}
+
+function dedupeNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of names) {
+    const key = name.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name.trim());
+  }
+  return out;
+}
 
 async function addRequestPerson(
   requestId: string,
@@ -65,11 +84,10 @@ async function removeRequestPerson(
   return res.ok;
 }
 
-const SECTIONS: { role: PersonRole; title: string; elevated?: boolean }[] = [
+const SECTIONS: { role: PersonRole; title: string }[] = [
   { role: "requester", title: "Πρόσωπα που αιτούνται" },
   { role: "affected", title: "Πρόσωπα που αφορά" },
   { role: "helper", title: "Πρόσωπα που βοηθούν" },
-  { role: "handler", title: "Χειριστές αιτήματος", elevated: true },
 ];
 
 function initials(c: RequestPersonContact) {
@@ -82,25 +100,6 @@ function initialsFromName(name: string) {
   if (w.length === 0) return "?";
   if (w.length === 1) return w[0]!.slice(0, 2).toUpperCase() || "?";
   return `${w[0]![0] ?? ""}${w[1]![0] ?? ""}`.toUpperCase() || "?";
-}
-
-function LegacyHandlerList({ names }: { names: string[] }) {
-  if (names.length === 0) return null;
-  return (
-    <ul className="space-y-0">
-      {names.map((name, index) => (
-        <li
-          key={`legacy-handler-${index}-${name}`}
-          className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
-        >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[10px] font-bold text-[var(--accent)]">
-            {initialsFromName(name)}
-          </div>
-          <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function PersonList({
@@ -151,46 +150,20 @@ function PersonList({
   );
 }
 
-function HandlerList({
-  legacyNames,
-  contacts,
-  canManage,
-  onRemove,
-}: {
-  legacyNames: string[];
-  contacts: RequestPersonContact[];
-  canManage: boolean;
-  onRemove: (contact: RequestPersonContact) => void;
-}) {
-  if (legacyNames.length === 0 && contacts.length === 0) {
-    return <p className="text-xs text-[var(--text-muted)]">—</p>;
-  }
-  return (
-    <>
-      <LegacyHandlerList names={legacyNames} />
-      <PersonList contacts={contacts} canManage={canManage} onRemove={onRemove} hideWhenEmpty />
-    </>
-  );
-}
-
 function PersonSection({
   title,
   role,
   contacts,
-  legacyHandlerNames,
   canManage,
   requestId,
   onChanged,
-  elevated,
 }: {
   title: string;
   role: PersonRole;
   contacts: RequestPersonContact[];
-  legacyHandlerNames?: string[];
   canManage: boolean;
   requestId: string;
   onChanged: () => void;
-  elevated?: boolean;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [contactId, setContactId] = useState("");
@@ -233,16 +206,9 @@ function PersonSection({
   );
 
   return (
-    <div
-      className={clsx(
-        "rounded-xl border border-[var(--border)] p-4",
-        elevated ? "bg-[var(--bg-elevated)]/30" : "bg-[var(--bg-card)]",
-      )}
-    >
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className={elevated ? "text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]" : lux.sectionLabel}>
-          {title}
-        </h3>
+        <h3 className={lux.sectionLabel}>{title}</h3>
         {canManage && (
           <button
             type="button"
@@ -277,15 +243,147 @@ function PersonSection({
           {saving ? <p className="mt-2 text-xs text-[var(--text-muted)]">Αποθήκευση…</p> : null}
         </div>
       )}
-      {role === "handler" ? (
-        <HandlerList
-          legacyNames={legacyHandlerNames ?? []}
-          contacts={contacts}
-          canManage={canManage}
-          onRemove={(c) => void remove(c)}
-        />
+      <PersonList contacts={contacts} canManage={canManage} onRemove={(c) => void remove(c)} />
+    </div>
+  );
+}
+
+function RequestHandlersSection({
+  requestId,
+  handlerNames,
+  canManage,
+  onChanged,
+}: {
+  requestId: string;
+  handlerNames: string[];
+  canManage: boolean;
+  onChanged: () => void;
+}) {
+  const [addOpen, setAddOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+
+  const names = useMemo(() => dedupeNames(handlerNames), [handlerNames]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    void fetchWithTimeout("/api/admin/users")
+      .then(async (r) => {
+        if (!r.ok) return;
+        const j = (await r.json()) as { users?: StaffUser[] };
+        setStaffUsers(j.users ?? []);
+      })
+      .catch(() => setStaffUsers([]));
+  }, [canManage]);
+
+  const closeAdd = useCallback(() => {
+    setAddOpen(false);
+    setSelectedUserId("");
+    setErr("");
+  }, []);
+
+  const addHandler = useCallback(
+    async (userId: string) => {
+      const user = staffUsers.find((u) => u.id === userId);
+      const fullName = user?.full_name?.trim() || user?.email?.trim();
+      if (!fullName) {
+        setErr("Επιλέξτε στέλεχος CRM.");
+        return;
+      }
+      setSaving(true);
+      setErr("");
+      try {
+        const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestId)}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: `[Χειριστής: ${fullName}]` }),
+        });
+        const j = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? "Σφάλμα");
+          return;
+        }
+        closeAdd();
+        onChanged();
+      } finally {
+        setSaving(false);
+      }
+    },
+    [closeAdd, onChanged, requestId, staffUsers],
+  );
+
+  const staffOptions = useMemo(
+    () =>
+      staffUsers.map((u) => ({
+        value: u.id,
+        label: u.full_name?.trim() || u.email || u.id,
+      })),
+    [staffUsers],
+  );
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+          Χειριστές αιτήματος
+        </h3>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => {
+              if (addOpen) {
+                closeAdd();
+                return;
+              }
+              setErr("");
+              setSelectedUserId("");
+              setAddOpen(true);
+            }}
+            className={"flex items-center gap-1 " + lux.linkAction}
+            aria-expanded={addOpen}
+          >
+            <Plus className="h-3 w-3" aria-hidden />
+            {addOpen ? "Άκυρο" : "Προσθήκη"}
+          </button>
+        )}
+      </div>
+      {addOpen && canManage && (
+        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3">
+          <label className={lux.label}>Στέλεχος CRM</label>
+          <SearchableSelect
+            value={selectedUserId}
+            onChange={(id) => {
+              setSelectedUserId(id);
+              if (id) void addHandler(id);
+            }}
+            options={staffOptions}
+            placeholder="Αναζήτηση στελέχους…"
+            searchPlaceholder="Αναζήτηση…"
+            aria-label="Στέλεχος CRM"
+            disabled={saving}
+          />
+          {err ? <p className="mt-2 text-sm text-red-400">{err}</p> : null}
+          {saving ? <p className="mt-2 text-xs text-[var(--text-muted)]">Αποθήκευση…</p> : null}
+        </div>
+      )}
+      {names.length === 0 ? (
+        <p className="text-xs text-[var(--text-muted)]">—</p>
       ) : (
-        <PersonList contacts={contacts} canManage={canManage} onRemove={(c) => void remove(c)} />
+        <ul className="space-y-0">
+          {names.map((name) => (
+            <li
+              key={name}
+              className="flex items-center gap-2 border-b border-[var(--border)]/50 py-1.5 last:border-0"
+            >
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[10px] font-bold text-[var(--accent)]">
+                {initialsFromName(name)}
+              </div>
+              <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">{name}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -296,8 +394,7 @@ export function RequestPersonsSections({
   requesters,
   affected,
   helpers,
-  handlers,
-  legacyHandlers,
+  handlerNames,
   canManage,
   onChanged,
 }: {
@@ -305,8 +402,7 @@ export function RequestPersonsSections({
   requesters: RequestPersonContact[];
   affected: RequestPersonContact[];
   helpers: RequestPersonContact[];
-  handlers: RequestPersonContact[];
-  legacyHandlers?: string[];
+  handlerNames: string[];
   canManage: boolean;
   onChanged: () => void;
 }) {
@@ -314,7 +410,6 @@ export function RequestPersonsSections({
     requester: requesters,
     affected,
     helper: helpers,
-    handler: handlers,
   };
 
   return (
@@ -325,13 +420,19 @@ export function RequestPersonsSections({
           title={s.title}
           role={s.role}
           contacts={lists[s.role]}
-          legacyHandlerNames={s.role === "handler" ? legacyHandlers : undefined}
           canManage={canManage}
           requestId={requestId}
           onChanged={onChanged}
-          elevated={s.elevated}
         />
       ))}
+      <RequestHandlersSection
+        requestId={requestId}
+        handlerNames={handlerNames}
+        canManage={canManage}
+        onChanged={onChanged}
+      />
     </div>
   );
 }
+
+export { parseHandlerName, dedupeNames };
