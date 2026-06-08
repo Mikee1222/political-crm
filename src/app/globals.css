@@ -822,6 +822,87 @@ textarea::placeholder {
 .ai-md li {
   margin: 0.1em 0;
 }
+.ai-md {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.ai-md h1,
+.ai-md h2,
+.ai-md h3,
+.ai-md h4 {
+  font-weight: 600;
+  color: var(--accent-gold);
+  margin: 0.45em 0 0.2em;
+}
+.ai-md h1 { font-size: 1.15em; }
+.ai-md h2 { font-size: 1.08em; }
+.ai-md h3 { font-size: 1em; }
+.ai-md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.88em;
+  background: var(--bg-elevated);
+  padding: 0.12em 0.4em;
+  border-radius: 4px;
+}
+.ai-md pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.88em;
+  background: var(--bg-elevated);
+  padding: 0.65em 0.85em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.35em 0;
+}
+.ai-md pre code {
+  background: transparent;
+  padding: 0;
+}
+.ai-md a {
+  color: var(--accent-gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@keyframes alex-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.alex-msg-enter {
+  animation: alex-msg-in 0.3s ease-out forwards;
+}
+
+@keyframes alex-conv-fade {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+.alex-conv-switch {
+  animation: alex-conv-fade 0.22s ease-out;
+}
+
+.alex-chat-input-glass {
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 -6px 28px rgba(0, 0, 0, 0.12),
+    0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.alex-user-bubble {
+  background: linear-gradient(135deg, #b8860b 0%, #d4a017 100%);
+  color: #ffffff;
+}
+
+.alex-ts {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
 /* Legacy animation alias for floating chat button */
 @keyframes ai-gold-pulse {

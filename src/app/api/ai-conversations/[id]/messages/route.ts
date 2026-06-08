@@ -1,7 +1,17 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { forbidden } from "@/lib/auth-helpers";
+import { getAllowedPermissionKeysForRole } from "@/lib/permission-check";
 export const dynamic = 'force-dynamic';
+
+async function requireAlexandraMessages(profile: { role: string }) {
+  const allowedKeys = await getAllowedPermissionKeysForRole(profile.role);
+  if (allowedKeys !== null && !allowedKeys.has("alexandra_use")) {
+    return forbidden();
+  }
+  return null;
+}
 
 const voicePostSchema = z.object({
   entries: z
@@ -19,7 +29,12 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   const { id: conversationId } = params;
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { user, supabase } = crm;
+  const { user, profile, supabase } = crm;
+  if (!profile) {
+    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  }
+  const denied = await requireAlexandraMessages(profile);
+  if (denied) return denied;
 
   const { data: conv, error: cErr } = await supabase
     .from("ai_conversations")
@@ -53,7 +68,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { id: conversationId } = params;
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { user, supabase } = crm;
+  const { user, profile, supabase } = crm;
+  if (!profile) {
+    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  }
+  const denied = await requireAlexandraMessages(profile);
+  if (denied) return denied;
 
   let body: z.infer<typeof voicePostSchema>;
   try {

@@ -1,7 +1,17 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
 import { API_RACE_MS, withTimeoutQuery } from "@/lib/api-resilience";
+import { forbidden } from "@/lib/auth-helpers";
+import { getAllowedPermissionKeysForRole } from "@/lib/permission-check";
 export const dynamic = 'force-dynamic';
+
+async function requireAlexandraConversations(profile: { role: string }) {
+  const allowedKeys = await getAllowedPermissionKeysForRole(profile.role);
+  if (allowedKeys !== null && !allowedKeys.has("alexandra_use")) {
+    return forbidden();
+  }
+  return null;
+}
 
 type ConvRow = { id: string; title: string | null; updated_at: string | null };
 type LastMsg = { content: string; created_at: string } | null;
@@ -10,7 +20,12 @@ export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { user, supabase } = crm;
+    const { user, profile, supabase } = crm;
+    if (!profile) {
+      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    }
+    const denied = await requireAlexandraConversations(profile);
+    if (denied) return denied;
 
     const q = supabase
       .from("ai_conversations")
@@ -90,7 +105,12 @@ export async function POST() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { user, supabase } = crm;
+    const { user, profile, supabase } = crm;
+    if (!profile) {
+      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+    }
+    const denied = await requireAlexandraConversations(profile);
+    if (denied) return denied;
 
     const q = supabase
       .from("ai_conversations")

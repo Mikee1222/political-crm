@@ -212,12 +212,12 @@ export async function POST(request: NextRequest) {
     ? `Ο χρήστης βρίσκεται στη σελίδα επαφής: ${pageContext.contactName} (id: ${pageContext.contactId})`
     : "Καμία ειδική σελίδα (όχι σε λεπτομέρειες επαφής).";
 
-  const systemPrompt =
-    buildSystemPrompt({
-      todayDate: today,
-      pageContextBlock,
-      memoriesBlock,
-    }) + `\nΡόλος χρήστη: ${p.role}.`;
+  const systemPrompt = buildSystemPrompt({
+    todayDate: today,
+    pageContextBlock,
+    memoriesBlock,
+    role: p.role,
+  });
 
   const client = new Anthropic({ apiKey: key });
   const encoder = new TextEncoder();

@@ -5,7 +5,35 @@ import { hasMinRole } from "@/lib/roles";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 
 import type { LucideIcon } from "lucide-react";
-import { BarChart2, Bell, MapPin, Sparkles, UserSearch, ListTodo } from "lucide-react";
+import {
+  BarChart2,
+  Bell,
+  Cake,
+  FileText,
+  ListTodo,
+  MapPin,
+  Phone,
+  Sparkles,
+  Sun,
+  UserSearch,
+} from "lucide-react";
+
+export type EmptyStateSuggestion = {
+  label: string;
+  icon: LucideIcon;
+  mode: "prefill" | "send";
+  text: string;
+};
+
+/** 6 empty-state cards on the Alexandra chat landing */
+export const EMPTY_STATE_SUGGESTIONS: EmptyStateSuggestion[] = [
+  { label: "Βρες επαφή", icon: UserSearch, mode: "prefill", text: "Βρες την επαφή " },
+  { label: "Νέο αίτημα", icon: FileText, mode: "prefill", text: "Δημιούργησε αίτημα για " },
+  { label: "Ποιος γιορτάζει σήμερα;", icon: Cake, mode: "send", text: "Ποιος γιορτάζει σήμερα;" },
+  { label: "Πρωινή ενημέρωση", icon: Sun, mode: "send", text: "Πρωινή ενημέρωση" },
+  { label: "Στατιστικά CRM", icon: BarChart2, mode: "send", text: "Στατιστικά CRM" },
+  { label: "Λίστα κλήσεων", icon: Phone, mode: "send", text: "Λίστα κλήσεων" },
+];
 
 export const SUGGESTED_CHIPS: { text: string; icon: LucideIcon }[] = [
   { text: "Τι έχω για σήμερα;", icon: Sparkles },
@@ -66,45 +94,73 @@ export type RowConv = {
 };
 export type MsgWithT = Msg & { _createdAt?: string };
 
+export const GREEK_TOOL_LABELS: Record<string, string> = {
+  find_contacts: "Αναζήτηση επαφών",
+  get_saved_filters: "Αποθηκευμένα φίλτρα",
+  search_contacts_advanced: "Προχωρημένη αναζήτηση",
+  get_all_contacts: "Λήψη επαφών",
+  get_contact_details: "Στοιχεία επαφής",
+  get_contact_summary: "Σύνοψη επαφής",
+  find_contacts_not_called: "Μη κληθείσες επαφές",
+  get_stats: "Στατιστικά CRM",
+  export_contacts: "Εξαγωγή επαφών",
+  create_contact: "Δημιουργία επαφής",
+  update_contact: "Ενημέρωση επαφής",
+  edit_contact: "Επεξεργασία επαφής",
+  update_contact_status: "Ενημέρωση κατάστασης",
+  add_note: "Προσθήκη σημείωσης",
+  bulk_update_contacts: "Μαζική ενημέρωση",
+  bulk_delete_contacts: "Μαζική διαγραφή",
+  bulk_update_status: "Μαζική αλλαγή κατάστασης",
+  import_csv_data: "Εισαγωγή CSV",
+  bulk_create_contacts: "Μαζική δημιουργία",
+  smart_excel_import: "Έξυπνη εισαγωγή Excel",
+  add_task: "Δημιουργία εργασίας",
+  create_request: "Δημιουργία αιτήματος",
+  schedule_reminder: "Υπενθύμιση",
+  start_call: "Έναρξη κλήσης",
+  get_todays_call_list: "Λίστα κλήσεων ημέρας",
+  calculate_scores: "Υπολογισμός σκορ",
+  bulk_send_nameday_wishes: "Μαζικές ευχές ονομαστικής",
+  send_nameday_wishes: "Ευχές ονομαστικής",
+  start_campaign: "Έναρξη καμπάνιας",
+  add_calendar_event: "Προσθήκη στο ημερολόγιο",
+  get_calendar_events: "Εκδηλώσεις ημερολογίου",
+  morning_briefing: "Πρωινή ενημέρωση",
+  write_letter: "Σύνταξη επιστολής",
+  generate_letter: "Δημιουργία επιστολής",
+  generate_press_release: "Δελτίο τύπου",
+  generate_social_post: "Social media post",
+  generate_content: "Δημιουργία περιεχομένου",
+  analyze_document: "Ανάλυση εγγράφου",
+  translate_text: "Μετάφραση",
+  read_pdf: "Ανάγνωση PDF",
+  create_event: "Δημιουργία εκδήλωσης",
+  get_events: "Εκδηλώσεις",
+  add_event_rsvp: "RSVP εκδήλωσης",
+  create_poll: "Δημιουργία δημοσκόπησης",
+  get_poll_results: "Αποτελέσματα δημοσκόπησης",
+  get_volunteer_list: "Λίστα εθελοντών",
+  get_documents: "Έγγραφα",
+  search_media: "Αναζήτηση νέων",
+  get_analytics: "Αναλυτικά",
+  analyze_contacts: "Ανάλυση επαφών",
+  run_analysis: "Εκτέλεση ανάλυσης",
+  generate_pdf: "Δημιουργία PDF",
+  generate_excel: "Δημιουργία Excel",
+  generate_csv: "Δημιουργία CSV",
+  get_weather: "Καιρός",
+  get_news: "Νέα",
+  get_sports: "Αθλητικά",
+  scrape_url: "Ανάγνωση ιστοσελίδας",
+  web_search: "Αναζήτηση στο internet",
+  save_memory: "Αποθήκευση μνήμης",
+  get_memories: "Ανάκτηση μνήμης",
+  forget_memory: "Διαγραφή μνήμης",
+};
+
 export function greekToolLabel(t: string) {
-  const m: Record<string, string> = {
-    find_contacts: "Αναζήτηση επαφών",
-    get_saved_filters: "Αποθηκευμένα φίλτρα",
-    update_contact: "Ενημέρωση επαφής",
-    edit_contact: "Επεξεργασία επαφής",
-    create_contact: "Νέα επαφή",
-    create_request: "Αίτημα",
-    add_note: "Σημείωση",
-    get_contact_details: "Λεπτομέρειες",
-    get_stats: "Στατιστικά",
-    start_call: "Κλήση",
-    add_task: "Εργασία",
-    update_contact_status: "Κατάσταση κλήσης",
-    import_csv_data: "Εισαγωγή CSV",
-    bulk_create_contacts: "Μαζική δημιουργία επαφών",
-    search_contacts_advanced: "Προχωρημένη αναζήτηση",
-    get_all_contacts: "Λίστα επαφών (ανάλυση)",
-    bulk_update_contacts: "Μαζική ενημέρωση",
-    bulk_delete_contacts: "Μαζική διαγραφή",
-    smart_excel_import: "Έξυπνο import Excel",
-    read_pdf: "PDF",
-    write_letter: "Επιστολή",
-    save_memory: "Μνήμη",
-    get_memories: "Φόρτωση μνημών",
-    forget_memory: "Διαγραφή μνήμης",
-    schedule_reminder: "Υπενθύμιση",
-    add_calendar_event: "Ημερολόγιο (νέο event)",
-    get_calendar_events: "Ημερολόγιο (πρόγραμμα)",
-    analyze_contacts: "Ανάλυση επαφών",
-    generate_letter: "Επιστολή (επίσημη)",
-    generate_press_release: "Ανακοίνωση τύπου",
-    generate_social_post: "Social post",
-    bulk_send_nameday_wishes: "Καμπάνια ευχών (εορτές)",
-    find_contacts_not_called: "Χωρίς κλήση",
-    analyze_document: "Ανάλυση εγγράφου",
-    morning_briefing: "Ημερήσια ενημέρωση",
-  };
-  return m[t] ?? t;
+  return GREEK_TOOL_LABELS[t] ?? t;
 }
 
 export function initialsName(first: string, last: string) {

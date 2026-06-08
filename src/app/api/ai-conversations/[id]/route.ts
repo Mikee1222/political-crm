@@ -1,6 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
+import { forbidden } from "@/lib/auth-helpers";
+import { getAllowedPermissionKeysForRole } from "@/lib/permission-check";
 export const dynamic = 'force-dynamic';
 
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
@@ -8,7 +10,14 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
   const { id } = params;
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { user, supabase } = crm;
+  const { user, profile, supabase } = crm;
+  if (!profile) {
+    return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 401 });
+  }
+  const allowedKeys = await getAllowedPermissionKeysForRole(profile.role);
+  if (allowedKeys !== null && !allowedKeys.has("alexandra_use")) {
+    return forbidden();
+  }
 
   const { data: row, error: fErr } = await supabase
     .from("ai_conversations")
