@@ -16,6 +16,7 @@ import {
   CONCURRENT_LINES_MAX,
   CONCURRENT_LINES_MIN,
 } from "@/lib/campaign-concurrent-lines";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -104,6 +105,7 @@ export default function CampaignDetailPage() {
   const [linesDraft, setLinesDraft] = useState("");
   const [linesSaving, setLinesSaving] = useState(false);
   const { showToast } = useFormToast();
+  const alexPage = useOptionalAlexandraPageContext();
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -163,6 +165,22 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!alexPage) return;
+    const camp = data?.campaign;
+    if (camp) {
+      alexPage.setPageContext({
+        type: "campaign",
+        campaignId: camp.id,
+        campaignName: camp.name,
+        status: camp.status,
+      });
+    } else {
+      alexPage.setPageContext(null);
+    }
+    return () => alexPage.setPageContext(null);
+  }, [alexPage, data?.campaign?.id, data?.campaign?.name, data?.campaign?.status]);
 
   const concurrentLinesStored = data?.campaign?.concurrent_lines;
   const campaignIdForLines = data?.campaign?.id;

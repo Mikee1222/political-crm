@@ -15,6 +15,7 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { validateEmail, requiredText } from "@/lib/form-validation";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
 import { ContactLocationSettingsSection } from "@/components/settings/contact-location-settings-section";
@@ -64,6 +65,7 @@ function GoogleCalendarReturnHandler({ onConnected }: { onConnected: () => void 
 
 export default function SettingsPage() {
   const { profile } = useProfile();
+  const alexPage = useOptionalAlexandraPageContext();
   const isAdmin = profile?.role === "admin";
   const canAccess =
     hasMinRole(profile?.role as Role, "manager") || profile?.permissions?.["settings_view"] === true;
@@ -106,6 +108,13 @@ export default function SettingsPage() {
       void loadUsers();
     }
   }, [isAdmin, loadUsers]);
+
+  useEffect(() => {
+    if (canAccess) {
+      alexPage?.setPageContext({ type: "settings" });
+    }
+    return () => alexPage?.setPageContext(null);
+  }, [alexPage, canAccess]);
 
   const loadRoleNames = useCallback(async () => {
     const res = await fetchWithTimeout("/api/admin/roles");

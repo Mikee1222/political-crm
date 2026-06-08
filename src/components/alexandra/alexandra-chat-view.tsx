@@ -28,7 +28,7 @@ import ReactMarkdown from "react-markdown";
 import { callStatusLabel, callStatusPill, lux } from "@/lib/luxury-styles";
 import {
   SUGGESTED_CHIPS,
-  EMPTY_STATE_SUGGESTIONS,
+  getContextSuggestions,
   greekToolLabel,
   canConfirmCreate,
   canConfirmStartCall,
@@ -95,8 +95,9 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
     listLoading, messagesLoading, input, setInput, error, toDelete, setToDelete,
     setError, hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, bottomRef, newConversation,
     deleteConv, execute, send, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, showChips, enterMiniFromPage,
-    loadList, loadMessages, setSpreadsheetImport, leftPanelTab, setLeftPanelTab, briefingToday, contactPageContext, openMiniFromBubble,
+    loadList, loadMessages, setSpreadsheetImport, leftPanelTab, setLeftPanelTab, briefingToday, pageContext, contactPageContext, openMiniFromBubble,
   } = useAlexandraChat();
+  const emptySuggestions = getContextSuggestions(pageContext);
   const canSeeBriefing = hasMinRole(role as Role | null | undefined, "manager");
   const canSeeActivity = hasMinRole(role as Role | null | undefined, "manager");
   const pendingVoiceStart = useRef(false);
@@ -222,7 +223,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
   }, [bottomRef]);
 
   const onEmptySuggestion = useCallback(
-    async (suggestion: (typeof EMPTY_STATE_SUGGESTIONS)[number]) => {
+    async (suggestion: (typeof emptySuggestions)[number]) => {
       let convId = selectedId;
       if (!convId) {
         convId = await newConversation();
@@ -646,7 +647,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                   <p className="mt-1 text-sm text-[var(--text-secondary)]">Η AI γραμματέας σου για το CRM</p>
                 </div>
                 <div className="mt-1 grid w-full max-w-lg grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {EMPTY_STATE_SUGGESTIONS.map((c) => (
+                  {emptySuggestions.map((c) => (
                     <button
                       key={c.label}
                       type="button"
@@ -682,6 +683,12 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                     Τι θέλεις να κάνω;
                   </p>
                 )}
+                {pageContext?.type === "request" && (
+                  <p className="text-center text-[15px] leading-relaxed text-[var(--text-primary)]">
+                    Βλέπω το αίτημα <strong className="text-[var(--accent-gold)]">{pageContext.requestTitle}</strong>.
+                    Τι θέλεις να κάνω;
+                  </p>
+                )}
                 <div className="mx-auto flex max-w-lg flex-col items-center text-center">
                   <div className="alex-avatar-gold mb-3 flex h-[60px] w-[60px] items-center justify-center rounded-full text-[28px] font-bold shadow-[0_0_32px_rgba(212,160,23,0.35)]">
                     A
@@ -690,7 +697,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                   <p className="mt-1 text-sm text-[var(--text-secondary)]">Η AI γραμματέας σου για το CRM</p>
                 </div>
                 <div className="mx-auto grid max-w-lg grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {EMPTY_STATE_SUGGESTIONS.map((c) => (
+                  {emptySuggestions.map((c) => (
                     <button
                       key={c.label}
                       type="button"

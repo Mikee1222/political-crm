@@ -4,15 +4,19 @@ import { formatChatTime } from "@/lib/date-format";
 import { hasMinRole } from "@/lib/roles";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 
+import type { AlexandraPageContext } from "@/contexts/alexandra-page-context";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart2,
   Bell,
+  Cake,
   FileText,
   ListTodo,
   MapPin,
   Megaphone,
+  Phone,
   Sparkles,
+  StickyNote,
   UserSearch,
 } from "lucide-react";
 
@@ -23,13 +27,49 @@ export type EmptyStateSuggestion = {
   text: string;
 };
 
-/** 2×2 empty-state cards on the Alexandra chat landing */
+/** Default empty-state cards when no page context */
 export const EMPTY_STATE_SUGGESTIONS: EmptyStateSuggestion[] = [
-  { label: "Βρες επαφή", icon: UserSearch, mode: "prefill", text: "Βρες επαφή " },
-  { label: "Νέο αίτημα", icon: FileText, mode: "prefill", text: "Δημιούργησε νέο αίτημα " },
-  { label: "Στατιστικά", icon: BarChart2, mode: "prefill", text: "Δείξε μου στατιστικά " },
-  { label: "Έναρξη καμπάνιας", icon: Megaphone, mode: "prefill", text: "Ξεκίνα καμπάνια " },
+  { label: "Πρωινή ενημέρωση", icon: Sparkles, mode: "send", text: "Δώσε μου πρωινή ενημέρωση" },
+  { label: "Βρες επαφή", icon: UserSearch, mode: "prefill", text: "Βρες την επαφή " },
+  { label: "Νέο αίτημα", icon: FileText, mode: "prefill", text: "Δημιούργησε αίτημα για " },
+  { label: "Ποιος γιορτάζει;", icon: Cake, mode: "send", text: "Ποιος γιορτάζει σήμερα;" },
+  { label: "Στατιστικά", icon: BarChart2, mode: "send", text: "Δείξε μου στατιστικά CRM" },
+  { label: "Λίστα κλήσεων", icon: Phone, mode: "send", text: "Λίστα κλήσεων για σήμερα" },
 ];
+
+function suggestion(label: string, prompt: string, icon: LucideIcon): EmptyStateSuggestion {
+  const prefill = prompt.endsWith(" ");
+  return { label, icon, mode: prefill ? "prefill" : "send", text: prompt };
+}
+
+/** Context-aware suggestion cards for Alexandra empty state */
+export function getContextSuggestions(ctx: AlexandraPageContext | null | undefined): EmptyStateSuggestion[] {
+  if (ctx?.type === "contact") {
+    return [
+      suggestion("Σύνοψη επαφής", "Δώσε μου σύνοψη αυτής της επαφής", Sparkles),
+      suggestion("Προσθήκη σημείωσης", "Πρόσθεσε σημείωση: ", StickyNote),
+      suggestion("Δες τα αιτήματά του", "Δείξε μου τα αιτήματα αυτής της επαφής", FileText),
+      suggestion("Νέο αίτημα", "Δημιούργησε αίτημα για αυτή την επαφή: ", FileText),
+    ];
+  }
+  if (ctx?.type === "request") {
+    return [
+      suggestion("Ανάλυση αιτήματος", "Ανάλυσε αυτό το αίτημα", Sparkles),
+      suggestion("Ενημέρωση κατάστασης", "Άλλαξε την κατάσταση σε ", ListTodo),
+      suggestion("Προσθήκη χειριστή", "Πρόσθεσε χειριστή: ", UserSearch),
+      suggestion("Σημείωση", "Πρόσθεσε σημείωση στο αίτημα: ", StickyNote),
+    ];
+  }
+  if (ctx?.type === "dashboard") {
+    return [
+      suggestion("Πρωινή ενημέρωση", "Δώσε μου πρωινή ενημέρωση", Sparkles),
+      suggestion("Στατιστικά", "Δείξε μου τα στατιστικά του CRM", BarChart2),
+      suggestion("Ποιος γιορτάζει;", "Ποιος γιορτάζει σήμερα;", Cake),
+      suggestion("Λίστα κλήσεων", "Δείξε μου τη λίστα κλήσεων για σήμερα", Phone),
+    ];
+  }
+  return EMPTY_STATE_SUGGESTIONS;
+}
 
 export const SUGGESTED_CHIPS: { text: string; icon: LucideIcon }[] = [
   { text: "Τι έχω για σήμερα;", icon: Sparkles },

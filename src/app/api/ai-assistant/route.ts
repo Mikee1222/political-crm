@@ -9,6 +9,7 @@ import type {
 import { type UserProfile } from "@/lib/auth-helpers";
 import {
   ALEX_TOOLS,
+  buildPageContextBlock,
   buildSystemPrompt,
   type FindRow,
   historyToClaude,
@@ -22,11 +23,42 @@ import type { ActionPayload } from "@/lib/ai-assistant-actions";
 import { formatTodayLabelAthens } from "@/lib/date-format";
 export const dynamic = 'force-dynamic';
 
-const pageContextSchema = z.object({
-  type: z.literal("contact"),
-  contactId: z.string().uuid(),
-  contactName: z.string().min(1).max(200),
-});
+const pageContextSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("contact"),
+    contactId: z.string().uuid(),
+    contactName: z.string().min(1).max(200),
+  }),
+  z.object({
+    type: z.literal("request"),
+    requestId: z.string().uuid(),
+    requestTitle: z.string().min(1).max(500),
+    requestStatus: z.string().max(100),
+  }),
+  z.object({
+    type: z.literal("contacts_list"),
+    filters: z.record(z.string(), z.unknown()).optional(),
+    totalCount: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal("requests_list"),
+    filters: z.record(z.string(), z.unknown()).optional(),
+    totalCount: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal("campaign"),
+    campaignId: z.string().uuid(),
+    campaignName: z.string().min(1).max(300),
+    status: z.string().max(100),
+  }),
+  z.object({ type: z.literal("dashboard") }),
+  z.object({ type: z.literal("analytics") }),
+  z.object({ type: z.literal("tasks") }),
+  z.object({ type: z.literal("events") }),
+  z.object({ type: z.literal("volunteers") }),
+  z.object({ type: z.literal("settings") }),
+  z.object({ type: z.literal("namedays") }),
+]);
 
 const bodySchema = z.object({
   message: z.string().min(1).max(32_000),
@@ -208,9 +240,7 @@ export async function POST(request: NextRequest) {
           .join("\n")
       : "— (κενό)";
 
-  const pageContextBlock = pageContext
-    ? `Ο χρήστης βρίσκεται στη σελίδα επαφής: ${pageContext.contactName} (id: ${pageContext.contactId})`
-    : "Καμία ειδική σελίδα (όχι σε λεπτομέρειες επαφής).";
+  const pageContextBlock = buildPageContextBlock(pageContext ?? null);
 
   const systemPrompt = buildSystemPrompt({
     todayDate: today,
@@ -239,7 +269,8 @@ export async function POST(request: NextRequest) {
         role: p.role,
         userId: user.id,
         allowedPermissionKeys: allowedKeys === null ? undefined : allowedKeys,
-        defaultContactId: pageContext?.contactId ?? null,
+        defaultContactId: pageContext?.type === "contact" ? pageContext.contactId : null,
+        defaultRequestId: pageContext?.type === "request" ? pageContext.requestId : null,
         importRows: importRowsForTool,
         importContextMunicipality,
         onBulkProgress: (current: number, total: number) => {

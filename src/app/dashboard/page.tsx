@@ -34,6 +34,7 @@ import { MetricSparkline } from "@/components/ui/metric-sparkline";
 import { PwaInstallSteps } from "@/components/pwa-install-guide";
 import { getAgeFromBirthday } from "@/lib/contact-birthday";
 import { formatNowAthens, formatTimeAthens } from "@/lib/date-format";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 type DashboardData = {
   totalContacts: number;
@@ -251,12 +252,18 @@ function greetingForHour(d: Date) {
 
 export default function DashboardPage() {
   const { profile } = useProfile();
+  const alexPage = useOptionalAlexandraPageContext();
   const [now, setNow] = useState(() => new Date());
   const [ready, setReady] = useState(false);
   const [data, setData] = useState<DashboardData>(EMPTY_DASH);
   const [briefing, setBriefing] = useState<Briefing>(EMPTY_BRIEF);
   const [acts, setActs] = useState<Act[]>([]);
   const [showInstallTutorial, setShowInstallTutorial] = useState(false);
+
+  useEffect(() => {
+    alexPage?.setPageContext({ type: "dashboard" });
+    return () => alexPage?.setPageContext(null);
+  }, [alexPage]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
