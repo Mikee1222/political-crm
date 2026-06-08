@@ -221,29 +221,51 @@ export function FloatingActions({ role }: Props) {
                 onClick={() => setOpen(false)}
               />
             ) : null}
-            <div ref={rootRef} className="pointer-events-none fixed inset-0 z-50">
-              {isManager ? (
-                <div
-                  className="pointer-events-none absolute right-4 flex flex-col items-end gap-2 md:hidden"
-                  style={{ bottom: bottomOffsetMobile }}
-                >
-                  {open ? <SpeedDialItems items={dialItems} onPick={() => setOpen(false)} /> : null}
-                  <MobileFabButton open={open} onToggle={() => setOpen((o) => !o)} />
-                </div>
-              ) : null}
+            {open ? (
+              <div ref={rootRef} className="pointer-events-none fixed inset-0 z-50">
+                {isManager ? (
+                  <div
+                    className="pointer-events-none absolute right-4 flex flex-col items-end gap-2 md:hidden"
+                    style={{ bottom: bottomOffsetMobile }}
+                  >
+                    <SpeedDialItems items={dialItems} onPick={() => setOpen(false)} />
+                    <MobileFabButton open={open} onToggle={() => setOpen((o) => !o)} />
+                  </div>
+                ) : null}
 
-              {/* Desktop: dial items sit above fixed merged button; button is fixed so it matches spec */}
-              <div className="pointer-events-none absolute bottom-6 right-6 hidden flex-col items-end gap-3 md:flex">
-                {isManager && open ? <SpeedDialItems items={dialItems} onPick={() => setOpen(false)} /> : null}
-                <DesktopMergedFabButton
-                  open={open}
-                  isManager={isManager}
-                  canAlex={canAlex}
-                  onToggleDial={() => setOpen((o) => !o)}
-                  onAlexClick={onAlexClick}
-                />
+                {/* Desktop: dial items sit above fixed merged button; button is fixed so it matches spec */}
+                <div className="pointer-events-none absolute bottom-6 right-6 hidden flex-col items-end gap-3 md:flex">
+                  {isManager ? <SpeedDialItems items={dialItems} onPick={() => setOpen(false)} /> : null}
+                  <DesktopMergedFabButton
+                    open={open}
+                    isManager={isManager}
+                    canAlex={canAlex}
+                    onToggleDial={() => setOpen((o) => !o)}
+                    onAlexClick={onAlexClick}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div
+                ref={rootRef}
+                className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-4 z-50 md:bottom-6 md:right-6"
+              >
+                {isManager ? (
+                  <div className="md:hidden">
+                    <MobileFabButton open={open} onToggle={() => setOpen((o) => !o)} />
+                  </div>
+                ) : null}
+                <div className="hidden md:block">
+                  <DesktopMergedFabButton
+                    open={open}
+                    isManager={isManager}
+                    canAlex={canAlex}
+                    onToggleDial={() => setOpen((o) => !o)}
+                    onAlexClick={onAlexClick}
+                  />
+                </div>
+              </div>
+            )}
           </>,
           document.body,
         )
