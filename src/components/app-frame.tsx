@@ -246,13 +246,11 @@ function navDataTour(href: string): string | undefined {
 function NavItemRow({
   item,
   pathname,
-  onNavigate,
   showLabels,
   dataTour,
 }: {
   item: NavItem;
   pathname: string;
-  onNavigate?: () => void;
   showLabels: boolean;
   dataTour?: string;
 }) {
@@ -266,7 +264,6 @@ function NavItemRow({
   return (
     <Link
       href={item.href}
-      onClick={onNavigate}
       data-tour={dataTour}
       className={[
         navItemBase,
@@ -297,12 +294,10 @@ function NavItemRow({
 function AlexandraRow({
   profile,
   pathname,
-  onNavigate,
   showLabels,
 }: {
   profile: Profile | null;
   pathname: string;
-  onNavigate?: () => void;
   showLabels: boolean;
 }) {
   if (!can(profile, "alexandra_use")) {
@@ -311,7 +306,6 @@ function AlexandraRow({
   return (
     <Link
       href="/alexandra"
-      onClick={onNavigate}
       data-tour="alexandra-button"
       className={[
         navItemBase,
@@ -352,7 +346,6 @@ function GroupBlock({
   onToggleGroup,
   pathname,
   profile,
-  onNavigate,
   showLabels,
   showGroupHeaders,
 }: {
@@ -361,7 +354,6 @@ function GroupBlock({
   onToggleGroup: () => void;
   pathname: string;
   profile: Profile | null;
-  onNavigate?: () => void;
   showLabels: boolean;
   showGroupHeaders: boolean;
 }) {
@@ -389,7 +381,6 @@ function GroupBlock({
                 key={item.href}
                 item={item}
                 pathname={pathname}
-                onNavigate={onNavigate}
                 showLabels={showLabels}
                 dataTour={navDataTour(item.href)}
               />
@@ -406,7 +397,6 @@ function GroupBlock({
           key={item.href}
           item={item}
           pathname={pathname}
-          onNavigate={onNavigate}
           showLabels={showLabels}
           dataTour={navDataTour(item.href)}
         />
@@ -418,7 +408,6 @@ function GroupBlock({
 type SidebarContentProps = {
   pathname: string;
   profile: Profile | null;
-  onNavigate?: () => void;
   showLabels: boolean;
   showGroupHeaders: boolean;
   groupState: Record<string, boolean>;
@@ -430,7 +419,6 @@ type SidebarContentProps = {
 function SidebarContent({
   pathname,
   profile,
-  onNavigate,
   showLabels,
   showGroupHeaders,
   groupState,
@@ -448,7 +436,6 @@ function SidebarContent({
               key={item.href}
               item={item}
               pathname={pathname}
-              onNavigate={onNavigate}
               showLabels={false}
               dataTour={navDataTour(item.href)}
             />
@@ -469,7 +456,6 @@ function SidebarContent({
             onToggleGroup={() => onToggleGroup(g.id)}
             pathname={pathname}
             profile={profile}
-            onNavigate={onNavigate}
             showLabels={showLabels}
             showGroupHeaders={showGroupHeaders}
           />
@@ -845,7 +831,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       .catch(() => setOpenRequestsCount(0));
   }, [isCrmLoginPublic, isPortal, profile]);
 
-  const pinBottom = (opts: { onNavigate?: () => void; showLabels: boolean }) => (
+  const pinBottom = (opts: { showLabels: boolean }) => (
     <div className="mt-auto space-y-1 border-t border-[var(--border)]/30 pt-2">
       <button
         type="button"
@@ -864,14 +850,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <NavItemRow
           item={settingsItem}
           pathname={pathname}
-          onNavigate={opts.onNavigate}
           showLabels={opts.showLabels}
         />
       )}
       <AlexandraRow
         profile={profile}
         pathname={pathname}
-        onNavigate={opts.onNavigate}
         showLabels={opts.showLabels}
       />
     </div>
@@ -934,13 +918,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <SidebarContent
               pathname={pathname}
               profile={profile}
-              onNavigate={undefined}
               showLabels={showLabels}
               showGroupHeaders={showGroupHeaders}
               groupState={groupState}
               onToggleGroup={toggleGroup}
               flatRail={mobileRail && !mobileNavOpen}
-              pinBottom={pinBottom({ onNavigate: undefined, showLabels })}
+              pinBottom={pinBottom({ showLabels })}
             />
           )}
         </div>
@@ -1009,13 +992,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <SidebarContent
                 pathname={pathname}
                 profile={profile}
-                onNavigate={() => setMobileNavOpen(false)}
                 showLabels
                 showGroupHeaders
                 groupState={groupState}
                 onToggleGroup={toggleGroup}
                 flatRail={false}
-                pinBottom={pinBottom({ onNavigate: () => setMobileNavOpen(false), showLabels: true })}
+                pinBottom={pinBottom({ showLabels: true })}
               />
             )}
             <div className="mt-3 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
