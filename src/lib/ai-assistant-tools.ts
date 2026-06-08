@@ -83,7 +83,7 @@ export const ALEX_TOOLS: Tool[] = [
   {
     name: "find_contacts",
     description:
-      "Αναζήτηση επαφών. Fuzzy search: pass το search. Φίλτρα: call_status, call_statuses, ομάδες (group_ids, exclude, groups_include/exclude by name), birth_year_from/to, δήμος, κ.λπ. Αν ο χρήστης αναφέρει αποθηκευμένο φίλτρο (π.χ. ‘κλασσικά’), get_saved_filters ή/και saved_filter_name· επιστρέφει filter_url για /contacts. Πάντα αναφέρει filter_url από το tool result (για κουμπί Ιστορικού/πλοήγησης).",
+      "Αναζήτηση επαφών. Επιστρέφει έως 25 επαφές. Fuzzy search: pass το search. Φίλτρα: call_status, call_statuses, ομάδες (group_ids, exclude, groups_include/exclude by name), birth_year_from/to, δήμος, κ.λπ. Αν ο χρήστης αναφέρει αποθηκευμένο φίλτρο (π.χ. ‘κλασσικά’), get_saved_filters ή/και saved_filter_name· επιστρέφει filter_url για /contacts. Πάντα αναφέρει filter_url από το tool result (για κουμπί Ιστορικού/πλοήγησης).",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -257,23 +257,6 @@ export const ALEX_TOOLS: Tool[] = [
     },
   },
   {
-    name: "edit_contact",
-    description:
-      "Πλήρης επεξεργασία πεδίων επαφής (ίδιο με update_contact). Χρησιμοποίησε για οποιαδήποτε αλλαγή πεδίου. Εκτέλεση: PUT /api/contacts/[id]",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        contact_id: { type: "string" as const },
-        fields: {
-          type: "object" as const,
-          description:
-            "Κλειδιά: first_name, last_name, father_name, mother_name, phone, age, municipality, notes, call_status, political_stance, priority, nickname, spouse_name, occupation, email, area, name_day, …",
-        },
-      },
-      required: ["contact_id", "fields"],
-    },
-  },
-  {
     name: "read_pdf",
     description: "Ανάγνωση PDF ή κειμένου από URL· εξαγωγή κειμένου / σύνοψη. Input: url, question (προαιρετικό).",
     input_schema: {
@@ -283,24 +266,6 @@ export const ALEX_TOOLS: Tool[] = [
         question: { type: "string" as const },
       },
       required: ["url"],
-    },
-  },
-  {
-    name: "write_letter",
-    description: "Σύνταξη τυπικής επιστολής (ελληνικά) προς δημόσιο φορέα. Input: recipient, subject, contact_name, issue, letter_type.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        recipient: { type: "string" as const },
-        subject: { type: "string" as const },
-        contact_name: { type: "string" as const },
-        issue: { type: "string" as const },
-        letter_type: {
-          type: "string" as const,
-          enum: ["αίτηση", "καταγγελία", "ερώτημα", "ευχαριστήρια"] as const,
-        },
-      },
-      required: ["recipient", "subject", "letter_type"],
     },
   },
   {
@@ -780,17 +745,6 @@ export const ALEX_TOOLS: Tool[] = [
     },
   },
   {
-    name: "send_nameday_wishes",
-    description: "Ευχές ονομαστικής: βρίσκει επαφές που εορτάζουν (ημερομηνία) και δημιουργεί καμπάνια — ίδιο με bulk_send_nameday_wishes.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        date: { type: "string" as const, description: "YYYY-MM-DD, προαιρετικό" },
-        municipality: { type: "string" as const },
-      },
-    },
-  },
-  {
     name: "get_documents",
     description: "Έγγραφα (GET /api/documents) — προαιρετικό contact_id.",
     input_schema: {
@@ -1202,7 +1156,7 @@ async function runAlexToolInner(
       return { content: JSON.stringify({ error: j.error || "Σφάλμα αναζήτησης" }), filterUrl };
     }
     const all = (j.contacts ?? []) as FindRow[];
-    const list = all.slice(0, 10) as FindRow[];
+    const list = all.slice(0, 25) as FindRow[];
     return {
       content: JSON.stringify({
         ok: true,
@@ -1243,7 +1197,7 @@ async function runAlexToolInner(
     };
   }
 
-  if (name === "update_contact" || name === "edit_contact") {
+  if (name === "update_contact") {
     if (!permLegacy("contacts_edit", isMgr)) {
       return { content: JSON.stringify({ error: "Δεν επιτρέπεται η επεξεργασία επαφών για αυτόν τον ρόλο" }) };
     }
@@ -1302,7 +1256,7 @@ async function runAlexToolInner(
         message: "Η επαφή ενημερώθηκε.",
         contact: j.contact,
       }),
-      executedToolName: name === "edit_contact" ? "edit_contact" : "update_contact",
+      executedToolName: "update_contact",
     };
   }
 
@@ -1609,43 +1563,6 @@ async function runAlexToolInner(
       return { content: JSON.stringify({ ok: true, answer: t, excerpt_length: trimmed.length }), executedToolName: "read_pdf" };
     }
     return { content: JSON.stringify({ ok: true, text: trimmed, excerpt_length: trimmed.length }), executedToolName: "read_pdf" };
-  }
-
-  if (name === "write_letter") {
-    if (!isMgr) {
-      return { content: JSON.stringify({ error: "Μόνο manager" }) };
-    }
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return { content: JSON.stringify({ error: "Λείπει ANTHROPIC_API_KEY" }) };
-    }
-    const recipient = String(raw.recipient ?? "");
-    const subject = String(raw.subject ?? "");
-    const letterType = String(raw.letter_type ?? "αίτηση");
-    const contactName = raw.contact_name != null ? String(raw.contact_name) : "";
-    const issue = raw.issue != null ? String(raw.issue) : "";
-    if (!recipient || !subject) {
-      return { content: JSON.stringify({ error: "Υποχρεωτικά recipient, subject" }) };
-    }
-    const cl = new Anthropic({ apiKey: key });
-    const out = await cl.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2_000,
-      messages: [
-        {
-          role: "user",
-          content: `Έγγραψε επιστολή στα ελληνικά, επίσημο ύφος. Τύπος: ${letterType}. Προς: ${recipient}. Θέμα: ${subject}.\nΕπαφή αναφοράς: ${contactName || "—"}\nΖήτημα: ${issue || "—"}\nΧρήση τυπικού format (ημερομηνία, Χαιρετισμός, Σώμα, Υπογραφή «Κ. Καραγκούνη» placeholder).`,
-        },
-      ],
-    });
-    const letter =
-      (out.content[0] as { type: string; text?: string } | undefined)?.type === "text"
-        ? (out.content[0] as { text: string }).text
-        : String(out.content[0] ?? "");
-    return {
-      content: JSON.stringify({ ok: true, letter, letter_type: letterType, recipient, subject }),
-      executedToolName: "write_letter",
-    };
   }
 
   if (name === "import_csv_data") {
@@ -2494,7 +2411,7 @@ ${sampleLines || "—"}${dupHint}
     return { content: JSON.stringify({ ok: true, post: out.text, platform }), executedToolName: "generate_social_post" };
   }
 
-  if (name === "bulk_send_nameday_wishes" || name === "send_nameday_wishes") {
+  if (name === "bulk_send_nameday_wishes") {
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
     }

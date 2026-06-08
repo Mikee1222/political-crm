@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
     if (!r.ok) {
       return NextResponse.json({ error: j.error || "Σφάλμα" }, { status: 400 });
     }
-    const list = (j.contacts ?? []).slice(0, 10);
+    const list = (j.contacts ?? []).slice(0, 25);
     return NextResponse.json({
       ok: true,
-      message: `Βρέθηκαν έως 10: ${list.length} επαφές`,
+      message: `Βρέθηκαν έως 25: ${list.length} επαφές`,
       findResults: list,
     });
   }
