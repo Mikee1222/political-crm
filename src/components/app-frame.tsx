@@ -895,7 +895,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       style={shellStyle}
     >
       <aside
-        className="crm-sidebar app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 hidden h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)]/50 px-3 py-4 pb-3 lg:flex"
+        className="crm-sidebar app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 flex h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)]/50 px-3 py-4 pb-3 max-lg:hidden"
         style={{ background: "var(--sidebar-bg)" }}
         aria-label="Πλοήγηση"
         data-tour="sidebar"
