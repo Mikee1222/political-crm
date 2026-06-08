@@ -21,7 +21,6 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { PageHeader } from "@/components/ui/page-header";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { BarChart3 } from "lucide-react";
-import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 const GOLD = "#C9A84C";
 const NAVY = "#0A1628";
@@ -133,7 +132,6 @@ function KpiCard({
 
 export default function AnalyticsPage() {
   const { showToast } = useFormToast();
-  const alexPage = useOptionalAlexandraPageContext();
   const [data, setData] = useState<AnalyticsPayload>(empty);
   const [err, setErr] = useState<string | null>(null);
 
@@ -166,11 +164,6 @@ export default function AnalyticsPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    alexPage?.setPageContext({ type: "analytics" });
-    return () => alexPage?.setPageContext(null);
-  }, [alexPage]);
 
   const muni10 = useMemo(
     () => [...(data.top10Municipalities ?? [])].filter((d) => d.value > 0).sort((a, b) => b.value - a.value),

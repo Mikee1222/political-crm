@@ -24,7 +24,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { todayYmdAthens } from "@/lib/date-format";
-import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -95,7 +94,6 @@ export default function TasksPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const alexPage = useOptionalAlexandraPageContext();
   const [view, setView] = useState<"list" | "kanban">("list");
   const [tab, setTab] = useState<TaskTabFilter>("all");
   const [pending, setPending] = useState<TaskT[]>([]);
@@ -111,11 +109,6 @@ export default function TasksPage() {
   const [heatCounts, setHeatCounts] = useState<Record<string, number>>({});
   const [heatMax, setHeatMax] = useState(0);
   const [assignees, setAssignees] = useState<AssigneeOpt[]>([]);
-
-  useEffect(() => {
-    alexPage?.setPageContext({ type: "tasks" });
-    return () => alexPage?.setPageContext(null);
-  }, [alexPage]);
 
   useEffect(() => {
     void fetchWithTimeout("/api/team/assignees")
