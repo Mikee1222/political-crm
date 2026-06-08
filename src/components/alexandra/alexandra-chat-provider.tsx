@@ -51,6 +51,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     rows: Array<Record<string, unknown>>;
     fileName?: string;
     sheetName?: string;
+    contextMunicipality?: string;
   } | null>(null);
   const role = profile?.role;
   const router = useRouter();
@@ -231,7 +232,13 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   }, [messages, loading, streamMode, scrollToBottom]);
 
   const setSpreadsheetImport = useCallback(
-    (p: { conversationId: string; rows: Array<Record<string, unknown>>; fileName?: string; sheetName?: string } | null) => {
+    (p: {
+      conversationId: string;
+      rows: Array<Record<string, unknown>>;
+      fileName?: string;
+      sheetName?: string;
+      contextMunicipality?: string;
+    } | null) => {
       importStashRef.current = p;
     },
     [],
@@ -495,6 +502,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
             rows: Array<Record<string, unknown>>;
             fileName?: string;
             sheetName?: string;
+            contextMunicipality?: string;
           };
         } = { message: text, conversationId: convId };
         if (pageContextForApi) {
@@ -506,6 +514,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
             rows: stash.rows,
             fileName: stash.fileName,
             sheetName: stash.sheetName,
+            contextMunicipality: stash.contextMunicipality,
           };
         }
         const res = await fetch("/api/ai-assistant", {

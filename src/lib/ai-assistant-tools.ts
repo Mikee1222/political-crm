@@ -6,7 +6,6 @@ import Papa from "papaparse";
 import { hasMinRole } from "@/lib/roles";
 import type { UserProfile } from "@/lib/auth-helpers";
 import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
-import { greekTitleCaseWords, parseGreekPhoneFieldsFromText } from "@/lib/greek-contact-import";
 import { anthropicComplete } from "@/lib/anthropic-once";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { todayYmdAthens } from "@/lib/athens-ranges";
@@ -24,7 +23,15 @@ import {
 } from "@/lib/contacts-filters";
 import { buildAlexandraPdf } from "@/lib/alexandra-pdf";
 import { storeAlexandraExport } from "@/lib/alexandra-storage";
-import { buildAlexandraExcel, buildAlexandraCsv } from "@/lib/alexandra-files";
+import { buildAlexandraExcel, buildAlexandraCsv, buildAlexandraExportMatrix } from "@/lib/alexandra-files";
+import {
+  buildExportRows,
+  buildImportPreview,
+  buildImportTemplateAoa,
+  DEFAULT_EXPORT_FIELDS,
+  detectColumns,
+  transformSpreadsheetRow,
+} from "@/lib/spreadsheet-import";
 import { runAlexandraAnalysis } from "@/lib/alexandra-analysis";
 import { scrapePublicUrl } from "@/lib/alexandra-scrape";
 import { fetchWeatherForCity } from "@/lib/alexandra-weather";
@@ -388,22 +395,23 @@ export const ALEX_TOOLS: Tool[] = [
   {
     name: "smart_excel_import",
     description:
-      "Έξυπνο import από γραμμές Excel/CSV: rows + mapping, προαιρετικό municipality, skip_duplicates (default true), update_existing (default false) — για διπλότυπα: ίδιο phone = υπάρχουσα επαφή. Αν update_existing=true, κάνει PATCH. Συνδυάζεται με συνημμένο: παράλειψε rows. Χρήση μετά mapping και επιβεβαίωση.",
+      "Έξυπνο import Excel/CSV: αυτόματη αντιστοίχιση στηλών, preview/validation, διπλότυπα. ΠΑΝΤΑ πρώτα confirmed/user_confirmed: false — preview· μετά true μετά ρητή επιβεβαίωση.",
     input_schema: {
       type: "object" as const,
       properties: {
         rows: { type: "array" as const, items: { type: "object" as const } },
-        mapping: { type: "object" as const },
+        mapping: { type: "object" as const, description: "Προαιρετικό — auto-detect αν λείπει" },
         context_municipality: { type: "string" as const },
+        confirmed: { type: "boolean" as const, description: "true = εκτέλεση import" },
+        user_confirmed: { type: "boolean" as const, description: "Ίδιο με confirmed" },
         skip_duplicates: { type: "boolean" as const, description: "Προεπιλογή true" },
         update_existing: { type: "boolean" as const, description: "Default false" },
         duplicate_mode: {
           type: "string" as const,
           enum: ["ask_user" as const, "skip" as const, "update" as const],
-          description: "ask_user: μόνον αναφορά διπλοτύπων χωρίς εισαγωγή· skip/update: ίδιο με τα flags",
+          description: "ask_user: μόνον αναφορά διπλοτύπων· skip/update: ίδιο με τα flags",
         },
       },
-      required: ["mapping"],
     },
   },
   {
@@ -726,8 +734,32 @@ export const ALEX_TOOLS: Tool[] = [
   },
   {
     name: "export_contacts",
-    description: "Πλήρης εξαγωγή επαφών CSV (GET /api/contacts/export) — μόνο manager· επιστρέφει περίληψη.",
-    input_schema: { type: "object" as const, properties: {} },
+    description:
+      "Εξαγωγή επαφών CSV ή Excel με ελληνικές κεφαλίδες, φίλτρα και επιλογή πεδίων (έως 50000). Χρησιμοποίησε ΠΑΝΤΑ αυτό το tool για εξαγωγές.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        filters: { type: "object" as const, description: "Προαιρετικά φίλτρα επαφών" },
+        format: { type: "string" as const, enum: ["excel", "csv"] as const, description: "Default excel" },
+        fields: {
+          type: "array" as const,
+          items: { type: "string" as const },
+          description: "Πεδία CRM προς εξαγωγή",
+        },
+        filename: { type: "string" as const, description: "Προαιρετικό όνομα αρχείου (χωρίς επέκταση)" },
+      },
+    },
+  },
+  {
+    name: "generate_import_template",
+    description: "Δημιουργεί πρότυπο Excel/CSV για εισαγωγή επαφών με ελληνικές κεφαλίδες, οδηγίες και παραδείγματα.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        format: { type: "string" as const, enum: ["excel", "csv"] as const },
+        include_examples: { type: "boolean" as const },
+      },
+    },
   },
   {
     name: "send_nameday_wishes",
@@ -907,120 +939,102 @@ export async function findSavedFilterJson(
   return null;
 }
 
-const BULK_OPTIONAL_FIELDS = [
-  "email",
-  "municipality",
-  "area",
-  "toponym",
-  "political_stance",
-  "notes",
-  "father_name",
-  "mother_name",
-  "occupation",
-  "nickname",
-] as const;
+type ExportContactRow = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  phone2?: string | null;
+  landline?: string | null;
+  email?: string | null;
+  municipality?: string | null;
+  area?: string | null;
+  toponym?: string | null;
+  father_name?: string | null;
+  mother_name?: string | null;
+  gender?: string | null;
+  age?: number | null;
+  political_stance?: string | null;
+  notes?: string | null;
+  occupation?: string | null;
+  priority?: string | null;
+  birthday?: string | null;
+  name_day?: string | null;
+  created_at?: string | null;
+  tags?: string[] | null;
+  contact_code?: string | null;
+  call_status?: string | null;
+  contact_groups?: { name?: string } | { name?: string }[] | null;
+  group_names?: string[];
+};
 
-function cellStr(row: Record<string, unknown>, header: string): string {
-  const k = header.trim();
-  if (row[k] !== undefined && row[k] !== null) return String(row[k]).trim();
-  const hit = Object.keys(row).find((x) => x.trim() === k);
-  if (hit != null && row[hit] != null) return String(row[hit]).trim();
-  return "";
+async function fetchContactsForExport(
+  ctx: ToolContext,
+  filters: Record<string, unknown>,
+  maxLimit = 50_000,
+): Promise<{ contacts: ExportContactRow[]; error?: string }> {
+  const all: ExportContactRow[] = [];
+  const pageSize = 5000;
+  let page = 1;
+  let total: number | undefined;
+
+  while (all.length < maxLimit) {
+    const q = buildAdvancedContactFilters(filters, {});
+    const params = new URLSearchParams(q);
+    params.set("page", String(page));
+    params.set("page_size", String(Math.min(pageSize, maxLimit - all.length)));
+    const r = await ctx.forward(`/api/contacts?${params.toString()}`, { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as {
+      contacts?: ExportContactRow[];
+      error?: string;
+      total?: number;
+    };
+    if (!r.ok) return { contacts: [], error: j.error || "Σφάλμα" };
+    const batch = j.contacts ?? [];
+    total = j.total ?? total;
+    if (!batch.length) break;
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+    if (total != null && all.length >= total) break;
+    page += 1;
+  }
+
+  return { contacts: all.slice(0, maxLimit) };
+}
+
+async function resolveImportGroupId(
+  supabase: SupabaseClient,
+  groupName: string,
+): Promise<string | null> {
+  const t = groupName.trim();
+  if (!t) return null;
+  const { data } = await supabase.from("contact_groups").select("id,name").ilike("name", t).limit(5);
+  const exact = data?.find((g) => String(g.name).toLowerCase() === t.toLowerCase());
+  if (exact?.id) return String(exact.id);
+  const partial = data?.find((g) => String(g.name).toLowerCase().includes(t.toLowerCase()));
+  return partial?.id ? String(partial.id) : null;
+}
+
+function contactPayloadForApi(payload: Record<string, unknown>): Record<string, unknown> {
+  const body = { ...payload };
+  delete body._import_group_name;
+  return body;
 }
 
 /**
  * mapping: column header from sheet → CRM field (first_name, last_name, full_name, phone, …).
- * full_name: last word → first_name, preceding → last_name (Greek order). Title Case for names.
- * Phone: multiple 69…/2… 10-digit numbers from one cell → phone, phone2, landline; context_municipality fills municipality, area, toponym when missing.
+ * Delegates to spreadsheet-import transformSpreadsheetRow.
  */
 export function mapSpreadsheetRowToContactPayload(
   row: Record<string, unknown>,
   mapping: Record<string, string>,
   options?: { contextMunicipality?: string },
-): { payload: Record<string, unknown> | null; skip?: "no_phone" | "incomplete_name" } {
-  const acc: Record<string, string> = {};
-  for (const [header, field] of Object.entries(mapping)) {
-    if (!field || field === "ignore" || field === "skip") continue;
-    const f = String(field).trim();
-    const v = cellStr(row, header);
-    if (f === "full_name") {
-      const parts = v.split(/\s+/).filter(Boolean);
-      if (parts.length === 0) {
-        /* leave empty */
-      } else if (parts.length === 1) {
-        if (!acc.first_name) acc.first_name = parts[0] ?? "";
-        if (!acc.last_name) acc.last_name = "—";
-      } else {
-        if (!acc.first_name) acc.first_name = parts[parts.length - 1] ?? "";
-        if (!acc.last_name) acc.last_name = parts.slice(0, -1).join(" ");
-      }
-    } else {
-      acc[f] = v;
-    }
-  }
-  const firstRaw = (acc.first_name ?? "").trim();
-  const lastRaw = (acc.last_name ?? "").trim();
-  const first_name = firstRaw ? greekTitleCaseWords(firstRaw) : "";
-  const last_name = lastRaw ? (lastRaw === "—" ? "—" : greekTitleCaseWords(lastRaw)) : "";
-
-  const { phone, phone2, landline } = parseGreekPhoneFieldsFromText(acc.phone);
-  if (!phone) {
-    return { payload: null, skip: "no_phone" };
-  }
-  if (!first_name || !last_name) {
+): { payload: Record<string, unknown> | null; skip?: "no_phone" | "no_first_name" | "incomplete_name" } {
+  const result = transformSpreadsheetRow(row, mapping, options);
+  if (result.skip === "no_first_name") {
     return { payload: null, skip: "incomplete_name" };
   }
-  const body: Record<string, unknown> = {
-    first_name,
-    last_name,
-    phone,
-    call_status: "Pending",
-    priority: "Medium",
-  };
-  if (phone2) body.phone2 = phone2;
-  if (landline) body.landline = landline;
-
-  const ctxPlace = options?.contextMunicipality?.trim();
-  let muni = (acc.municipality ?? "").trim();
-  let ar = (acc.area ?? "").trim();
-  if (muni && !ar) ar = muni;
-  if (ar && !muni) muni = ar;
-  if (ctxPlace) {
-    const p = greekTitleCaseWords(ctxPlace);
-    if (!muni) muni = p;
-    if (!ar) ar = p;
-  }
-  if (muni) muni = greekTitleCaseWords(muni);
-  if (ar) ar = greekTitleCaseWords(ar);
-  if (muni && !ar) ar = muni;
-  if (ar && !muni) muni = ar;
-  if (muni) body.municipality = muni;
-  if (ar) body.area = ar;
-
-  for (const k of BULK_OPTIONAL_FIELDS) {
-    if (k === "municipality" || k === "area") continue;
-    const v = acc[k];
-    if (v == null || !String(v).trim()) continue;
-    const t = String(v).trim();
-    if (k === "email" || k === "notes" || k === "political_stance") {
-      body[k] = t;
-    } else if (k === "father_name" || k === "mother_name" || k === "occupation" || k === "toponym") {
-      body[k] = greekTitleCaseWords(t);
-    } else {
-      body[k] = t;
-    }
-  }
-  if (ctxPlace) {
-    const p = greekTitleCaseWords(ctxPlace);
-    if (body.toponym == null || String(body.toponym).trim() === "") {
-      body.toponym = p;
-    }
-  }
-  if (acc.age) {
-    const n = parseInt(String(acc.age), 10);
-    if (Number.isFinite(n)) body.age = n;
-  }
-  return { payload: body };
+  return result;
 }
 
 function buildAdvancedContactFilters(f: Record<string, unknown>, extra?: { limit?: number }): string {
@@ -1879,13 +1893,8 @@ async function runAlexToolInner(
     if (!permLegacy("alexandra_import", isMgr)) {
       return { content: JSON.stringify({ error: "Δεν επιτρέπεται το import για αυτόν τον ρόλο" }) };
     }
-    const mapping = raw.mapping;
-    if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) {
-      return { content: JSON.stringify({ error: "Χρειάζεται mapping (object)" }) };
-    }
     const fromTool = typeof raw.context_municipality === "string" ? raw.context_municipality.trim() : "";
     const contextMunicipality = fromTool || ctx.importContextMunicipality;
-    const mapObj = mapping as Record<string, string>;
     let rows: Array<Record<string, unknown>> = [];
     if (Array.isArray(raw.rows) && raw.rows.length > 0) {
       rows = raw.rows as Array<Record<string, unknown>>;
@@ -1899,43 +1908,62 @@ async function runAlexToolInner(
         }),
       };
     }
+
+    let mapObj: Record<string, string>;
+    if (raw.mapping && typeof raw.mapping === "object" && !Array.isArray(raw.mapping)) {
+      mapObj = raw.mapping as Record<string, string>;
+    } else {
+      const headers = Object.keys(rows[0] ?? {});
+      mapObj = detectColumns(headers);
+      if (!Object.keys(mapObj).length) {
+        return {
+          content: JSON.stringify({
+            error: "Δεν αναγνωρίστηκαν στήλες. Δώσε mapping ή αρχείο με γνωστές κεφαλίδες (Όνομα, Επώνυμο, Κινητό…).",
+            headers,
+          }),
+        };
+      }
+    }
+
+    const confirmed = raw.confirmed === true || raw.user_confirmed === true;
     const skip_dup = raw.skip_duplicates !== false;
     const update_ex = raw.update_existing === true;
     const duplicate_mode = (raw.duplicate_mode as string) || (update_ex ? "update" : skip_dup ? "skip" : "skip");
-    const list = rows;
-    const totalRows = list.length;
-    const CONCURRENCY = 8;
-    type RowWork = { index1: number; payload: Record<string, unknown> | null; skip?: string };
-    const work: RowWork[] = new Array<RowWork>(totalRows);
-    for (let i = 0; i < totalRows; i++) {
-      const { payload, skip } = mapSpreadsheetRowToContactPayload(list[i]!, mapObj, {
-        contextMunicipality: contextMunicipality || undefined,
-      });
-      if (skip === "no_phone") {
-        work[i] = { index1: i + 1, payload: null, skip: "no_phone" };
-      } else if (skip === "incomplete_name") {
-        work[i] = { index1: i + 1, payload: null, skip: "incomplete_name" };
-      } else if (!payload) {
-        work[i] = { index1: i + 1, payload: null, skip: "other" };
-      } else {
-        work[i] = { index1: i + 1, payload };
-      }
-    }
-    const phones = [
+
+    const phonesForLookup = [
       ...new Set(
-        work
-          .map((w) => w.payload && typeof w.payload.phone === "string" ? w.payload.phone : null)
+        rows
+          .map((row) => {
+            const { payload } = transformSpreadsheetRow(row, mapObj, {
+              contextMunicipality: contextMunicipality || undefined,
+            });
+            return payload && typeof payload.phone === "string" ? payload.phone : null;
+          })
           .filter((x): x is string => Boolean(x)),
       ),
     ];
+    const existingPhones = new Set<string>();
     const phoneToId = new Map<string, string>();
-    for (let b = 0; b < phones.length; b += 120) {
-      const part = phones.slice(b, b + 120);
-      const { data: phRows } = await ctx.supabase.from("contacts").select("id, phone").in("phone", part);
+    for (let b = 0; b < phonesForLookup.length; b += 120) {
+      const part = phonesForLookup.slice(b, b + 120);
+      const { data: phRows } = await ctx.supabase
+        .from("contacts")
+        .select("id, phone, first_name, last_name")
+        .in("phone", part);
       for (const pr of phRows ?? []) {
-        if (pr.phone) phoneToId.set(String(pr.phone), String(pr.id));
+        if (pr.phone) {
+          phoneToId.set(String(pr.phone), String(pr.id));
+          existingPhones.add(String(pr.phone));
+        }
       }
     }
+
+    const preview = buildImportPreview(rows, mapObj, {
+      contextMunicipality: contextMunicipality || undefined,
+      existingPhones,
+    });
+    const { work } = preview;
+
     const dups: { row: number; phone: string; contact_id: string; name_hint?: string }[] = [];
     for (const w of work) {
       if (!w.payload) continue;
@@ -1950,6 +1978,59 @@ async function runAlexToolInner(
         });
       }
     }
+
+    if (!confirmed) {
+      const mappingLines = Object.entries(mapObj)
+        .map(([col, field]) => `• «${col}» → ${field}`)
+        .join("\n");
+      const sampleLines = preview.sample
+        .slice(0, 5)
+        .map(
+          (s) =>
+            `${s.first_name} ${s.last_name} — ${s.phone || "χωρίς τηλ."}${s.municipality ? ` — ${s.municipality}` : ""}`,
+        )
+        .join("\n");
+      const dupHint =
+        dups.length > 0
+          ? `\n\n⚠️ Βρέθηκαν ${dups.length} διπλότυπα (ίδιο τηλέφωνο). Θέλεις να τα παραλείψω ή να τα ενημερώσω;`
+          : "";
+      return {
+        content: JSON.stringify({
+          ok: true,
+          preview: true,
+          requires_user_confirmation: true,
+          summary: {
+            total_rows: preview.totalRows,
+            valid_rows: preview.validRows,
+            invalid_rows: preview.invalidRows,
+            duplicates: dups.length,
+            duplicate_phones: preview.duplicatePhones,
+            skip_no_phone: preview.sample.filter((s) => s.status === "no_phone").length,
+            skip_no_first_name: preview.sample.filter((s) => s.status === "no_first_name").length,
+          },
+          detected_columns: preview.detectedColumns,
+          sample: preview.sample,
+          duplicates: dups.slice(0, 5),
+          pending_rows: preview.pendingRows.slice(0, 10),
+          message: `📊 Προεπισκόπηση εισαγωγής:
+- Σύνολο γραμμών: ${preview.totalRows}
+- Έγκυρες: ${preview.validRows}
+- Μη έγκυρες: ${preview.invalidRows}
+- Διπλότυπα: ${dups.length}
+
+Αντιστοίχιση στηλών:
+${mappingLines}
+
+Δείγμα:
+${sampleLines || "—"}${dupHint}
+
+Επιβεβαιώνεις την εισαγωγή; (ναι/όχι)`,
+        }),
+        showExecutedTag: false,
+        executedToolName: "smart_excel_import",
+      };
+    }
+
     if (duplicate_mode === "ask_user" && dups.length > 0) {
       return {
         content: JSON.stringify({
@@ -1963,6 +2044,9 @@ async function runAlexToolInner(
         executedToolName: "smart_excel_import",
       };
     }
+
+    const totalRows = work.length;
+    const CONCURRENCY = 8;
     const failed: { index: number; err: string }[] = [];
     const outcome = new Array<string>(totalRows).fill("pending");
     await runIndexRangeWithConcurrency(0, totalRows, CONCURRENCY, async (i) => {
@@ -1972,24 +2056,26 @@ async function runAlexToolInner(
         ctx.onBulkProgress?.(i + 1, totalRows);
         return;
       }
-      if (w.skip === "incomplete_name") {
-        outcome[i] = "skip_incomplete_name";
+      if (w.skip === "no_first_name") {
+        outcome[i] = "skip_no_first_name";
         ctx.onBulkProgress?.(i + 1, totalRows);
         return;
       }
-      if (w.skip === "other" || !w.payload) {
+      if (!w.payload) {
         outcome[i] = "skip_other";
         ctx.onBulkProgress?.(i + 1, totalRows);
         return;
       }
-      const pl = w.payload;
+      const pl = { ...w.payload };
+      const groupName = typeof pl._import_group_name === "string" ? pl._import_group_name.trim() : "";
+      delete pl._import_group_name;
       const ph = String(pl.phone);
       const existing = phoneToId.get(ph);
       if (existing) {
         if (update_ex) {
           const body: Record<string, unknown> = {};
           for (const [k, v] of Object.entries(pl)) {
-            if (k === "phone") continue;
+            if (k === "phone" || k.startsWith("_")) continue;
             if (ALEX_BULK_UPDATE_FIELDS.has(k) && v !== undefined) {
               body[k] = v;
             }
@@ -2004,6 +2090,16 @@ async function runAlexToolInner(
             failed.push({ index: w.index1, err: j.error || "PATCH" });
             outcome[i] = "failed";
           } else {
+            if (groupName) {
+              const gid = await resolveImportGroupId(ctx.supabase, groupName);
+              if (gid) {
+                await ctx.forward(`/api/contacts/${existing}/groups`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ group_id: gid }),
+                });
+              }
+            }
             outcome[i] = "updated";
           }
         } else if (skip_dup) {
@@ -2015,10 +2111,15 @@ async function runAlexToolInner(
         ctx.onBulkProgress?.(i + 1, totalRows);
         return;
       }
+      const apiBody = contactPayloadForApi(pl);
+      if (groupName) {
+        const gid = await resolveImportGroupId(ctx.supabase, groupName);
+        if (gid) apiBody.group_id = gid;
+      }
       const r = await ctx.forward("/api/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pl),
+        body: JSON.stringify(apiBody),
       });
       const postBody = (await r.text().catch(() => "")) || "{}";
       let jr: { contact?: { id?: string }; error?: string } = {};
@@ -2042,7 +2143,7 @@ async function runAlexToolInner(
     const updated = outcome.filter((o) => o === "updated").length;
     const skipped = outcome.filter((o) => o === "skipped_dup" || o === "skip_other").length;
     const skip_no_phone = outcome.filter((o) => o === "skip_no_phone").length;
-    const skip_name = outcome.filter((o) => o === "skip_incomplete_name").length;
+    const skip_name = outcome.filter((o) => o === "skip_no_first_name").length;
     return {
       content: JSON.stringify({
         ok: true,
@@ -2050,9 +2151,10 @@ async function runAlexToolInner(
         updated,
         skipped,
         skipped_no_phone: skip_no_phone,
-        skipped_incomplete_name: skip_name,
+        skipped_no_first_name: skip_name,
         failed,
-        message: `Νέες: ${created}, ενημερώσεις: ${updated}, παραλείφθηκαν/άλλα: ${skipped} · αποτυχίες: ${failed.length}`,
+        duplicates_skipped: dups.length > 0 && skip_dup && !update_ex ? dups.length : 0,
+        message: `✅ Νέες: ${created}, ενημερώσεις: ${updated}, παραλείφθηκαν: ${skipped + skip_no_phone + skip_name}${failed.length > 0 ? ` · αποτυχίες: ${failed.length}` : ""}`,
       }),
       executedToolName: "smart_excel_import",
     };
@@ -2722,18 +2824,76 @@ async function runAlexToolInner(
     if (!permLegacy("alexandra_tool_export_contacts", isMgr)) {
       return { content: JSON.stringify({ error: "Δεν επιτρέπεται η εξαγωγή για αυτόν τον ρόλο" }) };
     }
-    const r = await ctx.forward("/api/contacts/export", { method: "GET" });
-    const txt = await r.text();
-    const first = txt.split(/\r?\n/).slice(0, 2).join(" | ");
-    return {
-      content: JSON.stringify({
-        ok: r.ok,
-        bytes: txt.length,
-        header_preview: first.slice(0, 240),
-        note: "Το CRM παράγει CSV (epafes-ημερομηνία.csv). Ο χρήστης κατεβάζει από Επαφές → Εξαγωγή.",
-      }),
-      executedToolName: "export_contacts",
-    };
+    const fl = (raw.filters as Record<string, unknown>) || {};
+    const formatRaw = String(raw.format ?? "excel").toLowerCase();
+    const format = formatRaw === "csv" ? "csv" : "excel";
+    const fieldsRaw = Array.isArray(raw.fields) ? (raw.fields as unknown[]).map(String) : [];
+    const exportFields = fieldsRaw.length ? fieldsRaw : [...DEFAULT_EXPORT_FIELDS];
+    const filenameBase =
+      String(raw.filename ?? "").trim().replace(/[^\w.\- ()\u0370-\u03FF]+/g, "_").slice(0, 120) ||
+      `epafes_${todayYmdAthens()}`;
+
+    const { contacts, error: fetchErr } = await fetchContactsForExport(ctx, fl, 50_000);
+    if (fetchErr) {
+      return { content: JSON.stringify({ error: fetchErr }) };
+    }
+    const { headers, rows } = buildExportRows(contacts as Record<string, unknown>[], exportFields);
+    try {
+      const stored = await buildAlexandraExportMatrix(ctx.userId, headers, rows, filenameBase, format, "Επαφές");
+      const preview = rows.slice(0, 3).map((row) => Object.fromEntries(headers.map((h, i) => [h, row[i] ?? ""])));
+      return {
+        content: JSON.stringify({
+          ok: true,
+          download_url: stored.download_url,
+          count: contacts.length,
+          format: stored.format,
+          fields: exportFields,
+          preview,
+          message: `Εξήχθησαν ${contacts.length} επαφές (${stored.format}). Κατέβασε το αρχείο από τον παρακάτω σύνδεσμο.`,
+        }),
+        executedToolName: "export_contacts",
+      };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα εξαγωγής" }) };
+    }
+  }
+
+  if (name === "generate_import_template") {
+    if (!permLegacy("alexandra_import", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται η δημιουργία προτύπου για αυτόν τον ρόλο" }) };
+    }
+    const formatRaw = String(raw.format ?? "excel").toLowerCase();
+    const format = formatRaw === "csv" ? "csv" : "excel";
+    const includeExamples = raw.include_examples !== false;
+    const template = buildImportTemplateAoa(includeExamples);
+    try {
+      const filename = `protipo_eisagogis_${todayYmdAthens()}`;
+      const payload = { aoa: template.aoa, sheetName: template.sheetName };
+      if (format === "csv") {
+        const stored = await buildAlexandraCsv(ctx.userId, payload, filename, { bom: true });
+        return {
+          content: JSON.stringify({
+            ok: true,
+            download_url: stored.download_url,
+            format: "CSV",
+            message: "Δημιουργήθηκε πρότυπο εισαγωγής (CSV). Κατέβασέ το και συμπλήρωσέ το πριν το ανεβάσεις ξανά.",
+          }),
+          executedToolName: "generate_import_template",
+        };
+      }
+      const stored = await buildAlexandraExcel(ctx.userId, payload, filename, { sheetName: template.sheetName });
+      return {
+        content: JSON.stringify({
+          ok: true,
+          download_url: stored.download_url,
+          format: "Excel",
+          message: "Δημιουργήθηκε πρότυπο εισαγωγής (Excel). Κατέβασέ το και συμπλήρωσέ το πριν το ανεβάσεις ξανά.",
+        }),
+        executedToolName: "generate_import_template",
+      };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα προτύπου" }) };
+    }
   }
 
   if (name === "get_documents") {
@@ -2958,6 +3118,24 @@ export function buildSystemPrompt({
 - ΠΟΤΕ μη λες "δεν μπορώ" — βρες πάντα τρόπο
 - Αν είσαι σε σελίδα επαφής, χρησιμοποίησε αυτόματα το contact_id της τρέχουσας επαφής
 - Αν είσαι σε σελίδα αιτήματος, χρησιμοποίησε αυτόματα το request_id του τρέχοντος αιτήματος
+
+ΕΞΑΓΩΓΗ ΔΕΔΟΜΕΝΩΝ:
+- «Εξάγαγε όλες τις επαφές από Αγρίνιο» → export_contacts με φίλτρο municipality=Αγρίνιο
+- «Δώσε μου Excel με τους θετικούς» → export_contacts με φίλτρο call_status=Positive, format=excel
+- «Θέλω CSV με ονοματεπώνυμο και τηλέφωνο μόνο» → export_contacts με fields [last_name, first_name, phone], format=csv
+- «Εξάγαγε ομάδα ΕΚΛΟΓΕΣ 2023» → export_contacts με φίλτρο group/ομάδα
+Χρησιμοποίησε ΠΑΝΤΑ το export_contacts tool για εξαγωγές, όχι get_all_contacts.
+Ρώτα για format (Excel/CSV) αν δεν έχει ειπωθεί — default Excel.
+
+ΕΙΣΑΓΩΓΗ ΔΕΔΟΜΕΝΩΝ:
+Όταν ο χρήστης ανεβάσει αρχείο ή ζητήσει import:
+- Αυτόματα αναγνώρισε τις στήλες (detectColumns / smart_excel_import χωρίς mapping)
+- Πάντα κάλεσε smart_excel_import πρώτα με confirmed=false για preview
+- Χειρίσου διπλότυπα — ρώτα: παράλειψη ή ενημέρωση
+- Αν κάτι είναι ασαφές, ρώτα πριν εισάγεις
+- Μετά την εισαγωγή, πες πόσες επαφές μπήκαν και αν υπήρξαν προβλήματα
+- Για πρότυπο εισαγωγής: generate_import_template
+- Ποτέ μη δημιουργείς επαφή χωρίς όνομα (first_name) και τηλέφωνο
 
 ΣΗΜΕΡΑ: ${todayDate}
 ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ: ${pageContextBlock}

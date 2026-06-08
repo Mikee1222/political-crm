@@ -21,6 +21,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { z } from "zod";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 import { formatTodayLabelAthens } from "@/lib/date-format";
+import { inferSpreadsheetContextMunicipality } from "@/lib/alexandra-sheet-parse";
 export const dynamic = 'force-dynamic';
 
 const pageContextSchema = z.discriminatedUnion("type", [
@@ -147,36 +148,13 @@ export async function POST(request: NextRequest) {
   const importRowsForTool =
     hasMinRole(p.role, "manager") && rawAttachment?.type === "spreadsheet_import" ? rawAttachment.rows : undefined;
 
-  function isGenericSheetName(name: string | undefined): boolean {
-    if (!name || !name.trim()) return true;
-    const t = name.trim();
-    if (/^sheet\d*$/i.test(t)) return true;
-    if (/^φ[ύυ]λλ[οό]\d*$/i.test(t)) return true;
-    return false;
-  }
-
-  function municipalityHintFromFileBaseName(fileName: string | undefined): string | undefined {
-    if (!fileName?.trim()) return undefined;
-    const base = fileName
-      .replace(/^.*[/\\]/, "")
-      .replace(/\.[^.]+$/i, "")
-      .replace(/[_-]+/g, " ")
-      .trim();
-    if (base.length < 2 || base.length > 120) return undefined;
-    const lower = base.toLowerCase();
-    if (/^(export|data|contacts|επαφ|book\d*|new\s*spreadsheet|untitled|timesheet)/i.test(lower)) {
-      return undefined;
-    }
-    return base;
-  }
-
   const importContextMunicipality: string | undefined = (() => {
     if (!hasMinRole(p.role, "manager") || rawAttachment?.type !== "spreadsheet_import") return undefined;
-    const explicit = rawAttachment.contextMunicipality?.trim();
-    if (explicit) return explicit;
-    const s = rawAttachment.sheetName?.trim();
-    if (s && !isGenericSheetName(s)) return s;
-    return municipalityHintFromFileBaseName(rawAttachment.fileName) ?? undefined;
+    return inferSpreadsheetContextMunicipality(
+      rawAttachment.fileName,
+      rawAttachment.sheetName,
+      rawAttachment.contextMunicipality,
+    );
   })();
   const cookie = request.headers.get("cookie") ?? "";
   const origin = request.nextUrl.origin;

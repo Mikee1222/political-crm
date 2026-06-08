@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hasMinRole, type Role } from "@/lib/roles";
-import { buildImportPreviewMessage, parseSpreadsheetToRows } from "@/lib/alexandra-sheet-parse";
+import { buildImportPreviewMessage, inferSpreadsheetContextMunicipality, parseSpreadsheetToRows } from "@/lib/alexandra-sheet-parse";
 import { useAlexandraVoiceConversation } from "@/hooks/use-alexandra-voice-conversation";
 import { AlexandraVoiceModeOverlay } from "./alexandra-voice-mode-overlay";
 import ReactMarkdown from "react-markdown";
@@ -267,6 +267,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           rows: p.rows as Array<Record<string, unknown>>,
           fileName: file.name,
           sheetName: p.sheetName,
+          contextMunicipality: inferSpreadsheetContextMunicipality(file.name, p.sheetName),
         });
         const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows, {
           headerRowIndex: p.headerRowIndex,
@@ -314,6 +315,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           rows: p.rows as Array<Record<string, unknown>>,
           fileName: file.name,
           sheetName: p.sheetName,
+          contextMunicipality: inferSpreadsheetContextMunicipality(file.name, p.sheetName),
         });
         const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows, {
           headerRowIndex: p.headerRowIndex,

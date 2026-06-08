@@ -98,6 +98,41 @@ export function parseSpreadsheetToRows(buf: ArrayBuffer): ParsedSheet {
   };
 }
 
+export function inferSpreadsheetContextMunicipality(
+  fileName?: string,
+  sheetName?: string,
+  explicit?: string,
+): string | undefined {
+  const ex = explicit?.trim();
+  if (ex) return ex;
+  const s = sheetName?.trim();
+  if (s && !isGenericSheetName(s)) return s;
+  return municipalityHintFromFileBaseName(fileName);
+}
+
+function isGenericSheetName(name: string | undefined): boolean {
+  if (!name || !name.trim()) return true;
+  const t = name.trim();
+  if (/^sheet\d*$/i.test(t)) return true;
+  if (/^φ[ύυ]λλ[οό]\d*$/i.test(t)) return true;
+  return false;
+}
+
+function municipalityHintFromFileBaseName(fileName: string | undefined): string | undefined {
+  if (!fileName?.trim()) return undefined;
+  const base = fileName
+    .replace(/^.*[/\\]/, "")
+    .replace(/\.[^.]+$/i, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (base.length < 2 || base.length > 120) return undefined;
+  const lower = base.toLowerCase();
+  if (/^(export|data|contacts|επαφ|book\d*|new\s*spreadsheet|untitled|timesheet)/i.test(lower)) {
+    return undefined;
+  }
+  return base;
+}
+
 export function buildImportPreviewMessage(
   fileName: string,
   columns: string[],
@@ -111,5 +146,5 @@ export function buildImportPreviewMessage(
       ? ` Η σειρά επικεφαλίδων (αυτόματη) είναι η γραμμή ${options.headerRowIndex + 1} του φύλλου.`
       : "";
   const s = options?.sheetName?.trim() ? ` Φύλλο: ${options.sheetName}.` : "";
-  return `Ανέβασα αρχείο «${fileName}».${s}${h} Στήλες: [${colLine}]. Πρώτες 5 γραμμές δεδομένων: ${dataPreview}. Αν ο τίτλος/όνομα αρχείου υποδηλώνει τόπο (π.χ. δήμος), το χρησιμοποιείς ως municipality+area+toponym. Χωρίς το κύριο phone δεν γίνεται επαφή. Χρήση full_name: τελευταίο token = first_name, προηγούμενα = last_name. Πολλαπλοί αριθμοί: → phone, phone2, landline. Κάνε mapping και import (bulk_create ή smart_excel_import) με επιβεβαίωση.`;
+  return `Ανέβασα αρχείο «${fileName}».${s}${h} Στήλες: [${colLine}]. Πρώτες 5 γραμμές δεδομένων: ${dataPreview}. Αν ο τίτλος/όνομα αρχείου υποδηλώνει τόπο (π.χ. δήμος), το χρησιμοποιείς ως municipality+area+toponym. Χωρίς όνομα (first_name) ή κύριο phone δεν γίνεται επαφή. Χρήση full_name: τελευταίο token = first_name, προηγούμενα = last_name. Πολλαπλοί αριθμοί: → phone, phone2, landline. Κάλεσε smart_excel_import με confirmed=false για preview πριν την εισαγωγή.`;
 }
