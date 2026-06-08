@@ -44,8 +44,6 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { CrmSessionBootScreen } from "@/components/crm-session-boot-screen";
-import { CRMTour } from "@/components/crm-tour";
-import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 import { GlobalSearchOverlay } from "@/components/global-search-overlay";
 import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
@@ -60,7 +58,6 @@ import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-shee
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { useProfile, type Profile } from "@/contexts/profile-context";
-import { useTour, type TourId } from "@/contexts/tour-context";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { can } from "@/lib/can";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -237,24 +234,16 @@ function flatOrderedNavItems(profile: Profile | null) {
   return all;
 }
 
-function navDataTour(href: string): string | undefined {
-  if (href === "/contacts") return "nav-contacts";
-  if (href === "/requests") return "nav-requests";
-  return undefined;
-}
-
 function NavItemRow({
   item,
   pathname,
   onNavigate,
   showLabels,
-  dataTour,
 }: {
   item: NavItem;
   pathname: string;
   onNavigate?: () => void;
   showLabels: boolean;
-  dataTour?: string;
 }) {
   const Icon = item.icon;
   const isSub = Boolean(item.subOf);
@@ -267,7 +256,6 @@ function NavItemRow({
     <Link
       href={item.href}
       onClick={onNavigate}
-      data-tour={dataTour}
       className={[
         navItemBase,
         isSub && showLabels && "ml-3 h-9 max-h-9 gap-2.5 pl-2",
@@ -312,7 +300,6 @@ function AlexandraRow({
     <Link
       href="/alexandra"
       onClick={onNavigate}
-      data-tour="alexandra-button"
       className={[
         navItemBase,
         "mt-1",
@@ -391,7 +378,6 @@ function GroupBlock({
                 pathname={pathname}
                 onNavigate={onNavigate}
                 showLabels={showLabels}
-                dataTour={navDataTour(item.href)}
               />
             ))}
           </div>
@@ -408,7 +394,6 @@ function GroupBlock({
           pathname={pathname}
           onNavigate={onNavigate}
           showLabels={showLabels}
-          dataTour={navDataTour(item.href)}
         />
       ))}
     </div>
@@ -450,7 +435,6 @@ function SidebarContent({
               pathname={pathname}
               onNavigate={onNavigate}
               showLabels={false}
-              dataTour={navDataTour(item.href)}
             />
           ))}
         </div>
@@ -484,16 +468,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { profile, loading: profileLoading, sessionResolved } = useProfile();
-  const { activeTour, setActiveTour, completeTour } = useTour();
-  const { openMiniFromBubble, startWithChip } = useAlexandraChat();
   const isPortal = pathname === "/portal" || pathname.startsWith("/portal/");
   const isCrmLoginPublic = pathname === "/login" || pathname === "/enter-code";
   const [openRequestsCount, setOpenRequestsCount] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [alexVoiceToast, setAlexVoiceToast] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const helpRef = useRef<HTMLDivElement>(null);
   const userMenu = usePortalDropdown({ align: "right", minWidth: 224 });
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -582,31 +562,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     setMoreOpen(false);
     setMobileNavOpen(false);
   }, [pathname]);
-
-  useEffect(() => {
-    if (!helpOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
-        setHelpOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [helpOpen]);
-
-  const startHelpTour = useCallback(
-    (tourId: TourId) => {
-      setHelpOpen(false);
-      setActiveTour(tourId);
-    },
-    [setActiveTour],
-  );
-
-  const askAlexandraForHelp = useCallback(() => {
-    setHelpOpen(false);
-    openMiniFromBubble();
-    void startWithChip("Χρειάζομαι βοήθεια");
-  }, [openMiniFromBubble, startWithChip]);
 
   useEffect(() => {
     if (isPortal || isCrmLoginPublic) return;
@@ -898,7 +853,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         className="crm-sidebar app-sidebar app-sidebar--rail fixed left-0 top-0 z-30 flex h-screen max-w-full flex-col overflow-hidden border-r border-[var(--border)]/50 px-3 py-4 pb-3 max-lg:hidden"
         style={{ background: "var(--sidebar-bg)" }}
         aria-label="Πλοήγηση"
-        data-tour="sidebar"
       >
         <div
           className={[
@@ -1054,7 +1008,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  data-tour="search-button"
                   className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)]/60 px-2.5 text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--accent-gold)]"
                   aria-label="Καθολική αναζήτηση"
                   title="Αναζήτηση (⌘K)"
@@ -1194,59 +1147,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         />
         <GlobalSearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} role={role} />
         <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-        {activeTour ? <CRMTour tourId={activeTour} onComplete={completeTour} /> : null}
-        <div ref={helpRef} className="fixed bottom-20 right-4 z-[130] max-lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
-          <button
-            type="button"
-            onClick={() => setHelpOpen((o) => !o)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-card)] shadow-lg transition-colors hover:border-[var(--accent-gold)]"
-            aria-label="Βοήθεια"
-            aria-expanded={helpOpen}
-          >
-            <HelpCircle className="h-5 w-5 text-[var(--text-muted)]" />
-          </button>
-          {helpOpen ? (
-            <div className="absolute bottom-12 right-0 w-64 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-xl">
-              <h3 className="mb-3 font-bold text-[var(--text-primary)]">Βοήθεια</h3>
-              <div className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  onClick={() => startHelpTour("welcome")}
-                  className="flex items-center gap-2 rounded-lg p-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                >
-                  <HelpCircle className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-                  Ξεναγία CRM
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startHelpTour("contacts_tour")}
-                  className="flex items-center gap-2 rounded-lg p-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                >
-                  <Users className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-                  Οδηγός Επαφών
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startHelpTour("requests_tour")}
-                  className="flex items-center gap-2 rounded-lg p-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                >
-                  <FileText className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-                  Οδηγός Αιτημάτων
-                </button>
-                <div className="mt-1 border-t border-[var(--border)] pt-2">
-                  <button
-                    type="button"
-                    onClick={() => void askAlexandraForHelp()}
-                    className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                  >
-                    <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent-gold)]" aria-hidden />
-                    Ρώτα την Αλεξάνδρα
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
       </div>
     </div>
   );

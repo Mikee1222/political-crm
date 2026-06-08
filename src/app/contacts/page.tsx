@@ -243,14 +243,12 @@ function ContactDesktopRowCard({
   onToggleSelected,
   onNavigate,
   onOpenInTab,
-  tourHighlight,
 }: {
   c: Contact;
   selected: boolean;
   onToggleSelected: () => void;
   onNavigate: () => void;
   onOpenInTab: () => void;
-  tourHighlight?: boolean;
 }) {
   const tel = contactTelHref(c);
   const nameDay = formatNameDayGreek(c.name_day);
@@ -266,7 +264,6 @@ function ContactDesktopRowCard({
     <div
       role="button"
       tabIndex={0}
-      data-tour={tourHighlight ? "contact-card" : undefined}
       onClick={(e) => {
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
@@ -1125,7 +1122,6 @@ function ContactsPage() {
               <button
                 type="button"
                 onClick={() => setOpenCreate(true)}
-                data-tour="new-contact-button"
                 className={lux.btnPrimary + " hq-shimmer-gold !rounded-full !py-2.5 w-full text-sm !font-bold text-[var(--text-badge-on-gold)] sm:w-auto"}
               >
                 <Plus className="h-4 w-4" />
@@ -1167,7 +1163,7 @@ function ContactsPage() {
         }
       />
 
-      <div className={lux.card + " !py-4 w-full min-w-0 max-w-full overflow-visible"} data-tour="contacts-filters">
+      <div className={lux.card + " !py-4 w-full min-w-0 max-w-full overflow-visible"}>
         <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="min-w-0 flex-1 sm:min-w-[12rem]">
             <label className={lux.label} htmlFor="f-search">
@@ -1279,7 +1275,6 @@ function ContactsPage() {
           </div>
           <Link
             href="/contacts/search"
-            data-tour="advanced-search-link"
             className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:text-[var(--text-primary)] hover:underline"
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden />
@@ -1356,11 +1351,10 @@ function ContactsPage() {
           </div>
         </div>
         <div className="flex flex-col gap-3 pb-1">
-          {contacts.map((c, idx) => (
+          {contacts.map((c) => (
             <ContactDesktopRowCard
               key={c.id}
               c={c}
-              tourHighlight={idx === 0}
               selected={selected.has(c.id)}
               onToggleSelected={() =>
                 setSelected((prev) => {

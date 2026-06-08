@@ -8,7 +8,6 @@ import { useProfile } from "@/contexts/profile-context";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import type { AlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { mapDbToMsg, type Msg, type MsgWithT, type RowConv, type StreamMeta } from "./alexandra-chat-helpers";
-import { useOptionalTour, type TourId } from "@/contexts/tour-context";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const AlexandraChatContext = createContext<any>(null);
@@ -56,7 +55,6 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   const role = profile?.role;
   const router = useRouter();
   const pathname = usePathname();
-  const tour = useOptionalTour();
   const isAlexandraPage = Boolean(pathname?.startsWith("/alexandra"));
   const [miniWindowOpen, setMiniWindowOpen] = useState(false);
   const [miniWindowMinimized, setMiniWindowMinimized] = useState(false);
@@ -377,7 +375,6 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
           phone?: string;
           current?: number;
           total?: number;
-          tourId?: string;
         };
         /* eslint-disable no-constant-condition */
         while (true) {
@@ -482,8 +479,6 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
                     : row,
                 ),
               );
-            } else if (j.event === "start_tour" && j.tourId) {
-              tour?.setActiveTour(j.tourId as TourId);
             }
           }
         }
@@ -555,7 +550,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
         );
       }
     },
-    [selectedId, loadMessages, loadList, pageContextForApi, tour],
+    [selectedId, loadMessages, loadList, pageContextForApi],
   );
 
   const startWithChip = useCallback(

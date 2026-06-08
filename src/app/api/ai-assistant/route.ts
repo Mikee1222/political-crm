@@ -356,9 +356,6 @@ export async function POST(request: NextRequest) {
                   sendSse(`data: ${JSON.stringify({ event: "executed", tool: tr.executedToolName })}\n\n`);
                 }
               }
-              if (tr.startTour && tr.tourId) {
-                sendSse(`data: ${JSON.stringify({ event: "start_tour", tourId: tr.tourId })}\n\n`);
-              }
               toolResultBlocks.push({
                 type: "tool_result",
                 tool_use_id: block.id,
