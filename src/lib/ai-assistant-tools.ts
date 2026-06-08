@@ -981,7 +981,8 @@ async function fetchContactsForExport(
   maxLimit = 50_000,
 ): Promise<{ contacts: ExportContactRow[]; error?: string }> {
   const all: ExportContactRow[] = [];
-  const pageSize = 5000;
+  /** List pagination: page + page_size. Do not pass `limit` — /api/contacts treats it as combobox mode (no total/page). */
+  const requestedPageSize = 500;
   let page = 1;
   let total: number | undefined;
 
@@ -989,19 +990,21 @@ async function fetchContactsForExport(
     const q = buildExportContactFilters(filters, {});
     const params = new URLSearchParams(q);
     params.set("page", String(page));
-    params.set("page_size", String(Math.min(pageSize, maxLimit - all.length)));
+    params.set("page_size", String(Math.min(requestedPageSize, maxLimit - all.length)));
     const r = await ctx.forward(`/api/contacts?${params.toString()}`, { method: "GET" });
     const j = (await r.json().catch(() => ({}))) as {
       contacts?: ExportContactRow[];
       error?: string;
       total?: number;
+      pageSize?: number;
     };
     if (!r.ok) return { contacts: [], error: j.error || "Σφάλμα" };
     const batch = j.contacts ?? [];
     total = j.total ?? total;
     if (!batch.length) break;
     all.push(...batch);
-    if (batch.length < pageSize) break;
+    const effectivePageSize = j.pageSize ?? requestedPageSize;
+    if (batch.length < effectivePageSize) break;
     if (total != null && all.length >= total) break;
     page += 1;
   }
