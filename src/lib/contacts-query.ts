@@ -23,11 +23,20 @@ export function contactMatchesLocalSearch(c: ContactForSearch, search: string | 
   return contactMatchesFuzzyGreekSearch(c, search);
 }
 
+function escapeIlike(value: string): string {
+  return value.replace(/[%_\\,().]/g, (c) => `\\${c}`);
+}
+
+function partialIlikePattern(value: string): string {
+  return `%${escapeIlike(value.trim())}%`;
+}
+
 export function applyContactListFiltersToBuilder(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
   f: ContactListFilters,
   groupResolution?: GroupFilterResolution,
+  opts?: { partialLocation?: boolean },
 ) {
   const callStatuses = f.call_statuses.length
     ? f.call_statuses
@@ -42,16 +51,32 @@ export function applyContactListFiltersToBuilder(
   if (f.first_name?.trim()) query = query.ilike("first_name", `%${f.first_name.trim()}%`);
   if (f.last_name?.trim()) query = query.ilike("last_name", `%${f.last_name.trim()}%`);
   if (f.father_name?.trim()) query = query.ilike("father_name", `%${f.father_name.trim()}%`);
-  if (f.area) query = query.eq("area", f.area);
+  if (f.area) {
+    query = opts?.partialLocation
+      ? query.ilike("area", partialIlikePattern(f.area))
+      : query.eq("area", f.area);
+  }
   if (f.municipalities.length === 1) {
-    query = query.eq("municipality", f.municipalities[0]!);
+    query = opts?.partialLocation
+      ? query.ilike("municipality", partialIlikePattern(f.municipalities[0]!))
+      : query.eq("municipality", f.municipalities[0]!);
   } else if (f.municipalities.length > 1) {
-    query = query.in("municipality", f.municipalities);
+    query = opts?.partialLocation
+      ? query.or(
+          f.municipalities
+            .map((m) => `municipality.ilike.${partialIlikePattern(m)}`)
+            .join(","),
+        )
+      : query.in("municipality", f.municipalities);
   }
   if (f.toponyms.length === 1) {
-    query = query.eq("toponym", f.toponyms[0]!);
+    query = opts?.partialLocation
+      ? query.ilike("toponym", partialIlikePattern(f.toponyms[0]!))
+      : query.eq("toponym", f.toponyms[0]!);
   } else if (f.toponyms.length > 1) {
-    query = query.in("toponym", f.toponyms);
+    query = opts?.partialLocation
+      ? query.or(f.toponyms.map((t) => `toponym.ilike.${partialIlikePattern(t)}`).join(","))
+      : query.in("toponym", f.toponyms);
   }
   if (f.gender) query = query.eq("gender", f.gender);
   if (f.birthday_today) {

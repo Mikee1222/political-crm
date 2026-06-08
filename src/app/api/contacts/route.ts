@@ -52,9 +52,12 @@ function applyApiContactFilters(
   query: QueryBuilder,
   f: ReturnType<typeof getDefaultContactFilters>,
   groupResolution: Awaited<ReturnType<typeof resolveContactListFilterIds>>,
+  partialLocation = false,
 ) {
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
-  query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution);
+  query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
+    partialLocation,
+  });
   return applyBirthdayAgeFilters(query, f.age_min, f.age_max);
 }
 
@@ -92,6 +95,7 @@ export async function GET(request: NextRequest) {
     const { supabase } = crm;
 
     const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
+    const partialLocation = request.nextUrl.searchParams.get("partial_location") === "1";
     console.log("contacts query filters:", JSON.stringify(f));
     const groupResolution = await resolveContactListFilterIds(supabase, f);
     const limitParam = f.limit;
@@ -117,7 +121,7 @@ export async function GET(request: NextRequest) {
         .select(SELECT_LIST)
         .in("id", ids)
         .order("created_at", { ascending: false });
-      query = applyApiContactFilters(query, f, groupResolution);
+      query = applyApiContactFilters(query, f, groupResolution, partialLocation);
       if (comboboxMode) {
         query = query.limit(listLimit!);
       } else {
@@ -139,7 +143,7 @@ export async function GET(request: NextRequest) {
 
     if (f.search) {
       let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
-      query = applyApiContactFilters(query, f, groupResolution);
+      query = applyApiContactFilters(query, f, groupResolution, partialLocation);
       query = query.limit(12_000);
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -158,7 +162,7 @@ export async function GET(request: NextRequest) {
       .from("contacts")
       .select(SELECT_LIST, { count: "exact" })
       .order("created_at", { ascending: false });
-    query = applyApiContactFilters(query, f, groupResolution);
+    query = applyApiContactFilters(query, f, groupResolution, partialLocation);
 
     if (comboboxMode) {
       query = query.limit(listLimit!);

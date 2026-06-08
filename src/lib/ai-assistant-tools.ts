@@ -968,6 +968,13 @@ type ExportContactRow = {
   group_names?: string[];
 };
 
+/** Export-only: partial (ilike) match for municipality, area, toponym via partial_location=1. */
+function buildExportContactFilters(f: Record<string, unknown>, extra?: { limit?: number }): string {
+  const params = new URLSearchParams(buildAdvancedContactFilters(f, extra));
+  params.set("partial_location", "1");
+  return params.toString();
+}
+
 async function fetchContactsForExport(
   ctx: ToolContext,
   filters: Record<string, unknown>,
@@ -979,7 +986,7 @@ async function fetchContactsForExport(
   let total: number | undefined;
 
   while (all.length < maxLimit) {
-    const q = buildAdvancedContactFilters(filters, {});
+    const q = buildExportContactFilters(filters, {});
     const params = new URLSearchParams(q);
     params.set("page", String(page));
     params.set("page_size", String(Math.min(pageSize, maxLimit - all.length)));
@@ -3120,6 +3127,7 @@ export function buildSystemPrompt({
 - Αν είσαι σε σελίδα αιτήματος, χρησιμοποίησε αυτόματα το request_id του τρέχοντος αιτήματος
 
 ΕΞΑΓΩΓΗ ΔΕΔΟΜΕΝΩΝ:
+- Όταν ο χρήστης ζητά επαφές από συγκεκριμένο δήμο ή περιοχή, χρησιμοποίησε partial search (π.χ. 'Βόνιτσα' θα βρει 'Ακτίου-Βόνιτσας'). Αν βρεθούν 0 αποτελέσματα, δοκίμασε με μικρότερο τμήμα του ονόματος.
 - «Εξάγαγε όλες τις επαφές από Αγρίνιο» → export_contacts με φίλτρο municipality=Αγρίνιο
 - «Δώσε μου Excel με τους θετικούς» → export_contacts με φίλτρο call_status=Positive, format=excel
 - «Θέλω CSV με ονοματεπώνυμο και τηλέφωνο μόνο» → export_contacts με fields [last_name, first_name, phone], format=csv
