@@ -177,7 +177,7 @@ function computePopupStyle(targetRect: DOMRect | null, position: TourStep["posit
 
   if (position === "bottom") {
     let top = targetRect.bottom + PAD;
-    let left = clampLeft(targetRect.left + targetRect.width / 2 - POPUP_W / 2);
+    const left = clampLeft(targetRect.left + targetRect.width / 2 - POPUP_W / 2);
     if (top + POPUP_EST_H > vh - PAD) {
       top = clampTop(targetRect.top - POPUP_EST_H - PAD);
     }
@@ -185,7 +185,7 @@ function computePopupStyle(targetRect: DOMRect | null, position: TourStep["posit
   }
 
   if (position === "top") {
-    let top = clampTop(targetRect.top - POPUP_EST_H - PAD);
+    const top = clampTop(targetRect.top - POPUP_EST_H - PAD);
     const left = clampLeft(targetRect.left + targetRect.width / 2 - POPUP_W / 2);
     if (top <= PAD) {
       return { top: targetRect.bottom + PAD, left, width: POPUP_W };
@@ -195,7 +195,7 @@ function computePopupStyle(targetRect: DOMRect | null, position: TourStep["posit
 
   if (position === "right") {
     let left = targetRect.right + PAD;
-    let top = clampTop(targetRect.top + targetRect.height / 2 - POPUP_EST_H / 2);
+    const top = clampTop(targetRect.top + targetRect.height / 2 - POPUP_EST_H / 2);
     if (left + POPUP_W > vw - PAD) {
       left = clampLeft(targetRect.left - POPUP_W - PAD);
     }
@@ -204,7 +204,7 @@ function computePopupStyle(targetRect: DOMRect | null, position: TourStep["posit
 
   if (position === "left") {
     let left = clampLeft(targetRect.left - POPUP_W - PAD);
-    let top = clampTop(targetRect.top + targetRect.height / 2 - POPUP_EST_H / 2);
+    const top = clampTop(targetRect.top + targetRect.height / 2 - POPUP_EST_H / 2);
     if (left <= PAD) {
       left = targetRect.right + PAD;
     }

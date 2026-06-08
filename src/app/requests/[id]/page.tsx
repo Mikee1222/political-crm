@@ -176,7 +176,7 @@ export default function RequestDetailPage() {
       setPageContext(null);
     }
     return () => setPageContext(null);
-  }, [setPageContext, data?.id, data?.title, data?.status]);
+  }, [setPageContext, data]);
 
   const load = useCallback(async () => {
     if (!id) return;
