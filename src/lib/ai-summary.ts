@@ -1,7 +1,7 @@
 import { anthropicComplete } from "@/lib/anthropic-once";
 
-export const SUMMARY_MODEL = "claude-sonnet-4-6";
-export const SUMMARY_MAX_TOKENS = 800;
+export const SUMMARY_MODEL = "claude-haiku-4-5-20251001";
+export const SUMMARY_MAX_TOKENS = 150;
 export const SUMMARY_CACHE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function truncateNote(text: string | null | undefined, max = 200): string {

@@ -9,10 +9,6 @@ export function rowsFromData(data: unknown): Record<string, unknown>[] {
     .map((r) => r as Record<string, unknown>);
 }
 
-type SheetInput =
-  | { headers: string[]; rows: unknown[][]; sheetName?: string }
-  | Record<string, unknown>[];
-
 function isAoaInput(
   data: unknown,
 ): data is { headers: string[]; rows: unknown[][]; sheetName?: string } | { aoa: unknown[][]; sheetName?: string } {

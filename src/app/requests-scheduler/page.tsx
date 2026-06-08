@@ -38,7 +38,6 @@ import {
   ChevronRight,
   Circle,
   LayoutGrid,
-  Loader2,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,

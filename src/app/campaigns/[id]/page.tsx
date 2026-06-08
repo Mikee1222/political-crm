@@ -180,7 +180,7 @@ export default function CampaignDetailPage() {
       alexPage.setPageContext(null);
     }
     return () => alexPage.setPageContext(null);
-  }, [alexPage, data?.campaign?.id, data?.campaign?.name, data?.campaign?.status]);
+  }, [alexPage, data?.campaign]);
 
   const concurrentLinesStored = data?.campaign?.concurrent_lines;
   const campaignIdForLines = data?.campaign?.id;

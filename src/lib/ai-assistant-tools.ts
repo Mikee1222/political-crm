@@ -8,7 +8,7 @@ import type { UserProfile } from "@/lib/auth-helpers";
 import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
 import { anthropicComplete } from "@/lib/anthropic-once";
 import {
-  buildContactAssistantPrompt,
+  CONTACT_SUMMARY_SYSTEM,
   fetchContactSummaryPack,
 } from "@/lib/ai-summary-prompts";
 import { isSummaryCacheFresh, SUMMARY_MAX_TOKENS, SUMMARY_MODEL } from "@/lib/ai-summary";
@@ -964,12 +964,6 @@ function pickContactId(raw: unknown, ctx: ToolContext): string {
   const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
   if (a) return a;
   return ctx.defaultContactId?.trim() ?? "";
-}
-
-function pickRequestId(raw: unknown, ctx: ToolContext): string {
-  const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
-  if (a) return a;
-  return ctx.defaultRequestId?.trim() ?? "";
 }
 
 export interface UndoAction {

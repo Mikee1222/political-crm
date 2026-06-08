@@ -13,7 +13,6 @@ import {
   FileText,
   ListTodo,
   MapPin,
-  Megaphone,
   Phone,
   Sparkles,
   StickyNote,

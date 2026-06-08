@@ -186,7 +186,7 @@ export default function RequestDetailPage() {
       alexPage.setPageContext(null);
     }
     return () => alexPage.setPageContext(null);
-  }, [alexPage, data?.id, data?.title, data?.status, data?.category, data?.description, data?.handlers, data?.requesters, data?.affected_list, notes.length]);
+  }, [alexPage, data, notes.length]);
 
   const load = useCallback(async () => {
     if (!id) return;
