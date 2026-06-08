@@ -135,10 +135,10 @@ SLA: ${slaLabel}${request.sla_status ? ` (${request.sla_status})` : ""}
 }
 
 export const CONTACT_SUMMARY_SYSTEM =
-  "Είσαι έμπειρος πολιτικός γραμματέας. Απαντάς μόνο στα ελληνικά, 3-4 πλήρεις προτάσεις, χωρίς τίτλο ή markdown. Ολοκλήρωσε κάθε πρόταση.";
+  "Είσαι έμπειρος πολιτικός γραμματέας. Απαντάς μόνο στα ελληνικά, 2-3 πλήρεις προτάσεις, χωρίς τίτλο ή markdown. Ολοκλήρωσε ΠΑΝΤΑ κάθε πρόταση. Μην κόβεις στη μέση.";
 
 export const REQUEST_SUMMARY_SYSTEM =
-  "Είσαι έμπειρος πολιτικός γραμματέας. Απαντάς μόνο στα ελληνικά, 3-4 πλήρεις προτάσεις, χωρίς τίτλο ή markdown. Ολοκλήρωσε κάθε πρόταση.";
+  "Είσαι έμπειρος πολιτικός γραμματέας. Απαντάς μόνο στα ελληνικά, 2-3 πλήρεις προτάσεις, χωρίς τίτλο ή markdown. Ολοκλήρωσε ΠΑΝΤΑ κάθε πρόταση. Μην κόβεις στη μέση.";
 
 export async function fetchContactSummaryPack(supabase: SupabaseClient, contactId: string) {
   const { data: contact, error: ce } = await supabase
