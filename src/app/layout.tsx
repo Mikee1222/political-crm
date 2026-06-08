@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeProfileSync } from "@/components/theme-profile-sync";
 import { AlexandraChatProvider } from "@/components/alexandra/alexandra-chat-provider";
 import { AlexandraPageProvider } from "@/contexts/alexandra-page-context";
+import { TourProvider } from "@/contexts/tour-context";
 import { FormToastProvider } from "@/contexts/form-toast-context";
 import { ContactTabsProvider } from "@/contexts/contact-tabs-context";
 
@@ -77,11 +78,13 @@ export default function RootLayout({
               <ProfileProvider>
                 <ThemeProfileSync />
                 <AlexandraPageProvider>
-                  <AlexandraChatProvider>
-                    <ContactTabsProvider>
-                      <AppFrame>{children}</AppFrame>
-                    </ContactTabsProvider>
-                  </AlexandraChatProvider>
+                  <TourProvider>
+                    <AlexandraChatProvider>
+                      <ContactTabsProvider>
+                        <AppFrame>{children}</AppFrame>
+                      </ContactTabsProvider>
+                    </AlexandraChatProvider>
+                  </TourProvider>
                 </AlexandraPageProvider>
               </ProfileProvider>
             </FormToastProvider>

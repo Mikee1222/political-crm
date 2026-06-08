@@ -77,6 +77,7 @@ function DesktopMergedFabButton({
       onClick={handleClick}
       className="pointer-events-auto flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(201,168,76,0.4)] transition"
       style={goldGradientStyle}
+      data-tour="alexandra-button"
     >
       {open && isManager ? (
         <X className="h-5 w-5 shrink-0" strokeWidth={2.2} aria-hidden />
