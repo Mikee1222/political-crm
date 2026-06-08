@@ -14,7 +14,6 @@ import {
   getRequestStatusQueryValues,
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
-import type { AlexandraPageContext } from "@/contexts/alexandra-page-context";
 import {
   applyFindContactsToolInput,
   applySavedFilterJson,
@@ -860,8 +859,6 @@ export type ToolContext = {
   allowedPermissionKeys?: ReadonlySet<string>;
   /** Επαφή από /contacts/[id] — default για tools με contact_id */
   defaultContactId?: string | null;
-  /** Αίτημα από /requests/[id] — default για tools με request_id */
-  defaultRequestId?: string | null;
   /** Πλήρεις γραμμές import από το τρέχον αίτημα (client attachment) */
   importRows?: Array<Record<string, unknown>>;
   /** Από sheet name / επισύναψη — ιδρύει περιοχή+δήμο όταν κενά στη γραμμή */
@@ -873,91 +870,6 @@ function pickContactId(raw: unknown, ctx: ToolContext): string {
   const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
   if (a) return a;
   return ctx.defaultContactId?.trim() ?? "";
-}
-
-function pickRequestId(raw: unknown, ctx: ToolContext): string {
-  const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
-  if (a) return a;
-  return ctx.defaultRequestId?.trim() ?? "";
-}
-
-async function autoSaveMemory(
-  toolName: string,
-  result: ToolRunResult,
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<void> {
-  try {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(result.content) as Record<string, unknown>;
-    } catch {
-      return;
-    }
-    if (parsed.error || parsed.ok === false) return;
-
-    const memories: { key: string; value: string }[] = [];
-
-    if (toolName === "create_contact" && parsed.contact && typeof parsed.contact === "object") {
-      const c = parsed.contact as { first_name?: string; last_name?: string; id?: string };
-      if (c.id) {
-        memories.push({
-          key: "last_created_contact",
-          value: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() + ` (${c.id})`,
-        });
-      }
-    }
-    if (toolName === "create_request") {
-      const req =
-        (parsed.request && typeof parsed.request === "object" ? parsed.request : null) ??
-        (parsed.result && typeof parsed.result === "object" ? parsed.result : null);
-      if (req) {
-        const r = req as { title?: string; id?: string };
-        if (r.id) {
-          memories.push({
-            key: "last_created_request",
-            value: `${r.title ?? "Αίτημα"} (${r.id})`,
-          });
-        }
-      }
-    }
-    if (toolName === "start_campaign") {
-      const camp =
-        parsed.campaign && typeof parsed.campaign === "object"
-          ? (parsed.campaign as { name?: string; id?: string })
-          : null;
-      if (camp?.id) {
-        memories.push({
-          key: "last_campaign",
-          value: `${camp.name ?? "Καμπάνια"} (${camp.id})`,
-        });
-      }
-    }
-    if (toolName === "find_contacts") {
-      const contacts = Array.isArray(parsed.contacts) ? parsed.contacts : [];
-      const count = typeof parsed.count === "number" ? parsed.count : contacts.length;
-      if (count > 0) {
-        memories.push({
-          key: "last_search",
-          value: `Αναζήτηση που επέστρεψε ${count} επαφές`,
-        });
-      }
-    }
-
-    for (const mem of memories) {
-      await supabase.from("alexandra_memory").upsert(
-        {
-          user_id: userId,
-          key: mem.key,
-          value: mem.value,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,key" },
-      );
-    }
-  } catch {
-    // silent fail — memory is not critical
-  }
 }
 
 async function buildGroupNameToIdMap(supabase: SupabaseClient) {
@@ -1183,9 +1095,7 @@ export async function runAlexTool(
   ctx: ToolContext,
 ): Promise<ToolRunResult> {
   try {
-    const result = await runAlexToolInner(name, input, ctx);
-    void autoSaveMemory(name, result, ctx.supabase, ctx.userId);
-    return result;
+    return await runAlexToolInner(name, input, ctx);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -1440,12 +1350,7 @@ async function runAlexToolInner(
       return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
     }
     return {
-      content: JSON.stringify({
-        ok: true,
-        message: "Το αίτημα δημιουργήθηκε.",
-        result: j.request,
-        request: j.request,
-      }),
+      content: JSON.stringify({ ok: true, message: "Το αίτημα δημιουργήθηκε.", result: j.request }),
       executedToolName: "create_request",
     };
   }
@@ -2804,23 +2709,12 @@ async function runAlexToolInner(
     if (!cid) {
       return { content: JSON.stringify({ error: "campaign_id" }) };
     }
-    const { data: campRow } = await ctx.supabase
-      .from("campaigns")
-      .select("id, name")
-      .eq("id", cid)
-      .maybeSingle();
     const r = await ctx.forward(`/api/campaigns/${cid}/dial-next`, { method: "POST" });
     const j4 = (await r.json().catch(() => ({}))) as Record<string, unknown>;
     if (!r.ok) {
       return { content: JSON.stringify({ error: (j4.error as string) || "Σφάλμα" }) };
     }
-    const campaign = campRow
-      ? { id: String((campRow as { id: string }).id), name: String((campRow as { name: string }).name) }
-      : { id: cid, name: cid };
-    return {
-      content: JSON.stringify({ ok: true, campaign, ...j4 }),
-      executedToolName: "start_campaign",
-    };
+    return { content: JSON.stringify({ ok: true, ...j4 }), executedToolName: "start_campaign" };
   }
 
   if (name === "export_contacts") {
@@ -2986,39 +2880,6 @@ async function runAlexToolInner(
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
-export function buildPageContextBlock(ctx: AlexandraPageContext | null | undefined): string {
-  if (!ctx) return "Αρχική σελίδα";
-
-  switch (ctx.type) {
-    case "contact":
-      return `Σελίδα επαφής: ${ctx.contactName} (ID: ${ctx.contactId}). Μπορείς να χρησιμοποιείς αυτό το contact_id αυτόματα.`;
-    case "request":
-      return `Σελίδα αιτήματος: "${ctx.requestTitle}" - Κατάσταση: ${ctx.requestStatus} (ID: ${ctx.requestId}). Μπορείς να αναφέρεσαι σε αυτό το αίτημα απευθείας — χρησιμοποίησε request_id=${ctx.requestId} όταν χρειάζεται.`;
-    case "contacts_list":
-      return `Σελίδα λίστας επαφών${ctx.totalCount != null ? ` (${ctx.totalCount} επαφές συνολικά)` : ""}. Μπορείς να κάνεις αναζητήσεις και φιλτράρισμα.`;
-    case "requests_list":
-      return `Σελίδα λίστας αιτημάτων${ctx.totalCount != null ? ` (${ctx.totalCount} αιτήματα συνολικά)` : ""}. Μπορείς να αναζητήσεις και να διαχειριστείς αιτήματα.`;
-    case "campaign":
-      return `Σελίδα καμπάνιας: "${ctx.campaignName}" - Κατάσταση: ${ctx.status} (ID: ${ctx.campaignId}).`;
-    case "dashboard":
-      return "Dashboard. Μπορείς να δείξεις στατιστικά, πρωινή ενημέρωση, ή γρήγορες ενέργειες.";
-    case "analytics":
-      return "Σελίδα αναλυτικών. Μπορείς να αναλύσεις δεδομένα και να δείξεις KPIs.";
-    case "tasks":
-      return "Σελίδα εργασιών. Μπορείς να δημιουργήσεις, επεξεργαστείς ή ολοκληρώσεις εργασίες.";
-    case "events":
-      return "Σελίδα εκδηλώσεων. Μπορείς να δημιουργήσεις εκδηλώσεις και να διαχειριστείς RSVPs.";
-    case "volunteers":
-      return "Σελίδα εθελοντών. Μπορείς να δείξεις και να διαχειριστείς εθελοντές.";
-    case "settings":
-      return "Σελίδα ρυθμίσεων CRM.";
-    case "namedays":
-      return "Σελίδα εορτολογίου. Μπορείς να δείξεις ποιος γιορτάζει σήμερα ή άλλη μέρα.";
-    default:
-      return "Γενική σελίδα CRM.";
-  }
-}
-
 export type SystemPromptBuildOpts = {
   todayDate: string;
   pageContextBlock: string;
@@ -3062,8 +2923,6 @@ export function buildSystemPrompt({
 - Αν tool αποτύχει: εξήγησε το error συγκεκριμένα
 - ΠΟΤΕ μη λες "δεν μπορώ" — βρες πάντα τρόπο
 - Αν είσαι σε σελίδα επαφής, χρησιμοποίησε αυτόματα το contact_id της τρέχουσας επαφής
-- Αν είσαι σε σελίδα αιτήματος, χρησιμοποίησε αυτόματα το request_id του τρέχοντος αιτήματος
-- Αποθήκευσε αυτόματα στη μνήμη σου οποιαδήποτε σημαντική πληροφορία που μαθαίνεις για τον χρήστη, τις προτιμήσεις του, ή σημαντικές ενέργειες που έγιναν (save_memory tool)
 
 ΣΗΜΕΡΑ: ${todayDate}
 ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ: ${pageContextBlock}

@@ -12,7 +12,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { useFormToast } from "@/contexts/form-toast-context";
-import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 type V = {
   id: string;
@@ -44,7 +43,6 @@ function roleStyle(role: string | null): { border: string; bg: string; label: st
 
 function VolunteersBody() {
   const { showToast } = useFormToast();
-  const alexPage = useOptionalAlexandraPageContext();
   const { profile } = useProfile();
   const can = hasMinRole(profile?.role, "manager");
   const router = useRouter();
@@ -66,11 +64,6 @@ function VolunteersBody() {
   useEffect(() => {
     if (can) void load();
   }, [can, load]);
-
-  useEffect(() => {
-    alexPage?.setPageContext({ type: "volunteers" });
-    return () => alexPage?.setPageContext(null);
-  }, [alexPage]);
 
   const stats = useMemo(() => {
     const byRole: Record<string, number> = {};
