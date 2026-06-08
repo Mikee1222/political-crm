@@ -264,7 +264,7 @@ function NavItemRow({
       !(item.href === "/contacts" && pathname.startsWith("/contacts/search")) &&
       !(item.href === "/requests" && pathname.startsWith("/requests/search")));
   return (
-    <Link
+    <a
       href={item.href}
       onClick={onNavigate}
       data-tour={dataTour}
@@ -290,7 +290,7 @@ function NavItemRow({
           {item.label}
         </span>
       )}
-    </Link>
+    </a>
   );
 }
 
