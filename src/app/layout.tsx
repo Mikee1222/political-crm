@@ -13,8 +13,6 @@ import { TourProvider } from "@/contexts/tour-context";
 import { FormToastProvider } from "@/contexts/form-toast-context";
 import { ContactTabsProvider } from "@/contexts/contact-tabs-context";
 
-export const dynamic = "force-dynamic";
-
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin", "greek"],
