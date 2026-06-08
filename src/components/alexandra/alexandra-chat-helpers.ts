@@ -99,6 +99,7 @@ export const GREEK_TOOL_LABELS: Record<string, string> = {
   get_contact_summary: "Σύνοψη επαφής",
   find_contacts_not_called: "Μη κληθείσες επαφές",
   get_stats: "Στατιστικά CRM",
+  search_municipalities: "Αναζήτηση δήμων",
   export_contacts: "Εξαγωγή επαφών",
   create_contact: "Δημιουργία επαφής",
   update_contact: "Ενημέρωση επαφής",

@@ -36,6 +36,10 @@ import { runAlexandraAnalysis } from "@/lib/alexandra-analysis";
 import { scrapePublicUrl } from "@/lib/alexandra-scrape";
 import { fetchWeatherForCity } from "@/lib/alexandra-weather";
 import { fetchNews, fetchSports } from "@/lib/alexandra-news";
+import {
+  resolveMunicipalityExportFilters,
+  searchMunicipalities,
+} from "@/lib/municipality-search";
 
 /** Fields allowed when merging spreadsheet row into existing contact (no phone change here). */
 const ALEX_BULK_UPDATE_FIELDS = new Set<string>([
@@ -733,9 +737,21 @@ export const ALEX_TOOLS: Tool[] = [
     },
   },
   {
+    name: "search_municipalities",
+    description:
+      "Αναζήτηση δήμων στο μητρώο CRM· επιστρέφει ακριβείς ονομασίες από τη βάση (case/accent insensitive, μερικό ταίριασμα). Χρησιμοποίησε πριν από export_contacts όταν ο χρήστης αναφέρει δήμο.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string" as const, description: "Μερικό όνομα δήμου, π.χ. Βόνιτσα, Αγρίνιο" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "export_contacts",
     description:
-      "Εξαγωγή επαφών CSV ή Excel με ελληνικές κεφαλίδες, φίλτρα και επιλογή πεδίων (έως 50000). Χρησιμοποίησε ΠΑΝΤΑ αυτό το tool για εξαγωγές.",
+      "Εξαγωγή επαφών CSV ή Excel με ελληνικές κεφαλίδες, φίλτρα και επιλογή πεδίων (έως 50000). Χρησιμοποίησε ΠΑΝΤΑ αυτό το tool για εξαγωγές. Για φίλτρο δήμου: πρώτα search_municipalities ή πέρασε το κείμενο του χρήστη — το export επιλύει αυτόματα τις ακριβείς τιμές.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -968,10 +984,17 @@ type ExportContactRow = {
   group_names?: string[];
 };
 
-/** Export-only: partial (ilike) match for municipality, area, toponym via partial_location=1. */
-function buildExportContactFilters(f: Record<string, unknown>, extra?: { limit?: number }): string {
-  const params = new URLSearchParams(buildAdvancedContactFilters(f, extra));
-  params.set("partial_location", "1");
+/** Export: exact municipality match when resolved; partial (ilike) fallback for area/toponym/unresolved municipality. */
+function buildExportContactFilters(
+  f: Record<string, unknown>,
+  opts?: { municipalityExact?: boolean },
+): string {
+  const params = new URLSearchParams(buildAdvancedContactFilters(f, {}));
+  const hasMuni =
+    Boolean(f.municipality) || (Array.isArray(f.municipalities) && f.municipalities.length > 0);
+  const needsPartial =
+    Boolean(f.area || f.toponym) || (hasMuni && !opts?.municipalityExact);
+  if (needsPartial) params.set("partial_location", "1");
   return params.toString();
 }
 
@@ -979,7 +1002,14 @@ async function fetchContactsForExport(
   ctx: ToolContext,
   filters: Record<string, unknown>,
   maxLimit = 50_000,
-): Promise<{ contacts: ExportContactRow[]; error?: string }> {
+): Promise<{
+  contacts: ExportContactRow[];
+  error?: string;
+  resolvedMunicipalities?: string[];
+  municipalityQueries?: string[];
+}> {
+  const muniResolution = await resolveMunicipalityExportFilters(ctx.supabase, filters);
+  const exportFilters = muniResolution.filters;
   const all: ExportContactRow[] = [];
   /** List pagination: page + page_size. Do not pass `limit` — /api/contacts treats it as combobox mode (no total/page). */
   const requestedPageSize = 500;
@@ -987,7 +1017,9 @@ async function fetchContactsForExport(
   let total: number | undefined;
 
   while (all.length < maxLimit) {
-    const q = buildExportContactFilters(filters, {});
+    const q = buildExportContactFilters(exportFilters, {
+      municipalityExact: muniResolution.municipalityExact,
+    });
     const params = new URLSearchParams(q);
     params.set("page", String(page));
     params.set("page_size", String(Math.min(requestedPageSize, maxLimit - all.length)));
@@ -1009,7 +1041,11 @@ async function fetchContactsForExport(
     page += 1;
   }
 
-  return { contacts: all.slice(0, maxLimit) };
+  return {
+    contacts: all.slice(0, maxLimit),
+    resolvedMunicipalities: muniResolution.resolved.length ? muniResolution.resolved : undefined,
+    municipalityQueries: muniResolution.queries.length ? muniResolution.queries : undefined,
+  };
 }
 
 async function resolveImportGroupId(
@@ -2830,6 +2866,32 @@ ${sampleLines || "—"}${dupHint}
     return { content: JSON.stringify({ ok: true, ...j4 }), executedToolName: "start_campaign" };
   }
 
+  if (name === "search_municipalities") {
+    const query = String(raw.query ?? "").trim();
+    if (!query) {
+      return { content: JSON.stringify({ error: "Χρειάζεται query (όνομα δήμου)" }) };
+    }
+    try {
+      const matches = await searchMunicipalities(ctx.supabase, query);
+      return {
+        content: JSON.stringify({
+          ok: true,
+          query,
+          count: matches.length,
+          municipalities: matches.map((m) => ({
+            name: m.name,
+            regional_unit: m.regional_unit,
+          })),
+        }),
+        executedToolName: "search_municipalities",
+      };
+    } catch (e) {
+      return {
+        content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα αναζήτησης δήμων" }),
+      };
+    }
+  }
+
   if (name === "export_contacts") {
     if (!permLegacy("alexandra_tool_export_contacts", isMgr)) {
       return { content: JSON.stringify({ error: "Δεν επιτρέπεται η εξαγωγή για αυτόν τον ρόλο" }) };
@@ -2843,7 +2905,8 @@ ${sampleLines || "—"}${dupHint}
       String(raw.filename ?? "").trim().replace(/[^\w.\- ()\u0370-\u03FF]+/g, "_").slice(0, 120) ||
       `epafes_${todayYmdAthens()}`;
 
-    const { contacts, error: fetchErr } = await fetchContactsForExport(ctx, fl, 50_000);
+    const { contacts, error: fetchErr, resolvedMunicipalities, municipalityQueries } =
+      await fetchContactsForExport(ctx, fl, 50_000);
     if (fetchErr) {
       return { content: JSON.stringify({ error: fetchErr }) };
     }
@@ -2859,6 +2922,9 @@ ${sampleLines || "—"}${dupHint}
           format: stored.format,
           fields: exportFields,
           preview,
+          ...(resolvedMunicipalities?.length
+            ? { resolved_municipalities: resolvedMunicipalities, municipality_queries: municipalityQueries }
+            : {}),
           message: `Εξήχθησαν ${contacts.length} επαφές (${stored.format}). Κατέβασε το αρχείο από τον παρακάτω σύνδεσμο.`,
         }),
         executedToolName: "export_contacts",
@@ -3130,8 +3196,9 @@ export function buildSystemPrompt({
 - Αν είσαι σε σελίδα αιτήματος, χρησιμοποίησε αυτόματα το request_id του τρέχοντος αιτήματος
 
 ΕΞΑΓΩΓΗ ΔΕΔΟΜΕΝΩΝ:
-- Όταν ο χρήστης ζητά επαφές από συγκεκριμένο δήμο ή περιοχή, χρησιμοποίησε partial search (π.χ. 'Βόνιτσα' θα βρει 'Ακτίου-Βόνιτσας'). Αν βρεθούν 0 αποτελέσματα, δοκίμασε με μικρότερο τμήμα του ονόματος.
-- «Εξάγαγε όλες τις επαφές από Αγρίνιο» → export_contacts με φίλτρο municipality=Αγρίνιο
+- Πριν κάνεις export με φίλτρο δήμου, χρησιμοποίησε search_municipalities για να βρεις την ακριβή ονομασία στη βάση (μην εφευρίσκεις επίσημο όνομα δήμου).
+- «Εξάγαγε όλες τις επαφές από Βόνιτσα» → search_municipalities(query=Βόνιτσα), μετά export_contacts με municipalities από το αποτέλεσμα (ή municipality=Βόνιτσα — το export επιλύει αυτόματα).
+- «Εξάγαγε όλες τις επαφές από Αγρίνιο» → search_municipalities(query=Αγρίνιο), μετά export_contacts
 - «Δώσε μου Excel με τους θετικούς» → export_contacts με φίλτρο call_status=Positive, format=excel
 - «Θέλω CSV με ονοματεπώνυμο και τηλέφωνο μόνο» → export_contacts με fields [last_name, first_name, phone], format=csv
 - «Εξάγαγε ομάδα ΕΚΛΟΓΕΣ 2023» → export_contacts με φίλτρο group/ομάδα
