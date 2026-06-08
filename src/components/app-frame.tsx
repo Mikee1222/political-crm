@@ -513,8 +513,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const isLg = useMediaQuery("(min-width: 1024px)", false);
   const [sidebarUserExpanded, setSidebarUserExpanded] = useState(true);
   const [groupState, setGroupState] = useState<Record<string, boolean>>({ ...DEFAULT_GROUP_STATE });
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
 
   useLayoutEffect(() => {
     if (isCrmLoginPublic || isPortal) return;
@@ -885,7 +883,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  const showSidebarNavSkeleton = !mounted || profileLoading || !sessionResolved;
+  const showSidebarNavSkeleton = profileLoading || !sessionResolved;
 
   return (
     <div
