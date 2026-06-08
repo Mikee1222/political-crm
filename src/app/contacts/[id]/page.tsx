@@ -631,21 +631,25 @@ function ContactDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact?.id, contact?.first_name, contact?.last_name, openTab]);
 
-  const setContactPage = alexPage?.setContactPage;
+  const setPageContext = alexPage?.setPageContext;
   useEffect(() => {
-    if (!setContactPage) return;
+    if (!setPageContext) return;
     if (!contact || contact.id !== id) {
-      setContactPage(null);
+      setPageContext(null);
       return;
     }
     const name = `${contact.first_name} ${contact.last_name}`.trim();
-    setContactPage({ contactId: contact.id, contactName: name || "Επαφή" });
+    setPageContext({
+      type: "contact",
+      contactId: contact.id,
+      contactName: name || "Επαφή",
+    });
     return () => {
-      setContactPage(null);
+      setPageContext(null);
     };
     // Primitives only — `contact` identity updates on every fetch and would retrigger Alexandra sync in a loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setContactPage, id, contact?.id, contact?.first_name, contact?.last_name]);
+  }, [setPageContext, id, contact?.id, contact?.first_name, contact?.last_name]);
 
   useEffect(() => {
     const ac = new AbortController();

@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { useProfile } from "@/contexts/profile-context";
-import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
+import type { AlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { mapDbToMsg, type Msg, type MsgWithT, type RowConv, type StreamMeta } from "./alexandra-chat-helpers";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,7 +29,7 @@ export type BriefingToday = {
 
 export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   const { profile } = useProfile();
-  const pageContact = useOptionalAlexandraPageContact();
+  const alexPage = useOptionalAlexandraPageContext();
   const [conversations, setConversations] = useState<RowConv[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MsgWithT[]>([]);
@@ -168,15 +169,8 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
   }, [isAlexandraPage, pathname]);
 
   const pageContextForApi = useMemo(
-    () =>
-      pageContact?.contact
-        ? {
-            type: "contact" as const,
-            contactId: pageContact.contact.contactId,
-            contactName: pageContact.contact.contactName,
-          }
-        : undefined,
-    [pageContact?.contact],
+    (): AlexandraPageContext | undefined => alexPage?.pageContext ?? undefined,
+    [alexPage?.pageContext],
   );
 
   const loadMessages = useCallback(
@@ -495,7 +489,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
         const payload: {
           message: string;
           conversationId: string;
-          pageContext?: { type: "contact"; contactId: string; contactName: string };
+          pageContext?: AlexandraPageContext;
           attachment?: {
             type: "spreadsheet_import";
             rows: Array<Record<string, unknown>>;
@@ -625,7 +619,9 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, setStreamMode, bottomRef, loadList, loadMessages, newConversation,
     deleteConv, execute, send, startWithChip, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, isEmpty, showChips, scrollToBottom, setSpreadsheetImport,
     miniWindowOpen, setMiniWindowOpen, miniWindowMinimized, setMiniWindowMinimized, enterMiniFromPage, openMiniFromBubble, goToFullAlexandra, closeMiniWindow,
-    leftPanelTab, setLeftPanelTab, briefingToday, contactPageContext: pageContact?.contact ?? null,
+    leftPanelTab, setLeftPanelTab, briefingToday,
+    pageContext: alexPage?.pageContext ?? null,
+    contactPageContext: alexPage?.contact ?? null,
   };
   return <AlexandraChatContext.Provider value={value}>{children}</AlexandraChatContext.Provider>;
 }

@@ -14,6 +14,7 @@ import {
   getRequestStatusQueryValues,
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
+import type { AlexandraPageContext } from "@/contexts/alexandra-page-context";
 import {
   applyFindContactsToolInput,
   applySavedFilterJson,
@@ -2880,6 +2881,39 @@ async function runAlexToolInner(
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
+export function buildPageContextBlock(ctx: AlexandraPageContext | null | undefined): string {
+  if (!ctx) return "Αρχική σελίδα";
+
+  switch (ctx.type) {
+    case "contact":
+      return `Σελίδα επαφής: ${ctx.contactName} (ID: ${ctx.contactId}). Μπορείς να χρησιμοποιείς αυτό το contact_id αυτόματα.`;
+    case "request":
+      return `Σελίδα αιτήματος: "${ctx.requestTitle}" - Κατάσταση: ${ctx.requestStatus} (ID: ${ctx.requestId}). Μπορείς να αναφέρεσαι σε αυτό το αίτημα απευθείας — χρησιμοποίησε request_id=${ctx.requestId} όταν χρειάζεται.`;
+    case "contacts_list":
+      return `Σελίδα λίστας επαφών${ctx.totalCount != null ? ` (${ctx.totalCount} επαφές συνολικά)` : ""}. Μπορείς να κάνεις αναζητήσεις και φιλτράρισμα.`;
+    case "requests_list":
+      return `Σελίδα λίστας αιτημάτων${ctx.totalCount != null ? ` (${ctx.totalCount} αιτήματα συνολικά)` : ""}. Μπορείς να αναζητήσεις και να διαχειριστείς αιτήματα.`;
+    case "campaign":
+      return `Σελίδα καμπάνιας: "${ctx.campaignName}" - Κατάσταση: ${ctx.status} (ID: ${ctx.campaignId}).`;
+    case "dashboard":
+      return "Dashboard. Μπορείς να δείξεις στατιστικά, πρωινή ενημέρωση, ή γρήγορες ενέργειες.";
+    case "analytics":
+      return "Σελίδα αναλυτικών. Μπορείς να αναλύσεις δεδομένα και να δείξεις KPIs.";
+    case "tasks":
+      return "Σελίδα εργασιών. Μπορείς να δημιουργήσεις, επεξεργαστείς ή ολοκληρώσεις εργασίες.";
+    case "events":
+      return "Σελίδα εκδηλώσεων. Μπορείς να δημιουργήσεις εκδηλώσεις και να διαχειριστείς RSVPs.";
+    case "volunteers":
+      return "Σελίδα εθελοντών. Μπορείς να δείξεις και να διαχειριστείς εθελοντές.";
+    case "settings":
+      return "Σελίδα ρυθμίσεων CRM.";
+    case "namedays":
+      return "Σελίδα εορτολογίου. Μπορείς να δείξεις ποιος γιορτάζει σήμερα ή άλλη μέρα.";
+    default:
+      return "Γενική σελίδα CRM.";
+  }
+}
+
 export type SystemPromptBuildOpts = {
   todayDate: string;
   pageContextBlock: string;
@@ -2923,6 +2957,7 @@ export function buildSystemPrompt({
 - Αν tool αποτύχει: εξήγησε το error συγκεκριμένα
 - ΠΟΤΕ μη λες "δεν μπορώ" — βρες πάντα τρόπο
 - Αν είσαι σε σελίδα επαφής, χρησιμοποίησε αυτόματα το contact_id της τρέχουσας επαφής
+- Αν είσαι σε σελίδα αιτήματος, χρησιμοποίησε αυτόματα το request_id του τρέχοντος αιτήματος
 
 ΣΗΜΕΡΑ: ${todayDate}
 ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ: ${pageContextBlock}
