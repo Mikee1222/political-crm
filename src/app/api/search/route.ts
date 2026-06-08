@@ -4,6 +4,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { fetchGroupNamesByContactId } from "@/lib/contact-group-members";
+import { normalizeGreekName } from "@/lib/duplicate-detection";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,89 @@ function normQ(s: string) {
 
 function escapeIlike(s: string) {
   return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+function splitQueryParts(raw: string): string[] {
+  return raw.split(/\s+/).filter(Boolean);
+}
+
+/** PostgREST ilike value; quote when pattern contains reserved characters. */
+function ilikePattern(escaped: string, prefixOnly = false): string {
+  const pat = prefixOnly ? `${escaped}%` : `%${escaped}%`;
+  if (/[,\s().]/.test(pat)) {
+    return `"${pat.replace(/"/g, '\\"')}"`;
+  }
+  return pat;
+}
+
+function ilikeFilter(column: string, escaped: string, prefixOnly = false): string {
+  return `${column}.ilike.${ilikePattern(escaped, prefixOnly)}`;
+}
+
+function andIlike(firstCol: string, firstEsc: string, lastCol: string, lastEsc: string): string {
+  return `and(${ilikeFilter(firstCol, firstEsc)},${ilikeFilter(lastCol, lastEsc)})`;
+}
+
+function buildContactDirectOrFilter(raw: string, esc: string, isPhone: boolean): string {
+  const parts = splitQueryParts(raw);
+  const normParts = parts.map((p) => escapeIlike(normalizeGreekName(p)));
+  const phonePattern = isPhone ? ilikePattern(esc, true) : ilikePattern(esc);
+  const textPattern = ilikePattern(esc);
+  const otherFields = [
+    `father_name.ilike.${textPattern}`,
+    `mother_name.ilike.${textPattern}`,
+    `phone.ilike.${phonePattern}`,
+    `phone2.ilike.${phonePattern}`,
+    `landline.ilike.${phonePattern}`,
+    `email.ilike.${textPattern}`,
+    `contact_code.ilike.${textPattern}`,
+    `municipality.ilike.${textPattern}`,
+    `area.ilike.${textPattern}`,
+    `notes.ilike.${textPattern}`,
+  ];
+
+  if (parts.length >= 3) {
+    const firstCombined = escapeIlike(normalizeGreekName(parts.slice(0, -1).join(" ")));
+    const lastPart = normParts[normParts.length - 1]!;
+    return [andIlike("first_name", firstCombined, "last_name", lastPart), ...otherFields].join(",");
+  }
+
+  if (parts.length === 2) {
+    const [p1, p2] = normParts;
+    return [
+      andIlike("first_name", p1!, "last_name", p2!),
+      andIlike("first_name", p2!, "last_name", p1!),
+      ...otherFields,
+    ].join(",");
+  }
+
+  return [
+    `first_name.ilike.${textPattern}`,
+    `last_name.ilike.${textPattern}`,
+    ...otherFields,
+  ].join(",");
+}
+
+function contactMatchesMultiPartName(
+  row: { first_name: string; last_name: string },
+  parts: string[],
+): boolean {
+  if (parts.length < 2) return false;
+  const fn = normalizeGreekName(row.first_name);
+  const ln = normalizeGreekName(row.last_name);
+  const normParts = parts.map((p) => normalizeGreekName(p));
+
+  if (parts.length >= 3) {
+    const firstCombined = normalizeGreekName(parts.slice(0, -1).join(" "));
+    const lastPart = normParts[normParts.length - 1]!;
+    return fn.includes(firstCombined) && ln.includes(lastPart);
+  }
+
+  const [p1, p2] = normParts;
+  return (
+    (fn.includes(p1!) && ln.includes(p2!)) ||
+    (fn.includes(p2!) && ln.includes(p1!))
+  );
 }
 
 function snippet(text: string | null | undefined, q: string, max = 88): string | null {
@@ -30,7 +114,7 @@ function snippet(text: string | null | undefined, q: string, max = 88): string |
 
 function hasQ(v: string | null | undefined, q: string) {
   if (v == null || !q) return false;
-  return v.toLowerCase().includes(q.toLowerCase());
+  return normalizeGreekName(v).includes(normalizeGreekName(q));
 }
 
 const CONTACT_SELECT =
@@ -61,10 +145,20 @@ export type SearchTaskHit = { id: string; title: string; due_date: string | null
 
 export type SearchCampaignHit = { id: string; name: string; status: string | null };
 
-function contactFieldReasons(row: Record<string, unknown>, raw: string): { reasons: string[]; aiMatch: boolean } {
+function contactFieldReasons(
+  row: Record<string, unknown>,
+  raw: string,
+): { reasons: string[]; aiMatch: boolean } {
   const reasons: string[] = [];
   let aiMatch = false;
-  if (hasQ(String(row.first_name ?? ""), raw) || hasQ(String(row.last_name ?? ""), raw)) {
+  const parts = splitQueryParts(raw);
+  const nameRow = {
+    first_name: String(row.first_name ?? ""),
+    last_name: String(row.last_name ?? ""),
+  };
+  if (parts.length >= 2 && contactMatchesMultiPartName(nameRow, parts)) {
+    reasons.push("Ταίριασμα σε όνομα και επώνυμο");
+  } else if (hasQ(nameRow.first_name, raw) || hasQ(nameRow.last_name, raw)) {
     reasons.push("Ταίριασμα σε όνομα ή επώνυμο");
   }
   if (hasQ(row.father_name as string | null, raw)) {
@@ -104,10 +198,30 @@ function contactFieldReasons(row: Record<string, unknown>, raw: string): { reaso
 }
 
 function contactMatchTier(row: { first_name: string; last_name: string }, raw: string): number {
-  const q = raw.toLowerCase().trim();
-  const fn = String(row.first_name ?? "").toLowerCase().trim();
-  const ln = String(row.last_name ?? "").toLowerCase().trim();
+  const parts = splitQueryParts(raw);
+  const q = normalizeGreekName(raw);
+  const fn = normalizeGreekName(row.first_name);
+  const ln = normalizeGreekName(row.last_name);
   const full = `${fn} ${ln}`.trim();
+
+  if (parts.length >= 3) {
+    const firstCombined = normalizeGreekName(parts.slice(0, -1).join(" "));
+    const lastPart = normalizeGreekName(parts[parts.length - 1]!);
+    if (fn === firstCombined && ln === lastPart) return 0;
+    if (fn.includes(firstCombined) && ln.includes(lastPart)) return 1;
+    if (full.startsWith(q)) return 1;
+    return 2;
+  }
+
+  if (parts.length === 2) {
+    const p1 = normalizeGreekName(parts[0]!);
+    const p2 = normalizeGreekName(parts[1]!);
+    if ((fn === p1 && ln === p2) || (fn === p2 && ln === p1)) return 0;
+    if ((fn.includes(p1) && ln.includes(p2)) || (fn.includes(p2) && ln.includes(p1))) return 1;
+    if (full.startsWith(q)) return 1;
+    return 2;
+  }
+
   if (fn === q || ln === q) return 0;
   if (full.startsWith(q)) return 1;
   return 2;
@@ -139,10 +253,10 @@ export async function GET(request: NextRequest) {
         campaigns: [] as SearchCampaignHit[],
       });
     }
-    const esc = escapeIlike(raw);
+    const esc = escapeIlike(normalizeGreekName(raw));
     const isPhone = /^\d{6,}$/.test(raw);
-    const phonePattern = isPhone ? `${esc}%` : `%${esc}%`;
-    const p = `%${esc}%`;
+    const p = ilikePattern(esc);
+    const contactOrFilter = buildContactDirectOrFilter(raw, esc, isPhone);
 
     const [
       cDirect,
@@ -155,24 +269,9 @@ export async function GET(request: NextRequest) {
       supabase
         .from("contacts")
         .select(CONTACT_SELECT)
-        .or(
-          [
-            `first_name.ilike.${p}`,
-            `last_name.ilike.${p}`,
-            `father_name.ilike.${p}`,
-            `mother_name.ilike.${p}`,
-            `phone.ilike.${phonePattern}`,
-            `phone2.ilike.${phonePattern}`,
-            `landline.ilike.${phonePattern}`,
-            `email.ilike.${p}`,
-            `contact_code.ilike.${p}`,
-            `municipality.ilike.${p}`,
-            `area.ilike.${p}`,
-            `notes.ilike.${p}`,
-          ].join(","),
-        )
+        .or(contactOrFilter)
         .limit(35),
-      supabase.from("contact_notes").select("contact_id, content").ilike("content", p).limit(45),
+      supabase.from("contact_notes").select("contact_id, content").ilike("content", `%${esc}%`).limit(45),
       supabase
         .from("requests")
         .select("id, contact_id, title, description")
