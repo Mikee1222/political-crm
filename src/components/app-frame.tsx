@@ -924,6 +924,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <div className="relative z-10 mb-3 h-px flex-shrink-0 bg-gradient-to-r from-transparent via-[var(--accent-gold)]/50 to-transparent" />
 
         <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col">
+          <a href="/contacts" style={{display:'block', padding:'10px', background:'red', color:'white', zIndex:9999}}>
+            TEST LINK
+          </a>
           {showSidebarNavSkeleton ? (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <SidebarNavSkeleton rows={10} />
