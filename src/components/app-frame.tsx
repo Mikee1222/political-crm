@@ -60,7 +60,7 @@ import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-shee
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { useProfile, type Profile } from "@/contexts/profile-context";
-import { CRM_TOUR_COMPLETED_KEY, useTour, type TourId } from "@/contexts/tour-context";
+import { useTour, type TourId } from "@/contexts/tour-context";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { can } from "@/lib/can";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -582,17 +582,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     setMoreOpen(false);
     setMobileNavOpen(false);
   }, [pathname]);
-
-  useEffect(() => {
-    if (isCrmLoginPublic || isPortal || !profile || profileLoading) return;
-    try {
-      if (localStorage.getItem(CRM_TOUR_COMPLETED_KEY)) return;
-    } catch {
-      return;
-    }
-    const t = window.setTimeout(() => setActiveTour("welcome"), 2000);
-    return () => window.clearTimeout(t);
-  }, [profile, profileLoading, isCrmLoginPublic, isPortal, setActiveTour]);
 
   useEffect(() => {
     if (!helpOpen) return;

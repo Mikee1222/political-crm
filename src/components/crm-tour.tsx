@@ -219,10 +219,10 @@ function computePopupStyle(targetRect: DOMRect | null, position: TourStep["posit
   };
 }
 
-export function CRMTour({ tourId, onComplete }: { tourId: TourId; onComplete: () => void }) {
+export function CRMTour({ tourId, onComplete }: { tourId: TourId | null; onComplete: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
-  const tour = TOURS[tourId];
+  const tour = tourId ? TOURS[tourId] : undefined;
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [popupStyle, setPopupStyle] = useState<CSSProperties>({ width: POPUP_W });
@@ -296,7 +296,7 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId; onComplete: ()
     [tour, pathname, router],
   );
 
-  if (!tour || !step) return null;
+  if (!tourId || !tour || !step) return null;
 
   return (
     <>
@@ -318,7 +318,7 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId; onComplete: ()
         role="dialog"
         aria-modal
         aria-labelledby="crm-tour-title"
-        className="fixed z-[142] rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-2xl"
+        className="pointer-events-auto fixed z-[142] rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-2xl"
         style={popupStyle}
       >
         <div className="mb-3 flex items-start justify-between gap-2">
