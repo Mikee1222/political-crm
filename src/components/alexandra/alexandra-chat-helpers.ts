@@ -150,7 +150,6 @@ export const GREEK_TOOL_LABELS: Record<string, string> = {
   import_csv_data: "Εισαγωγή CSV",
   bulk_create_contacts: "Μαζική δημιουργία",
   smart_excel_import: "Έξυπνη εισαγωγή Excel",
-  generate_import_template: "Πρότυπο εισαγωγής Excel/CSV",
   add_task: "Δημιουργία εργασίας",
   create_request: "Δημιουργία αιτήματος",
   schedule_reminder: "Υπενθύμιση",
