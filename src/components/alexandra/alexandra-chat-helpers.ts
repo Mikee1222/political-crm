@@ -12,6 +12,7 @@ import {
   ListTodo,
   MapPin,
   Megaphone,
+  Newspaper,
   Sparkles,
   UserSearch,
 } from "lucide-react";
@@ -32,6 +33,7 @@ export const EMPTY_STATE_SUGGESTIONS: EmptyStateSuggestion[] = [
 ];
 
 export const SUGGESTED_CHIPS: { text: string; icon: LucideIcon }[] = [
+  { text: "Κάνε μου πλήρες πολιτικό briefing για σήμερα", icon: Newspaper },
   { text: "Τι έχω για σήμερα;", icon: Sparkles },
   { text: "Ποιοι γιορτάζουν αυτή την εβδομάδα;", icon: BarChart2 },
   { text: "Δείξε μου τους αναποφάσιστους", icon: UserSearch },
@@ -149,6 +151,8 @@ export const GREEK_TOOL_LABELS: Record<string, string> = {
   get_sports: "Αθλητικά",
   scrape_url: "Ανάγνωση ιστοσελίδας",
   web_search: "Αναζήτηση στο internet",
+  political_research: "Πολιτική έρευνα",
+  political_daily_briefing: "Πολιτικό briefing",
   save_memory: "Αποθήκευση μνήμης",
   get_memories: "Ανάκτηση μνήμης",
   forget_memory: "Διαγραφή μνήμης",

@@ -31,3 +31,36 @@ export function todayYmdAthens(): string {
   const t = new Date();
   return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
 }
+
+/** Europe/Athens UTC offset for a calendar date (DST-aware), e.g. +02:00 or +03:00 */
+export function athensOffsetForYmd(ymd: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "+03:00";
+  const probe = new Date(`${ymd}T12:00:00Z`);
+  if (!Number.isFinite(probe.getTime())) return "+03:00";
+  const tzPart = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Athens",
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(probe)
+    .find((p) => p.type === "timeZoneName")?.value;
+  const off = tzPart?.match(/GMT([+-]\d{2}):(\d{2})/);
+  return off ? `${off[1]}:${off[2]}` : "+03:00";
+}
+
+/** Format parsed instant as due_date: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS (Europe/Athens). */
+export function formatAthensDueDate(d: Date, includeTime: boolean): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    timeZone: "Europe/Athens",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    ...(includeTime
+      ? { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
+      : {}),
+  };
+  const parts = new Intl.DateTimeFormat("en-US", opts).formatToParts(d);
+  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? "";
+  const base = `${get("year")}-${get("month")}-${get("day")}`;
+  if (!includeTime) return base;
+  return `${base}T${get("hour")}:${get("minute")}:${get("second") || "00"}`;
+}

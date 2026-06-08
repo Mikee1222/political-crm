@@ -8,7 +8,8 @@ import type { UserProfile } from "@/lib/auth-helpers";
 import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
 import { anthropicComplete } from "@/lib/anthropic-once";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
-import { todayYmdAthens } from "@/lib/athens-ranges";
+import { athensOffsetForYmd, formatAthensDueDate, todayYmdAthens } from "@/lib/athens-ranges";
+import { SUMMARY_MODEL } from "@/lib/ai-summary";
 import {
   getRequestStatusQueryValues,
   REQUEST_STATUS_OPEN,
@@ -36,6 +37,7 @@ import { runAlexandraAnalysis } from "@/lib/alexandra-analysis";
 import { scrapePublicUrl } from "@/lib/alexandra-scrape";
 import { fetchWeatherForCity } from "@/lib/alexandra-weather";
 import { fetchNews, fetchSports } from "@/lib/alexandra-news";
+import { runPoliticalResearch, runPoliticalDailyBriefing, type PoliticalResearchType } from "@/lib/alexandra-political-research";
 import {
   resolveMunicipalityExportFilters,
   searchMunicipalities,
@@ -850,6 +852,40 @@ export const ALEX_TOOLS: Tool[] = [
       type: "object" as const,
       properties: { url: { type: "string" as const } },
       required: ["url"],
+    },
+  },
+  {
+    name: "political_research",
+    description:
+      "Έρευνα για βουλευτές, κόμματα, ψηφοφορίες και πολιτικές εξελίξεις. Χρησιμοποίησε για σύγκριση θέσεων, παρακολούθηση αντιπάλων και πολιτική ανάλυση.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        subject: { type: "string" as const, description: "Όνομα βουλευτή, κόμματος ή θέμα" },
+        research_type: {
+          type: "string" as const,
+          enum: ["news", "statements", "votes", "comparison", "local_impact", "social_media", "full_profile"] as const,
+          description: "Τύπος έρευνας",
+        },
+        time_range: {
+          type: "string" as const,
+          enum: ["today", "week", "month", "all"] as const,
+          description: "Χρονικό εύρος αναζήτησης",
+        },
+        compare_with_kostas: { type: "boolean" as const, description: "Σύγκριση με θέσεις Καραγκούνη" },
+      },
+      required: ["subject", "research_type"],
+    },
+  },
+  {
+    name: "political_daily_briefing",
+    description:
+      "Πλήρες πολιτικό briefing: νέα αντιπάλων, τύπος Αιτωλοακαρνανίας, Βουλή, social media. Εκτέλεσε 8-10 web searches και σύνθεσε αναλυτική αναφορά.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        focus: { type: "string" as const, description: "Προαιρετικό θέμα εστίασης" },
+      },
     },
   },
 ];
@@ -2234,10 +2270,8 @@ ${sampleLines || "—"}${dupHint}
     if (!Number.isFinite(d.getTime())) {
       return { content: JSON.stringify({ error: "Άκυρη ημερομηνία/ώρα (χρησιμοποιήστε ISO 8601)" }) };
     }
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const due_date = `${y}-${m}-${day}`;
+    const hasTime = /T\d{1,2}:\d{2}/.test(dtStr);
+    const due_date = formatAthensDueDate(d, hasTime);
     const { data, error } = await ctx.supabase
       .from("tasks")
       .insert({
@@ -2274,8 +2308,9 @@ ${sampleLines || "—"}${dupHint}
     }
     const sNorm = sTime.length === 5 ? `${sTime}:00` : sTime;
     const eNorm = eTime.length === 5 ? `${eTime}:00` : eTime;
-    const start = `${date}T${sNorm}+03:00`;
-    const end = `${date}T${eNorm}+03:00`;
+    const offset = athensOffsetForYmd(date);
+    const start = `${date}T${sNorm}${offset}`;
+    const end = `${date}T${eNorm}${offset}`;
     const typeStr = String(raw.type ?? "meeting").toLowerCase();
     const typeMap: Record<string, "meeting" | "event" | "campaign" | "other"> = {
       meeting: "meeting",
@@ -2343,7 +2378,7 @@ ${sampleLines || "—"}${dupHint}
     const groups = groupContactsRaw(list, groupBy);
     const sorted = Object.entries(groups)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 50);
+      .slice(0, 200);
     return {
       content: JSON.stringify({ ok: true, total: list.length, group_by: groupBy, groups: Object.fromEntries(sorted) }),
       executedToolName: "analyze_contacts",
@@ -2535,7 +2570,19 @@ ${sampleLines || "—"}${dupHint}
     if (!r.ok) {
       return { content: JSON.stringify({ error: (j as { error?: string }).error || "Σφάλμα briefing" }) };
     }
-    return { content: JSON.stringify({ ok: true, briefing: j }), executedToolName: "morning_briefing" };
+    let narrative: string | undefined;
+    const narrativeOut = await anthropicComplete(
+      "Είσαι η Αλεξάνδρα, γραμματέας βουλευτή. Γράψε 2-3 σύντομες προτάσεις στα ελληνικά που συνοψίζουν την ημέρα: κλήσεις χθες, σημαντικά αιτήματα, εκδηλώσεις, εργασίες. Μόνο το κείμενο, χωρίς bullets.",
+      `Σημερινό briefing (JSON):\n${JSON.stringify(j).slice(0, 12_000)}`,
+      { model: SUMMARY_MODEL, maxTokens: 150 },
+    );
+    if (narrativeOut.ok) {
+      narrative = narrativeOut.text.trim();
+    }
+    return {
+      content: JSON.stringify({ ok: true, narrative, briefing: j }),
+      executedToolName: "morning_briefing",
+    };
   }
 
   if (name === "calculate_scores") {
@@ -2756,7 +2803,7 @@ ${sampleLines || "—"}${dupHint}
       ev = ev.filter((e) => (e.date ?? "").slice(0, 10) >= today);
     }
     return {
-      content: JSON.stringify({ ok: true, count: ev.length, events: ev.slice(0, 20) }),
+      content: JSON.stringify({ ok: true, count: ev.length, events: ev.slice(0, 50) }),
       executedToolName: "get_events",
     };
   }
@@ -3074,6 +3121,55 @@ ${sampleLines || "—"}${dupHint}
     }
   }
 
+  if (name === "political_research") {
+    const subject = String(raw.subject ?? "").trim();
+    const researchType = String(raw.research_type ?? "").trim() as PoliticalResearchType;
+    const validTypes = new Set([
+      "news",
+      "statements",
+      "votes",
+      "comparison",
+      "local_impact",
+      "social_media",
+      "full_profile",
+    ]);
+    if (!subject) {
+      return { content: JSON.stringify({ error: "Χρειάζεται subject" }) };
+    }
+    if (!validTypes.has(researchType)) {
+      return { content: JSON.stringify({ error: "Άκυρος research_type" }) };
+    }
+    const timeRangeRaw = raw.time_range != null ? String(raw.time_range) : "week";
+    const validRanges = new Set(["today", "week", "month", "all"]);
+    const time_range = validRanges.has(timeRangeRaw)
+      ? (timeRangeRaw as "today" | "week" | "month" | "all")
+      : "week";
+    try {
+      const result = await runPoliticalResearch(
+        {
+          subject,
+          research_type: researchType,
+          time_range,
+          compare_with_kostas: raw.compare_with_kostas === true,
+        },
+        { isManager: isMgr },
+      );
+      return { content: JSON.stringify(result), executedToolName: "political_research" };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα πολιτικής έρευνας" }) };
+    }
+  }
+
+  if (name === "political_daily_briefing") {
+    const focus = raw.focus != null ? String(raw.focus).trim() : undefined;
+    try {
+      const result = await runPoliticalDailyBriefing({ focus: focus || undefined }, { isManager: isMgr });
+      return { content: JSON.stringify(result), executedToolName: "political_daily_briefing" };
+    } catch (e) {
+      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα ημερήσιου briefing" }) };
+    }
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
@@ -3175,10 +3271,33 @@ export function buildSystemPrompt({
 - Για πρότυπο εισαγωγής: generate_import_template
 - Ποτέ μη δημιουργείς επαφή χωρίς όνομα (first_name) και τηλέφωνο
 
+ΠΟΛΙΤΙΚΗ ΕΡΕΥΝΑ & ΑΝΑΛΥΣΗ:
+"Όταν ο χρήστης ζητά πληροφορίες για άλλους βουλευτές ή πολιτικά κόμματα:
+1. Χρησιμοποίησε web_search με queries όπως '[όνομα βουλευτή] δηλώσεις', '[όνομα] βουλή ψηφοφορία', '[όνομα] νέα σήμερα'
+2. Κάνε ΠΑΝΤΑ τουλάχιστον 3 διαφορετικές αναζητήσεις για να έχεις πλήρη εικόνα
+3. Σύγκρινε τις θέσεις τους με τις θέσεις του Κώστα Καραγκούνη όπου είναι σχετικό
+4. Παρουσίασε τα ευρήματα αναλυτικά: τι είπε, πότε, πού, και τι σημαίνει πολιτικά
+5. Επισήμανε αν υπάρχουν αντιφάσεις ή αλλαγές θέσεων
+6. Πρότεινε πώς ο Κώστας μπορεί να αξιοποιήσει αυτές τις πληροφορίες
+
+Για παρακολούθηση αντιπάλων:
+- Ψάξε πρόσφατες δηλώσεις (τελευταίες 7 ημέρες)
+- Ψάξε ψηφοφορίες στη Βουλή
+- Ψάξε τοπικά νέα που αφορούν την Αιτωλοακαρνανία
+- Ψάξε social media posts (Twitter/Facebook)
+- Σύγκρινε με τις θέσεις της ΝΔ και του Κώστα"
+
+Χρησιμοποίησε το tool political_research για δομημένη έρευνα αντιπάλων/κομμάτων· συμπλήρωσε με web_search για live αποτελέσματα.
+Για πλήρες ημερήσιο briefing (τύπος, Βουλή, αντίπαλοι, social): χρησιμοποίησε political_daily_briefing.
+
+Για interview/ομιλία prep: όταν ο χρήστης αναφέρει ότι έχει συνέντευξη ή ομιλία για κάποιο θέμα, αυτόματα κάνε political research για το θέμα, μάζεψε επιχειρήματα, και φτιάξε briefing με: α) κύρια μηνύματα, β) πιθανές ερωτήσεις, γ) απαντήσεις.
+
 ΣΗΜΕΡΑ: ${todayDate}
 ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ: ${pageContextBlock}
 ΜΝΗΜΗ: ${memoriesBlock}
 ΡΟΛΟΣ ΧΡΗΣΤΗ: ${role}
+
+Είσαι proactive: όταν ο χρήστης ολοκληρώνει μια ενέργεια, πρότεινε το επόμενο λογικό βήμα. Π.χ. μετά από εξαγωγή επαφών → πρότεινε καμπάνια. Μετά από δημιουργία επαφής → πρότεινε προσθήκη αιτήματος. Μετά από ανάλυση → πρότεινε ενέργεια βάσει αποτελεσμάτων.
 `;
 }
 
