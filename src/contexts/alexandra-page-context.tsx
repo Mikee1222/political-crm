@@ -8,43 +8,10 @@ export type AlexandraPageContactContext = {
 };
 
 export type AlexandraPageContext =
-  | {
-      type: "contact";
-      contactId: string;
-      contactName: string;
-      contactData?: {
-        phone?: string;
-        municipality?: string;
-        groups?: string[];
-        call_status?: string;
-        notes_count?: number;
-        requests_count?: number;
-      };
-    }
-  | {
-      type: "request";
-      requestId: string;
-      requestTitle: string;
-      requestStatus: string;
-      requestCategory?: string;
-      requestData?: {
-        description?: string;
-        handlers?: string[];
-        persons?: string[];
-        notes_count?: number;
-      };
-    }
-  | {
-      type: "contacts_list";
-      totalCount?: number;
-      activeFilters?: Record<string, unknown>;
-      visibleContactIds?: string[];
-    }
-  | {
-      type: "requests_list";
-      totalCount?: number;
-      activeFilters?: Record<string, unknown>;
-    }
+  | { type: "contact"; contactId: string; contactName: string }
+  | { type: "request"; requestId: string; requestTitle: string; requestStatus: string }
+  | { type: "contacts_list"; filters?: Record<string, unknown>; totalCount?: number }
+  | { type: "requests_list"; filters?: Record<string, unknown>; totalCount?: number }
   | { type: "campaign"; campaignId: string; campaignName: string; status: string }
   | { type: "dashboard" }
   | { type: "analytics" }
@@ -74,17 +41,14 @@ function samePageContext(a: AlexandraPageContext | null, b: AlexandraPageContext
       return (
         b.type === "contact" &&
         a.contactId === b.contactId &&
-        a.contactName === b.contactName &&
-        JSON.stringify(a.contactData ?? null) === JSON.stringify(b.contactData ?? null)
+        a.contactName === b.contactName
       );
     case "request":
       return (
         b.type === "request" &&
         a.requestId === b.requestId &&
         a.requestTitle === b.requestTitle &&
-        a.requestStatus === b.requestStatus &&
-        a.requestCategory === b.requestCategory &&
-        JSON.stringify(a.requestData ?? null) === JSON.stringify(b.requestData ?? null)
+        a.requestStatus === b.requestStatus
       );
     case "campaign":
       return (
@@ -97,14 +61,13 @@ function samePageContext(a: AlexandraPageContext | null, b: AlexandraPageContext
       return (
         b.type === "contacts_list" &&
         a.totalCount === b.totalCount &&
-        JSON.stringify(a.activeFilters ?? null) === JSON.stringify(b.activeFilters ?? null) &&
-        JSON.stringify(a.visibleContactIds ?? null) === JSON.stringify(b.visibleContactIds ?? null)
+        JSON.stringify(a.filters ?? null) === JSON.stringify(b.filters ?? null)
       );
     case "requests_list":
       return (
         b.type === "requests_list" &&
         a.totalCount === b.totalCount &&
-        JSON.stringify(a.activeFilters ?? null) === JSON.stringify(b.activeFilters ?? null)
+        JSON.stringify(a.filters ?? null) === JSON.stringify(b.filters ?? null)
       );
     default:
       return true;

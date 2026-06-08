@@ -29,7 +29,6 @@ import { runAlexandraAnalysis } from "@/lib/alexandra-analysis";
 import { scrapePublicUrl } from "@/lib/alexandra-scrape";
 import { fetchWeatherForCity } from "@/lib/alexandra-weather";
 import { fetchNews, fetchSports } from "@/lib/alexandra-news";
-import { callStatusLabel } from "@/lib/luxury-styles";
 
 /** Fields allowed when merging spreadsheet row into existing contact (no phone change here). */
 const ALEX_BULK_UPDATE_FIELDS = new Set<string>([
@@ -362,16 +361,14 @@ export const ALEX_TOOLS: Tool[] = [
   {
     name: "bulk_update_contacts",
     description:
-      "Μαζική ενημέρωση: contact_ids ή filters + fields. ΠΑΝΤΑ πρώτα user_confirmed: false — preview· μετά user_confirmed: true μετά από ρητή επιβεβαίωση. (manager only)",
+      "Μαζική ενημέρωση: contact_ids (πίνακας UUID) + fields (object) — ίδια επιτρεπτά πεδία με update_contact. (manager only)",
     input_schema: {
       type: "object" as const,
       properties: {
-        user_confirmed: { type: "boolean" as const, description: "Ψευδές = μόνο προεπισκόπηση" },
         contact_ids: { type: "array" as const, items: { type: "string" as const } },
-        filters: { type: "object" as const, description: "Όπως get_all_contacts" },
         fields: { type: "object" as const },
       },
-      required: ["user_confirmed", "fields"],
+      required: ["contact_ids", "fields"],
     },
   },
   {
@@ -729,13 +726,8 @@ export const ALEX_TOOLS: Tool[] = [
   },
   {
     name: "export_contacts",
-    description: "Πλήρης εξαγωγή επαφών CSV — επιστρέφει download_url (προαιρετικά filters όπως get_all_contacts).",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        filters: { type: "object" as const, description: "Προαιρετικά φίλτρα επαφών" },
-      },
-    },
+    description: "Πλήρης εξαγωγή επαφών CSV (GET /api/contacts/export) — μόνο manager· επιστρέφει περίληψη.",
+    input_schema: { type: "object" as const, properties: {} },
   },
   {
     name: "send_nameday_wishes",
@@ -758,23 +750,15 @@ export const ALEX_TOOLS: Tool[] = [
   },
   {
     name: "bulk_update_status",
-    description:
-      "Μαζική ενημέρωση call_status. ΠΑΝΤΑ πρώτα user_confirmed: false — preview· μετά user_confirmed: true μετά από ρητή επιβεβαίωση.",
+    description: "Μαζική ενημέρωση call_status επαφών (POST /api/contacts/manager-bulk-update).",
     input_schema: {
       type: "object" as const,
       properties: {
-        user_confirmed: { type: "boolean" as const, description: "Ψευδές = μόνο προεπισκόπηση" },
         contact_ids: { type: "array" as const, items: { type: "string" as const } },
-        filters: { type: "object" as const, description: "Όπως get_all_contacts" },
         status: { type: "string" as const, enum: ["Pending", "Positive", "Negative", "No Answer"] as const },
       },
-      required: ["user_confirmed", "status"],
+      required: ["contact_ids", "status"],
     },
-  },
-  {
-    name: "undo_last_action",
-    description: "Αναιρεί την τελευταία αναστρέψιμη ενέργεια (κατάσταση, σημείωση, επεξεργασία επαφής).",
-    input_schema: { type: "object" as const, properties: {} },
   },
   {
     name: "generate_pdf",
@@ -883,8 +867,6 @@ export type ToolContext = {
   /** Από sheet name / επισύναψη — ιδρύει περιοχή+δήμο όταν κενά στη γραμμή */
   importContextMunicipality?: string;
   onBulkProgress?: (current: number, total: number) => void;
-  /** Skip pushing undo entries (used when undoing) */
-  skipUndo?: boolean;
 };
 
 function pickContactId(raw: unknown, ctx: ToolContext): string {
@@ -897,166 +879,6 @@ function pickRequestId(raw: unknown, ctx: ToolContext): string {
   const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
   if (a) return a;
   return ctx.defaultRequestId?.trim() ?? "";
-}
-
-export interface UndoAction {
-  id: string;
-  timestamp: string;
-  description: string;
-  tool: string;
-  reverseAction: {
-    tool: string;
-    params: Record<string, unknown>;
-  };
-}
-
-async function loadUndoStack(supabase: SupabaseClient, userId: string): Promise<UndoAction[]> {
-  const { data } = await supabase
-    .from("alexandra_memory")
-    .select("value")
-    .eq("user_id", userId)
-    .eq("key", "undo_stack")
-    .maybeSingle();
-  if (!data?.value) return [];
-  try {
-    const parsed = JSON.parse(String(data.value)) as unknown;
-    return Array.isArray(parsed) ? (parsed as UndoAction[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-async function persistUndoStack(supabase: SupabaseClient, userId: string, stack: UndoAction[]) {
-  await supabase.from("alexandra_memory").upsert(
-    {
-      user_id: userId,
-      key: "undo_stack",
-      value: JSON.stringify(stack),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,key" },
-  );
-}
-
-async function saveUndoAction(supabase: SupabaseClient, userId: string, action: UndoAction) {
-  const stack = await loadUndoStack(supabase, userId);
-  stack.unshift(action);
-  await persistUndoStack(supabase, userId, stack.slice(0, 10));
-}
-
-async function popUndoAction(supabase: SupabaseClient, userId: string): Promise<UndoAction | null> {
-  const stack = await loadUndoStack(supabase, userId);
-  if (stack.length === 0) return null;
-  const [first, ...rest] = stack;
-  await persistUndoStack(supabase, userId, rest);
-  return first ?? null;
-}
-
-async function restoreContactsBulk(
-  ctx: ToolContext,
-  restorations: Array<{ contact_id: string; fields: Record<string, unknown> }>,
-): Promise<number> {
-  let restored = 0;
-  for (const row of restorations) {
-    const r = await ctx.forward(`/api/contacts/${row.contact_id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(row.fields),
-    });
-    if (r.ok) restored += 1;
-  }
-  return restored;
-}
-
-async function resolveBulkContactIds(
-  ctx: ToolContext,
-  raw: Record<string, unknown>,
-): Promise<{ ids: string[]; error?: string }> {
-  let ids = Array.isArray(raw.contact_ids)
-    ? (raw.contact_ids as unknown[]).map((x) => String(x).trim()).filter(Boolean)
-    : [];
-  if (ids.length === 0 && raw.filters && typeof raw.filters === "object" && !Array.isArray(raw.filters)) {
-    const fl = raw.filters as Record<string, unknown>;
-    const q = buildAdvancedContactFilters(fl, { limit: 10_000 });
-    const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
-    const j = (await r.json().catch(() => ({}))) as { contacts?: FindRow[]; error?: string };
-    if (!r.ok) return { ids: [], error: j.error || "Σφάλμα αναζήτησης" };
-    ids = (j.contacts ?? []).map((c) => c.id);
-  }
-  return { ids };
-}
-
-async function fetchContactPreviewSample(
-  supabase: SupabaseClient,
-  ids: string[],
-  limit = 5,
-): Promise<Array<{ id: string; first_name: string; last_name: string; phone: string | null; municipality: string | null }>> {
-  if (!ids.length) return [];
-  const { data } = await supabase
-    .from("contacts")
-    .select("id, first_name, last_name, phone, municipality")
-    .in("id", ids.slice(0, limit));
-  return (data ?? []) as Array<{
-    id: string;
-    first_name: string;
-    last_name: string;
-    phone: string | null;
-    municipality: string | null;
-  }>;
-}
-
-function buildBulkPreviewResult(
-  toolName: string,
-  count: number,
-  sample: Array<{ first_name: string; last_name: string }>,
-  changes: Record<string, unknown>,
-  pending_ids: string[],
-  actionLabel: string,
-): ToolRunResult {
-  const sampleNames = sample.map((c) => `${c.first_name} ${c.last_name}`.trim()).filter(Boolean).join(", ");
-  return {
-    content: JSON.stringify({
-      preview: true,
-      requires_user_confirmation: true,
-      count,
-      sample_contacts: sampleNames,
-      sample,
-      changes,
-      pending_ids,
-      message: `Πρόκειται να ${actionLabel} ${count} επαφές.\nΠαράδειγμα: ${sampleNames || "—"}${count > 5 ? "..." : ""}\nΑλλαγές: ${JSON.stringify(changes)}\n\nΕπιβεβαιώνεις; (ναι/όχι)`,
-    }),
-    showExecutedTag: false,
-    executedToolName: toolName,
-  };
-}
-
-type ExportContactRow = FindRow & {
-  phone2?: string | null;
-  landline?: string | null;
-  email?: string | null;
-  municipality?: string | null;
-  contact_groups?: { name?: string } | { name?: string }[] | null;
-  group_names?: string[];
-};
-
-function exportGroupNames(c: ExportContactRow): string {
-  if (Array.isArray(c.group_names) && c.group_names.length) return c.group_names.join("; ");
-  const g = c.contact_groups;
-  if (Array.isArray(g)) return g.map((x) => x.name).filter(Boolean).join("; ");
-  if (g && typeof g === "object" && g.name) return String(g.name);
-  return "";
-}
-
-async function fetchContactsForExport(
-  ctx: ToolContext,
-  filters: Record<string, unknown>,
-  limit = 10_000,
-): Promise<{ contacts: ExportContactRow[]; error?: string }> {
-  const q = buildAdvancedContactFilters(filters, { limit });
-  const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
-  const j = (await r.json().catch(() => ({}))) as { contacts?: ExportContactRow[]; error?: string };
-  if (!r.ok) return { contacts: [], error: j.error || "Σφάλμα" };
-  return { contacts: j.contacts ?? [] };
 }
 
 async function autoSaveMemory(
@@ -1492,17 +1314,6 @@ async function runAlexToolInner(
     if (Object.keys(body).length === 0) {
       return { content: JSON.stringify({ error: "Καθόλου επιτρεπτά πεδία" }) };
     }
-    const fieldKeys = Object.keys(body);
-    const { data: prevContact, error: prevErr } = await ctx.supabase
-      .from("contacts")
-      .select(fieldKeys.join(", "))
-      .eq("id", contact_id)
-      .maybeSingle();
-    if (prevErr) return { content: JSON.stringify({ error: prevErr.message }) };
-    const prevFields: Record<string, unknown> = {};
-    for (const k of fieldKeys) {
-      if (prevContact && k in prevContact) prevFields[k] = (prevContact as unknown as Record<string, unknown>)[k];
-    }
     const r = await ctx.forward(`/api/contacts/${contact_id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1511,18 +1322,6 @@ async function runAlexToolInner(
     const j = (await r.json()) as { error?: string; contact?: unknown };
     if (!r.ok) {
       return { content: JSON.stringify({ error: j.error || "Σφάλμα ενημέρωσης" }) };
-    }
-    if (!ctx.skipUndo && Object.keys(prevFields).length > 0) {
-      void saveUndoAction(ctx.supabase, ctx.userId, {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        description: `Ενημέρωση επαφής (${fieldKeys.join(", ")})`,
-        tool: name === "edit_contact" ? "edit_contact" : "update_contact",
-        reverseAction: {
-          tool: "update_contact",
-          params: { contact_id, fields: prevFields },
-        },
-      });
     }
     return {
       content: JSON.stringify({
@@ -1540,13 +1339,6 @@ async function runAlexToolInner(
     if (!contact_id || !status) {
       return { content: JSON.stringify({ error: "Άκυρα δεδομένα" }) };
     }
-    const { data: prevRow, error: prevErr } = await ctx.supabase
-      .from("contacts")
-      .select("call_status, first_name, last_name")
-      .eq("id", contact_id)
-      .maybeSingle();
-    if (prevErr) return { content: JSON.stringify({ error: prevErr.message }) };
-    const prevStatus = (prevRow as { call_status?: string | null } | null)?.call_status ?? null;
     if (isCaller) {
       const { data, error } = await ctx.supabase
         .from("contacts")
@@ -1555,19 +1347,6 @@ async function runAlexToolInner(
         .select("id")
         .single();
       if (error) return { content: JSON.stringify({ error: error.message }) };
-      if (!ctx.skipUndo && prevStatus != null && prevStatus !== status) {
-        const nm = `${(prevRow as { first_name?: string }).first_name ?? ""} ${(prevRow as { last_name?: string }).last_name ?? ""}`.trim();
-        void saveUndoAction(ctx.supabase, ctx.userId, {
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          description: `Κατάσταση ${nm || "επαφής"} → ${status}`,
-          tool: "update_contact_status",
-          reverseAction: {
-            tool: "update_contact_status",
-            params: { contact_id, status: prevStatus },
-          },
-        });
-      }
       return {
         content: JSON.stringify({ ok: true, message: "Η κατάσταση κλήσης ενημερώθηκε.", id: data?.id }),
         executedToolName: "update_contact_status",
@@ -1583,19 +1362,6 @@ async function runAlexToolInner(
       .select("id")
       .single();
     if (error) return { content: JSON.stringify({ error: error.message }) };
-    if (!ctx.skipUndo && prevStatus != null && prevStatus !== status) {
-      const nm = `${(prevRow as { first_name?: string }).first_name ?? ""} ${(prevRow as { last_name?: string }).last_name ?? ""}`.trim();
-      void saveUndoAction(ctx.supabase, ctx.userId, {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        description: `Κατάσταση ${nm || "επαφής"} → ${status}`,
-        tool: "update_contact_status",
-        reverseAction: {
-          tool: "update_contact_status",
-          params: { contact_id, status: prevStatus },
-        },
-      });
-    }
     return {
       content: JSON.stringify({ ok: true, message: "Η κατάσταση ενημερώθηκε.", id: data?.id }),
       executedToolName: "update_contact_status",
@@ -1697,23 +1463,10 @@ async function runAlexToolInner(
     if (e0) {
       return { content: JSON.stringify({ error: e0.message }) };
     }
-    const prevNotes = cur?.notes ?? "";
     const nextNote = [cur?.notes, note].filter(Boolean).join("\n\n");
     const { error: e1 } = await ctx.supabase.from("contacts").update({ notes: nextNote }).eq("id", contact_id);
     if (e1) {
       return { content: JSON.stringify({ error: e1.message }) };
-    }
-    if (!ctx.skipUndo) {
-      void saveUndoAction(ctx.supabase, ctx.userId, {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        description: "Προσθήκη σημείωσης σε επαφή",
-        tool: "add_note",
-        reverseAction: {
-          tool: "update_contact",
-          params: { contact_id, fields: { notes: prevNotes } },
-        },
-      });
     }
     return {
       content: JSON.stringify({ ok: true, message: "Η σημείωση αποθηκεύτηκε." }),
@@ -2139,61 +1892,19 @@ async function runAlexToolInner(
     if (!permLegacy("alexandra_tool_bulk_update_contacts", isMgr)) {
       return { content: JSON.stringify({ error: "Δεν επιτρέπεται η μαζική ενημέρωση για αυτόν τον ρόλο" }) };
     }
-    const user_confirmed = raw.user_confirmed === true;
+    const contact_ids = raw.contact_ids;
     const fields = raw.fields;
-    if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
-      return { content: JSON.stringify({ error: "Χρειάζονται fields (object)" }) };
+    if (!Array.isArray(contact_ids) || !fields || typeof fields !== "object" || Array.isArray(fields)) {
+      return { content: JSON.stringify({ error: "Χρειάζονται contact_ids (array) και fields (object)" }) };
     }
-    const { ids, error: idErr } = await resolveBulkContactIds(ctx, raw);
-    if (idErr) return { content: JSON.stringify({ error: idErr }) };
-    if (!ids.length) {
-      return { content: JSON.stringify({ error: "Δεν βρέθηκαν επαφές — δώσε contact_ids ή filters" }) };
-    }
-    const fieldKeys = Object.keys(fields as Record<string, unknown>).filter((k) => ALEX_BULK_UPDATE_FIELDS.has(k));
-    if (!fieldKeys.length) {
-      return { content: JSON.stringify({ error: "Καθόλου επιτρεπτά πεδία στο fields" }) };
-    }
-    if (!user_confirmed) {
-      const sample = await fetchContactPreviewSample(ctx.supabase, ids);
-      return buildBulkPreviewResult(
-        "bulk_update_contacts",
-        ids.length,
-        sample,
-        fields as Record<string, unknown>,
-        ids,
-        "ενημερωθούν",
-      );
-    }
-    const capped = ids.slice(0, 5000);
-    const selectCols = ["id", ...fieldKeys].join(", ");
-    const { data: beforeRows } = await ctx.supabase.from("contacts").select(selectCols).in("id", capped);
     const r = await ctx.forward("/api/contacts/manager-bulk-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contact_ids: capped, fields }),
+      body: JSON.stringify({ contact_ids, fields }),
     });
     const j = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean; updated?: number; failed?: number };
     if (!r.ok) {
       return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
-    }
-    if (!ctx.skipUndo && beforeRows?.length) {
-      const restorations = (beforeRows as unknown as Array<Record<string, unknown>>).map((row) => {
-        const prev: Record<string, unknown> = {};
-        for (const k of fieldKeys) {
-          if (k in row) prev[k] = row[k];
-        }
-        return { contact_id: String(row.id), fields: prev };
-      });
-      void saveUndoAction(ctx.supabase, ctx.userId, {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        description: `Μαζική ενημέρωση ${j.updated ?? capped.length} επαφών`,
-        tool: "bulk_update_contacts",
-        reverseAction: {
-          tool: "_restore_contacts_bulk",
-          params: { restorations },
-        },
-      });
     }
     return {
       content: JSON.stringify({
@@ -2240,24 +1951,13 @@ async function runAlexToolInner(
       return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
     }
     if (j.mode === "preview") {
-      const { ids: pending_ids } = await resolveBulkContactIds(ctx, raw);
-      const sampleRows = pending_ids.length
-        ? await fetchContactPreviewSample(ctx.supabase, pending_ids)
-        : [];
-      const sampleNames = sampleRows.map((c) => `${c.first_name} ${c.last_name}`.trim()).join(", ");
       return {
         content: JSON.stringify({
           ok: true,
-          preview: true,
           requires_user_confirmation: true,
-          would_delete: j.would_delete ?? pending_ids.length,
-          count: j.would_delete ?? pending_ids.length,
-          sample: j.sample ?? sampleRows,
-          sample_contacts: sampleNames || undefined,
-          pending_ids: pending_ids.length ? pending_ids : undefined,
-          message:
-            j.message ??
-            `Πρόκειται να διαγραφούν ${j.would_delete ?? pending_ids.length} επαφές.${sampleNames ? `\nΠαράδειγμα: ${sampleNames}` : ""}\n\nΕπιβεβαιώνεις; (ναι/όχι)`,
+          would_delete: j.would_delete,
+          sample: j.sample,
+          message: j.message,
         }),
         showExecutedTag: false,
         executedToolName: "bulk_delete_contacts",
@@ -3127,38 +2827,18 @@ async function runAlexToolInner(
     if (!permLegacy("alexandra_tool_export_contacts", isMgr)) {
       return { content: JSON.stringify({ error: "Δεν επιτρέπεται η εξαγωγή για αυτόν τον ρόλο" }) };
     }
-    const fl = (raw.filters as Record<string, unknown>) || {};
-    const { contacts, error: fetchErr } = await fetchContactsForExport(ctx, fl, 10_000);
-    if (fetchErr) {
-      return { content: JSON.stringify({ error: fetchErr }) };
-    }
-    const rows = contacts.map((c) => ({
-      Κωδικός: c.contact_code ?? "",
-      Όνομα: c.first_name ?? "",
-      Επώνυμο: c.last_name ?? "",
-      Τηλέφωνο: c.phone ?? "",
-      "Κινητό 2": c.phone2 ?? "",
-      Σταθερό: c.landline ?? "",
-      Email: c.email ?? "",
-      Δήμος: c.municipality ?? "",
-      Κατάσταση: callStatusLabel(c.call_status ?? undefined),
-      Ομάδες: exportGroupNames(c),
-    }));
-    try {
-      const filename = `epafes_${todayYmdAthens()}`;
-      const stored = await buildAlexandraCsv(ctx.userId, rows, filename);
-      return {
-        content: JSON.stringify({
-          ok: true,
-          download_url: stored.download_url,
-          count: rows.length,
-          message: `Εξήχθησαν ${rows.length} επαφές. Κατέβασε το αρχείο από τον παρακάτω σύνδεσμο.`,
-        }),
-        executedToolName: "export_contacts",
-      };
-    } catch (e) {
-      return { content: JSON.stringify({ error: e instanceof Error ? e.message : "Σφάλμα CSV" }) };
-    }
+    const r = await ctx.forward("/api/contacts/export", { method: "GET" });
+    const txt = await r.text();
+    const first = txt.split(/\r?\n/).slice(0, 2).join(" | ");
+    return {
+      content: JSON.stringify({
+        ok: r.ok,
+        bytes: txt.length,
+        header_preview: first.slice(0, 240),
+        note: "Το CRM παράγει CSV (epafes-ημερομηνία.csv). Ο χρήστης κατεβάζει από Επαφές → Εξαγωγή.",
+      }),
+      executedToolName: "export_contacts",
+    };
   }
 
   if (name === "get_documents") {
@@ -3183,99 +2863,23 @@ async function runAlexToolInner(
     if (!permLegacy("alexandra_tool_bulk_update_contacts", isMgr)) {
       return { content: JSON.stringify({ error: "Δεν επιτρέπεται η μαζική ενημέρωση για αυτόν τον ρόλο" }) };
     }
-    const user_confirmed = raw.user_confirmed === true;
+    const ids = Array.isArray(raw.contact_ids) ? (raw.contact_ids as unknown[]).map((x) => String(x).trim()).filter(Boolean) : [];
     const status = String(raw.status ?? "").trim();
-    if (!["Pending", "Positive", "Negative", "No Answer"].includes(status)) {
-      return { content: JSON.stringify({ error: "Άκυρο status" }) };
+    if (!ids.length || !["Pending", "Positive", "Negative", "No Answer"].includes(status)) {
+      return { content: JSON.stringify({ error: "Άκυρα contact_ids ή status" }) };
     }
-    const { ids, error: idErr } = await resolveBulkContactIds(ctx, raw);
-    if (idErr) return { content: JSON.stringify({ error: idErr }) };
-    if (!ids.length) {
-      return { content: JSON.stringify({ error: "Δεν βρέθηκαν επαφές — δώσε contact_ids ή filters" }) };
-    }
-    if (!user_confirmed) {
-      const sample = await fetchContactPreviewSample(ctx.supabase, ids);
-      return buildBulkPreviewResult(
-        "bulk_update_status",
-        ids.length,
-        sample,
-        { call_status: status },
-        ids,
-        `αλλάξουν κατάσταση σε «${status}» για`,
-      );
-    }
-    const capped = ids.slice(0, 5000);
-    const { data: beforeRows } = await ctx.supabase.from("contacts").select("id, call_status").in("id", capped);
     const r = await ctx.forward("/api/contacts/manager-bulk-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contact_ids: capped, fields: { call_status: status } }),
+      body: JSON.stringify({ contact_ids: ids.slice(0, 5000), fields: { call_status: status } }),
     });
     const j6 = (await r.json().catch(() => ({}))) as { error?: string; updated?: number; failed?: number };
     if (!r.ok) {
       return { content: JSON.stringify({ error: j6.error || "Σφάλμα" }) };
     }
-    if (!ctx.skipUndo && beforeRows?.length) {
-      const restorations = (beforeRows as Array<{ id: string; call_status: string | null }>).map((row) => ({
-        contact_id: row.id,
-        fields: { call_status: row.call_status },
-      }));
-      void saveUndoAction(ctx.supabase, ctx.userId, {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        description: `Μαζική αλλαγή κατάστασης σε ${status} (${j6.updated ?? capped.length} επαφές)`,
-        tool: "bulk_update_status",
-        reverseAction: {
-          tool: "_restore_contacts_bulk",
-          params: { restorations },
-        },
-      });
-    }
     return {
       content: JSON.stringify({ ok: true, updated: j6.updated ?? 0, failed: j6.failed ?? 0 }),
       executedToolName: "bulk_update_status",
-    };
-  }
-
-  if (name === "undo_last_action") {
-    const lastAction = await popUndoAction(ctx.supabase, ctx.userId);
-    if (!lastAction) {
-      return { content: JSON.stringify({ error: "Δεν υπάρχει ενέργεια για αναίρεση" }) };
-    }
-    const { tool, params } = lastAction.reverseAction;
-    const undoCtx: ToolContext = { ...ctx, skipUndo: true };
-    if (tool === "_restore_contacts_bulk") {
-      const restorations = (params.restorations ?? []) as Array<{ contact_id: string; fields: Record<string, unknown> }>;
-      const restored = await restoreContactsBulk(undoCtx, restorations);
-      return {
-        content: JSON.stringify({
-          ok: true,
-          undone: lastAction.description,
-          restored,
-          message: `Αναίρεση: ${lastAction.description}`,
-        }),
-        executedToolName: "undo_last_action",
-      };
-    }
-    const result = await runAlexTool(tool, params, undoCtx);
-    let parsed: Record<string, unknown> = {};
-    try {
-      parsed = JSON.parse(result.content) as Record<string, unknown>;
-    } catch {
-      parsed = { raw: result.content };
-    }
-    if (parsed.error) {
-      await saveUndoAction(ctx.supabase, ctx.userId, lastAction);
-      return { content: JSON.stringify({ error: `Η αναίρεση απέτυχε: ${parsed.error}` }) };
-    }
-    return {
-      content: JSON.stringify({
-        ok: true,
-        undone: lastAction.description,
-        result: parsed,
-        message: `Αναίρεση: ${lastAction.description}`,
-      }),
-      executedToolName: "undo_last_action",
     };
   }
 
@@ -3386,63 +2990,16 @@ export function buildPageContextBlock(ctx: AlexandraPageContext | null | undefin
   if (!ctx) return "Αρχική σελίδα";
 
   switch (ctx.type) {
-    case "contact": {
-      const d = ctx.contactData;
-      return [
-        `Τρέχουσα επαφή: ${ctx.contactName} (ID: ${ctx.contactId})`,
-        `Τηλέφωνο: ${d?.phone || "—"}`,
-        `Δήμος: ${d?.municipality || "—"}`,
-        `Ομάδες: ${d?.groups?.length ? d.groups.join(", ") : "Καμία"}`,
-        `Κατάσταση: ${d?.call_status || "—"}`,
-        `Σημειώσεις: ${d?.notes_count ?? 0}`,
-        `Αιτήματα: ${d?.requests_count ?? 0}`,
-        `→ Χρησιμοποίησε αυτόματα contact_id="${ctx.contactId}" σε όλα τα tools.`,
-      ].join("\n");
-    }
-    case "request": {
-      const d = ctx.requestData;
-      const lines = [
-        `Τρέχον αίτημα: «${ctx.requestTitle}» (ID: ${ctx.requestId})`,
-        `Κατάσταση: ${ctx.requestStatus}`,
-      ];
-      if (ctx.requestCategory) lines.push(`Κατηγορία: ${ctx.requestCategory}`);
-      if (d?.description) lines.push(`Περιγραφή: ${d.description.slice(0, 300)}${d.description.length > 300 ? "…" : ""}`);
-      if (d?.handlers?.length) lines.push(`Χειριστές: ${d.handlers.join(", ")}`);
-      if (d?.persons?.length) lines.push(`Πρόσωπα: ${d.persons.slice(0, 8).join(", ")}${d.persons.length > 8 ? "…" : ""}`);
-      if (d?.notes_count != null) lines.push(`Σημειώσεις: ${d.notes_count}`);
-      lines.push(`→ Χρησιμοποίησε αυτόματα request_id="${ctx.requestId}" όταν χρειάζεται.`);
-      return lines.join("\n");
-    }
-    case "contacts_list": {
-      const filterDesc = Object.entries(ctx.activeFilters ?? {})
-        .filter(([, v]) => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(", ");
-      return [
-        `Σελίδα επαφών — ${ctx.totalCount ?? "?"} επαφές συνολικά`,
-        filterDesc ? `Ενεργά φίλτρα: ${filterDesc}` : "Χωρίς φίλτρα",
-        ctx.visibleContactIds?.length
-          ? `Ορατές επαφές: ${ctx.visibleContactIds.length} (IDs διαθέσιμα στο context)`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-    }
-    case "requests_list": {
-      const filterDesc = Object.entries(ctx.activeFilters ?? {})
-        .filter(([, v]) => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(", ");
-      return [
-        `Σελίδα αιτημάτων${ctx.totalCount != null ? ` (${ctx.totalCount} αιτήματα συνολικά)` : ""}`,
-        filterDesc ? `Ενεργά φίλτρα: ${filterDesc}` : "Χωρίς φίλτρα",
-        "Μπορείς να αναζητήσεις και να διαχειριστείς αιτήματα.",
-      ]
-        .filter(Boolean)
-        .join("\n");
-    }
+    case "contact":
+      return `Σελίδα επαφής: ${ctx.contactName} (ID: ${ctx.contactId}). Μπορείς να χρησιμοποιείς αυτό το contact_id αυτόματα.`;
+    case "request":
+      return `Σελίδα αιτήματος: "${ctx.requestTitle}" - Κατάσταση: ${ctx.requestStatus} (ID: ${ctx.requestId}). Μπορείς να αναφέρεσαι σε αυτό το αίτημα απευθείας — χρησιμοποίησε request_id=${ctx.requestId} όταν χρειάζεται.`;
+    case "contacts_list":
+      return `Σελίδα λίστας επαφών${ctx.totalCount != null ? ` (${ctx.totalCount} επαφές συνολικά)` : ""}. Μπορείς να κάνεις αναζητήσεις και φιλτράρισμα.`;
+    case "requests_list":
+      return `Σελίδα λίστας αιτημάτων${ctx.totalCount != null ? ` (${ctx.totalCount} αιτήματα συνολικά)` : ""}. Μπορείς να αναζητήσεις και να διαχειριστείς αιτήματα.`;
     case "campaign":
-      return `Σελίδα καμπάνιας: «${ctx.campaignName}» — Κατάσταση: ${ctx.status} (ID: ${ctx.campaignId}).`;
+      return `Σελίδα καμπάνιας: "${ctx.campaignName}" - Κατάσταση: ${ctx.status} (ID: ${ctx.campaignId}).`;
     case "dashboard":
       return "Dashboard. Μπορείς να δείξεις στατιστικά, πρωινή ενημέρωση, ή γρήγορες ενέργειες.";
     case "analytics":
@@ -3507,7 +3064,6 @@ export function buildSystemPrompt({
 - Αν είσαι σε σελίδα επαφής, χρησιμοποίησε αυτόματα το contact_id της τρέχουσας επαφής
 - Αν είσαι σε σελίδα αιτήματος, χρησιμοποίησε αυτόματα το request_id του τρέχοντος αιτήματος
 - Αποθήκευσε αυτόματα στη μνήμη σου οποιαδήποτε σημαντική πληροφορία που μαθαίνεις για τον χρήστη, τις προτιμήσεις του, ή σημαντικές ενέργειες που έγιναν (save_memory tool)
-- Μπορείς να αναιρέσεις την τελευταία ενέργεια με το tool undo_last_action. Ενημέρωνε τον χρήστη ότι μπορεί να πει «αναίρεση» ή «undo» μετά από κάθε σημαντική ενέργεια.
 
 ΣΗΜΕΡΑ: ${todayDate}
 ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ: ${pageContextBlock}

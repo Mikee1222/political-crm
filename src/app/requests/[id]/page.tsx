@@ -166,28 +166,17 @@ export default function RequestDetailPage() {
   useEffect(() => {
     if (!alexPage) return;
     if (data) {
-      const persons = [
-        ...(data.requesters ?? []).map((p) => `${p.first_name} ${p.last_name}`.trim()),
-        ...(data.affected_list ?? []).map((p) => `${p.first_name} ${p.last_name}`.trim()),
-      ].filter(Boolean);
       alexPage.setPageContext({
         type: "request",
         requestId: data.id,
         requestTitle: data.title,
         requestStatus: data.status ?? REQUEST_STATUS_OPEN,
-        requestCategory: data.category ?? undefined,
-        requestData: {
-          description: data.description ?? undefined,
-          handlers: data.handlers ?? [],
-          persons,
-          notes_count: notes.length,
-        },
       });
     } else {
       alexPage.setPageContext(null);
     }
     return () => alexPage.setPageContext(null);
-  }, [alexPage, data, notes.length]);
+  }, [alexPage, data?.id, data?.title, data?.status]);
 
   const load = useCallback(async () => {
     if (!id) return;

@@ -28,42 +28,22 @@ const pageContextSchema = z.discriminatedUnion("type", [
     type: z.literal("contact"),
     contactId: z.string().uuid(),
     contactName: z.string().min(1).max(200),
-    contactData: z
-      .object({
-        phone: z.string().optional(),
-        municipality: z.string().optional(),
-        groups: z.array(z.string()).optional(),
-        call_status: z.string().optional(),
-        notes_count: z.number().optional(),
-        requests_count: z.number().optional(),
-      })
-      .optional(),
   }),
   z.object({
     type: z.literal("request"),
     requestId: z.string().uuid(),
     requestTitle: z.string().min(1).max(500),
     requestStatus: z.string().max(100),
-    requestCategory: z.string().max(200).optional(),
-    requestData: z
-      .object({
-        description: z.string().max(5000).optional(),
-        handlers: z.array(z.string()).optional(),
-        persons: z.array(z.string()).optional(),
-        notes_count: z.number().optional(),
-      })
-      .optional(),
   }),
   z.object({
     type: z.literal("contacts_list"),
+    filters: z.record(z.string(), z.unknown()).optional(),
     totalCount: z.number().optional(),
-    activeFilters: z.record(z.string(), z.unknown()).optional(),
-    visibleContactIds: z.array(z.string().uuid()).max(50).optional(),
   }),
   z.object({
     type: z.literal("requests_list"),
+    filters: z.record(z.string(), z.unknown()).optional(),
     totalCount: z.number().optional(),
-    activeFilters: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal("campaign"),
