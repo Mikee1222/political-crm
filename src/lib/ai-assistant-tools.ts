@@ -305,12 +305,14 @@ export const ALEX_TOOLS: Tool[] = [
   },
   {
     name: "import_csv_data",
-    description: "Εισαγωγή επαφών από raw CSV/δεδομένα με mapping στηλών σε πεδία CRM. Input: data (string), mapping object.",
+    description:
+      "Εισαγωγή επαφών από raw CSV/δεδομένα με mapping στηλών σε πεδία CRM. ΠΑΝΤΑ πρώτα confirmed: false — preview· μετά true μετά ρητή επιβεβαίωση.",
     input_schema: {
       type: "object" as const,
       properties: {
         data: { type: "string" as const },
         mapping: { type: "object" as const, description: "Χάρτης: όνομα στήλης CSV → first_name, last_name, phone, ..." },
+        confirmed: { type: "boolean" as const, description: "true = εκτέλεση import" },
       },
       required: ["data", "mapping"],
     },
@@ -1660,7 +1662,8 @@ async function runAlexToolInner(
       return { content: JSON.stringify({ error: "CSV: " + parsed.errors[0]?.message }) };
     }
     const map = mapping as Record<string, string>;
-    const contacts: Array<{
+    const confirmed = raw.confirmed === true;
+    type CsvContact = {
       first_name: string;
       last_name: string;
       phone: string;
@@ -1671,7 +1674,11 @@ async function runAlexToolInner(
       toponym?: string | null;
       political_stance?: string | null;
       notes?: string | null;
-    }> = [];
+    };
+    const contacts: CsvContact[] = [];
+    const mappedRows: Array<Record<string, string>> = [];
+    let validCount = 0;
+    let skipCount = 0;
     for (const row of parsed.data) {
       const o: Record<string, string> = {};
       for (const [csvCol, crmField] of Object.entries(map)) {
@@ -1679,10 +1686,16 @@ async function runAlexToolInner(
         const v = row[csvCol] ?? row[csvCol.trim()];
         if (v != null) o[crmField] = String(v).trim();
       }
+      mappedRows.push(o);
       const first_name = o.first_name;
       const last_name = o.last_name;
       const phone = o.phone;
-      if (!first_name || !last_name || !phone) continue;
+      if (!first_name || !phone) {
+        skipCount++;
+        continue;
+      }
+      validCount++;
+      if (!last_name) continue;
       contacts.push({
         first_name,
         last_name,
@@ -1695,6 +1708,36 @@ async function runAlexToolInner(
         political_stance: o.political_stance || null,
         notes: o.notes || null,
       });
+    }
+    const totalRows = parsed.data.length;
+    if (!confirmed) {
+      const sample = mappedRows
+        .filter((o) => o.first_name && o.phone)
+        .slice(0, 5)
+        .map((o) => ({
+          first_name: o.first_name,
+          last_name: o.last_name || "",
+          phone: o.phone,
+          email: o.email || null,
+          municipality: o.municipality || null,
+          area: o.area || null,
+        }));
+      return {
+        content: JSON.stringify({
+          ok: true,
+          preview: true,
+          requires_user_confirmation: true,
+          summary: {
+            total_rows: totalRows,
+            valid_rows: validCount,
+            invalid_rows: skipCount,
+          },
+          sample,
+          message: `Θέλεις να προχωρήσω με την εισαγωγή ${validCount} επαφών;`,
+        }),
+        showExecutedTag: false,
+        executedToolName: "import_csv_data",
+      };
     }
     if (contacts.length === 0) {
       return { content: JSON.stringify({ error: "Δεν εξήχθησαν έγκυρες γραμμές" }) };
