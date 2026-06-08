@@ -392,11 +392,6 @@ alter table public.contacts
   add column if not exists portal_invite_token text,
   add column if not exists ai_summary text,
   add column if not exists ai_summary_updated_at timestamptz;
-
-alter table public.requests
-  add column if not exists ai_summary text,
-  add column if not exists ai_summary_updated_at timestamptz;
-
 update public.contacts
   set updated_at = coalesce(updated_at, created_at::timestamptz, now())
   where updated_at is null;

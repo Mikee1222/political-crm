@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Download, FileText, QrCode, Trash2 } from "lucide-react";
+import { Download, FileText, Loader2, QrCode, Trash2, Wand2 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateTimeAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
-import { AISummaryCard } from "@/components/ai-summary-card";
 
 type DocRow = {
   id: string;
@@ -37,6 +36,8 @@ export function ContactExtraSections({
   phone: string | null;
   canManage: boolean;
 }) {
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [appts, setAppts] = useState<ApptRow[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -45,9 +46,10 @@ export function ContactExtraSections({
   const load = useCallback(async () => {
     if (!canManage) return;
     try {
-      const [dr, ar] = await Promise.all([
+      const [dr, ar, ai] = await Promise.all([
         fetchWithTimeout(`/api/documents?contact_id=${encodeURIComponent(contactId)}`),
         fetchWithTimeout(`/api/contacts/${encodeURIComponent(contactId)}/appointments`),
+        fetchWithTimeout(`/api/contacts/${encodeURIComponent(contactId)}/ai-summary`),
       ]);
       if (dr.ok) {
         try {
@@ -67,15 +69,36 @@ export function ContactExtraSections({
       } else {
         setAppts([]);
       }
+      if (ai.ok) {
+        try {
+          const j = (await ai.json()) as { summary?: string | null };
+          setAiSummary(j.summary ?? null);
+        } catch {
+          setAiSummary(null);
+        }
+      } else {
+        setAiSummary(null);
+      }
     } catch {
       setDocs([]);
       setAppts([]);
+      setAiSummary(null);
     }
   }, [canManage, contactId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const runAi = async () => {
+    setAiLoading(true);
+    const res = await fetchWithTimeout(`/api/contacts/${contactId}/ai-summary`, { method: "POST" });
+    const j = (await res.json().catch(() => ({}))) as { summary?: string; error?: string };
+    setAiLoading(false);
+    if (res.ok && j.summary) {
+      setAiSummary(j.summary);
+    }
+  };
 
   const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -108,21 +131,33 @@ export function ContactExtraSections({
 
   return (
     <div className="col-span-full flex flex-col gap-4">
-      <div className="relative">
-        <AISummaryCard
-          entityType="contact"
-          entityId={contactId}
-          apiEndpoint={`/api/contacts/${contactId}/ai-summary`}
-          canManage={canManage}
-        />
-        <button
-          type="button"
-          onClick={() => setQrOpen(true)}
-          className="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-2.5 py-1.5 text-xs text-[var(--text-primary)]"
-        >
-          <QrCode className="h-3.5 w-3.5" />
-          QR
-        </button>
+      <div
+        className="rounded-2xl border-2 border-[#C9A84C] bg-[var(--bg-card)]/90 p-4 shadow-sm"
+        style={{ boxShadow: "0 0 0 1px color-mix(in srgb, #C9A84C 35%, transparent)" }}
+      >
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">AI Σύνοψη</h2>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void runAi()}
+              disabled={aiLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#C9A84C]/50 bg-[#C9A84C]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--accent-gold)]"
+            >
+              {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+              AI Σύνοψη
+            </button>
+            <button
+              type="button"
+              onClick={() => setQrOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-primary)]"
+            >
+              <QrCode className="h-3.5 w-3.5" />
+              QR
+            </button>
+          </div>
+        </div>
+        {aiSummary ? <p className="text-sm leading-relaxed text-[var(--text-primary)]">{aiSummary}</p> : <p className="text-sm text-[var(--text-muted)]">Πατήστε για παραγωγή σύνοψης.</p>}
       </div>
 
       <div className={card + " !border-l-[#003476]"}>

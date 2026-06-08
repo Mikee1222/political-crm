@@ -7,13 +7,6 @@ import { hasMinRole } from "@/lib/roles";
 import type { UserProfile } from "@/lib/auth-helpers";
 import { runIndexRangeWithConcurrency } from "@/lib/async-pool";
 import { anthropicComplete } from "@/lib/anthropic-once";
-import {
-  CONTACT_SUMMARY_SYSTEM,
-  fetchContactSummaryPack,
-} from "@/lib/ai-summary-prompts";
-import { isSummaryCacheFresh, SUMMARY_MAX_TOKENS, SUMMARY_MODEL } from "@/lib/ai-summary";
-import { fetchBriefingTodayData } from "@/lib/briefing-data";
-import { formatDateAthens } from "@/lib/date-format";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { todayYmdAthens } from "@/lib/athens-ranges";
 import {
@@ -964,6 +957,12 @@ function pickContactId(raw: unknown, ctx: ToolContext): string {
   const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
   if (a) return a;
   return ctx.defaultContactId?.trim() ?? "";
+}
+
+function pickRequestId(raw: unknown, ctx: ToolContext): string {
+  const a = raw != null && String(raw).trim() ? String(raw).trim() : "";
+  if (a) return a;
+  return ctx.defaultRequestId?.trim() ?? "";
 }
 
 export interface UndoAction {
@@ -3045,57 +3044,12 @@ ${sampleLines || "—"}${dupHint}
     if (!isMgr) {
       return { content: JSON.stringify({ error: "Μόνο manager" }) };
     }
-    const data = await fetchBriefingTodayData(ctx.supabase, ctx.userId);
-    const todayDate = data.todayYmd
-      ? formatDateAthens(`${data.todayYmd}T12:00:00Z`)
-      : formatDateAthens(new Date());
-    const todayNamedays = data.namedays.names ?? [];
-    const namedayCount = data.namedays.matchingContactsCount ?? 0;
-    const birthdayCount = data.birthdayContacts.length;
-    const openRequests = data.openRequestsCount ?? 0;
-    const pendingTasks = data.pendingTasksCount ?? 0;
-    const upcomingEvents = data.calendar.events ?? [];
-
-    const narrativePrompt = `Είσαι ο πολιτικός γραμματέας του βουλευτή Κώστα Καραγκούνη.
-Γράψε σύντομη πρωινή ενημέρωση για σήμερα (${todayDate}).
-
-Δεδομένα:
-- Εορτολόγιο σήμερα: ${todayNamedays.length ? todayNamedays.join(", ") : "—"} (${namedayCount} επαφές γιορτάζουν)
-- Γενέθλια: ${birthdayCount} επαφές
-- Ανοικτά αιτήματα: ${openRequests}
-- Εκκρεμείς εργασίες: ${pendingTasks}
-- Επερχόμενες εκδηλώσεις: ${upcomingEvents.map((e) => e.title).filter(Boolean).join(", ") || "Καμία"}
-- Κλήσεις χθες: ${data.callsYesterday.total} (θετικές: ${data.callsYesterday.positive})
-- Καθυστερημένα αιτήματα (SLA): ${data.overdueRequestCount}
-
-Γράψε 2-3 προτάσεις ενημέρωση σαν να μιλάς στον βουλευτή.
-Τόνισε τι χρειάζεται άμεση προσοχή. Μόνο κείμενο, στα Ελληνικά.`;
-
-    const narrativeOut = await anthropicComplete(
-      "Είσαι πολιτικός γραμματέας. Απαντάς στα ελληνικά, 2-3 πλήρεις προτάσεις, χωρίς bullets.",
-      narrativePrompt,
-      { maxTokens: 400 },
-    );
-
-    const briefing = {
-      namedays: data.namedays,
-      namedayContacts: data.namedayContacts,
-      overdueTop5: data.overdueTop5,
-      birthdayContacts: data.birthdayContacts,
-      tasksDueToday: data.tasksDueToday,
-      pendingTasksCount: data.pendingTasksCount,
-      openRequestsCount: data.openRequestsCount,
-      contactsAddedThisWeek: data.contactsAddedThisWeek,
-      campaigns: data.campaigns,
-      calendar: data.calendar,
-      stalledOpenRequestCount: data.stalledOpenRequestCount,
-      callsYesterday: data.callsYesterday,
-      overdueRequestCount: data.overdueRequestCount,
-      narrative: narrativeOut.ok ? narrativeOut.text.trim() : null,
-      narrative_error: narrativeOut.ok ? undefined : narrativeOut.error,
-    };
-
-    return { content: JSON.stringify({ ok: true, briefing }), executedToolName: "morning_briefing" };
+    const r = await ctx.forward("/api/briefing/today", { method: "GET" });
+    const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok) {
+      return { content: JSON.stringify({ error: (j as { error?: string }).error || "Σφάλμα briefing" }) };
+    }
+    return { content: JSON.stringify({ ok: true, briefing: j }), executedToolName: "morning_briefing" };
   }
 
   if (name === "calculate_scores") {
@@ -3210,87 +3164,17 @@ ${sampleLines || "—"}${dupHint}
     if (!contact_id) {
       return { content: JSON.stringify({ error: "Χρειάζεται contact_id" }) };
     }
-
-    const { data: cached } = await ctx.supabase
-      .from("contacts")
-      .select("ai_summary, ai_summary_updated_at, first_name, last_name, phone, municipality, call_status, predicted_score, group_id, contact_groups!contacts_group_id_fkey ( name )")
-      .eq("id", contact_id)
-      .maybeSingle();
-
-    if (
-      cached?.ai_summary &&
-      isSummaryCacheFresh((cached as { ai_summary_updated_at?: string | null }).ai_summary_updated_at)
-    ) {
-      const c = cached as {
-        first_name?: string | null;
-        last_name?: string | null;
-        phone?: string | null;
-        municipality?: string | null;
-        call_status?: string | null;
-        predicted_score?: number | null;
-        contact_groups?: { name?: string } | { name?: string }[] | null;
-      };
-      const groupName = Array.isArray(c.contact_groups)
-        ? c.contact_groups[0]?.name
-        : c.contact_groups?.name;
-      const { count: requestsCount } = await ctx.supabase
-        .from("requests")
-        .select("id", { count: "exact", head: true })
-        .eq("contact_id", contact_id);
-      return {
-        content: JSON.stringify({
-          ok: true,
-          contact_name: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
-          summary: cached.ai_summary,
-          cached: true,
-          quick_facts: {
-            phone: c.phone ?? null,
-            municipality: c.municipality ?? null,
-            status: c.call_status ?? null,
-            requests: requestsCount ?? 0,
-            groups: groupName ? [groupName] : [],
-          },
-        }),
-        executedToolName: "get_contact_summary",
-      };
+    const g = await ctx.forward(`/api/contacts/${contact_id}/ai-summary`, { method: "GET" });
+    const j = (await g.json().catch(() => ({}))) as { summary?: string | null; error?: string };
+    if (g.ok && j.summary) {
+      return { content: JSON.stringify({ ok: true, summary: j.summary, cached: true }), executedToolName: "get_contact_summary" };
     }
-
-    const pack = await fetchContactSummaryPack(ctx.supabase, contact_id);
-    if (!pack) {
-      return { content: JSON.stringify({ error: "Άγνωστη επαφή" }) };
+    const p = await ctx.forward(`/api/contacts/${contact_id}/ai-summary`, { method: "POST" });
+    const j2 = (await p.json().catch(() => ({}))) as { summary?: string; error?: string };
+    if (!p.ok) {
+      return { content: JSON.stringify({ error: j2.error || "Σφάλμα AI" }) };
     }
-
-    const out = await anthropicComplete(CONTACT_SUMMARY_SYSTEM, pack.prompt, {
-      model: SUMMARY_MODEL,
-      maxTokens: SUMMARY_MAX_TOKENS,
-    });
-    if (!out.ok) {
-      return { content: JSON.stringify({ error: out.error }) };
-    }
-
-    const summary = out.text.trim();
-    const now = new Date().toISOString();
-    await ctx.supabase
-      .from("contacts")
-      .update({ ai_summary: summary, ai_summary_updated_at: now })
-      .eq("id", contact_id);
-
-    return {
-      content: JSON.stringify({
-        ok: true,
-        contact_name: `${pack.input.first_name ?? ""} ${pack.input.last_name ?? ""}`.trim(),
-        summary,
-        cached: false,
-        quick_facts: {
-          phone: pack.input.phone ?? null,
-          municipality: pack.input.municipality ?? null,
-          status: pack.input.call_status ?? null,
-          requests: pack.input.requests_count ?? 0,
-          groups: pack.input.groups?.slice(0, 5) ?? [],
-        },
-      }),
-      executedToolName: "get_contact_summary",
-    };
+    return { content: JSON.stringify({ ok: true, summary: j2.summary, cached: false }), executedToolName: "get_contact_summary" };
   }
 
   if (name === "get_todays_call_list") {
