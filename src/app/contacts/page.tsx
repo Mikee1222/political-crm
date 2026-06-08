@@ -712,6 +712,19 @@ function contactDisplayName(c: Contact): string {
   return `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Επαφή";
 }
 
+function contactListActiveFilters(f: ContactListFilters): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (f.search.trim()) out.search = f.search.trim();
+  if (f.municipalities.length) out.municipality = f.municipalities.join(", ");
+  if (f.area.trim()) out.area = f.area.trim();
+  if (f.group_id) out.group_id = f.group_id;
+  if (f.call_status) out.call_status = f.call_status;
+  if (f.priority) out.priority = f.priority;
+  if (f.tag) out.tag = f.tag;
+  if (f.political_stance) out.political_stance = f.political_stance;
+  return out;
+}
+
 function ContactsPage() {
   const { profile } = useProfile();
   const pageCtx = useOptionalAlexandraPageContact();
@@ -753,9 +766,14 @@ function ContactsPage() {
   const { showToast: showListToast } = useFormToast();
 
   useEffect(() => {
-    pageCtx?.setPageContext({ type: "contacts_list", totalCount: listTotal });
+    pageCtx?.setPageContext({
+      type: "contacts_list",
+      totalCount: listTotal,
+      activeFilters: contactListActiveFilters(f),
+      visibleContactIds: contacts.slice(0, 50).map((c) => c.id),
+    });
     return () => pageCtx?.setPageContext(null);
-  }, [pageCtx, listTotal]);
+  }, [pageCtx, listTotal, f, contacts]);
 
   const applyFocusModeDom = useCallback((val: boolean) => {
     if (val) document.body.classList.add("focus-mode");

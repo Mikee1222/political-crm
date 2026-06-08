@@ -193,6 +193,7 @@ export const GREEK_TOOL_LABELS: Record<string, string> = {
   save_memory: "Αποθήκευση μνήμης",
   get_memories: "Ανάκτηση μνήμης",
   forget_memory: "Διαγραφή μνήμης",
+  undo_last_action: "Αναίρεση ενέργειας",
 };
 
 export function greekToolLabel(t: string) {

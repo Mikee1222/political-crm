@@ -232,9 +232,16 @@ export default function RequestsPage() {
   }, [load]);
 
   useEffect(() => {
-    alexPage?.setPageContext({ type: "requests_list", totalCount: totalCount });
+    const activeFilters: Record<string, unknown> = {};
+    if (f.status) activeFilters.status = f.status;
+    if (f.category) activeFilters.category = f.category;
+    if (f.priority) activeFilters.priority = f.priority;
+    if (f.range) activeFilters.range = f.range;
+    if (f.assigned) activeFilters.assigned = f.assigned;
+    if (f.search.trim()) activeFilters.search = f.search.trim();
+    alexPage?.setPageContext({ type: "requests_list", totalCount, activeFilters });
     return () => alexPage?.setPageContext(null);
-  }, [alexPage, totalCount]);
+  }, [alexPage, totalCount, f.status, f.category, f.priority, f.range, f.assigned, f.search]);
 
   useEffect(() => {
     void (async () => {

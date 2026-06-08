@@ -18,6 +18,7 @@ import {
   Sparkles,
   Trash2,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hasMinRole, type Role } from "@/lib/roles";
@@ -47,6 +48,15 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { formatTodayLabelAthens } from "@/lib/date-format";
+
+const UNDOABLE_TOOLS = [
+  "update_contact_status",
+  "bulk_update_status",
+  "add_note",
+  "update_contact",
+  "edit_contact",
+  "bulk_update_contacts",
+] as const;
 
 function isBriefingReady(b: BriefingToday | "loading" | null): b is BriefingToday {
   return b != null && b !== "loading";
@@ -783,8 +793,10 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                               ),
                             );
                             if (tools.length === 0) return null;
+                            const showUndo = tools.some((t) => (UNDOABLE_TOOLS as readonly string[]).includes(t));
                             return (
-                              <div className="mt-2 flex flex-wrap gap-1.5">
+                              <div className="mt-2 flex flex-col gap-1.5">
+                                <div className="flex flex-wrap gap-1.5">
                                 {tools.map((t) => (
                                   <span
                                     key={t}
@@ -796,6 +808,17 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                                     </span>
                                   </span>
                                 ))}
+                                </div>
+                                {showUndo && !m.isStreaming && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void send("Αναίρεσε την τελευταία ενέργεια")}
+                                    className="inline-flex w-fit items-center gap-1 text-xs text-[var(--text-muted)] transition hover:text-[var(--accent-gold)]"
+                                  >
+                                    <RotateCcw className="h-3 w-3" aria-hidden />
+                                    ↩ Αναίρεση
+                                  </button>
+                                )}
                               </div>
                             );
                           })()}
