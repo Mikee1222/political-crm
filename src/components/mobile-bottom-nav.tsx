@@ -49,6 +49,7 @@ export function MobileBottomNav({ profile, onOpenMore, openRequestsCount }: Mobi
     <button
       type="button"
       className={tabClass(alexActive)}
+      data-tour="alexandra-button"
       onClick={() => {
         openMiniFromBubble();
         setMiniWindowMinimized(false);

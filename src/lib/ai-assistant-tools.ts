@@ -69,6 +69,22 @@ export type FindRow = {
   contact_code?: string | null;
 };
 
+const GUIDE_TOPICS = [
+  "add_contact",
+  "search_contacts",
+  "add_request",
+  "manage_groups",
+  "start_campaign",
+  "use_search",
+  "manage_settings",
+  "export_data",
+  "use_alexandra",
+  "namedays",
+  "analytics",
+  "tasks",
+  "events",
+] as const;
+
 export const ALEX_TOOLS: Tool[] = [
   {
     name: "find_contacts",
@@ -772,6 +788,31 @@ export const ALEX_TOOLS: Tool[] = [
     },
   },
   {
+    name: "guide_user",
+    description:
+      "Οδηγεί τον χρήστη βήμα-βήμα σε μια λειτουργία του CRM. Χρησιμοποίησε όταν ρωτά «πώς να κάνω X», «βοήθεια», «δείξε μου πώς». Για ξεναγία/tour βάλε start_tour=true.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        topic: {
+          type: "string" as const,
+          description: "Τι θέλει να μάθει ο χρήστης",
+          enum: [...GUIDE_TOPICS],
+        },
+        start_tour: {
+          type: "boolean" as const,
+          description: "true για να ξεκινήσει διαδραστική ξεναγία στο CRM",
+        },
+        tour_id: {
+          type: "string" as const,
+          enum: ["welcome", "contacts_tour", "requests_tour"] as const,
+          description: "Ποια ξεναγία να ξεκινήσει (προαιρετικό — επιλέγεται από topic)",
+        },
+      },
+      required: ["topic"],
+    },
+  },
+  {
     name: "undo_last_action",
     description: "Αναιρεί την τελευταία αναστρέψιμη ενέργεια (κατάσταση, σημείωση, επεξεργασία επαφής).",
     input_schema: { type: "object" as const, properties: {} },
@@ -1321,7 +1362,188 @@ export type ToolRunResult = {
   /** For UI "Εκτελέστηκε" badge — false for start_call (χρειάζεται Ναι/Όχι) */
   executedToolName?: string;
   showExecutedTag?: boolean;
+  /** Trigger interactive CRM tour in the client */
+  startTour?: boolean;
+  tourId?: string;
 };
+
+type GuideStep = {
+  step: number;
+  text: string;
+  url?: string | null;
+  action?: string;
+};
+
+type UserGuide = {
+  title: string;
+  steps: GuideStep[];
+};
+
+const TOUR_ID_BY_TOPIC: Partial<Record<(typeof GUIDE_TOPICS)[number], string>> = {
+  add_contact: "contacts_tour",
+  search_contacts: "contacts_tour",
+  manage_groups: "contacts_tour",
+  export_data: "contacts_tour",
+  add_request: "requests_tour",
+  use_alexandra: "welcome",
+  use_search: "welcome",
+};
+
+function getUserGuides(): Record<(typeof GUIDE_TOPICS)[number], UserGuide> {
+  return {
+    add_contact: {
+      title: "Πώς να προσθέσεις νέα επαφή",
+      steps: [
+        { step: 1, text: "Πήγαινε στη σελίδα Επαφές", url: "/contacts", action: "navigate" },
+        { step: 2, text: 'Πάτα το κουμπί "+ Νέα Επαφή" πάνω δεξιά' },
+        { step: 3, text: "Συμπλήρωσε Όνομα, Επώνυμο και Τηλέφωνο (υποχρεωτικά)" },
+        { step: 4, text: "Προαιρετικά: Δήμος, Τοπωνύμιο, Φύλο, Ημ. Γέννησης" },
+        { step: 5, text: 'Πάτα "Αποθήκευση"' },
+      ],
+    },
+    search_contacts: {
+      title: "Πώς να ψάξεις επαφές",
+      steps: [
+        { step: 1, text: "Γρήγορη αναζήτηση: Πάτα ⌘K ή το εικονίδιο αναζήτησης πάνω δεξιά", url: null },
+        {
+          step: 2,
+          text: "Για φίλτρα: Πήγαινε Επαφές → χρησιμοποίησε τα φίλτρα (Δήμος, Ομάδα, Φύλο, Ηλικία)",
+          url: "/contacts",
+        },
+        {
+          step: 3,
+          text: 'Για προχωρημένη αναζήτηση: Πάτα "Προχωρημένη αναζήτηση →"',
+          url: "/contacts/search",
+        },
+        { step: 4, text: "Μπορείς να αναζητήσεις με όνομα, τηλέφωνο, δήμο, ομάδα, ηλικία κλπ" },
+      ],
+    },
+    add_request: {
+      title: "Πώς να προσθέσεις αίτημα",
+      steps: [
+        { step: 1, text: "Πήγαινε στη σελίδα Αιτήματα", url: "/requests" },
+        { step: 2, text: 'Πάτα "+ Νέο Αίτημα"' },
+        { step: 3, text: "Συμπλήρωσε τίτλο και κατηγορία (π.χ. ΕΦΚΑ, ΥΠ.ΠΑΙΔΕΙΑΣ)" },
+        { step: 4, text: "Πρόσθεσε τον αιτούντα από την αναζήτηση επαφών" },
+        { step: 5, text: "Πρόσθεσε χειριστή αιτήματος αν χρειάζεται" },
+        { step: 6, text: 'Πάτα "Αποθήκευση"' },
+      ],
+    },
+    manage_groups: {
+      title: "Πώς να διαχειριστείς ομάδες",
+      steps: [
+        { step: 1, text: "Ρυθμίσεις → Οργάνωση → Ομάδες Επαφών", url: "/settings" },
+        { step: 2, text: 'Δημιούργησε νέα ομάδα με το "+" κουμπί' },
+        {
+          step: 3,
+          text: 'Για να προσθέσεις επαφή σε ομάδα: Άνοιξε την επαφή → Ομάδες → "+ Προσθήκη ομάδας"',
+        },
+        {
+          step: 4,
+          text: 'Για μαζική προσθήκη: Χρησιμοποίησε την Αλεξάνδρα: "Πρόσθεσε όλους από [δήμο] στην ομάδα [X]"',
+        },
+      ],
+    },
+    start_campaign: {
+      title: "Πώς να ξεκινήσεις καμπάνια κλήσεων",
+      steps: [
+        { step: 1, text: "Πήγαινε στις Καμπάνιες", url: "/campaigns" },
+        { step: 2, text: "Δημιούργησε νέα καμπάνια με τις επαφές που θέλεις" },
+        { step: 3, text: 'Πάτα "Εκκίνηση" για να αρχίσεις τις κλήσεις' },
+        { step: 4, text: "Κάθε κλήση γίνεται αυτόματα — μετά σημείωσε το αποτέλεσμα" },
+        {
+          step: 5,
+          text: 'Εναλλακτικά: πες στην Αλεξάνδρα "Ξεκίνα καμπάνια για επαφές από [δήμο]"',
+        },
+      ],
+    },
+    use_alexandra: {
+      title: "Πώς να χρησιμοποιείς την Αλεξάνδρα",
+      steps: [
+        {
+          step: 1,
+          text: 'Πάτα το κουμπί "Αλεξάνδρα AI" κάτω δεξιά ή πήγαινε στη σελίδα Αλεξάνδρα',
+          url: "/alexandra",
+        },
+        { step: 2, text: "Γράψε οτιδήποτε θέλεις — η Αλεξάνδρα καταλαβαίνει φυσική γλώσσα" },
+        {
+          step: 3,
+          text: 'Παραδείγματα: "Βρες όλους από το Αγρίνιο", "Νέο αίτημα για τον Παπαδόπουλο", "Ποιος γιορτάζει σήμερα;"',
+        },
+        {
+          step: 4,
+          text: 'Για μαζικές ενέργειες πες: "Άλλαξε κατάσταση σε Θετικός για όλους από [δήμο]"',
+        },
+        {
+          step: 5,
+          text: "Μπορείς επίσης να ρωτάς για καιρό, νέα, αθλητικά — η Αλεξάνδρα έχει πρόσβαση στο internet",
+        },
+      ],
+    },
+    export_data: {
+      title: "Πώς να εξάγεις δεδομένα",
+      steps: [
+        { step: 1, text: "Για επαφές: Επαφές → Εξαγωγή (αν έχεις δικαίωμα)" },
+        { step: 2, text: "Για προχωρημένη εξαγωγή: Αναζήτηση Επαφών → φίλτρα → Εξαγωγή αποτελεσμάτων" },
+        { step: 3, text: 'Μέσω Αλεξάνδρας: "Εξάγαγε όλες τις επαφές από το Αγρίνιο σε Excel"' },
+        { step: 4, text: "Για αιτήματα: Αναζήτηση Αιτημάτων → Εξαγωγή" },
+      ],
+    },
+    namedays: {
+      title: "Πώς λειτουργεί το Εορτολόγιο",
+      steps: [
+        { step: 1, text: "Πήγαινε στο Εορτολόγιο από το sidebar", url: "/namedays" },
+        { step: 2, text: "Βλέπεις ποιος γιορτάζει σήμερα και πόσες επαφές έχεις" },
+        { step: 3, text: "Ψάξε οποιοδήποτε όνομα για να δεις πότε γιορτάζει" },
+        { step: 4, text: "Κάνε κλικ στον αριθμό επαφών για να τις δεις" },
+        {
+          step: 5,
+          text: 'Η Αλεξάνδρα μπορεί να στείλει αυτόματα ευχές: "Στείλε ευχές σε όσους γιορτάζουν σήμερα"',
+        },
+      ],
+    },
+    use_search: {
+      title: "Πώς να χρησιμοποιείς την αναζήτηση",
+      steps: [
+        { step: 1, text: "Πάτα ⌘K ή το εικονίδιο αναζήτησης για γρήγορη καθολική αναζήτηση" },
+        { step: 2, text: "Για επαφές με φίλτρα: Επαφές → Προχωρημένη αναζήτηση", url: "/contacts/search" },
+        { step: 3, text: "Για αιτήματα: Αιτήματα → Αναζήτηση Αιτημάτων", url: "/requests/search" },
+      ],
+    },
+    manage_settings: {
+      title: "Πώς να διαχειριστείς τις ρυθμίσεις",
+      steps: [
+        { step: 1, text: "Πήγαινε στις Ρυθμίσεις από το sidebar", url: "/settings" },
+        { step: 2, text: "Εκεί ρυθμίζεις ομάδες επαφών, καταστάσεις, κατηγορίες αιτημάτων και άλλα" },
+        { step: 3, text: "Οι αλλαγές ισχύουν για όλους τους χρήστες του CRM (ανάλογα με τον ρόλο σου)" },
+      ],
+    },
+    analytics: {
+      title: "Πώς να δεις αναλυτικά στοιχεία",
+      steps: [
+        { step: 1, text: "Πήγαινε στα Αναλυτικά από το sidebar", url: "/analytics" },
+        { step: 2, text: "Δες KPIs, τάσεις επαφών και αιτημάτων" },
+        { step: 3, text: 'Ή ρώτα την Αλεξάνδρα: "Δείξε μου στατιστικά CRM"' },
+      ],
+    },
+    tasks: {
+      title: "Πώς να διαχειριστείς εργασίες",
+      steps: [
+        { step: 1, text: "Πήγαινε στις Εργασίες από το sidebar", url: "/tasks" },
+        { step: 2, text: "Δημιούργησε νέα εργασία ή ολοκλήρωσε εκκρεμείς" },
+        { step: 3, text: 'Ή πες στην Αλεξάνδρα: "Πρόσθεσε εργασία για αύριο"' },
+      ],
+    },
+    events: {
+      title: "Πώς να διαχειριστείς εκδηλώσεις",
+      steps: [
+        { step: 1, text: "Πήγαινε στις Εκδηλώσεις από το sidebar", url: "/events" },
+        { step: 2, text: "Δημιούργησε εκδήλωση και διαχειρίσου RSVPs" },
+        { step: 3, text: 'Ή πες στην Αλεξάνδρα: "Δημιούργησε εκδήλωση για [ημερομηνία]"' },
+      ],
+    },
+  };
+}
 
 function contactAgeGroup(age: unknown): string {
   const a = typeof age === "number" ? age : parseInt(String(age), 10);
@@ -3379,6 +3601,40 @@ async function runAlexToolInner(
     }
   }
 
+  if (name === "guide_user") {
+    const topic = String(raw.topic ?? "").trim() as (typeof GUIDE_TOPICS)[number];
+    const guides = getUserGuides();
+    const guide = guides[topic];
+    if (!guide) {
+      return { content: JSON.stringify({ error: "Δεν βρέθηκε οδηγός για αυτό το θέμα" }) };
+    }
+    const message = `Ακολούθησε τα παρακάτω βήματα:\n\n${guide.steps
+      .map((s) => `**Βήμα ${s.step}:** ${s.text}`)
+      .join("\n")}`;
+    const wantTour = raw.start_tour === true;
+    const tourId =
+      (typeof raw.tour_id === "string" && raw.tour_id.trim() ? raw.tour_id.trim() : null) ??
+      TOUR_ID_BY_TOPIC[topic] ??
+      (wantTour ? "welcome" : null);
+    const payload: Record<string, unknown> = {
+      ok: true,
+      guide: guide.title,
+      steps: guide.steps,
+      message,
+    };
+    if (wantTour && tourId) {
+      payload.start_tour = true;
+      payload.tour_id = tourId;
+    }
+    return {
+      content: JSON.stringify(payload),
+      executedToolName: "guide_user",
+      showExecutedTag: false,
+      startTour: Boolean(wantTour && tourId),
+      tourId: wantTour && tourId ? tourId : undefined,
+    };
+  }
+
   return { content: JSON.stringify({ error: "Άγνωστο tool" }) };
 }
 
@@ -3508,6 +3764,13 @@ export function buildSystemPrompt({
 - Αν είσαι σε σελίδα αιτήματος, χρησιμοποίησε αυτόματα το request_id του τρέχοντος αιτήματος
 - Αποθήκευσε αυτόματα στη μνήμη σου οποιαδήποτε σημαντική πληροφορία που μαθαίνεις για τον χρήστη, τις προτιμήσεις του, ή σημαντικές ενέργειες που έγιναν (save_memory tool)
 - Μπορείς να αναιρέσεις την τελευταία ενέργεια με το tool undo_last_action. Ενημέρωνε τον χρήστη ότι μπορεί να πει «αναίρεση» ή «undo» μετά από κάθε σημαντική ενέργεια.
+
+ΒΟΗΘΕΙΑ ΧΡΗΣΤΩΝ:
+Όταν ο χρήστης ρωτά «πώς να κάνω X», «δείξε μου πώς», «βοήθεια με X», «ξεναγία», «κάνε tour»:
+- Χρησιμοποίησε το tool guide_user με το κατάλληλο topic (add_contact, search_contacts, add_request, use_alexandra, κ.λπ.)
+- Για ξεναγία/tour: guide_user με start_tour=true και tour_id welcome | contacts_tour | requests_tour (ή άφησέ το να επιλεγεί από topic)
+- Να είσαι πάντα υπομονετική και ενθαρρυντική με νέους χρήστες
+- Μπορείς επίσης να κάνεις τη δουλειά ΑΝΤΙ για τον χρήστη αν το προτιμά — ρώτα σύντομα αν θέλει οδηγίες ή να το κάνεις εσύ
 
 ΣΗΜΕΡΑ: ${todayDate}
 ΤΡΕΧΟΥΣΑ ΣΕΛΙΔΑ: ${pageContextBlock}

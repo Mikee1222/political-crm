@@ -316,6 +316,7 @@ export default function RequestsPage() {
             <button
               type="button"
               onClick={() => setCreateOpen(true)}
+              data-tour="new-request-button"
               className={lux.btnGold + " hq-shimmer-gold w-full !rounded-full !px-5 !py-2.5 !text-sm sm:w-auto"}
             >
               <Inbox className="h-4 w-4" />
@@ -370,7 +371,7 @@ export default function RequestsPage() {
         </div>
       ) : null}
 
-      <div className={lux.card + " !py-4 !px-4 sm:!p-5 w-full min-w-0 max-w-full"}>
+      <div className={lux.card + " !py-4 !px-4 sm:!p-5 w-full min-w-0 max-w-full"} data-tour="requests-filters">
         <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="min-w-0 w-full flex-1 sm:min-w-[12rem]">
             <label className={lux.label} htmlFor="r-search">
