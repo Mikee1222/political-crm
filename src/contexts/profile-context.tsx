@@ -47,7 +47,10 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sessionResolved, setSessionResolved] = useState(() => !isCrmAppPath(pathname));
+  const [sessionResolved, setSessionResolved] = useState(() => {
+    if (typeof window === "undefined") return true; // SSR: πάντα true
+    return !isCrmAppPath(pathname);
+  });
   const crmSessionReadyRef = useRef(false);
 
   const loadProfile = useCallback(async () => {
