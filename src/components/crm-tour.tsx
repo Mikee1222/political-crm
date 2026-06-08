@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Lightbulb, X } from "lucide-react";
 import type { TourId } from "@/contexts/tour-context";
@@ -156,7 +156,12 @@ function resolveTarget(selector: string | undefined): Element | null {
     const parent = document.querySelector(base);
     return parent?.firstElementChild ?? parent;
   }
-  return document.querySelector(selector);
+  const matches = document.querySelectorAll(selector);
+  for (const el of matches) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) return el;
+  }
+  return matches[0] ?? null;
 }
 
 function computePopupStyle(targetRect: DOMRect | null, position: TourStep["position"]): CSSProperties {
@@ -226,16 +231,16 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId | null; onCompl
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [popupStyle, setPopupStyle] = useState<CSSProperties>({ width: POPUP_W });
-  const pendingNavRef = useRef<number | null>(null);
 
   const step = tour?.steps[currentStep];
   const isLast = tour ? currentStep === tour.steps.length - 1 : true;
   const isFirst = currentStep === 0;
 
   const refreshTarget = useCallback(() => {
-    if (!step?.target) {
+    if (!step) return;
+    if (!step.target) {
       setTargetRect(null);
-      setPopupStyle(computePopupStyle(null, step?.position ?? "center"));
+      setPopupStyle(computePopupStyle(null, step.position));
       return;
     }
     const el = resolveTarget(step.target);
@@ -246,6 +251,11 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId | null; onCompl
     }
     el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      setTargetRect(null);
+      setPopupStyle(computePopupStyle(null, step.position));
+      return;
+    }
     setTargetRect(rect);
     setPopupStyle(computePopupStyle(rect, step.position));
   }, [step]);
@@ -253,23 +263,17 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId | null; onCompl
   useLayoutEffect(() => {
     if (!tour) return;
     setCurrentStep(0);
-    pendingNavRef.current = null;
   }, [tourId, tour]);
 
   useEffect(() => {
-    if (!step?.url || pathMatches(step.url, pathname)) {
-      const t = window.setTimeout(refreshTarget, step?.url ? 350 : 50);
-      return () => window.clearTimeout(t);
+    if (!step) return;
+    if (step.url && !pathMatches(step.url, pathname)) {
+      router.push(step.url);
+      return;
     }
-    router.push(step.url);
+    const t = window.setTimeout(refreshTarget, step.url ? 350 : 50);
+    return () => window.clearTimeout(t);
   }, [currentStep, step, pathname, router, refreshTarget]);
-
-  useEffect(() => {
-    if (pendingNavRef.current == null) return;
-    if (!pathMatches(tour?.steps[pendingNavRef.current]?.url, pathname)) return;
-    setCurrentStep(pendingNavRef.current);
-    pendingNavRef.current = null;
-  }, [pathname, tour]);
 
   useEffect(() => {
     if (!step?.target) return;
@@ -282,19 +286,27 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId | null; onCompl
     };
   }, [step?.target, refreshTarget]);
 
-  const goToStep = useCallback(
-    (next: number) => {
-      if (!tour || next < 0 || next >= tour.steps.length) return;
-      const nextStep = tour.steps[next];
-      if (nextStep.url && !pathMatches(nextStep.url, pathname)) {
-        pendingNavRef.current = next;
-        router.push(nextStep.url);
-        return;
-      }
-      setCurrentStep(next);
-    },
-    [tour, pathname, router],
-  );
+  const handleNext = useCallback(async () => {
+    if (!tour || isLast) return;
+    const nextIndex = currentStep + 1;
+    const nextStep = tour.steps[nextIndex];
+    if (nextStep.url && !pathMatches(nextStep.url, window.location.pathname)) {
+      router.push(nextStep.url);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    setCurrentStep(nextIndex);
+  }, [tour, isLast, currentStep, router]);
+
+  const handleBack = useCallback(async () => {
+    if (!tour || isFirst) return;
+    const prevIndex = currentStep - 1;
+    const prevStep = tour.steps[prevIndex];
+    if (prevStep.url && !pathMatches(prevStep.url, window.location.pathname)) {
+      router.push(prevStep.url);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    setCurrentStep(prevIndex);
+  }, [tour, isFirst, currentStep, router]);
 
   if (!tourId || !tour || !step) return null;
 
@@ -352,12 +364,12 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId | null; onCompl
         </h3>
         <p className="mb-4 text-sm leading-relaxed text-[var(--text-secondary)]">{step.description}</p>
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="relative z-[143] flex items-center justify-between gap-2">
           <button
             type="button"
-            onClick={() => goToStep(currentStep - 1)}
+            onClick={() => void handleBack()}
             disabled={isFirst}
-            className="flex items-center gap-1 text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-30"
+            className="pointer-events-auto flex items-center gap-1 text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-30"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden />
             Πίσω
@@ -367,15 +379,15 @@ export function CRMTour({ tourId, onComplete }: { tourId: TourId | null; onCompl
             <button
               type="button"
               onClick={onComplete}
-              className="rounded-lg bg-[var(--accent-gold)] px-4 py-2 text-sm font-medium text-[var(--text-badge-on-gold)] hover:opacity-90"
+              className="pointer-events-auto rounded-lg bg-[var(--accent-gold)] px-4 py-2 text-sm font-medium text-[var(--text-badge-on-gold)] hover:opacity-90"
             >
               Τέλος!
             </button>
           ) : (
             <button
               type="button"
-              onClick={() => goToStep(currentStep + 1)}
-              className="flex items-center gap-1 rounded-lg bg-[var(--accent-gold)] px-4 py-2 text-sm font-medium text-[var(--text-badge-on-gold)] hover:opacity-90"
+              onClick={() => void handleNext()}
+              className="pointer-events-auto flex items-center gap-1 rounded-lg bg-[var(--accent-gold)] px-4 py-2 text-sm font-medium text-[var(--text-badge-on-gold)] hover:opacity-90"
             >
               Επόμενο
               <ChevronRight className="h-4 w-4" aria-hidden />

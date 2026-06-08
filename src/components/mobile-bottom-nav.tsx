@@ -68,14 +68,14 @@ export function MobileBottomNav({ profile, onOpenMore, openRequestsCount }: Mobi
 
   if (mgr) {
     return (
-      <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
+      <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση" data-tour="sidebar">
         <div className={innerBar}>
           <Link href="/dashboard" prefetch className={tabClass(pathname === "/dashboard")} aria-current={pathname === "/dashboard" ? "page" : undefined}>
             <Home className={`h-5 w-5 shrink-0 ${pathname === "/dashboard" ? active : inactive}`} />
             <span>Dashboard</span>
           </Link>
           {canContacts ? (
-            <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
+            <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined} data-tour="nav-contacts">
               <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
               <span>Επαφές</span>
             </Link>
@@ -83,7 +83,7 @@ export function MobileBottomNav({ profile, onOpenMore, openRequestsCount }: Mobi
             <span className={`${tabClass(false)} opacity-40`} aria-hidden />
           )}
           {canRequests ? (
-            <Link href="/requests" prefetch className={`${tabClass(isTabActive("/requests"))} relative`} aria-current={isTabActive("/requests") ? "page" : undefined}>
+            <Link href="/requests" prefetch className={`${tabClass(isTabActive("/requests"))} relative`} aria-current={isTabActive("/requests") ? "page" : undefined} data-tour="nav-requests">
               <Inbox className={`h-5 w-5 shrink-0 ${isTabActive("/requests") ? active : inactive}`} />
               <span>Αιτήματα</span>
               {openRequestsCount > 0 && (
@@ -113,7 +113,7 @@ export function MobileBottomNav({ profile, onOpenMore, openRequestsCount }: Mobi
     <nav className={navShell} role="navigation" aria-label="Κύρια πλοήγηση">
       <div className={innerBarVolunteer}>
         {canContacts ? (
-          <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined}>
+          <Link href="/contacts" prefetch className={tabClass(isTabActive("/contacts"))} aria-current={isTabActive("/contacts") ? "page" : undefined} data-tour="nav-contacts">
             <Users className={`h-5 w-5 shrink-0 ${isTabActive("/contacts") ? active : inactive}`} />
             <span>Επαφές</span>
           </Link>
