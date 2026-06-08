@@ -883,7 +883,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  const showSidebarNavSkeleton = profileLoading || !sessionResolved;
+  if (!sessionResolved) {
+    return <CrmSessionBootScreen />;
+  }
+
+  const showSidebarNavSkeleton = profileLoading;
 
   return (
     <div
@@ -1247,7 +1251,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           ) : null}
         </div>
       </div>
-      {!sessionResolved && <CrmSessionBootScreen />}
     </div>
   );
 }
