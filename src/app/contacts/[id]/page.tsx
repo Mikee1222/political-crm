@@ -45,6 +45,7 @@ import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactElectoralLocationEdit } from "@/components/contact-electoral-location-edit";
 import { ContactGroupsSection } from "@/components/contact-groups-section";
+import { AISummaryCard } from "@/components/ai-summary-card";
 import { ContactExtraSections } from "@/components/contact-extra-sections";
 import { ContactRelatedPersonsSection } from "@/components/contact-related-persons-section";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
@@ -1647,6 +1648,17 @@ function ContactDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-5">
+        {canManage && (
+          <div className="min-w-0 md:col-span-2">
+            <AISummaryCard
+              entityType="contact"
+              entityId={c.id}
+              entityName={`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim()}
+              apiEndpoint={`/api/contacts/${c.id}/ai-summary`}
+              compact
+            />
+          </div>
+        )}
         {canManage && (
           <div className="min-w-0 md:col-span-2">
             <ContactExtraSections contactId={c.id} phone={c.phone} canManage={canManage} />

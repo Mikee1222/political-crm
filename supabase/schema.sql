@@ -1033,6 +1033,10 @@ alter table public.contacts
   add column if not exists ai_summary text,
   add column if not exists ai_summary_updated_at timestamptz;
 
+alter table public.requests
+  add column if not exists ai_summary text,
+  add column if not exists ai_summary_updated_at timestamptz;
+
 create table if not exists public.whatsapp_messages (
   id uuid primary key default gen_random_uuid (),
   contact_id uuid references public.contacts (id) on delete set null,

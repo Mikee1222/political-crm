@@ -4,7 +4,8 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { generateSummaryText, readCachedSummary } from "@/lib/ai-summary";
-import { CONTACT_SUMMARY_SYSTEM, fetchContactSummaryPack } from "@/lib/ai-summary-prompts";
+import { fetchRequestSummaryPack } from "@/lib/ai-summary-request-data";
+import { REQUEST_SUMMARY_SYSTEM } from "@/lib/ai-summary-prompts";
 
 export const dynamic = "force-dynamic";
 
@@ -19,21 +20,21 @@ export async function GET(
     const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
-    const { data: c, error } = await supabase
-      .from("contacts")
+    const { data: row, error } = await supabase
+      .from("requests")
       .select("id, ai_summary, ai_summary_updated_at")
       .eq("id", id)
       .maybeSingle();
     if (error) {
-      console.warn("[ai-summary GET]", error.message);
+      console.warn("[request ai-summary GET]", error.message);
       return NextResponse.json({ summary: null, cached: false, updated_at: null });
     }
-    if (!c) {
+    if (!row) {
       return NextResponse.json({ summary: null, cached: false, updated_at: null });
     }
-    return NextResponse.json(readCachedSummary(c));
+    return NextResponse.json(readCachedSummary(row));
   } catch (e) {
-    console.error("[ai-summary GET]", e);
+    console.error("[request ai-summary GET]", e);
     return NextResponse.json({ summary: null, cached: false, updated_at: null });
   }
 }
@@ -49,19 +50,19 @@ export async function POST(
     const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
-    const pack = await fetchContactSummaryPack(supabase, id);
+    const pack = await fetchRequestSummaryPack(supabase, id);
     if (!pack) {
-      return NextResponse.json({ error: "Άγνωστη επαφή" }, { status: 404 });
+      return NextResponse.json({ error: "Δεν βρέθηκε το αίτημα" }, { status: 404 });
     }
 
-    const generated = await generateSummaryText(CONTACT_SUMMARY_SYSTEM, pack.prompt);
+    const generated = await generateSummaryText(REQUEST_SUMMARY_SYSTEM, pack.prompt);
     if (!generated.ok) {
-      return NextResponse.json({ error: generated.error }, { status: 503 });
+      return NextResponse.json({ error: generated.error, summary: `Σφάλμα: ${generated.error}` }, { status: 503 });
     }
 
     const now = new Date().toISOString();
     const { error: up } = await supabase
-      .from("contacts")
+      .from("requests")
       .update({ ai_summary: generated.summary, ai_summary_updated_at: now })
       .eq("id", id);
     if (up) {
@@ -69,7 +70,7 @@ export async function POST(
     }
     return NextResponse.json({ summary: generated.summary, cached: false, updated_at: now });
   } catch (e) {
-    console.error("[ai-summary POST]", e);
+    console.error("[request ai-summary POST]", e);
     return nextJsonError();
   }
 }

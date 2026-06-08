@@ -2,50 +2,41 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { anthropicComplete } from "@/lib/anthropic-once";
-import { formatDateAthens } from "@/lib/date-format";
+import { generateSummaryText, readCachedSummary } from "@/lib/ai-summary";
+import { fetchRequestSummaryPack } from "@/lib/ai-summary-request-data";
+import { REQUEST_SUMMARY_SYSTEM } from "@/lib/ai-summary-prompts";
 
 export const dynamic = "force-dynamic";
 
-const SELECT_WITH_CONTACT =
-  "id, request_code, title, description, category, status, priority, created_at, sla_due_date, contact_id, contacts!contact_id(first_name,last_name,phone,address,area,municipality,political_stance,call_status,occupation,age,contact_groups(name))";
+export async function GET(req: NextRequest) {
+  try {
+    const crm = await checkCRMAccess(req);
+    if (!crm.allowed) return crm.response;
+    const { profile, supabase } = crm;
+    if (!hasMinRole(profile?.role, "manager")) return forbidden();
 
-const SELECT_FALLBACK =
-  "id, request_code, title, description, category, status, priority, created_at, sla_due_date, contact_id, contacts!contact_id(first_name,last_name,phone,address,area,municipality,political_stance,call_status,occupation,age)";
+    const requestId = req.nextUrl.searchParams.get("requestId")?.trim() ?? "";
+    if (!requestId) {
+      return NextResponse.json({ error: "Απαιτείται requestId" }, { status: 400 });
+    }
 
-type ContactRow = {
-  first_name?: string | null;
-  last_name?: string | null;
-  phone?: string | null;
-  address?: string | null;
-  area?: string | null;
-  municipality?: string | null;
-  political_stance?: string | null;
-  call_status?: string | null;
-  occupation?: string | null;
-  age?: number | null;
-  contact_groups?: { name?: string } | { name?: string }[] | null;
-};
-
-function resolveContact(contacts: unknown): ContactRow | null {
-  if (!contacts) return null;
-  if (Array.isArray(contacts)) return (contacts[0] as ContactRow) ?? null;
-  return contacts as ContactRow;
-}
-
-function resolveGroupName(contact: ContactRow | null): string {
-  const groups = contact?.contact_groups;
-  if (Array.isArray(groups)) return groups[0]?.name ?? "Καμία";
-  if (groups && typeof groups === "object" && "name" in groups) {
-    return (groups as { name?: string }).name ?? "Καμία";
+    const { data: row, error } = await supabase
+      .from("requests")
+      .select("id, ai_summary, ai_summary_updated_at")
+      .eq("id", requestId)
+      .maybeSingle();
+    if (error || !row) {
+      return NextResponse.json({ summary: null, cached: false, updated_at: null });
+    }
+    return NextResponse.json(readCachedSummary(row));
+  } catch (err) {
+    console.error("[ai-summary GET]", err);
+    return NextResponse.json({ summary: null, cached: false, updated_at: null });
   }
-  return "Καμία";
 }
 
 export async function POST(req: NextRequest) {
   try {
-    console.log("[ai-summary] API key exists:", !!process.env.ANTHROPIC_API_KEY);
-
     const crm = await checkCRMAccess(req);
     if (!crm.allowed) return crm.response;
     const { profile, supabase } = crm;
@@ -59,110 +50,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Απαιτείται requestId" }, { status: 400 });
     }
 
-    let { data: requestRow, error: reqErr } = await supabase
-      .from("requests")
-      .select(SELECT_WITH_CONTACT)
-      .eq("id", requestId)
-      .single();
-
-    if (reqErr?.message.includes("contact_groups")) {
-      const retry = await supabase.from("requests").select(SELECT_FALLBACK).eq("id", requestId).single();
-      requestRow = retry.data as typeof requestRow;
-      reqErr = retry.error;
+    const pack = await fetchRequestSummaryPack(supabase, requestId);
+    if (!pack) {
+      return NextResponse.json({ error: "Δεν βρέθηκε το αίτημα" }, { status: 404 });
     }
 
-    if (reqErr || !requestRow) {
-      console.error("[ai-summary] request fetch failed:", reqErr);
-      return NextResponse.json(
-        { error: reqErr?.message ?? "Δεν βρέθηκε το αίτημα" },
-        { status: 404 },
-      );
-    }
+    const schedulerPrompt = `${pack.prompt}
 
-    const { data: notes, error: notesErr } = await supabase
-      .from("request_notes")
-      .select("content, created_at")
-      .eq("request_id", requestId)
-      .order("created_at", { ascending: true })
-      .limit(10);
+ΠΡΟΣΘΕΤΕΣ ΟΔΗΓΙΕΣ (προγραμματιστής αιτημάτων):
+Δώσε ΟΛΟΚΛΗΡΩΜΕΝΗ σύνοψη 4-6 προτάσεων για γρήγορη απόφαση προγραμματισμού.
+Τόνισε προτεραιότητα, SLA, κατάσταση πολίτη και αν χρειάζεται άμεση δράση.`;
 
-    if (notesErr) {
-      console.error("[ai-summary] notes fetch failed:", notesErr);
-    }
-
-    const row = requestRow as {
-      request_code?: string | null;
-      title?: string | null;
-      description?: string | null;
-      category?: string | null;
-      status?: string | null;
-      priority?: string | null;
-      created_at?: string | null;
-      sla_due_date?: string | null;
-      contacts?: unknown;
-    };
-
-    const contact = resolveContact(row.contacts);
-    const contactName = contact
-      ? `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || "Άγνωστος"
-      : "Άγνωστος";
-    const groupName = resolveGroupName(contact);
-
-    const notesText =
-      notes && notes.length > 0
-        ? notes
-            .map((n) => {
-              const c = n as { content?: string; created_at?: string };
-              const d = c.created_at ? formatDateAthens(c.created_at) : "—";
-              return `- ${c.content ?? ""} (${d})`;
-            })
-            .join("\n")
-        : "Δεν υπάρχουν σημειώσεις.";
-
-    const createdLabel = row.created_at ? formatDateAthens(row.created_at) : "—";
-
-    const prompt = `Είσαι βοηθός πολιτικού γραφείου. Δώσε μια ΟΛΟΚΛΗΡΩΜΕΝΗ σύνοψη (4-6 προτάσεις) στα ελληνικά για το παρακάτω αίτημα. ΣΗΜΑΝΤΙΚΟ: Να ολοκληρώνεις πάντα τις προτάσεις σου.
-
-ΑΙΤΗΜΑ: ${row.request_code ?? "—"} — ${row.title ?? "—"}
-ΚΑΤΗΓΟΡΙΑ: ${row.category ?? "—"}
-ΚΑΤΑΣΤΑΣΗ: ${row.status ?? "—"}
-ΠΡΟΤΕΡΑΙΟΤΗΤΑ: ${row.priority ?? "—"}
-ΠΕΡΙΓΡΑΦΗ: ${row.description ?? "Χωρίς περιγραφή"}
-ΗΜΕΡΟΜΗΝΙΑ: ${createdLabel}
-SLA: ${row.sla_due_date ?? "—"}
-
-ΠΟΛΙΤΗΣ: ${contactName}
-ΤΗΛΕΦΩΝΟ: ${contact?.phone ?? "—"}
-ΠΕΡΙΟΧΗ: ${contact?.municipality ?? contact?.area ?? "Άγνωστη"}
-ΗΛΙΚΙΑ: ${contact?.age ?? "Άγνωστη"}
-ΕΠΑΓΓΕΛΜΑ: ${contact?.occupation ?? "Άγνωστο"}
-ΠΟΛΙΤΙΚΗ ΣΤΑΣΗ: ${contact?.political_stance ?? "—"}
-ΚΑΤΑΣΤΑΣΗ ΚΛΗΣΗΣ: ${contact?.call_status ?? "—"}
-ΟΜΑΔΑ: ${groupName}
-
-ΙΣΤΟΡΙΚΟ ΣΗΜΕΙΩΣΕΩΝ:
-${notesText}
-
-Σύνοψη: Τι έχει γίνει, ποιος είναι ο πολίτης και ποια είναι η κατάσταση του αιτήματος;`;
-
-    const out = await anthropicComplete(
-      "Είσαι βοηθός για βουλευτή. Απαντάς μόνο στα ελληνικά, 4-6 πλήρεις προτάσεις, χωρίς τίτλο ή markdown. Ολοκλήρωσε κάθε πρόταση.",
-      prompt,
-      { model: "claude-sonnet-4-5", maxTokens: 800 },
-    );
-
-    if (!out.ok) {
-      console.error("[ai-summary] Anthropic failed:", out.error);
+    const generated = await generateSummaryText(REQUEST_SUMMARY_SYSTEM, schedulerPrompt);
+    if (!generated.ok) {
+      console.error("[ai-summary] Anthropic failed:", generated.error);
       return NextResponse.json(
         {
-          error: out.error,
-          summary: `Σφάλμα: ${out.error}`,
+          error: generated.error,
+          summary: `Σφάλμα: ${generated.error}`,
         },
         { status: 503 },
       );
     }
 
-    return NextResponse.json({ summary: out.text.trim() });
+    const now = new Date().toISOString();
+    const { error: up } = await supabase
+      .from("requests")
+      .update({ ai_summary: generated.summary, ai_summary_updated_at: now })
+      .eq("id", requestId);
+    if (up) {
+      return NextResponse.json({ error: up.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ summary: generated.summary, cached: false, updated_at: now });
   } catch (err) {
     console.error("AI Summary error:", err);
     const message = err instanceof Error ? err.message : String(err);

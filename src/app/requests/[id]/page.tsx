@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
@@ -14,6 +14,7 @@ import { RequestPersonsSections } from "@/components/requests/request-persons-se
 import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
+import { AISummaryCard } from "@/components/ai-summary-card";
 
 type ContactCard = {
   id: string;
@@ -158,8 +159,6 @@ export default function RequestDetailPage() {
   const [sending, setSending] = useState(false);
   const [portalMsg, setPortalMsg] = useState("");
   const [savingMsg, setSavingMsg] = useState(false);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
   const alexPage = useOptionalAlexandraPageContext();
 
@@ -192,7 +191,6 @@ export default function RequestDetailPage() {
   const load = useCallback(async () => {
     if (!id) return;
     setErr("");
-    setAiSummary(null);
     try {
       const rRes = await fetchWithTimeout(`/api/requests/${encodeURIComponent(id)}`);
       const rj = await rRes.json();
@@ -215,28 +213,6 @@ export default function RequestDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const handleAiSummary = async () => {
-    if (!data) return;
-    if (aiSummary) {
-      setAiSummary(null);
-      return;
-    }
-    setAiLoading(true);
-    try {
-      const res = await fetchWithTimeout("/api/requests-scheduler/ai-summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId: data.id }),
-      });
-      const json = (await res.json()) as { summary?: string };
-      setAiSummary(json.summary ?? "Δεν ήταν δυνατή η δημιουργία σύνοψης.");
-    } catch {
-      setAiSummary("Σφάλμα σύνδεσης.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   if (err && !data) {
     return (
@@ -286,30 +262,15 @@ export default function RequestDetailPage() {
           </div>
         </div>
         {canEdit && (
-          <>
-            <button
-              type="button"
-              onClick={() => void handleAiSummary()}
-              disabled={aiLoading}
-              className="mt-3 flex touch-manipulation items-center gap-2 rounded-xl border border-primary/30 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
-            >
-              {aiLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Sparkles className="h-4 w-4" aria-hidden />
-              )}
-              {aiSummary ? "Απόκρυψη σύνοψης" : "Σύνοψη AI"}
-            </button>
-            {aiSummary && (
-              <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <div className="mb-2 flex items-center gap-2 text-primary">
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                  <span className="text-xs font-semibold uppercase tracking-widest">Σύνοψη Alexandra</span>
-                </div>
-                <p className="text-sm leading-relaxed text-foreground">{aiSummary}</p>
-              </div>
-            )}
-          </>
+          <div className="mt-4">
+            <AISummaryCard
+              entityType="request"
+              entityId={data.id}
+              entityName={data.title}
+              apiEndpoint={`/api/requests/${data.id}/ai-summary`}
+              canManage={canEdit}
+            />
+          </div>
         )}
       </header>
 

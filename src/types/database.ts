@@ -24,6 +24,8 @@ export type Database = {
           notes: string | null;
           last_contacted_at: string | null;
           last_contacted_by: string | null;
+          ai_summary: string | null;
+          ai_summary_updated_at: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["contacts"]["Row"]> & {
