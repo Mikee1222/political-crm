@@ -8,13 +8,11 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart2,
   Bell,
-  Cake,
   FileText,
   ListTodo,
   MapPin,
-  Phone,
+  Megaphone,
   Sparkles,
-  Sun,
   UserSearch,
 } from "lucide-react";
 
@@ -25,14 +23,12 @@ export type EmptyStateSuggestion = {
   text: string;
 };
 
-/** 6 empty-state cards on the Alexandra chat landing */
+/** 2×2 empty-state cards on the Alexandra chat landing */
 export const EMPTY_STATE_SUGGESTIONS: EmptyStateSuggestion[] = [
-  { label: "Βρες επαφή", icon: UserSearch, mode: "prefill", text: "Βρες την επαφή " },
-  { label: "Νέο αίτημα", icon: FileText, mode: "prefill", text: "Δημιούργησε αίτημα για " },
-  { label: "Ποιος γιορτάζει σήμερα;", icon: Cake, mode: "send", text: "Ποιος γιορτάζει σήμερα;" },
-  { label: "Πρωινή ενημέρωση", icon: Sun, mode: "send", text: "Πρωινή ενημέρωση" },
-  { label: "Στατιστικά CRM", icon: BarChart2, mode: "send", text: "Στατιστικά CRM" },
-  { label: "Λίστα κλήσεων", icon: Phone, mode: "send", text: "Λίστα κλήσεων" },
+  { label: "Βρες επαφή", icon: UserSearch, mode: "prefill", text: "Βρες επαφή " },
+  { label: "Νέο αίτημα", icon: FileText, mode: "prefill", text: "Δημιούργησε νέο αίτημα " },
+  { label: "Στατιστικά", icon: BarChart2, mode: "prefill", text: "Δείξε μου στατιστικά " },
+  { label: "Έναρξη καμπάνιας", icon: Megaphone, mode: "prefill", text: "Ξεκίνα καμπάνια " },
 ];
 
 export const SUGGESTED_CHIPS: { text: string; icon: LucideIcon }[] = [
