@@ -12,6 +12,7 @@ import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 type Ev = {
   id: string;
@@ -95,6 +96,7 @@ function EventsEmpty() {
 
 function EventsBody() {
   const { profile } = useProfile();
+  const alexPage = useOptionalAlexandraPageContext();
   const can = hasMinRole(profile?.role, "manager");
   const [list, setList] = useState<Ev[]>([]);
   const [openCreate, setOpenCreate] = useState(false);
@@ -113,6 +115,13 @@ function EventsBody() {
   useEffect(() => {
     if (can) void load();
   }, [can, load]);
+
+  const setPageContext = alexPage?.setPageContext;
+  useEffect(() => {
+    if (!setPageContext) return;
+    setPageContext({ type: "events" });
+    return () => setPageContext(null);
+  }, [setPageContext]);
 
   const openDetail = useCallback(async (e: Ev) => {
     setDetail(e);

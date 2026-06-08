@@ -7,6 +7,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { normalizeGreekName } from "@/lib/namedays";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 const MONTHS_HEADER = [
   "Ιανουάριος",
@@ -48,6 +49,7 @@ type TodaySummary = { dateLabel: string; calendarNames: string[]; contactCount: 
 
 export default function NamedaysPage() {
   const { showToast } = useFormToast();
+  const alexPage = useOptionalAlexandraPageContext();
   const [days, setDays] = useState<DayRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
@@ -96,6 +98,13 @@ export default function NamedaysPage() {
   useEffect(() => {
     void loadToday();
   }, [loadToday]);
+
+  const setPageContext = alexPage?.setPageContext;
+  useEffect(() => {
+    if (!setPageContext) return;
+    setPageContext({ type: "namedays" });
+    return () => setPageContext(null);
+  }, [setPageContext]);
 
   const byMonth = useMemo(() => {
     const m: DayRow[][] = Array.from({ length: 12 }, () => []);

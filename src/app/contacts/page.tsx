@@ -714,6 +714,7 @@ function contactDisplayName(c: Contact): string {
 
 function ContactsPage() {
   const { profile } = useProfile();
+  const pageCtx = useOptionalAlexandraPageContact();
   const canCreate = can(profile, "contacts_create");
   const canBulk = can(profile, "contacts_bulk");
   const canExport = can(profile, "contacts_export");
@@ -750,6 +751,13 @@ function ContactsPage() {
   const [focusMode, setFocusMode] = useState(false);
   const filtersUrlKeyRef = useRef<string | null>(null);
   const { showToast: showListToast } = useFormToast();
+
+  const setPageContext = pageCtx?.setPageContext;
+  useEffect(() => {
+    if (!setPageContext) return;
+    setPageContext({ type: "contacts_list", totalCount: listTotal });
+    return () => setPageContext(null);
+  }, [setPageContext, listTotal]);
 
   const applyFocusModeDom = useCallback((val: boolean) => {
     if (val) document.body.classList.add("focus-mode");

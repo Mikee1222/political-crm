@@ -33,6 +33,7 @@ import { ymdToNextMonth, ymdToPrevMonth } from "@/lib/task-filters";
 import type { TaskTabFilter } from "@/lib/task-filters";
 import { PageHeader } from "@/components/ui/page-header";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 type TaskT = {
   id: string;
@@ -109,6 +110,14 @@ export default function TasksPage() {
   const [heatCounts, setHeatCounts] = useState<Record<string, number>>({});
   const [heatMax, setHeatMax] = useState(0);
   const [assignees, setAssignees] = useState<AssigneeOpt[]>([]);
+  const alexPage = useOptionalAlexandraPageContext();
+
+  const setPageContext = alexPage?.setPageContext;
+  useEffect(() => {
+    if (!setPageContext) return;
+    setPageContext({ type: "tasks" });
+    return () => setPageContext(null);
+  }, [setPageContext]);
 
   useEffect(() => {
     void fetchWithTimeout("/api/team/assignees")

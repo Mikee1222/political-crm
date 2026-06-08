@@ -14,6 +14,7 @@ import { RequestPersonsSections } from "@/components/requests/request-persons-se
 import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 import { AISummaryCard } from "@/components/ai-summary-card";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 type ContactCard = {
   id: string;
@@ -159,6 +160,23 @@ export default function RequestDetailPage() {
   const [portalMsg, setPortalMsg] = useState("");
   const [savingMsg, setSavingMsg] = useState(false);
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
+  const alexPage = useOptionalAlexandraPageContext();
+
+  const setPageContext = alexPage?.setPageContext;
+  useEffect(() => {
+    if (!setPageContext) return;
+    if (data) {
+      setPageContext({
+        type: "request",
+        requestId: data.id,
+        requestTitle: data.title,
+        requestStatus: data.status ?? REQUEST_STATUS_OPEN,
+      });
+    } else {
+      setPageContext(null);
+    }
+    return () => setPageContext(null);
+  }, [setPageContext, data?.id, data?.title, data?.status]);
 
   const load = useCallback(async () => {
     if (!id) return;

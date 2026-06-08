@@ -43,6 +43,7 @@ import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
 import { can } from "@/lib/can";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
+import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 
 type RequestRow = {
   id: string;
@@ -132,6 +133,7 @@ export default function RequestsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { profile } = useProfile();
+  const alexPage = useOptionalAlexandraPageContext();
   const canCreate = can(profile, "requests_create");
   const canEdit = can(profile, "requests_edit");
   const canComplete = can(profile, "requests_complete");
@@ -228,6 +230,13 @@ export default function RequestsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const setPageContext = alexPage?.setPageContext;
+  useEffect(() => {
+    if (!setPageContext) return;
+    setPageContext({ type: "requests_list", totalCount });
+    return () => setPageContext(null);
+  }, [setPageContext, totalCount]);
 
   useEffect(() => {
     void (async () => {
