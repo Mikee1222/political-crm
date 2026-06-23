@@ -384,9 +384,71 @@ export function canUseNameOnlyFuzzySearchPath(f: ContactListFilters): boolean {
   return isNameOnlyFilter(f);
 }
 
-/** Name + any non-name column filter (gender, municipality, father_name, …) — not group+name fast path. */
+/** Column filters supported by search_contacts_in_groups_filtered RPC. */
+export function hasGroupRpcColumnFilters(f: ContactListFilters): boolean {
+  return Boolean(
+    f.gender ||
+      f.municipalities.length ||
+      f.toponyms.length ||
+      f.call_status ||
+      f.call_statuses.length ||
+      f.political_stance,
+  );
+}
+
+/** Any column filter other than group-RPC-supported fields (and name columns). */
+export function hasNonGroupRpcColumnFilters(f: ContactListFilters): boolean {
+  const stripped: ContactListFilters = { ...f };
+  stripped.gender = "";
+  stripped.political_stance = "";
+  stripped.call_status = "";
+  stripped.call_statuses = [];
+  stripped.municipalities = [];
+  stripped.toponyms = [];
+  stripped.first_name = "";
+  stripped.last_name = "";
+  stripped.father_name = "";
+  return hasColumnListFilters(stripped);
+}
+
+/** Group + RPC column filters only — no name, search, exclude/source, or other columns. */
+export function isGroupColumnOnlyFilter(f: ContactListFilters): boolean {
+  if (!hasGroupIncludeFilter(f)) return false;
+  if (hasNameColumnFilters(f)) return false;
+  if (!hasGroupRpcColumnFilters(f)) return false;
+  if (hasNonGroupRpcColumnFilters(f)) return false;
+  if (f.search?.trim()) return false;
+  if (f.exclude_group_ids.length) return false;
+  if (f.source_ids.length) return false;
+  if (f.exclude_source_ids.length) return false;
+  if (f.nameday_today) return false;
+  if (f.birthday_today) return false;
+  return true;
+}
+
+/** Group + column: search_contacts_in_groups_filtered RPC instead of batch id fetch. */
+export function canUseGroupColumnFastPath(
+  f: ContactListFilters,
+  resolvedIds?: string[] | null,
+): boolean {
+  if (!isGroupColumnOnlyFilter(f)) return false;
+  if (resolvedIds !== undefined && resolvedIds === null) return false;
+  return true;
+}
+
+/** Name + column (no group): search_contacts_by_name RPC + in-memory column refine. */
+export function canUseNameColumnFastPath(f: ContactListFilters): boolean {
+  if (!hasNameColumnFilters(f)) return false;
+  if (hasGroupIncludeFilter(f)) return false;
+  if (isNameOnlyFilter(f)) return false;
+  if (canUseGroupNameSearchFastPath(f)) return false;
+  return true;
+}
+
+/** Name + any non-name column filter — not name-column or group+name fast paths. */
 export function nameRequiresInMemoryPipeline(f: ContactListFilters): boolean {
   if (!hasNameColumnFilters(f)) return false;
+  if (canUseNameColumnFastPath(f)) return false;
   if (canUseGroupNameSearchFastPath(f)) return false;
   if (isNameOnlyFilter(f)) return false;
   return true;
@@ -414,11 +476,12 @@ export function canUseGroupOnlyFastPath(
   return true;
 }
 
-/** Group without name fast path: group+gender, group+municipality, … */
+/** Group without RPC fast path: complex column combos, exclude/source, etc. */
 export function groupRequiresInMemoryPipeline(f: ContactListFilters): boolean {
   if (!hasGroupIncludeFilter(f)) return false;
   if (canUseGroupNameSearchFastPath(f)) return false;
   if (isGroupOnlyFilter(f)) return false;
+  if (canUseGroupColumnFastPath(f)) return false;
   return true;
 }
 
@@ -490,7 +553,9 @@ export function needsInMemoryContactListPipeline(
 ): boolean {
   if (canUseGroupNameSearchFastPath(f)) return false;
   if (canUseGroupOnlyFastPath(f, resolvedIds)) return false;
+  if (canUseGroupColumnFastPath(f, resolvedIds)) return false;
   if (canUseNameOnlyFuzzySearchPath(f)) return false;
+  if (canUseNameColumnFastPath(f)) return false;
   if (f.search?.trim()) return true;
   if (nameRequiresInMemoryPipeline(f)) return true;
   if (groupRequiresInMemoryPipeline(f)) return true;

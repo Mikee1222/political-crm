@@ -3,14 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 import {
   applyColumnContactFiltersToBuilder,
+  canUseGroupColumnFastPath,
   canUseGroupNameSearchFastPath,
   canUseGroupOnlyFastPath,
+  canUseNameColumnFastPath,
   canUseNameOnlyFuzzySearchPath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
   filterContactRowsByListFilters,
   groupRequiresInMemoryPipeline,
   hasNameColumnFilters,
+  isGroupColumnOnlyFilter,
   isGroupOnlyFilter,
   isNameOnlyFilter,
   nameRequiresInMemoryPipeline,
@@ -20,6 +23,7 @@ import {
   fetchContactsByIncludeIdBatches,
   searchContactsByGroupsPaginated,
   searchContactsInGroups,
+  searchContactsInGroupsFiltered,
 } from "@/lib/contact-group-members";
 import { contactFieldMatchesFuzzyName } from "@/lib/greek-fuzzy-name";
 
@@ -182,11 +186,18 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
     );
   });
 
-  it("gender only, municipality only, gender+municipality → default DB", () => {
+  it("gender only, municipality only, toponym, call_status, political_stance → default DB", () => {
     expect(needsInMemoryContactListPipeline({ ...base, gender: "Άντρας" }, null)).toBe(false);
     expect(needsInMemoryContactListPipeline({ ...base, municipalities: ["Αθήνα"] }, null)).toBe(
       false,
     );
+    expect(needsInMemoryContactListPipeline({ ...base, toponyms: ["Κέντρο"] }, null)).toBe(false);
+    expect(needsInMemoryContactListPipeline({ ...base, call_status: "Positive" }, null)).toBe(
+      false,
+    );
+    expect(
+      needsInMemoryContactListPipeline({ ...base, political_stance: "Center" }, null),
+    ).toBe(false);
     expect(
       needsInMemoryContactListPipeline(
         { ...base, gender: "Άντρας", municipalities: ["Αθήνα"] },
@@ -195,37 +206,31 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
     ).toBe(false);
   });
 
-  it("name + gender and name + municipality → in-memory", () => {
-    expect(
-      needsInMemoryContactListPipeline(
-        { ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" },
-        null,
-      ),
-    ).toBe(true);
-    expect(
-      needsInMemoryContactListPipeline(
-        { ...base, first_name: "ΜΑΡΙΑ", municipalities: ["Αθήνα"] },
-        null,
-      ),
-    ).toBe(true);
-    expect(
-      nameRequiresInMemoryPipeline({ ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" }),
-    ).toBe(true);
+  it("name + gender and name + municipality → name RPC + memory (not in-memory pipeline)", () => {
+    const nameGender = { ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" };
+    const nameMuni = { ...base, first_name: "ΜΑΡΙΑ", municipalities: ["Αθήνα"] };
+    expect(needsInMemoryContactListPipeline(nameGender, null)).toBe(false);
+    expect(needsInMemoryContactListPipeline(nameMuni, null)).toBe(false);
+    expect(canUseNameColumnFastPath(nameGender)).toBe(true);
+    expect(canUseNameColumnFastPath(nameMuni)).toBe(true);
+    expect(nameRequiresInMemoryPipeline(nameGender)).toBe(false);
   });
 
-  it("group + gender and group + municipality → in-memory", () => {
-    expect(
-      needsInMemoryContactListPipeline(
-        { ...base, group_ids: ["g1"], gender: "Άντρας" },
-        smallGroupIds,
-      ),
-    ).toBe(true);
-    expect(
-      needsInMemoryContactListPipeline(
-        { ...base, group_ids: ["g1"], municipalities: ["Αθήνα"] },
-        smallGroupIds,
-      ),
-    ).toBe(true);
+  it("group + gender and group + municipality → filtered group RPC (not in-memory)", () => {
+    const groupGender = { ...base, group_ids: ["g1"], gender: "Άντρας" };
+    const groupMuni = { ...base, group_ids: ["g1"], municipalities: ["Αθήνα"] };
+    expect(needsInMemoryContactListPipeline(groupGender, smallGroupIds)).toBe(false);
+    expect(needsInMemoryContactListPipeline(groupMuni, smallGroupIds)).toBe(false);
+    expect(canUseGroupColumnFastPath(groupGender)).toBe(true);
+    expect(canUseGroupColumnFastPath(groupMuni)).toBe(true);
+    expect(isGroupColumnOnlyFilter(groupGender)).toBe(true);
+    expect(groupRequiresInMemoryPipeline(groupGender)).toBe(false);
+  });
+
+  it("group + gender + priority → in-memory (unsupported RPC column)", () => {
+    const combo = { ...base, group_ids: ["g1"], gender: "Άντρας", priority: "High" };
+    expect(canUseGroupColumnFastPath(combo)).toBe(false);
+    expect(needsInMemoryContactListPipeline(combo, smallGroupIds)).toBe(true);
   });
 
   it("group + name + gender + municipality → fast RPC (not in-memory)", () => {

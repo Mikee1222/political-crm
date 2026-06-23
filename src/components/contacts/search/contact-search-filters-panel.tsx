@@ -28,6 +28,7 @@ import { SearchFilterActions } from "@/components/search/search-filter-actions";
 import { SearchFilterInput } from "@/components/search/search-filter-input";
 import { SegmentedControl } from "@/components/search/segmented-control";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import type { ToponymListRow } from "@/app/api/toponyms/route";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import { cn } from "@/lib/utils";
 
@@ -93,8 +94,9 @@ export function ContactSearchFiltersPanel({
         return Array.isArray(d) ? d : (d.municipalities ?? []);
       }),
       fetchWithTimeout("/api/toponyms").then(async (r) => {
-        const d = (await r.json()) as { toponyms?: { name: string }[] };
-        return (d.toponyms ?? []).map((t) => t.name).filter(Boolean);
+        const d = (await r.json()) as ToponymListRow[] | { toponyms?: ToponymListRow[] };
+        const rows = Array.isArray(d) ? d : (d.toponyms ?? []);
+        return rows.map((t) => t.name).filter(Boolean);
       }),
       fetchWithTimeout("/api/groups").then(async (r) => {
         const d = (await r.json()) as { groups?: ContactGroupRow[] };

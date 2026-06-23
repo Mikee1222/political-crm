@@ -260,6 +260,61 @@ export async function searchContactsByGroupsPaginated(
   return { contacts, total };
 }
 
+export type SearchContactsInGroupsFilteredRow = SearchContactsByGroupsPaginatedRow;
+
+/** Group + column filters via search_contacts_in_groups_filtered RPC (paginated). */
+export async function searchContactsInGroupsFiltered(
+  supabase: SupabaseClient,
+  opts: {
+    groupIds: string[];
+    matchMode?: "or" | "and";
+    gender?: string | null;
+    municipalities?: string[];
+    callStatus?: string | null;
+    callStatuses?: string[];
+    politicalStance?: string | null;
+    toponyms?: string[];
+    partialLocation?: boolean;
+    offset: number;
+    limit: number;
+  },
+): Promise<{ contacts: SearchContactsInGroupsRow[]; total: number }> {
+  const {
+    groupIds,
+    matchMode = "or",
+    gender,
+    municipalities = [],
+    callStatus,
+    callStatuses = [],
+    politicalStance,
+    toponyms = [],
+    partialLocation = false,
+    offset,
+    limit,
+  } = opts;
+  if (!groupIds.length) return { contacts: [], total: 0 };
+
+  const { data, error } = await supabase.rpc("search_contacts_in_groups_filtered", {
+    p_group_ids: groupIds,
+    p_match_mode: matchMode,
+    p_gender: gender?.trim() || null,
+    p_municipalities: municipalities.length ? municipalities : null,
+    p_call_status: callStatus?.trim() || null,
+    p_call_statuses: callStatuses.length ? callStatuses : null,
+    p_political_stance: politicalStance?.trim() || null,
+    p_toponyms: toponyms.length ? toponyms : null,
+    p_partial_location: partialLocation,
+    p_offset: offset,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  const rows = (data ?? []) as SearchContactsInGroupsFilteredRow[];
+  const total = rows.length > 0 ? Number(rows[0]!.total) : 0;
+  const contacts = rows.map(({ total: _total, ...contact }) => contact);
+  return { contacts, total };
+}
+
 /** Resolve include/exclude group filters via get_contacts_in_groups RPC. */
 async function resolveGroupFilterResolution(
   supabase: SupabaseClient,

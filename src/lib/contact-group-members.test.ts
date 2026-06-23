@@ -395,3 +395,54 @@ describe("searchContactsByGroupsPaginated", () => {
     expect(result.contacts[0]).not.toHaveProperty("total");
   });
 });
+
+describe("searchContactsInGroupsFiltered", () => {
+  const groupA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+  it("calls search_contacts_in_groups_filtered RPC with column filters and pagination", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          first_name: "Γιώργος",
+          gender: "Άντρας",
+          created_at: "2026-01-01",
+          total: 120,
+        },
+      ],
+      error: null,
+    });
+    const supabase = { rpc };
+
+    const { searchContactsInGroupsFiltered } = await import("./contact-group-members");
+    const result = await searchContactsInGroupsFiltered(supabase as never, {
+      groupIds: [groupA],
+      matchMode: "and",
+      gender: "Άντρας",
+      municipalities: ["Αθήνα"],
+      callStatuses: ["Positive", "Negative"],
+      politicalStance: "Center",
+      toponyms: ["Κέντρο"],
+      partialLocation: true,
+      offset: 0,
+      limit: 25,
+    });
+
+    expect(rpc).toHaveBeenCalledWith("search_contacts_in_groups_filtered", {
+      p_group_ids: [groupA],
+      p_match_mode: "and",
+      p_gender: "Άντρας",
+      p_municipalities: ["Αθήνα"],
+      p_call_status: null,
+      p_call_statuses: ["Positive", "Negative"],
+      p_political_stance: "Center",
+      p_toponyms: ["Κέντρο"],
+      p_partial_location: true,
+      p_offset: 0,
+      p_limit: 25,
+    });
+    expect(result.total).toBe(120);
+    expect(result.contacts).toHaveLength(1);
+    expect(result.contacts[0]).not.toHaveProperty("total");
+  });
+});

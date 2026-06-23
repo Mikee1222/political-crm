@@ -16,6 +16,8 @@ import {
   applyContactListFiltersToBuilder,
   canUseGroupNameSearchFastPath,
   canUseGroupOnlyFastPath,
+  canUseGroupColumnFastPath,
+  canUseNameColumnFastPath,
   canUseNameOnlyFuzzySearchPath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
@@ -36,6 +38,7 @@ import {
   resolveGroupIdsToUuids,
   searchContactsByGroupsPaginated,
   searchContactsInGroups,
+  searchContactsInGroupsFiltered,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
 export const dynamic = "force-dynamic";
@@ -221,11 +224,9 @@ async function fetchContactsInMemoryPipeline(
       unknown
     >[];
   }
-  console.log("FETCHED CONTACTS COUNT:", rows.length);
   if (f.search?.trim()) {
     rows = afterFilterRows(rows, f.search) as Record<string, unknown>[];
   }
-  console.log("AFTER ALL FILTERS:", rows.length);
   return rows;
 }
 
@@ -240,20 +241,17 @@ function respondWithContactList(
 ) {
   if (comboboxMode) {
     const slice = rows.slice(0, listLimit!);
-    console.log("RETURNED COUNT:", slice.length);
     return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
       NextResponse.json({ contacts: enriched }),
     );
   }
   const { slice, total } = paginateList(rows, page, pageSize);
-  console.log("RETURNED COUNT:", total);
   return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
     NextResponse.json({ contacts: enriched, total, page, pageSize }),
   );
 }
 
 export async function GET(request: NextRequest) {
-  console.log("ROUTE ENTRY", JSON.stringify(Object.fromEntries(request.nextUrl.searchParams)));
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
@@ -284,6 +282,21 @@ export async function GET(request: NextRequest) {
       return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
     }
 
+    if (canUseNameColumnFastPath(f)) {
+      let rows = await searchContactsByName(supabase, {
+        firstName: f.first_name || null,
+        lastName: f.last_name || null,
+        fatherName: f.father_name || null,
+      });
+      const filterResolution = await resolveContactListFilterIds(supabase, f);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rows = filterContactRowsByListFilters(rows as any, f, {
+        partialLocation,
+        excludeContactIds: filterResolution.excludeContactIds,
+      });
+      return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
+    }
+
     if (canUseGroupOnlyFastPath(f)) {
       const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
       const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
@@ -309,9 +322,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ contacts: enriched, total, page, pageSize });
     }
 
+    if (canUseGroupColumnFastPath(f)) {
+      const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+      const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+      if (rawInclude.length && !groupIds.length) {
+        return emptyContactsResponse(comboboxMode, page, pageSize);
+      }
+      const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
+      const callStatuses = f.call_statuses.length
+        ? f.call_statuses
+        : f.call_status
+          ? [f.call_status]
+          : [];
+      const rpcLimit = comboboxMode ? listLimit! : pageSize;
+      const rpcOffset = comboboxMode ? 0 : (page - 1) * pageSize;
+      const { contacts, total } = await searchContactsInGroupsFiltered(supabase, {
+        groupIds,
+        matchMode,
+        gender: f.gender || null,
+        municipalities: f.municipalities,
+        callStatus: callStatuses.length === 1 ? callStatuses[0]! : null,
+        callStatuses: callStatuses.length > 1 ? callStatuses : [],
+        politicalStance: f.political_stance || null,
+        toponyms: f.toponyms,
+        partialLocation,
+        offset: rpcOffset,
+        limit: rpcLimit,
+      });
+      const enriched = await enrichContactsWithGroupCount(
+        supabase,
+        contacts as Record<string, unknown>[],
+      );
+      if (comboboxMode) {
+        return NextResponse.json({ contacts: enriched });
+      }
+      return NextResponse.json({ contacts: enriched, total, page, pageSize });
+    }
+
     const filterResolution = await resolveContactListFilterIds(supabase, f);
     const resolvedIds = filterResolution.includeContactIds;
-    console.log("GROUP IDS COUNT:", resolvedIds?.length ?? null);
     if (
       hasGroupIncludeFilter(f) &&
       filterResolution.includeContactIds !== null &&
