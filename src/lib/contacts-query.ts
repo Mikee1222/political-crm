@@ -321,10 +321,20 @@ export function needsInMemoryContactListPipeline(
   f: ContactListFilters,
   resolvedIds: string[] | null,
 ): boolean {
+  if (canUseGroupNameSearchFastPath(f)) return false;
   if (f.search?.trim()) return true;
   if (f.first_name?.trim() || f.last_name?.trim() || f.father_name?.trim()) return true;
   if (resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE) return true;
   return false;
+}
+
+/** Group + first/last name: search_contacts_in_groups RPC instead of batch id fetch. */
+export function canUseGroupNameSearchFastPath(f: ContactListFilters): boolean {
+  const hasGroup = f.group_ids.length > 0 || Boolean(f.group_id?.trim());
+  if (!hasGroup) return false;
+  if (!f.first_name?.trim() && !f.last_name?.trim()) return false;
+  if (f.search?.trim() || f.father_name?.trim()) return false;
+  return true;
 }
 
 export function applyContactListFiltersToBuilder(

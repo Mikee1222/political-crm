@@ -309,3 +309,51 @@ describe("applyGroupFiltersToQuery", () => {
     expect(q._calls).toEqual([{ method: "in", args: ["id", [contact1]] }]);
   });
 });
+
+describe("searchContactsInGroups", () => {
+  const groupA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+  it("calls search_contacts_in_groups RPC with name params and paginates", async () => {
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({
+      id: `${String(i).padStart(8, "0")}-0000-4000-8000-000000000001`,
+      first_name: "Μαρία",
+      last_name: "Παπ",
+      created_at: "2026-01-01",
+    }));
+    const page2 = [
+      {
+        id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        first_name: "Μαρία",
+        last_name: "Νικ",
+        created_at: "2026-01-02",
+      },
+    ];
+    let callCount = 0;
+    const pages = [page1, page2];
+    const rpc = vi.fn(() => ({
+      range(_from: number, _to: number) {
+        const page = pages[callCount] ?? [];
+        callCount += 1;
+        return Promise.resolve({ data: page, error: null });
+      },
+    }));
+    const supabase = { rpc };
+
+    const { searchContactsInGroups } = await import("./contact-group-members");
+    const rows = await searchContactsInGroups(supabase as never, {
+      groupIds: [groupA],
+      firstName: "ΜΑΡΙΑ",
+      lastName: null,
+      matchMode: "or",
+    });
+
+    expect(rpc).toHaveBeenCalledWith("search_contacts_in_groups", {
+      p_group_ids: [groupA],
+      p_first_name: "ΜΑΡΙΑ",
+      p_last_name: null,
+      p_match_mode: "or",
+    });
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rows).toHaveLength(1001);
+  });
+});

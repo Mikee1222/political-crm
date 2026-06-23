@@ -97,7 +97,7 @@ export async function fetchContactsByIncludeIdBatches<T extends { id: string; cr
 }
 
 /** Resolve group filter values to contact_groups UUIDs (accepts names or ids). */
-async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: string[]): Promise<string[]> {
+export async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: string[]): Promise<string[]> {
   const uuids = new Set<string>();
   const names: string[] = [];
   for (const x of raw) {
@@ -156,6 +156,80 @@ type GroupFilterInput = Pick<
   ContactListFilters,
   "group_id" | "group_ids" | "exclude_group_ids" | "group_match"
 >;
+
+export type SearchContactsInGroupsRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  phone2: string | null;
+  landline: string | null;
+  email: string | null;
+  area: string | null;
+  municipality: string | null;
+  toponym: string | null;
+  gender: string | null;
+  call_status: string | null;
+  priority: string | null;
+  tags: string[] | null;
+  nickname: string | null;
+  contact_code: string | null;
+  age: number | null;
+  political_stance: string | null;
+  group_id: string | null;
+  birthday: string | null;
+  predicted_score: number | null;
+  is_volunteer: boolean | null;
+  volunteer_role: string | null;
+  volunteer_area: string | null;
+  volunteer_since: string | null;
+  language: string | null;
+  last_contacted_at: string | null;
+  father_name: string | null;
+  name_day: string | null;
+  is_dead: boolean | null;
+  electoral_district: string | null;
+  may_not_have_mobile: boolean | null;
+  may_not_have_landline: boolean | null;
+  may_not_have_email: boolean | null;
+  created_at: string | null;
+};
+
+/** Contacts in groups filtered by first/last name via RPC (junction + contacts.group_id). */
+export async function searchContactsInGroups(
+  supabase: SupabaseClient,
+  opts: {
+    groupIds: string[];
+    firstName?: string | null;
+    lastName?: string | null;
+    matchMode?: "or" | "and";
+  },
+): Promise<SearchContactsInGroupsRow[]> {
+  const { groupIds, firstName, lastName, matchMode = "or" } = opts;
+  if (!groupIds.length) return [];
+
+  const allRows: SearchContactsInGroupsRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .rpc("search_contacts_in_groups", {
+        p_group_ids: groupIds,
+        p_first_name: firstName?.trim() || null,
+        p_last_name: lastName?.trim() || null,
+        p_match_mode: matchMode,
+      })
+      .range(from, from + RPC_PAGE_SIZE - 1);
+    if (error) throw error;
+
+    const page = (data ?? []) as SearchContactsInGroupsRow[];
+    allRows.push(...page);
+    if (page.length < RPC_PAGE_SIZE) break;
+    from += RPC_PAGE_SIZE;
+  }
+
+  return allRows;
+}
 
 /** Resolve include/exclude group filters via get_contacts_in_groups RPC. */
 async function resolveGroupFilterResolution(
@@ -245,8 +319,16 @@ async function contactIdsWithRequests(supabase: SupabaseClient): Promise<string[
 export async function resolveContactListFilterIds(
   supabase: SupabaseClient,
   f: ContactListFilters,
+  opts?: { skipGroupInclude?: boolean },
 ): Promise<GroupFilterResolution> {
-  const groupRes = await resolveGroupFilterContactIds(supabase, f);
+  const groupRes = opts?.skipGroupInclude
+    ? await resolveGroupFilterContactIds(supabase, {
+        group_id: "",
+        group_ids: [],
+        exclude_group_ids: f.exclude_group_ids,
+        group_match: f.group_match,
+      })
+    : await resolveGroupFilterContactIds(supabase, f);
   let includeContactIds = groupRes.includeContactIds;
   const excludeSet = new Set(groupRes.excludeContactIds);
 

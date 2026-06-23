@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 import {
   applyColumnContactFiltersToBuilder,
+  canUseGroupNameSearchFastPath,
   contactRowMatchesListFilters,
   filterContactRowsByListFilters,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
-import { fetchContactsByIncludeIdBatches } from "@/lib/contact-group-members";
+import { fetchContactsByIncludeIdBatches, searchContactsInGroups } from "@/lib/contact-group-members";
 import { contactFieldMatchesFuzzyName } from "@/lib/greek-fuzzy-name";
 
 describe("contactFieldMatchesFuzzyName", () => {
@@ -16,6 +17,35 @@ describe("contactFieldMatchesFuzzyName", () => {
     expect(contactFieldMatchesFuzzyName("ΜΑΡΙΑ", "μαρια")).toBe(true);
     expect(contactFieldMatchesFuzzyName("Μαρια", "ΜΑΡΙΑ")).toBe(true);
     expect(contactFieldMatchesFuzzyName("Γιώργος", "ΜΑΡΙΑ")).toBe(false);
+  });
+});
+
+describe("canUseGroupNameSearchFastPath", () => {
+  it("enables RPC path for group + first/last name without search or father_name", () => {
+    const base = getDefaultContactFilters();
+    expect(canUseGroupNameSearchFastPath(base)).toBe(false);
+    expect(
+      canUseGroupNameSearchFastPath({ ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" }),
+    ).toBe(true);
+    expect(
+      canUseGroupNameSearchFastPath({ ...base, group_id: "g1", last_name: "ΠΑΠ" }),
+    ).toBe(true);
+    expect(
+      canUseGroupNameSearchFastPath({
+        ...base,
+        group_ids: ["g1"],
+        first_name: "ΜΑΡΙΑ",
+        search: "μαρια",
+      }),
+    ).toBe(false);
+    expect(
+      canUseGroupNameSearchFastPath({
+        ...base,
+        group_ids: ["g1"],
+        first_name: "ΜΑΡΙΑ",
+        father_name: "ΝΙΚ",
+      }),
+    ).toBe(false);
   });
 });
 
@@ -31,6 +61,9 @@ describe("needsInMemoryContactListPipeline", () => {
     expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, smallGroupIds)).toBe(
       true,
     );
+    expect(
+      needsInMemoryContactListPipeline({ ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" }, null),
+    ).toBe(false);
     const manyIds = Array.from({ length: 81 }, (_, i) =>
       `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
     );

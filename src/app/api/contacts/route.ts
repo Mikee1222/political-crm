@@ -14,6 +14,8 @@ import {
   applyBirthdayAgeFiltersToBuilder,
   applyColumnContactFiltersToBuilder,
   applyContactListFiltersToBuilder,
+  canUseGroupNameSearchFastPath,
+  contactRowMatchesListFilters,
   filterContactRowsByListFilters,
   hasColumnListFilters,
   needsInMemoryContactListPipeline,
@@ -25,6 +27,8 @@ import {
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
   resolveContactListFilterIds,
+  resolveGroupIdsToUuids,
+  searchContactsInGroups,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
 export const dynamic = "force-dynamic";
@@ -130,6 +134,46 @@ async function fetchContactsByResolvedIds(
   return refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
 }
 
+async function fetchContactsViaGroupNameSearch(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  f: ContactFilters,
+  partialLocation: boolean,
+) {
+  const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+  const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+  if (rawInclude.length && !groupIds.length) return [];
+
+  const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
+  let rows = (await searchContactsInGroups(supabase, {
+    groupIds,
+    firstName: f.first_name || null,
+    lastName: f.last_name || null,
+    matchMode,
+  })) as Record<string, unknown>[];
+
+  const filterResolution = await resolveContactListFilterIds(supabase, f, {
+    skipGroupInclude: true,
+  });
+
+  if (filterResolution.includeContactIds !== null) {
+    const allow = new Set(filterResolution.includeContactIds);
+    rows = rows.filter((r) => allow.has(String(r.id)));
+  }
+
+  const exclude = filterResolution.excludeContactIds.length
+    ? new Set(filterResolution.excludeContactIds)
+    : undefined;
+  rows = rows.filter((row) =>
+    contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
+      partialLocation,
+      excludeContactIds: exclude,
+    }),
+  );
+
+  return rows;
+}
+
 async function fetchContactsInMemoryPipeline(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -164,12 +208,9 @@ async function fetchContactsInMemoryPipeline(
       unknown
     >[];
   }
-  console.log("FETCHED CONTACTS COUNT:", rows.length);
   if (f.search?.trim()) {
     rows = afterFilterRows(rows, f.search) as Record<string, unknown>[];
   }
-  console.log("AFTER NAME FILTER:", rows.length);
-  console.log("AFTER ALL FILTERS:", rows.length);
   return rows;
 }
 
@@ -188,16 +229,13 @@ function respondWithContactList(
       NextResponse.json({ contacts: enriched }),
     );
   }
-  console.log("BEFORE PAGINATION:", rows.length);
   const { slice, total } = paginateList(rows, page, pageSize);
-  console.log("RETURNED COUNT:", total);
   return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
     NextResponse.json({ contacts: enriched, total, page, pageSize }),
   );
 }
 
 export async function GET(request: NextRequest) {
-  console.log("ROUTE ENTRY", JSON.stringify(Object.fromEntries(request.nextUrl.searchParams)));
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
@@ -214,9 +252,13 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") || "1", 10) || 1);
     const pageSize = Math.min(200, Math.max(1, parseInt(request.nextUrl.searchParams.get("page_size") || "50", 10) || 50));
 
+    if (canUseGroupNameSearchFastPath(f)) {
+      const rows = await fetchContactsViaGroupNameSearch(supabase, f, partialLocation);
+      return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
+    }
+
     const filterResolution = await resolveContactListFilterIds(supabase, f);
     const resolvedIds = filterResolution.includeContactIds;
-    console.log("GROUP IDS COUNT:", resolvedIds?.length ?? null);
     if (
       hasGroupIncludeFilter(f) &&
       filterResolution.includeContactIds !== null &&
