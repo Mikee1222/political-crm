@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAliasToProfileMap, resolveAuthorName } from "@/lib/staff-aliases";
+import { buildAliasToProfileMap, formatUnlinkedLegacyNameLabel, resolveAuthorName } from "@/lib/staff-aliases";
 
 describe("resolveAuthorName", () => {
   const aliases = [
@@ -34,5 +34,13 @@ describe("buildAliasToProfileMap", () => {
       { id: "1", profile_id: "p1", alias_name: "LEGACY", profile_full_name: null },
     ]);
     expect(map.size).toBe(0);
+  });
+});
+
+describe("formatUnlinkedLegacyNameLabel", () => {
+  it("formats name with note count", () => {
+    expect(formatUnlinkedLegacyNameLabel({ name: "ΓΑΒΡΙΕΛΑ ΜΗΛΙΩΡΗ", usage_count: 4788 })).toBe(
+      "ΓΑΒΡΙΕΛΑ ΜΗΛΙΩΡΗ (4788 σημειώσεις)",
+    );
   });
 });

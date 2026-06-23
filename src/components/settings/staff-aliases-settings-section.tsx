@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormToast } from "@/contexts/form-toast-context";
-import { requiredText } from "@/lib/form-validation";
-import type { StaffAlias, StaffProfileRow, UnlinkedLegacyName } from "@/lib/staff-aliases";
+import {
+  formatUnlinkedLegacyNameLabel,
+  type StaffAlias,
+  type StaffProfileRow,
+  type UnlinkedLegacyName,
+} from "@/lib/staff-aliases";
 
 export function StaffAliasesSettingsSection() {
   const [profiles, setProfiles] = useState<StaffProfileRow[]>([]);
@@ -149,7 +154,7 @@ export function StaffAliasesSettingsSection() {
               Μη συνδεδεμένα παλαιά ονόματα
             </h3>
             <p className="mb-3 text-xs text-[var(--text-secondary)]">
-              Κορυφαία ονόματα από σημειώσεις, επαφές και αιτήματα που δεν έχουν αντιστοιχιστεί ακόμη.
+              Κορυφαία ονόματα από σημειώσεις επαφών και αιτημάτων που δεν έχουν αντιστοιχιστεί ακόμη.
             </p>
             {unlinked.length === 0 ? (
               <p className="text-sm text-[var(--text-muted)]">Όλα τα γνωστά ονόματα είναι συνδεδεμένα.</p>
@@ -160,9 +165,10 @@ export function StaffAliasesSettingsSection() {
                     key={row.name}
                     className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm"
                   >
-                    <span className="font-medium text-[var(--text-primary)]">{row.name}</span>
+                    <span className="font-medium text-[var(--text-primary)]">
+                      {formatUnlinkedLegacyNameLabel(row)}
+                    </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs tabular-nums text-[var(--text-muted)]">{row.usage_count}×</span>
                       <button
                         type="button"
                         className={lux.btnSecondary + " !px-2 !py-1 text-xs"}
@@ -190,6 +196,7 @@ export function StaffAliasesSettingsSection() {
         <AddAliasModal
           profile={addForProfile}
           profiles={profiles}
+          unlinked={unlinked}
           initialAlias={prefillAlias}
           onClose={() => {
             setAddForProfile(null);
@@ -209,12 +216,14 @@ export function StaffAliasesSettingsSection() {
 function AddAliasModal({
   profile,
   profiles,
+  unlinked,
   initialAlias,
   onClose,
   onSaved,
 }: {
   profile: StaffProfileRow;
   profiles: StaffProfileRow[];
+  unlinked: UnlinkedLegacyName[];
   initialAlias: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
@@ -225,6 +234,17 @@ function AddAliasModal({
   const [busy, setBusy] = useState(false);
   const [aliasErr, setAliasErr] = useState<string | null>(null);
 
+  const aliasOptions = useMemo(() => {
+    const opts = unlinked.map((row) => ({
+      value: row.name,
+      label: formatUnlinkedLegacyNameLabel(row),
+    }));
+    if (initialAlias && !opts.some((o) => o.value === initialAlias)) {
+      opts.unshift({ value: initialAlias, label: initialAlias });
+    }
+    return opts;
+  }, [unlinked, initialAlias]);
+
   useEffect(() => {
     setProfileId(profile.id);
     setAliasName(initialAlias);
@@ -232,9 +252,8 @@ function AddAliasModal({
 
   const save = async () => {
     setAliasErr(null);
-    const req = requiredText(aliasName, "όνομα alias");
-    if (req) {
-      setAliasErr(req);
+    if (!aliasName.trim()) {
+      setAliasErr("Επιλέξτε παλαιό όνομα από τη λίστα");
       return;
     }
     setBusy(true);
@@ -268,7 +287,7 @@ function AddAliasModal({
           <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
             Άκυρο
           </button>
-          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy}>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy || aliasOptions.length === 0}>
             {busy ? "…" : "Αποθήκευση"}
           </button>
         </>
@@ -294,17 +313,26 @@ function AddAliasModal({
           <HqLabel htmlFor="sa-alias" required>
             Παλαιό όνομα (από εισαγωγή)
           </HqLabel>
-          <input
-            id="sa-alias"
-            className={[lux.input, aliasErr ? lux.inputError : ""].join(" ")}
-            value={aliasName}
-            onChange={(e) => {
-              setAliasName(e.target.value);
-              setAliasErr(null);
-            }}
-            placeholder="π.χ. ΓΑΒΡΙΕΛΑ ΜΗΛΙΩΡΗ"
-            autoFocus
-          />
+          {aliasOptions.length === 0 ? (
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Δεν υπάρχουν μη συνδεδεμένα παλαιά ονόματα.
+            </p>
+          ) : (
+            <SearchableSelect
+              id="sa-alias"
+              className="mt-1"
+              options={aliasOptions}
+              value={aliasName}
+              onChange={(v) => {
+                setAliasName(v);
+                setAliasErr(null);
+              }}
+              placeholder="Επιλέξτε παλαιό όνομα…"
+              searchPlaceholder="Αναζήτηση ονόματος…"
+              emptyText="Δεν βρέθηκε όνομα"
+              aria-label="Παλαιό όνομα από εισαγωγή"
+            />
+          )}
           <HqFieldError>{aliasErr}</HqFieldError>
         </div>
       </div>

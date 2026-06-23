@@ -14,6 +14,10 @@ export type UnlinkedLegacyName = {
   usage_count: number;
 };
 
+export function formatUnlinkedLegacyNameLabel(row: UnlinkedLegacyName): string {
+  return `${row.name} (${row.usage_count} σημειώσεις)`;
+}
+
 export type StaffProfileRow = {
   id: string;
   full_name: string | null;
