@@ -219,9 +219,11 @@ async function fetchContactsInMemoryPipeline(
       unknown
     >[];
   }
+  console.log("FETCHED CONTACTS COUNT:", rows.length);
   if (f.search?.trim()) {
     rows = afterFilterRows(rows, f.search) as Record<string, unknown>[];
   }
+  console.log("AFTER ALL FILTERS:", rows.length);
   return rows;
 }
 
@@ -236,17 +238,20 @@ function respondWithContactList(
 ) {
   if (comboboxMode) {
     const slice = rows.slice(0, listLimit!);
+    console.log("RETURNED COUNT:", slice.length);
     return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
       NextResponse.json({ contacts: enriched }),
     );
   }
   const { slice, total } = paginateList(rows, page, pageSize);
+  console.log("RETURNED COUNT:", total);
   return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
     NextResponse.json({ contacts: enriched, total, page, pageSize }),
   );
 }
 
 export async function GET(request: NextRequest) {
+  console.log("ROUTE ENTRY", JSON.stringify(Object.fromEntries(request.nextUrl.searchParams)));
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
@@ -275,6 +280,7 @@ export async function GET(request: NextRequest) {
 
     const filterResolution = await resolveContactListFilterIds(supabase, f);
     const resolvedIds = filterResolution.includeContactIds;
+    console.log("GROUP IDS COUNT:", resolvedIds?.length ?? null);
     if (
       hasGroupIncludeFilter(f) &&
       filterResolution.includeContactIds !== null &&
