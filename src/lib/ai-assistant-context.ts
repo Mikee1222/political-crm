@@ -225,24 +225,13 @@ async function campaignStats(supabase: SupabaseClient) {
 async function searchContacts(supabase: SupabaseClient, q: string, take: number) {
   const t = q.trim();
   if (t.length < 2) return { query: t, matches: [] as unknown[] };
-  const { data } = await supabase
-    .from("contacts")
-    .select("id, first_name, last_name, phone, area, municipality, call_status, priority, nickname")
-    .or(
-      `first_name.ilike.%${t}%,last_name.ilike.%${t}%,phone.ilike.%${t}%,nickname.ilike.%${t}%,municipality.ilike.%${t}%,area.ilike.%${t}%`,
-    )
-    .limit(take);
-  const rows = (data ?? []) as Array<{
-    id: string;
-    first_name: string;
-    last_name: string;
-    phone: string | null;
-    area: string | null;
-    municipality: string | null;
-    call_status: string | null;
-    priority: string | null;
-    nickname: string | null;
-  }>;
+  const { searchAlexandraContacts } = await import("@/lib/alexandra-contact-search");
+  const digits = t.replace(/\D/g, "");
+  const rows = await searchAlexandraContacts(supabase, {
+    search: digits.length >= 6 ? undefined : t,
+    phone: digits.length >= 6 ? t : undefined,
+    limit: take,
+  });
   return {
     query: t,
     /** contact_id = UUID για ACTION_JSON (update_status, start_call, κλπ.) χωρίς νέα αναζήτηση */
@@ -251,11 +240,11 @@ async function searchContacts(supabase: SupabaseClient, q: string, take: number)
       first_name: c.first_name,
       last_name: c.last_name,
       phone: c.phone,
-      area: c.area,
-      municipality: c.municipality,
-      call_status: c.call_status,
-      priority: c.priority,
-      nickname: c.nickname,
+      area: c.area ?? null,
+      municipality: c.municipality ?? null,
+      call_status: c.call_status ?? null,
+      priority: null,
+      nickname: c.nickname ?? null,
     })),
   };
 }
@@ -388,18 +377,18 @@ async function searchPersonProfile(supabase: SupabaseClient, message: string) {
     .slice(0, 5);
   if (tokens.length < 1) return null;
   const q = tokens.length >= 2 ? `${tokens[0]} ${tokens[1]}` : tokens[0]!;
-  const t0 = tokens[0]!;
+  const { searchAlexandraContacts } = await import("@/lib/alexandra-contact-search");
+  const hits = await searchAlexandraContacts(supabase, { search: q, limit: 3 });
+  if (!hits.length) return null;
   const { data, error } = await supabase
     .from("contacts")
     .select(
       "id, first_name, last_name, phone, email, area, municipality, call_status, priority, political_stance, source, notes, age, gender, occupation, tags, name_day, birthday, nickname, spouse_name",
     )
-    .or(
-      `first_name.ilike.%${q}%,last_name.ilike.%${q}%,first_name.ilike.%${t0}%,last_name.ilike.%${t0}%`,
-    )
-    .limit(3);
-  if (error || !data?.length) return null;
-  return (data as Record<string, unknown>[])[0];
+    .eq("id", hits[0]!.id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as Record<string, unknown>;
 }
 
 async function dashboardLikeSummary(

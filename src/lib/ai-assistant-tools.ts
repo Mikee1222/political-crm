@@ -43,7 +43,10 @@ import {
   resolveMunicipalityExportFilters,
   searchMunicipalities,
 } from "@/lib/municipality-search";
-import { alexandraContactSearchLimit } from "@/lib/alexandra-contact-search";
+import {
+  alexandraContactSearchLimit,
+  normalizeContactSearchFilters,
+} from "@/lib/alexandra-contact-search";
 
 /** Fields allowed when merging spreadsheet row into existing contact (no phone change here). */
 const ALEX_BULK_UPDATE_FIELDS = new Set<string>([
@@ -1078,27 +1081,28 @@ export function mapSpreadsheetRowToContactPayload(
 }
 
 function buildAdvancedContactFilters(f: Record<string, unknown>, extra?: { limit?: number }): string {
+  const normalized = normalizeContactSearchFilters(f);
   const p = new URLSearchParams();
-  if (f.search) p.set("search", String(f.search));
-  if (f.name) p.set("name", String(f.name));
-  if (f.first_name) p.set("first_name", String(f.first_name));
-  if (f.last_name) p.set("last_name", String(f.last_name));
-  if (f.father_name) p.set("father_name", String(f.father_name));
-  if (f.phone) p.set("phone", String(f.phone));
-  if (Array.isArray(f.municipalities) && f.municipalities.length) {
-    p.set("municipalities", f.municipalities.map(String).join(","));
-  } else if (f.municipality) p.set("municipality", String(f.municipality));
-  if (Array.isArray(f.toponyms) && f.toponyms.length) {
-    p.set("toponyms", f.toponyms.map(String).join(","));
-  } else if (f.toponym) p.set("toponym", String(f.toponym));
-  if (f.area) p.set("area", String(f.area));
-  if (f.call_status) p.set("call_status", String(f.call_status));
-  if (f.priority) p.set("priority", String(f.priority));
-  if (f.political_stance) p.set("political_stance", String(f.political_stance));
-  if (f.tag) p.set("tag", String(f.tag));
-  if (f.group_id) p.set("group_id", String(f.group_id));
-  if (f.age_min != null) p.set("age_min", String(f.age_min));
-  if (f.age_max != null) p.set("age_max", String(f.age_max));
+  if (normalized.search) p.set("search", String(normalized.search));
+  if (normalized.name) p.set("name", String(normalized.name));
+  if (normalized.first_name) p.set("first_name", String(normalized.first_name));
+  if (normalized.last_name) p.set("last_name", String(normalized.last_name));
+  if (normalized.father_name) p.set("father_name", String(normalized.father_name));
+  if (normalized.phone) p.set("phone", String(normalized.phone));
+  if (Array.isArray(normalized.municipalities) && normalized.municipalities.length) {
+    p.set("municipalities", normalized.municipalities.map(String).join(","));
+  } else if (normalized.municipality) p.set("municipality", String(normalized.municipality));
+  if (Array.isArray(normalized.toponyms) && normalized.toponyms.length) {
+    p.set("toponyms", normalized.toponyms.map(String).join(","));
+  } else if (normalized.toponym) p.set("toponym", String(normalized.toponym));
+  if (normalized.area) p.set("area", String(normalized.area));
+  if (normalized.call_status) p.set("call_status", String(normalized.call_status));
+  if (normalized.priority) p.set("priority", String(normalized.priority));
+  if (normalized.political_stance) p.set("political_stance", String(normalized.political_stance));
+  if (normalized.tag) p.set("tag", String(normalized.tag));
+  if (normalized.group_id) p.set("group_id", String(normalized.group_id));
+  if (normalized.age_min != null) p.set("age_min", String(normalized.age_min));
+  if (normalized.age_max != null) p.set("age_max", String(normalized.age_max));
   if (extra?.limit != null) p.set("limit", String(extra.limit));
   return p.toString();
 }

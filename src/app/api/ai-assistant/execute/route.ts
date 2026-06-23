@@ -11,6 +11,7 @@ import {
   getDefaultContactFilters,
 } from "@/lib/contacts-filters";
 import { alexandraContactSearchLimit } from "@/lib/alexandra-contact-search";
+import { resolveContactMunicipalityForWrite } from "@/lib/municipality-search";
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
@@ -71,10 +72,15 @@ export async function POST(request: NextRequest) {
     if (!isMgr) {
       return forbidden();
     }
+    const body = { ...action.data } as Record<string, unknown>;
+    if (typeof body.municipality === "string" && body.municipality.trim()) {
+      const resolved = await resolveContactMunicipalityForWrite(supabase, body.municipality);
+      body.municipality = resolved.municipality;
+    }
     const r = await forward("/api/contacts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(action.data),
+      body: JSON.stringify(body),
     });
     const j = (await r.json()) as { error?: string; contact?: unknown };
     if (!r.ok) {
