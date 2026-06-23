@@ -7,7 +7,6 @@ import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
 
 const ACCESS_COOKIE = "crm_access_granted";
-const ACCESS_MAX_AGE = 60 * 60 * 2;
 
 /** POST { code } — verify hourly code; grant via cookie (+ DB audit). */
 export async function POST(req: NextRequest) {
@@ -27,6 +26,7 @@ export async function POST(req: NextRequest) {
     }
 
     const expiresAt = accessGrantExpiresAt();
+    const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
     const admin = createServiceClient();
     const { error: grantErr } = await admin.from("access_code_grants").upsert(
       {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: ACCESS_MAX_AGE,
+      maxAge,
       path: "/",
     });
     return response;
