@@ -25,6 +25,12 @@ describe("needsInMemoryContactListPipeline", () => {
     expect(needsInMemoryContactListPipeline(base, null)).toBe(false);
     expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, null)).toBe(true);
     expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(true);
+    const smallGroupIds = Array.from({ length: 10 }, (_, i) =>
+      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    );
+    expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, smallGroupIds)).toBe(
+      true,
+    );
     const manyIds = Array.from({ length: 81 }, (_, i) =>
       `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
     );
