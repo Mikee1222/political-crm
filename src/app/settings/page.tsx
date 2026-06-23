@@ -18,7 +18,6 @@ import { validateEmail, requiredText } from "@/lib/form-validation";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { ElectoralSettingsSection } from "@/components/settings/electoral-settings-section";
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
-import { ContactLocationSettingsSection } from "@/components/settings/contact-location-settings-section";
 import { RequestCategoriesSettingsSection } from "@/components/settings/request-categories-settings-section";
 import { StaffAliasesSettingsSection } from "@/components/settings/staff-aliases-settings-section";
 import { RequestStatusesSettingsSection } from "@/components/settings/request-statuses-settings-section";
@@ -350,8 +349,6 @@ export default function SettingsPage() {
           {isAdmin && <EventCategoriesSection />}
 
           {isAdmin && <CampaignTypesSettingsSection />}
-
-          {hasMinRole(profile?.role as Role, "manager") && <ContactLocationSettingsSection />}
 
           {isAdmin && <GeographicDataSection />}
 

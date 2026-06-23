@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Search, Trash2 } from "lucide-react";
-import { fetchWithTimeout } from "@/lib/client-fetch";
+import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
-import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
-import type { ElectoralDistrictAdminRow } from "@/app/api/admin/electoral-districts/route";
-import type { ToponymAdminRow } from "@/app/api/admin/toponyms/route";
+import type { MunicipalityWithCountRow } from "@/app/api/municipalities/route";
+import type { ElectoralDistrictListRow } from "@/app/api/electoral-districts/route";
+import type { ToponymWithCountRow } from "@/app/api/toponyms/route";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { HqSelect } from "@/components/ui/hq-select";
+import { HqLabel } from "@/components/ui/hq-form-primitives";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 type Tab = "municipalities" | "districts" | "toponyms";
@@ -29,59 +30,54 @@ function norm(s: string) {
 export function GeographicDataSection() {
   const [tab, setTab] = useState<Tab>("municipalities");
   const [q, setQ] = useState("");
-  const [munis, setMunis] = useState<MunicipalityRow[]>([]);
-  const [dists, setDists] = useState<ElectoralDistrictAdminRow[]>([]);
-  const [tops, setTops] = useState<ToponymAdminRow[]>([]);
+  const [munis, setMunis] = useState<MunicipalityWithCountRow[]>([]);
+  const [dists, setDists] = useState<ElectoralDistrictListRow[]>([]);
+  const [tops, setTops] = useState<ToponymWithCountRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [editM, setEditM] = useState<MunicipalityRow | null | "add">(null);
-  const [editD, setEditD] = useState<ElectoralDistrictAdminRow | null | "add">(null);
-  const [editT, setEditT] = useState<ToponymAdminRow | null | "add">(null);
+  const [editM, setEditM] = useState<MunicipalityWithCountRow | null | "add">(null);
+  const [editD, setEditD] = useState<ElectoralDistrictListRow | null | "add">(null);
+  const [editT, setEditT] = useState<ToponymWithCountRow | null | "add">(null);
+  const [transferMuni, setTransferMuni] = useState<MunicipalityWithCountRow | null>(null);
+  const [transferTop, setTransferTop] = useState<ToponymWithCountRow | null>(null);
 
   const load = useCallback(async () => {
     setLoadErr(null);
     setLoading(true);
     try {
+      const fetchOpts = { timeoutMs: CLIENT_FETCH_TIMEOUT_MS * 3 };
       const [rm, rd, rt] = await Promise.all([
-        fetchWithTimeout("/api/admin/municipalities"),
-        fetchWithTimeout("/api/admin/electoral-districts"),
-        fetchWithTimeout("/api/admin/toponyms"),
+        fetchWithTimeout("/api/municipalities?with_counts=1", fetchOpts),
+        fetchWithTimeout("/api/electoral-districts", fetchOpts),
+        fetchWithTimeout("/api/toponyms?with_counts=1", fetchOpts),
       ]);
+      const errors: string[] = [];
       if (rm.ok) {
-        const data = (await rm.json()) as MunicipalityRow[] | { municipalities?: MunicipalityRow[] };
-        setMunis(
-          (!Array.isArray(data) && data.municipalities) ||
-            (Array.isArray(data) ? data : []) ||
-            [],
-        );
+        const data = (await rm.json()) as { municipalities?: MunicipalityWithCountRow[] };
+        setMunis(data.municipalities ?? []);
       } else {
         setMunis([]);
         const j = (await rm.json().catch(() => ({}))) as { error?: string };
-        setLoadErr(j.error ?? "Φόρτωση δήμων");
+        errors.push(j.error ?? "Φόρτωση δήμων");
       }
       if (rd.ok) {
-        const data = (await rd.json()) as
-          | ElectoralDistrictAdminRow[]
-          | { districts?: ElectoralDistrictAdminRow[] };
-        setDists(
-          (!Array.isArray(data) && data.districts) ||
-            (Array.isArray(data) ? data : []) ||
-            [],
-        );
+        const data = (await rd.json()) as { districts?: ElectoralDistrictListRow[] };
+        setDists(data.districts ?? []);
       } else {
         setDists([]);
+        const j = (await rd.json().catch(() => ({}))) as { error?: string };
+        errors.push(j.error ?? "Φόρτωση διαμερισμάτων");
       }
       if (rt.ok) {
-        const data = (await rt.json()) as ToponymAdminRow[] | { toponyms?: ToponymAdminRow[] };
-        setTops(
-          (!Array.isArray(data) && data.toponyms) ||
-            (Array.isArray(data) ? data : []) ||
-            [],
-        );
+        const data = (await rt.json()) as { toponyms?: ToponymWithCountRow[] };
+        setTops(data.toponyms ?? []);
       } else {
         setTops([]);
+        const j = (await rt.json().catch(() => ({}))) as { error?: string };
+        errors.push(j.error ?? "Φόρτωση τοπωνυμίων");
       }
+      if (errors.length) setLoadErr(errors.join(" · "));
     } catch {
       setLoadErr("Σφάλμα δικτύου");
     } finally {
@@ -178,16 +174,49 @@ export function GeographicDataSection() {
       ) : (
         <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
           {tab === "municipalities" && (
-            <MuniTable rows={filteredMunis} onEdit={(r) => setEditM(r)} onDelete={load} />
+            <MuniTable
+              rows={filteredMunis}
+              onEdit={(r) => setEditM(r)}
+              onTransfer={(r) => setTransferMuni(r)}
+              onDelete={load}
+            />
           )}
-          {tab === "districts" && <DistTable rows={filteredDists} munis={munis} onEdit={(r) => setEditD(r)} onDelete={load} />}
-          {tab === "toponyms" && <TopTable rows={filteredTops} munis={munis} dists={dists} onEdit={(r) => setEditT(r)} onDelete={load} />}
+          {tab === "districts" && (
+            <DistTable rows={filteredDists} munis={munis} onEdit={(r) => setEditD(r)} onDelete={load} />
+          )}
+          {tab === "toponyms" && (
+            <TopTable rows={filteredTops} munis={munis} dists={dists} onEdit={(r) => setEditT(r)} onTransfer={(r) => setTransferTop(r)} onDelete={load} />
+          )}
         </div>
       )}
 
       {editM && <MuniModal open={true} v={editM} onClose={() => setEditM(null)} onSave={() => void load()} />}
       {editD && <DistModal open={true} v={editD} munis={munis} onClose={() => setEditD(null)} onSave={() => void load()} />}
       {editT && <TopModal open={true} v={editT} munis={munis} dists={dists} onClose={() => setEditT(null)} onSave={() => void load()} />}
+
+      {transferMuni && (
+        <MunicipalityTransferModal
+          from={transferMuni}
+          municipalities={munis}
+          onClose={() => setTransferMuni(null)}
+          onTransferred={async () => {
+            setTransferMuni(null);
+            await load();
+          }}
+        />
+      )}
+
+      {transferTop && (
+        <ToponymTransferModal
+          from={transferTop}
+          toponyms={tops}
+          onClose={() => setTransferTop(null)}
+          onTransferred={async () => {
+            setTransferTop(null);
+            await load();
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -195,25 +224,28 @@ export function GeographicDataSection() {
 function MuniTable({
   rows,
   onEdit,
+  onTransfer,
   onDelete,
 }: {
-  rows: MunicipalityRow[];
-  onEdit: (r: MunicipalityRow) => void;
+  rows: MunicipalityWithCountRow[];
+  onEdit: (r: MunicipalityWithCountRow) => void;
+  onTransfer: (r: MunicipalityWithCountRow) => void;
   onDelete: () => void;
 }) {
   return (
-    <table className="w-full min-w-[520px] text-sm">
+    <table className="w-full min-w-[560px] text-sm">
       <thead>
         <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
           <th className="p-2 pl-3 text-left">Όνομα</th>
           <th className="p-2 text-left">Περιφερ. ενότητα</th>
-          <th className="w-28 p-2 pr-3 text-right">Ενέργειες</th>
+          <th className="p-2 text-right">Επαφές</th>
+          <th className="w-44 p-2 pr-3 text-right">Ενέργειες</th>
         </tr>
       </thead>
       <tbody>
         {rows.length === 0 && (
           <tr>
-            <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
+            <td colSpan={4} className="p-4 text-center text-[var(--text-muted)]">
               Δεν βρέθηκαν.
             </td>
           </tr>
@@ -222,15 +254,26 @@ function MuniTable({
           <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
             <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
             <td className="p-2 text-[var(--text-secondary)]">{r.regional_unit ?? "—"}</td>
+            <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
             <td className="p-2 pr-3 text-right">
-              <RowActions
-                onEdit={() => onEdit(r)}
-                onDelete={async () => {
-                  if (!confirm("Διαγραφή δήμου; Θα διαγραφούν και τα σχετικά διαμερίσματα/τοπωνύμια.")) return;
-                  const res = await fetchWithTimeout(`/api/admin/municipalities/${r.id}`, { method: "DELETE" });
-                  if (res.ok) onDelete();
-                }}
-              />
+              <div className="inline-flex flex-wrap justify-end gap-1">
+                <button
+                  type="button"
+                  className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                  disabled={r.contact_count === 0}
+                  onClick={() => onTransfer(r)}
+                >
+                  Μεταφορά επαφών
+                </button>
+                <RowActions
+                  onEdit={() => onEdit(r)}
+                  onDelete={async () => {
+                    if (!confirm("Διαγραφή δήμου; Θα διαγραφούν και τα σχετικά διαμερίσματα/τοπωνύμια.")) return;
+                    const res = await fetchWithTimeout(`/api/admin/municipalities/${r.id}`, { method: "DELETE" });
+                    if (res.ok) onDelete();
+                  }}
+                />
+              </div>
             </td>
           </tr>
         ))}
@@ -245,9 +288,9 @@ function DistTable({
   onEdit,
   onDelete,
 }: {
-  rows: ElectoralDistrictAdminRow[];
-  munis: MunicipalityRow[];
-  onEdit: (r: ElectoralDistrictAdminRow) => void;
+  rows: ElectoralDistrictListRow[];
+  munis: MunicipalityWithCountRow[];
+  onEdit: (r: ElectoralDistrictListRow) => void;
   onDelete: () => void;
 }) {
   return (
@@ -295,28 +338,31 @@ function TopTable({
   munis,
   dists,
   onEdit,
+  onTransfer,
   onDelete,
 }: {
-  rows: ToponymAdminRow[];
-  munis: MunicipalityRow[];
-  dists: ElectoralDistrictAdminRow[];
-  onEdit: (r: ToponymAdminRow) => void;
+  rows: ToponymWithCountRow[];
+  munis: MunicipalityWithCountRow[];
+  dists: ElectoralDistrictListRow[];
+  onEdit: (r: ToponymWithCountRow) => void;
+  onTransfer: (r: ToponymWithCountRow) => void;
   onDelete: () => void;
 }) {
   return (
-    <table className="w-full min-w-[640px] text-sm">
+    <table className="w-full min-w-[720px] text-sm">
       <thead>
         <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
           <th className="p-2 pl-3 text-left">Όνομα</th>
           <th className="p-2 text-left">Δήμος</th>
           <th className="p-2 text-left">Διαμέρισμα</th>
-          <th className="w-28 p-2 pr-3 text-right">Ενέργειες</th>
+          <th className="p-2 text-right">Επαφές</th>
+          <th className="w-44 p-2 pr-3 text-right">Ενέργειες</th>
         </tr>
       </thead>
       <tbody>
         {rows.length === 0 && (
           <tr>
-            <td colSpan={4} className="p-4 text-center text-[var(--text-muted)]">
+            <td colSpan={5} className="p-4 text-center text-[var(--text-muted)]">
               Δεν βρέθηκαν.
             </td>
           </tr>
@@ -325,20 +371,33 @@ function TopTable({
           <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
             <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
             <td className="p-2 text-[var(--text-secondary)]">
-              {r.municipality_name ?? munis.find((m) => m.id === r.municipality_id)?.name ?? "—"}
+              {r.municipality_name ?? (r.municipality_id ? munis.find((m) => m.id === r.municipality_id)?.name : null) ?? "—"}
             </td>
             <td className="p-2 text-[var(--text-secondary)]">
-              {r.electoral_district_name ?? dists.find((d) => d.id === r.electoral_district_id)?.name ?? "—"}
+              {r.electoral_district_name ??
+                (r.electoral_district_id ? dists.find((d) => d.id === r.electoral_district_id)?.name : null) ??
+                "—"}
             </td>
+            <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
             <td className="p-2 pr-3 text-right">
-              <RowActions
-                onEdit={() => onEdit(r)}
-                onDelete={async () => {
-                  if (!confirm("Διαγραφή τοπωνυμίου;")) return;
-                  const res = await fetchWithTimeout(`/api/admin/toponyms/${r.id}`, { method: "DELETE" });
-                  if (res.ok) onDelete();
-                }}
-              />
+              <div className="inline-flex flex-wrap justify-end gap-1">
+                <button
+                  type="button"
+                  className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                  disabled={r.contact_count === 0}
+                  onClick={() => onTransfer(r)}
+                >
+                  Μεταφορά επαφών
+                </button>
+                <RowActions
+                  onEdit={() => onEdit(r)}
+                  onDelete={async () => {
+                    if (!confirm("Διαγραφή τοπωνυμίου;")) return;
+                    const res = await fetchWithTimeout(`/api/admin/toponyms/${r.id}`, { method: "DELETE" });
+                    if (res.ok) onDelete();
+                  }}
+                />
+              </div>
             </td>
           </tr>
         ))}
@@ -360,7 +419,186 @@ function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => 
   );
 }
 
-function MuniModal({ open, v, onClose, onSave }: { open: boolean; v: MunicipalityRow | "add" | null; onClose: () => void; onSave: () => void }) {
+function MunicipalityTransferModal({
+  from,
+  municipalities,
+  onClose,
+  onTransferred,
+}: {
+  from: MunicipalityWithCountRow;
+  municipalities: MunicipalityWithCountRow[];
+  onClose: () => void;
+  onTransferred: () => Promise<void>;
+}) {
+  const { showToast } = useFormToast();
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const options = useMemo(
+    () => municipalities.filter((m) => m.name !== from.name).sort((a, b) => a.name.localeCompare(b.name, "el")),
+    [municipalities, from.name],
+  );
+
+  useEffect(() => {
+    setTo(options[0]?.name ?? "");
+  }, [from.name, options]);
+
+  const submit = async () => {
+    if (!to.trim()) {
+      showToast("Επιλέξτε προορισμό.", "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetchWithTimeout("/api/admin/contacts/bulk-transfer-municipality", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: from.name, to: to.trim() }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; transferred?: number };
+      if (!res.ok) {
+        showToast(j.error ?? "Σφάλμα", "error");
+        return;
+      }
+      showToast(`Μεταφέρθηκαν ${j.transferred ?? 0} επαφές.`, "success");
+      await onTransferred();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <CenteredModal
+      open
+      onClose={onClose}
+      title="Μεταφορά επαφών"
+      ariaLabel="Μεταφορά επαφών ανά δήμο"
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy || !to}>
+            {busy ? "…" : `Μεταφορά ${from.contact_count} επαφών`}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        <p className="text-[var(--text-secondary)]">
+          Μεταφορά <strong className="text-[var(--text-primary)]">{from.contact_count}</strong> επαφών από{" "}
+          <strong className="text-[var(--text-primary)]">{from.name}</strong> σε:
+        </p>
+        <div>
+          <HqLabel htmlFor="muni-to">Δήμος προορισμού</HqLabel>
+          <HqSelect id="muni-to" className={lux.select + " mt-1"} value={to} onChange={(e) => setTo(e.target.value)}>
+            {options.length === 0 && <option value="">— (δεν υπάρχει άλλος δήμος) —</option>}
+            {options.map((m) => (
+              <option key={m.id} value={m.name}>
+                {m.name}
+              </option>
+            ))}
+          </HqSelect>
+        </div>
+      </div>
+    </CenteredModal>
+  );
+}
+
+function ToponymTransferModal({
+  from,
+  toponyms,
+  onClose,
+  onTransferred,
+}: {
+  from: ToponymWithCountRow;
+  toponyms: ToponymWithCountRow[];
+  onClose: () => void;
+  onTransferred: () => Promise<void>;
+}) {
+  const { showToast } = useFormToast();
+  const [toId, setToId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const options = useMemo(
+    () => toponyms.filter((t) => t.id !== from.id).sort((a, b) => a.name.localeCompare(b.name, "el")),
+    [toponyms, from.id],
+  );
+
+  useEffect(() => {
+    setToId(options[0]?.id ?? "");
+  }, [from.id, options]);
+
+  const submit = async () => {
+    if (!toId) {
+      showToast("Επιλέξτε προορισμό.", "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetchWithTimeout("/api/admin/contacts/bulk-transfer-toponym", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from_id: from.id, to_id: toId }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; transferred?: number };
+      if (!res.ok) {
+        showToast(j.error ?? "Σφάλμα", "error");
+        return;
+      }
+      showToast(`Μεταφέρθηκαν ${j.transferred ?? 0} επαφές.`, "success");
+      await onTransferred();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toLabel = options.find((t) => t.id === toId)?.name ?? "";
+
+  return (
+    <CenteredModal
+      open
+      onClose={onClose}
+      title="Μεταφορά επαφών"
+      ariaLabel="Μεταφορά επαφών ανά τοπωνύμιο"
+      className="!max-w-md"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
+            Άκυρο
+          </button>
+          <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy || !toId}>
+            {busy ? "…" : `Μεταφορά ${from.contact_count} επαφών`}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        <p className="text-[var(--text-secondary)]">
+          Μεταφορά <strong className="text-[var(--text-primary)]">{from.contact_count}</strong> επαφών από{" "}
+          <strong className="text-[var(--text-primary)]">{from.name}</strong> σε:
+        </p>
+        <div>
+          <HqLabel htmlFor="top-to">Τοπωνύμιο προορισμού</HqLabel>
+          <HqSelect id="top-to" className={lux.select + " mt-1"} value={toId} onChange={(e) => setToId(e.target.value)}>
+            {options.length === 0 && <option value="">— (δεν υπάρχει άλλο τοπωνύμιο) —</option>}
+            {options.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </HqSelect>
+          {toLabel ? (
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Οι επαφές θα ενημερωθούν στο πεδίο τοπωνυμίου: «{toLabel}».
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </CenteredModal>
+  );
+}
+
+function MuniModal({ open, v, onClose, onSave }: { open: boolean; v: MunicipalityWithCountRow | "add" | null; onClose: () => void; onSave: () => void }) {
   const { showToast } = useFormToast();
   const [name, setName] = useState("");
   const [reg, setReg] = useState("");
@@ -445,8 +683,8 @@ function DistModal({
   onSave,
 }: {
   open: boolean;
-  v: ElectoralDistrictAdminRow | "add" | null;
-  munis: MunicipalityRow[];
+  v: ElectoralDistrictListRow | "add" | null;
+  munis: MunicipalityWithCountRow[];
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -544,9 +782,9 @@ function TopModal({
   onSave,
 }: {
   open: boolean;
-  v: ToponymAdminRow | "add" | null;
-  munis: MunicipalityRow[];
-  dists: ElectoralDistrictAdminRow[];
+  v: ToponymWithCountRow | "add" | null;
+  munis: MunicipalityWithCountRow[];
+  dists: ElectoralDistrictListRow[];
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -567,7 +805,7 @@ function TopModal({
       setDist("");
     } else if (row) {
       setName(row.name);
-      setMuni(row.municipality_id);
+      setMuni(row.municipality_id ?? munis[0]?.id ?? "");
       setDist(row.electoral_district_id ?? "");
     }
     setErr(null);
