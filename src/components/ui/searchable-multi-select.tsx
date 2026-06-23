@@ -16,6 +16,9 @@ export type SearchableMultiSelectProps = {
   emptyText?: string;
   id?: string;
   disabled?: boolean;
+  /** When true and more than one option is selected, show a count summary on the trigger. */
+  countSummaryWhenMultiple?: boolean;
+  countSummaryText?: (count: number) => string;
   "aria-label"?: string;
 };
 
@@ -36,6 +39,8 @@ export function SearchableMultiSelect({
   emptyText = "Δεν βρέθηκαν αποτελέσματα",
   id,
   disabled,
+  countSummaryWhenMultiple = false,
+  countSummaryText = (count) => `${count} επιλεγμένα`,
   "aria-label": ariaLabel,
 }: SearchableMultiSelectProps) {
   const [search, setSearch] = useState("");
@@ -78,11 +83,14 @@ export function SearchableMultiSelect({
 
   const summaryLabel = useMemo(() => {
     if (selectedOptions.length === 0) return placeholder;
+    if (countSummaryWhenMultiple && selectedOptions.length > 1) {
+      return countSummaryText(selectedOptions.length);
+    }
     if (selectedOptions.length <= 2) {
       return selectedOptions.map((option) => option.label).join(", ");
     }
     return `${selectedOptions.length} επιλογές`;
-  }, [placeholder, selectedOptions]);
+  }, [countSummaryText, countSummaryWhenMultiple, placeholder, selectedOptions]);
 
   return (
     <>

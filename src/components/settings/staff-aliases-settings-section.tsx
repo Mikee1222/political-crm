@@ -5,7 +5,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 import {
   formatUnlinkedLegacyNameLabel,
@@ -230,7 +230,9 @@ function AddAliasModal({
   const [crmProfiles, setCrmProfiles] = useState<{ id: string; full_name: string | null }[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesErr, setProfilesErr] = useState<string | null>(null);
-  const [aliasName, setAliasName] = useState(initialAlias);
+  const [aliasNames, setAliasNames] = useState<string[]>(() =>
+    initialAlias.trim() ? [initialAlias.trim()] : [],
+  );
   const [busy, setBusy] = useState(false);
   const [aliasErr, setAliasErr] = useState<string | null>(null);
 
@@ -277,13 +279,13 @@ function AddAliasModal({
 
   useEffect(() => {
     setProfileId(profile.id);
-    setAliasName(initialAlias);
+    setAliasNames(initialAlias.trim() ? [initialAlias.trim()] : []);
   }, [profile.id, initialAlias]);
 
   const save = async () => {
     setAliasErr(null);
-    if (!aliasName.trim()) {
-      setAliasErr("Επιλέξτε παλαιό όνομα από τη λίστα");
+    if (aliasNames.length === 0) {
+      setAliasErr("Επιλέξτε τουλάχιστον ένα παλαιό όνομα από τη λίστα");
       return;
     }
     setBusy(true);
@@ -291,14 +293,32 @@ function AddAliasModal({
       const res = await fetchWithTimeout("/api/admin/staff-aliases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile_id: profileId, alias_name: aliasName.trim() }),
+        body: JSON.stringify({ profile_id: profileId, alias_names: aliasNames }),
       });
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        aliases?: StaffAlias[];
+        skipped?: string[];
+      };
       if (!res.ok) {
         showToast(j.error ?? "Σφάλμα", "error");
         return;
       }
-      showToast("Το alias προστέθηκε.", "success");
+      const added = j.aliases?.length ?? aliasNames.length;
+      const skipped = j.skipped?.length ?? 0;
+      if (skipped > 0) {
+        showToast(
+          added === 1
+            ? "Προστέθηκε 1 alias. Κάποια ονόματα ήταν ήδη συνδεδεμένα."
+            : `Προστέθηκαν ${added} aliases. ${skipped} ήταν ήδη συνδεδεμένα.`,
+          "success",
+        );
+      } else {
+        showToast(
+          added === 1 ? "Το alias προστέθηκε." : `Προστέθηκαν ${added} aliases.`,
+          "success",
+        );
+      }
       await onSaved();
     } finally {
       setBusy(false);
@@ -357,19 +377,24 @@ function AddAliasModal({
               Δεν υπάρχουν μη συνδεδεμένα παλαιά ονόματα.
             </p>
           ) : (
-            <SearchableSelect
+            <SearchableMultiSelect
               id="sa-alias"
               className="mt-1"
               options={aliasOptions}
-              value={aliasName}
-              onChange={(v) => {
-                setAliasName(v);
+              values={aliasNames}
+              onToggle={(value) => {
+                setAliasNames((current) =>
+                  current.includes(value)
+                    ? current.filter((name) => name !== value)
+                    : [...current, value],
+                );
                 setAliasErr(null);
               }}
-              placeholder="Επιλέξτε παλαιό όνομα…"
+              countSummaryWhenMultiple
+              placeholder="Επιλέξτε παλαιά ονόματα…"
               searchPlaceholder="Αναζήτηση ονόματος…"
               emptyText="Δεν βρέθηκε όνομα"
-              aria-label="Παλαιό όνομα από εισαγωγή"
+              aria-label="Παλαιά ονόματα από εισαγωγή"
             />
           )}
           <HqFieldError>{aliasErr}</HqFieldError>
