@@ -39,6 +39,19 @@ const inputBox =
   "h-[56px] w-full max-w-3xl rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-5 pr-12 text-lg text-[var(--text-primary)] shadow-2xl outline-none focus:ring-2 focus:ring-[#C9A84C]/40";
 const sectionTitle =
   "mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[#C9A84C]/90";
+const searchResultItemBase = "rounded-lg px-2 py-2.5 text-left text-sm transition-colors";
+
+function searchResultItemClass(isActive: boolean, extra = "") {
+  return [
+    searchResultItemBase,
+    extra,
+    isActive
+      ? "bg-[color-mix(in_srgb,var(--accent-gold)_18%,var(--bg-card))] text-[var(--text-primary)] ring-1 ring-[color-mix(in_srgb,var(--accent-gold)_28%,transparent)]"
+      : "text-[var(--text-primary)] hover:bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-card))]",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 type Entry = { k: "c" | "r" | "t" | "ca"; id: string; href: string; title: string; sub: string };
 
@@ -358,12 +371,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     <button
                       type="button"
                       onClick={() => go(e)}
-                      className={[
-                        "flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-left text-sm transition-colors",
-                        idx === active
-                          ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]"
-                          : "text-[var(--text-primary)] hover:bg-accent",
-                      ].join(" ")}
+                      className={searchResultItemClass(idx === active, "flex w-full items-start gap-3")}
                       onMouseEnter={() => setActive(idx)}
                     >
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#003476]/25 text-xs font-bold text-[var(--text-primary)]">
@@ -422,10 +430,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     type="button"
                     key={req.id}
                     onClick={() => go(e)}
-                    className={[
-                      "mb-1 w-full rounded-lg px-2 py-2.5 text-left text-sm",
-                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-accent",
-                    ].join(" ")}
+                    className={searchResultItemClass(idx === active, "mb-1 w-full")}
                     onMouseEnter={() => setActive(idx)}
                   >
                     <span className="font-medium">{e.title}</span>
@@ -451,10 +456,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     type="button"
                     key={task.id}
                     onClick={() => go(e)}
-                    className={[
-                      "mb-1 w-full rounded-lg px-2 py-2.5 text-left text-sm",
-                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-accent",
-                    ].join(" ")}
+                    className={searchResultItemClass(idx === active, "mb-1 w-full")}
                     onMouseEnter={() => setActive(idx)}
                   >
                     {e.title} <span className="ml-1 text-xs text-[var(--text-muted)]">{e.sub}</span>
@@ -476,10 +478,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     key={camp.id}
                     href={e.href}
                     onClick={onClose}
-                    className={[
-                      "mb-1 block w-full rounded-lg px-2 py-2.5 text-sm",
-                      idx === active ? "bg-[var(--nav-item-active-bg)] text-[var(--nav-item-active-fg)]" : "hover:bg-accent",
-                    ].join(" ")}
+                    className={searchResultItemClass(idx === active, "mb-1 block w-full")}
                     onMouseEnter={() => setActive(idx)}
                   >
                     {e.title} <span className="ml-1 text-xs text-[var(--text-muted)]">{e.sub}</span>
