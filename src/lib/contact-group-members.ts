@@ -55,19 +55,6 @@ export function applyContactIdExcludeFilter(
   return q;
 }
 
-function intersectIdSets(sets: string[][]): string[] {
-  if (!sets.length) return [];
-  const [first, ...rest] = sets;
-  const base = new Set(first);
-  for (const s of rest) {
-    const next = new Set(s);
-    for (const id of base) {
-      if (!next.has(id)) base.delete(id);
-    }
-  }
-  return [...base];
-}
-
 /** Resolve group filter values to contact_groups UUIDs (accepts names or ids). */
 async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: string[]): Promise<string[]> {
   const uuids = new Set<string>();
@@ -92,48 +79,23 @@ async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: string[]): 
   return [...uuids];
 }
 
-async function contactIdsInSingleGroup(supabase: SupabaseClient, groupId: string): Promise<string[]> {
-  const ids = new Set<string>();
-
-  const { data: members, error } = await supabase
-    .from("contact_group_members")
-    .select("contact_id")
-    .eq("group_id", groupId);
-  if (error) throw error;
-  for (const r of members ?? []) ids.add(String((r as { contact_id: string }).contact_id));
-
-  const { data: primary, error: primaryErr } = await supabase
-    .from("contacts")
-    .select("id")
-    .eq("group_id", groupId);
-  if (primaryErr) throw primaryErr;
-  for (const r of primary ?? []) ids.add(String((r as { id: string }).id));
-
-  return [...ids];
-}
-
+/** Contact IDs in groups via RPC (junction + contacts.group_id). AND = all groups; OR = any. */
 async function contactIdsForGroups(
   supabase: SupabaseClient,
   groupIds: string[],
+  matchMode: "or" | "and" = "or",
 ): Promise<string[]> {
   if (!groupIds.length) return [];
-  const ids = new Set<string>();
 
-  const { data, error } = await supabase
-    .from("contact_group_members")
-    .select("contact_id")
-    .in("group_id", groupIds);
+  const { data, error } = await supabase.rpc("get_contacts_in_groups", {
+    group_ids: groupIds,
+    match_mode: matchMode,
+  });
   if (error) throw error;
-  for (const r of data ?? []) ids.add(String((r as { contact_id: string }).contact_id));
 
-  const { data: primary, error: primaryErr } = await supabase
-    .from("contacts")
-    .select("id")
-    .in("group_id", groupIds);
-  if (primaryErr) throw primaryErr;
-  for (const r of primary ?? []) ids.add(String((r as { id: string }).id));
-
-  return [...ids];
+  return uniqueIds(
+    (data ?? []).map((r: { contact_id: string }) => String(r.contact_id)),
+  );
 }
 
 export async function resolveGroupFilterContactIds(
@@ -148,20 +110,16 @@ export async function resolveGroupFilterContactIds(
   if (rawInclude.length) {
     if (!includeGroupIds.length) {
       includeContactIds = [];
-    } else if (f.group_match === "and" && includeGroupIds.length > 1) {
-      const perGroup: string[][] = [];
-      for (const gid of includeGroupIds) {
-        perGroup.push(await contactIdsInSingleGroup(supabase, gid));
-      }
-      includeContactIds = intersectIdSets(perGroup);
     } else {
-      includeContactIds = await contactIdsForGroups(supabase, includeGroupIds);
+      const matchMode =
+        f.group_match === "and" && includeGroupIds.length > 1 ? "and" : "or";
+      includeContactIds = await contactIdsForGroups(supabase, includeGroupIds, matchMode);
     }
   }
 
   let excludeContactIds: string[] = [];
   if (excludeGroupIds.length) {
-    excludeContactIds = await contactIdsForGroups(supabase, excludeGroupIds);
+    excludeContactIds = await contactIdsForGroups(supabase, excludeGroupIds, "or");
   }
 
   return { includeContactIds, excludeContactIds };
