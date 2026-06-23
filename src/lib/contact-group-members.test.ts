@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyContactIdExcludeFilter,
   applyContactIdIncludeFilter,
+  applyGroupFiltersToQuery,
+  groupIncludeFilterMatchesNone,
   NO_MATCH_CONTACT_ID,
   resolveGroupFilterContactIds,
 } from "./contact-group-members";
@@ -181,5 +183,85 @@ describe("resolveGroupFilterContactIds", () => {
     });
     expect(result.includeContactIds).toBeNull();
     expect(result.excludeContactIds).toEqual([contact2]);
+  });
+});
+
+describe("groupIncludeFilterMatchesNone", () => {
+  const groupA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+  it("returns false when no include group filter", async () => {
+    const supabase = { from: vi.fn(), rpc: vi.fn() };
+    await expect(
+      groupIncludeFilterMatchesNone(supabase as never, {
+        group_id: "",
+        group_ids: [],
+        exclude_group_ids: [],
+        group_match: "or",
+      }),
+    ).resolves.toBe(false);
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns true when RPC returns no contacts", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const supabase = {
+      from: () => ({
+        select: () =>
+          Promise.resolve({
+            data: [{ id: groupA, name: "Group A" }],
+            error: null,
+          }),
+      }),
+      rpc,
+    };
+
+    await expect(
+      groupIncludeFilterMatchesNone(supabase as never, {
+        group_id: "",
+        group_ids: [groupA],
+        exclude_group_ids: [],
+        group_match: "or",
+      }),
+    ).resolves.toBe(true);
+  });
+});
+
+describe("applyGroupFiltersToQuery", () => {
+  const groupA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const contact1 = "11111111-1111-1111-1111-111111111111";
+
+  it("applies chunked include filter from RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ contact_id: contact1 }],
+      error: null,
+    });
+    const supabase = {
+      from: () => ({
+        select: () =>
+          Promise.resolve({
+            data: [{ id: groupA, name: "Group A" }],
+            error: null,
+          }),
+      }),
+      rpc,
+    };
+    const q = mockQuery();
+
+    await applyGroupFiltersToQuery(
+      supabase as never,
+      {
+        group_id: "",
+        group_ids: [groupA],
+        exclude_group_ids: [],
+        group_match: "or",
+      },
+      q,
+    );
+
+    expect(rpc).toHaveBeenCalledWith("get_contacts_in_groups", {
+      group_ids: [groupA],
+      match_mode: "or",
+    });
+    expect(q._calls).toEqual([{ method: "in", args: ["id", [contact1]] }]);
   });
 });

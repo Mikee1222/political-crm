@@ -98,9 +98,15 @@ async function contactIdsForGroups(
   );
 }
 
-export async function resolveGroupFilterContactIds(
+type GroupFilterInput = Pick<
+  ContactListFilters,
+  "group_id" | "group_ids" | "exclude_group_ids" | "group_match"
+>;
+
+/** Resolve include/exclude group filters via get_contacts_in_groups RPC. */
+async function resolveGroupFilterResolution(
   supabase: SupabaseClient,
-  f: Pick<ContactListFilters, "group_id" | "group_ids" | "exclude_group_ids" | "group_match">,
+  f: GroupFilterInput,
 ): Promise<GroupFilterResolution> {
   const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
   const includeGroupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
@@ -123,6 +129,36 @@ export async function resolveGroupFilterContactIds(
   }
 
   return { includeContactIds, excludeContactIds };
+}
+
+/** Heatmap/export: group filter contact IDs via RPC. */
+export async function resolveGroupFilterContactIds(
+  supabase: SupabaseClient,
+  f: GroupFilterInput,
+): Promise<GroupFilterResolution> {
+  return resolveGroupFilterResolution(supabase, f);
+}
+
+/** GET /api/contacts: true when an include-group filter matches zero contacts. */
+export async function groupIncludeFilterMatchesNone(
+  supabase: SupabaseClient,
+  f: GroupFilterInput,
+): Promise<boolean> {
+  const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+  if (!rawInclude.length) return false;
+  const resolution = await resolveGroupFilterResolution(supabase, f);
+  return resolution.includeContactIds !== null && resolution.includeContactIds.length === 0;
+}
+
+/** GET /api/contacts: apply group include/exclude via RPC + chunked id filters. */
+export async function applyGroupFiltersToQuery(
+  supabase: SupabaseClient,
+  f: GroupFilterInput,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+) {
+  const resolution = await resolveGroupFilterResolution(supabase, f);
+  return applyGroupMembershipFiltersToBuilder(query, resolution);
 }
 
 function intersectInclude(
@@ -151,14 +187,13 @@ async function contactIdsWithRequests(supabase: SupabaseClient): Promise<string[
   return [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)).filter(Boolean))];
 }
 
-/** Merges group, source, and request id-based filters into one resolution. */
+/** Merges source and request id-based filters (group filters are applied separately in GET /api/contacts). */
 export async function resolveContactListFilterIds(
   supabase: SupabaseClient,
   f: ContactListFilters,
 ): Promise<GroupFilterResolution> {
-  const groupRes = await resolveGroupFilterContactIds(supabase, f);
-  let includeContactIds = groupRes.includeContactIds;
-  const excludeSet = new Set(groupRes.excludeContactIds);
+  let includeContactIds: string[] | null = null;
+  const excludeSet = new Set<string>();
 
   if (f.source_ids.length) {
     const ids = await contactIdsForSources(supabase, f.source_ids);
@@ -189,6 +224,20 @@ export async function resolveContactListFilterIds(
   }
 
   return { includeContactIds, excludeContactIds: [...excludeSet] };
+}
+
+export function mergeContactListFilterResolutions(
+  a: GroupFilterResolution,
+  b: GroupFilterResolution,
+): GroupFilterResolution {
+  let includeContactIds = a.includeContactIds;
+  if (b.includeContactIds !== null) {
+    includeContactIds = intersectInclude(includeContactIds, b.includeContactIds);
+  }
+  return {
+    includeContactIds,
+    excludeContactIds: [...new Set([...a.excludeContactIds, ...b.excludeContactIds])],
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

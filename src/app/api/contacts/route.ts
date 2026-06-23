@@ -12,7 +12,9 @@ import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
 import { searchParamsToFilters, getDefaultContactFilters } from "@/lib/contacts-filters";
 import { applyContactListFiltersToBuilder } from "@/lib/contacts-query";
 import {
+  applyGroupFiltersToQuery,
   enrichContactsWithGroupCountsAndNames,
+  groupIncludeFilterMatchesNone,
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
   resolveContactListFilterIds,
@@ -49,14 +51,17 @@ function applyBirthdayAgeFilters(query: QueryBuilder, ageMin: string, ageMax: st
   return query;
 }
 
-function applyApiContactFilters(
+async function applyApiContactFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   query: QueryBuilder,
   f: ReturnType<typeof getDefaultContactFilters>,
-  groupResolution: GroupFilterResolution | undefined,
+  nonGroupResolution: GroupFilterResolution | undefined,
   partialLocation = false,
 ) {
+  query = await applyGroupFiltersToQuery(supabase, f, query);
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
-  query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
+  query = applyContactListFiltersToBuilder(query, filtersWithoutAge, nonGroupResolution, {
     partialLocation,
   });
   return applyBirthdayAgeFilters(query, f.age_min, f.age_max);
@@ -103,24 +108,39 @@ function logContactsQueryError(
   });
 }
 
-async function resolveGroupFilterSafe(
+function emptyContactsResponse(
+  comboboxMode: boolean,
+  page: number,
+  pageSize: number,
+) {
+  if (comboboxMode) {
+    return NextResponse.json({ contacts: [] });
+  }
+  return NextResponse.json({ contacts: [], total: 0, page, pageSize });
+}
+
+async function resolveNonGroupFilterSafe(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   f: ReturnType<typeof getDefaultContactFilters>,
 ): Promise<GroupFilterResolution | undefined> {
-  const hasGroupFilter =
-    f.group_ids.length > 0 || Boolean(f.group_id?.trim()) || f.exclude_group_ids.length > 0;
-  if (!hasGroupFilter) return undefined;
+  const hasNonGroupIdFilter =
+    f.source_ids.length > 0 ||
+    f.exclude_source_ids.length > 0 ||
+    f.has_request === "has" ||
+    f.has_request === "not" ||
+    Boolean(f.request_status.trim());
+  if (!hasNonGroupIdFilter) return undefined;
   try {
     return await resolveContactListFilterIds(supabase, f);
-  } catch (groupErr) {
-    console.error("[api/contacts GET] group filter resolution failed", {
-      error: groupErr instanceof Error ? groupErr.message : groupErr,
-      stack: groupErr instanceof Error ? groupErr.stack : undefined,
-      group_ids: f.group_ids,
-      group_id: f.group_id,
-      exclude_group_ids: f.exclude_group_ids,
-      group_match: f.group_match,
+  } catch (filterErr) {
+    console.error("[api/contacts GET] non-group id filter resolution failed", {
+      error: filterErr instanceof Error ? filterErr.message : filterErr,
+      stack: filterErr instanceof Error ? filterErr.stack : undefined,
+      source_ids: f.source_ids,
+      exclude_source_ids: f.exclude_source_ids,
+      has_request: f.has_request,
+      request_status: f.request_status,
     });
     return undefined;
   }
@@ -134,7 +154,6 @@ export async function GET(request: NextRequest) {
 
     const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
     const partialLocation = request.nextUrl.searchParams.get("partial_location") === "1";
-    const groupResolution = await resolveGroupFilterSafe(supabase, f);
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;
     const listLimit = Number.isFinite(parsedLimit) ? Math.min(10_000, Math.max(1, parsedLimit)) : null;
@@ -143,6 +162,22 @@ export async function GET(request: NextRequest) {
 
     const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") || "1", 10) || 1);
     const pageSize = Math.min(200, Math.max(1, parseInt(request.nextUrl.searchParams.get("page_size") || "50", 10) || 50));
+
+    try {
+      if (await groupIncludeFilterMatchesNone(supabase, f)) {
+        return emptyContactsResponse(comboboxMode, page, pageSize);
+      }
+    } catch (groupErr) {
+      console.error("[api/contacts GET] group include RPC failed", {
+        error: groupErr instanceof Error ? groupErr.message : groupErr,
+        stack: groupErr instanceof Error ? groupErr.stack : undefined,
+        group_ids: f.group_ids,
+        group_id: f.group_id,
+        group_match: f.group_match,
+      });
+    }
+
+    const nonGroupResolution = await resolveNonGroupFilterSafe(supabase, f);
 
     if (namedayToday) {
       const now = new Date();
@@ -158,7 +193,7 @@ export async function GET(request: NextRequest) {
         .select(SELECT_LIST)
         .in("id", ids)
         .order("created_at", { ascending: false });
-      query = applyApiContactFilters(query, f, groupResolution, partialLocation);
+      query = await applyApiContactFilters(supabase, query, f, nonGroupResolution, partialLocation);
       if (comboboxMode) {
         query = query.limit(listLimit!);
       } else {
@@ -183,7 +218,7 @@ export async function GET(request: NextRequest) {
 
     if (f.search) {
       let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
-      query = applyApiContactFilters(query, f, groupResolution, partialLocation);
+      query = await applyApiContactFilters(supabase, query, f, nonGroupResolution, partialLocation);
       query = query.limit(12_000);
       const { data, error } = await query;
       if (error) {
@@ -205,7 +240,7 @@ export async function GET(request: NextRequest) {
       .from("contacts")
       .select(SELECT_LIST, { count: "exact" })
       .order("created_at", { ascending: false });
-    query = applyApiContactFilters(query, f, groupResolution, partialLocation);
+    query = await applyApiContactFilters(supabase, query, f, nonGroupResolution, partialLocation);
 
     if (comboboxMode) {
       query = query.limit(listLimit!);

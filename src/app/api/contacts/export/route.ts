@@ -14,7 +14,9 @@ import { callStatusLabel } from "@/lib/luxury-styles";
 import { nextJsonError } from "@/lib/api-resilience";
 import {
   fetchGroupNamesByContactId,
+  mergeContactListFilterResolutions,
   resolveContactListFilterIds,
+  resolveGroupFilterContactIds,
 } from "@/lib/contact-group-members";
 
 export const dynamic = "force-dynamic";
@@ -73,15 +75,22 @@ export async function GET(request: NextRequest) {
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
-        qn = applyContactListFiltersToBuilder(qn, f, await resolveContactListFilterIds(supabase, f));
+        const filterResolution = mergeContactListFilterResolutions(
+          await resolveGroupFilterContactIds(supabase, f),
+          await resolveContactListFilterIds(supabase, f),
+        );
+        qn = applyContactListFiltersToBuilder(qn, f, filterResolution);
         query = qn;
       }
     } else if (filtered) {
-      const groupResolution = await resolveContactListFilterIds(supabase, f);
+      const filterResolution = mergeContactListFilterResolutions(
+        await resolveGroupFilterContactIds(supabase, f),
+        await resolveContactListFilterIds(supabase, f),
+      );
       query = applyContactListFiltersToBuilder(
         supabase.from("contacts").select(SELECT_EXPORT),
         f,
-        groupResolution,
+        filterResolution,
       );
     } else {
       const canFullExport = await hasPermissionFlexible(user.id, "contacts_export", isManager);
