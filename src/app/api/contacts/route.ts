@@ -18,7 +18,7 @@ import {
   canUseNameOnlyFuzzySearchPath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
-  fetchContactsNameOnlyFuzzySearch,
+  searchContactsByName,
   filterContactRowsByListFilters,
   hasColumnListFilters,
   hasGroupIncludeFilter,
@@ -274,8 +274,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (canUseNameOnlyFuzzySearchPath(f)) {
-      console.log("NAME ONLY PATH TRIGGERED");
-      const rows = await fetchContactsNameOnlyFuzzySearch(supabase, f, SELECT_LIST);
+      const rows = await searchContactsByName(supabase, {
+        firstName: f.first_name || null,
+        lastName: f.last_name || null,
+        fatherName: f.father_name || null,
+      });
       return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
     }
 

@@ -379,7 +379,7 @@ export function isNameOnlyFilter(f: ContactListFilters): boolean {
   return true;
 }
 
-/** Name-only: accent-insensitive fuzzy match over all contacts (not the generic in-memory pipeline). */
+/** Name-only: search_contacts_by_name RPC (not the generic in-memory pipeline). */
 export function canUseNameOnlyFuzzySearchPath(f: ContactListFilters): boolean {
   return isNameOnlyFilter(f);
 }
@@ -426,18 +426,38 @@ export async function fetchContactRowsInBatches(
   return rows;
 }
 
-/** Accent-insensitive first/last name search — scans contacts in batches, fuzzy-filters, full count. */
-export async function fetchContactsNameOnlyFuzzySearch(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  f: ContactListFilters,
-  select: string,
+const NAME_SEARCH_RPC_PAGE_SIZE = 1000;
+
+/** First/last/father name search via search_contacts_by_name RPC (paginated). */
+export async function searchContactsByName(
+  supabase: SupabaseClient,
+  opts: {
+    firstName?: string | null;
+    lastName?: string | null;
+    fatherName?: string | null;
+  },
 ): Promise<Record<string, unknown>[]> {
-  const rows = await fetchContactRowsInBatches(supabase, select, (query) => query);
-  console.log("NAME ONLY FETCHED:", rows.length);
-  const filtered = filterContactRowsByListFilters(rows as ContactListFilterRow[], f);
-  console.log("NAME ONLY AFTER FUZZY:", filtered.length);
-  return filtered;
+  const { firstName, lastName, fatherName } = opts;
+  const allRows: Record<string, unknown>[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .rpc("search_contacts_by_name", {
+        p_first_name: firstName?.trim() || null,
+        p_last_name: lastName?.trim() || null,
+        p_father_name: fatherName?.trim() || null,
+      })
+      .range(from, from + NAME_SEARCH_RPC_PAGE_SIZE - 1);
+    if (error) throw error;
+
+    const page = (data ?? []) as Record<string, unknown>[];
+    allRows.push(...page);
+    if (page.length < NAME_SEARCH_RPC_PAGE_SIZE) break;
+    from += NAME_SEARCH_RPC_PAGE_SIZE;
+  }
+
+  return allRows;
 }
 
 /** Fetch all matches in memory before paginating (search, name combos, group-only, large include lists). */

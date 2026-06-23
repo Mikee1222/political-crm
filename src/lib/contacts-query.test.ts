@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 import {
   applyColumnContactFiltersToBuilder,
@@ -234,35 +234,31 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
   });
 });
 
-describe("fetchContactsNameOnlyFuzzySearch", () => {
-  it("batch-fetches all contacts then fuzzy-filters by first_name", async () => {
-    const { fetchContactsNameOnlyFuzzySearch } = await import("@/lib/contacts-query");
-    const allRows = [
-      { id: "1", first_name: "Μαρία", last_name: "Α" },
-      { id: "2", first_name: "Γιώργος", last_name: "Β" },
-      { id: "3", first_name: "Μαρια", last_name: "Γ" },
-    ];
-    const supabase = {
-      from() {
-        return {
-          select() {
-            const builder = {
-              order() {
-                return builder;
-              },
-              range() {
-                return Promise.resolve({ data: allRows, error: null });
-              },
-            };
-            return builder;
-          },
-        };
-      },
-    };
-    const f = getDefaultContactFilters();
-    f.first_name = "ΜΑΡΙΑ";
-    const rows = await fetchContactsNameOnlyFuzzySearch(supabase, f, "id, first_name, last_name");
-    expect(rows.map((r) => r.id)).toEqual(["1", "3"]);
+describe("searchContactsByName", () => {
+  it("calls search_contacts_by_name RPC with name params and paginates", async () => {
+    const { searchContactsByName } = await import("@/lib/contacts-query");
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({
+      id: String(i),
+      first_name: "Μαρία",
+      last_name: "Α",
+    }));
+    const page2 = [{ id: "1000", first_name: "Μαρία", last_name: "Β" }];
+    const rpc = vi.fn().mockReturnValue({
+      range: vi
+        .fn()
+        .mockResolvedValueOnce({ data: page1, error: null })
+        .mockResolvedValueOnce({ data: page2, error: null }),
+    });
+    const supabase = { rpc };
+
+    const rows = await searchContactsByName(supabase as never, { firstName: "ΜΑΡΙΑ" });
+
+    expect(rpc).toHaveBeenCalledWith("search_contacts_by_name", {
+      p_first_name: "ΜΑΡΙΑ",
+      p_last_name: null,
+      p_father_name: null,
+    });
+    expect(rows).toHaveLength(1001);
   });
 });
 
