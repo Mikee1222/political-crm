@@ -434,7 +434,7 @@ export async function fetchContactsNameOnlyFuzzySearch(
   select: string,
 ): Promise<Record<string, unknown>[]> {
   const rows = await fetchContactRowsInBatches(supabase, select, (query) => query);
-  return filterContactRowsByListFilters(rows, f);
+  return filterContactRowsByListFilters(rows as ContactListFilterRow[], f);
 }
 
 /** Fetch all matches in memory before paginating (search, name combos, group-only, large include lists). */
