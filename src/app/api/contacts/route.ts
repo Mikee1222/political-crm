@@ -214,6 +214,8 @@ export async function GET(request: NextRequest) {
         logContactsQueryError("combobox query", error, { group_ids: f.group_ids });
         return NextResponse.json({ error: error.message }, { status: 400 });
       }
+      const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
+      return NextResponse.json({ contacts: enriched.slice(0, listLimit!) });
     }
 
     const from = (page - 1) * pageSize;
