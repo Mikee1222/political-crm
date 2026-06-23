@@ -16,8 +16,10 @@ import {
   applyContactListFiltersToBuilder,
   canUseGroupNameSearchFastPath,
   contactRowMatchesListFilters,
+  fetchContactRowsInBatches,
   filterContactRowsByListFilters,
   hasColumnListFilters,
+  hasNameColumnFilters,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import {
@@ -191,6 +193,16 @@ async function fetchContactsInMemoryPipeline(
       filterResolution,
       partialLocation,
     )) as Record<string, unknown>[];
+  } else if (hasNameColumnFilters(f)) {
+    rows = await fetchContactRowsInBatches(supabase, SELECT_LIST, (query) =>
+      applyApiContactFilters(query, f, filterResolution, partialLocation, {
+        skipNameColumnFilters: true,
+      }),
+    );
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation) as Record<
+      string,
+      unknown
+    >[];
   } else {
     let query: QueryBuilder = supabase
       .from("contacts")
@@ -199,7 +211,7 @@ async function fetchContactsInMemoryPipeline(
     query = applyApiContactFilters(query, f, filterResolution, partialLocation, {
       skipNameColumnFilters: true,
     });
-    query = query.limit(f.search?.trim() ? 12_000 : 15_000);
+    query = query.limit(12_000);
     const { data, error } = await query;
     if (error) throw error;
     rows = (data ?? []) as Record<string, unknown>[];

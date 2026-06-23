@@ -316,6 +316,37 @@ export function applyColumnContactFiltersToBuilder(
   return applyBirthdayAgeFiltersToBuilder(q, f.age_min, f.age_max);
 }
 
+export function hasNameColumnFilters(f: ContactListFilters): boolean {
+  return Boolean(f.first_name?.trim() || f.last_name?.trim() || f.father_name?.trim());
+}
+
+const FUZZY_NAME_FETCH_BATCH = 1000;
+
+/** Page through contacts when fuzzy name columns must be matched in memory (no row cap). */
+export async function fetchContactRowsInBatches(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  select: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  applyFilters: (query: any) => any,
+  batchSize = FUZZY_NAME_FETCH_BATCH,
+): Promise<Record<string, unknown>[]> {
+  const rows: Record<string, unknown>[] = [];
+  let from = 0;
+  while (true) {
+    let query = supabase.from("contacts").select(select).order("created_at", { ascending: false });
+    query = applyFilters(query);
+    query = query.range(from, from + batchSize - 1);
+    const { data, error } = await query;
+    if (error) throw error;
+    const chunk = (data ?? []) as Record<string, unknown>[];
+    rows.push(...chunk);
+    if (chunk.length < batchSize) break;
+    from += batchSize;
+  }
+  return rows;
+}
+
 /** Fetch all matches in memory before paginating (name filters, search, large include lists). */
 export function needsInMemoryContactListPipeline(
   f: ContactListFilters,
@@ -323,7 +354,7 @@ export function needsInMemoryContactListPipeline(
 ): boolean {
   if (canUseGroupNameSearchFastPath(f)) return false;
   if (f.search?.trim()) return true;
-  if (f.first_name?.trim() || f.last_name?.trim() || f.father_name?.trim()) return true;
+  if (hasNameColumnFilters(f)) return true;
   if (resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE) return true;
   return false;
 }

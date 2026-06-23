@@ -5,7 +5,9 @@ import {
   applyColumnContactFiltersToBuilder,
   canUseGroupNameSearchFastPath,
   contactRowMatchesListFilters,
+  fetchContactRowsInBatches,
   filterContactRowsByListFilters,
+  hasNameColumnFilters,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import { fetchContactsByIncludeIdBatches, searchContactsInGroups } from "@/lib/contact-group-members";
@@ -17,6 +19,60 @@ describe("contactFieldMatchesFuzzyName", () => {
     expect(contactFieldMatchesFuzzyName("ΜΑΡΙΑ", "μαρια")).toBe(true);
     expect(contactFieldMatchesFuzzyName("Μαρια", "ΜΑΡΙΑ")).toBe(true);
     expect(contactFieldMatchesFuzzyName("Γιώργος", "ΜΑΡΙΑ")).toBe(false);
+  });
+});
+
+describe("hasNameColumnFilters", () => {
+  it("detects first, last, and father name filters", () => {
+    const base = getDefaultContactFilters();
+    expect(hasNameColumnFilters(base)).toBe(false);
+    expect(hasNameColumnFilters({ ...base, first_name: "ΜΑΡΙΑ" })).toBe(true);
+    expect(hasNameColumnFilters({ ...base, last_name: "ΠΑΠ" })).toBe(true);
+    expect(hasNameColumnFilters({ ...base, father_name: "ΝΙΚ" })).toBe(true);
+    expect(hasNameColumnFilters({ ...base, search: "μαρια" })).toBe(false);
+  });
+});
+
+describe("fetchContactRowsInBatches", () => {
+  it("pages until a short final batch", async () => {
+    const ranges: [number, number][] = [];
+    let call = 0;
+    const supabase = {
+      from() {
+        return {
+          select() {
+            const builder = {
+              order() {
+                return builder;
+              },
+              range(from: number, to: number) {
+                ranges.push([from, to]);
+                call += 1;
+                const batchIndex = call - 1;
+                if (batchIndex === 0) {
+                  return Promise.resolve({
+                    data: Array.from({ length: 1000 }, (_, i) => ({ id: `a-${i}` })),
+                    error: null,
+                  });
+                }
+                return Promise.resolve({
+                  data: Array.from({ length: 181 }, (_, i) => ({ id: `b-${i}` })),
+                  error: null,
+                });
+              },
+            };
+            return builder;
+          },
+        };
+      },
+    };
+
+    const rows = await fetchContactRowsInBatches(supabase, "id", (q) => q, 1000);
+    expect(ranges).toEqual([
+      [0, 999],
+      [1000, 1999],
+    ]);
+    expect(rows).toHaveLength(1181);
   });
 });
 
