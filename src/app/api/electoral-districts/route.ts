@@ -5,7 +5,10 @@ import type { ElectoralDistrictRow } from "@/app/api/geo/electoral-districts/rou
 
 export const dynamic = "force-dynamic";
 
-export type ElectoralDistrictListRow = ElectoralDistrictRow & { municipality_name?: string | null };
+export type ElectoralDistrictListRow = ElectoralDistrictRow & {
+  municipality_name?: string | null;
+  contact_count?: number;
+};
 
 export async function GET() {
   try {
@@ -13,24 +16,26 @@ export async function GET() {
     if (!crm.allowed) return crm.response;
     const { supabase } = crm;
 
-    const { data, error } = await supabase
-      .from("electoral_districts")
-      .select("id, name, municipality_id, created_at")
-      .order("name", { ascending: true });
-
+    const { data: counts, error } = await supabase.rpc("get_contact_electoral_district_counts");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const { data: munis } = await supabase.from("municipalities").select("id, name");
-    const mMap = new Map((munis as { id: string; name: string }[] | null)?.map((m) => [m.id, m.name]) ?? []);
+    const districts: ElectoralDistrictListRow[] = (
+      (counts as { name?: string; contact_count?: number | string }[] | null) ?? []
+    ).map((row) => {
+      const name = String(row.name ?? "").trim();
+      return {
+        id: name,
+        name,
+        municipality_id: "",
+        created_at: "",
+        municipality_name: null,
+        contact_count: Number(row.contact_count ?? 0),
+      };
+    });
 
-    const districts = ((data ?? []) as ElectoralDistrictRow[]).map((r) => ({
-      ...r,
-      municipality_name: mMap.get(r.municipality_id) ?? null,
-    }));
-
-    return NextResponse.json({ districts: districts as ElectoralDistrictListRow[] });
+    return NextResponse.json({ districts });
   } catch (e) {
     console.error("[api/electoral-districts GET]", e);
     return nextJsonError();

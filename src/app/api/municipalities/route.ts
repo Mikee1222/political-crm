@@ -17,29 +17,23 @@ export async function GET(request: NextRequest) {
       if (!crm.allowed) return crm.response;
       const { supabase } = crm;
 
-      const [{ data: munis, error: mErr }, { data: counts, error: cErr }] = await Promise.all([
-        supabase.from("municipalities").select("id, name, regional_unit, created_at").order("name", { ascending: true }),
-        supabase.rpc("get_contact_municipality_counts"),
-      ]);
-
-      if (mErr) {
-        return NextResponse.json({ error: mErr.message }, { status: 400 });
-      }
-      if (cErr) {
-        return NextResponse.json({ error: cErr.message }, { status: 400 });
+      const { data: counts, error } = await supabase.rpc("get_contact_municipality_counts");
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
       }
 
-      const countMap = new Map(
-        ((counts as { name?: string; contact_count?: number | string }[] | null) ?? []).map((r) => [
-          String(r.name ?? "").trim(),
-          Number(r.contact_count ?? 0),
-        ]),
-      );
-
-      const municipalities = ((munis ?? []) as MunicipalityRow[]).map((m) => ({
-        ...m,
-        contact_count: countMap.get(m.name.trim()) ?? 0,
-      }));
+      const municipalities: MunicipalityWithCountRow[] = (
+        (counts as { name?: string; contact_count?: number | string }[] | null) ?? []
+      ).map((row) => {
+        const name = String(row.name ?? "").trim();
+        return {
+          id: name,
+          name,
+          regional_unit: null,
+          created_at: "",
+          contact_count: Number(row.contact_count ?? 0),
+        };
+      });
 
       return NextResponse.json({ municipalities });
     } catch (e) {

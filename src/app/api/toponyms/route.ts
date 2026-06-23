@@ -37,52 +37,18 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: cErr.message }, { status: 400 });
       }
 
-      const ids = ((counts as { id?: string }[] | null) ?? []).map((r) => r.id).filter(Boolean) as string[];
-      if (ids.length === 0) {
-        return NextResponse.json({ toponyms: [] as ToponymWithCountRow[] });
-      }
-
-      const { data: tops, error: tErr } = await supabase
-        .from("toponyms")
-        .select("id, name, municipality_id, electoral_district_id")
-        .in("id", ids);
-      if (tErr) {
-        return NextResponse.json({ error: tErr.message }, { status: 400 });
-      }
-
-      const [{ data: munis }, { data: eds }] = await Promise.all([
-        supabase.from("municipalities").select("id, name"),
-        supabase.from("electoral_districts").select("id, name"),
-      ]);
-      const mMap = new Map((munis as { id: string; name: string }[] | null)?.map((m) => [m.id, m.name]) ?? []);
-      const dMap = new Map((eds as { id: string; name: string }[] | null)?.map((m) => [m.id, m.name]) ?? []);
-      const countMap = new Map(
-        ((counts as { id?: string; contact_count?: number | string }[] | null) ?? []).map((r) => [
-          String(r.id ?? ""),
-          Number(r.contact_count ?? 0),
-        ]),
-      );
-      const topMap = new Map(
-        ((tops ?? []) as { id: string; name: string; municipality_id: string; electoral_district_id: string | null }[]).map(
-          (t) => [t.id, t],
-        ),
-      );
-
-      const toponyms: ToponymWithCountRow[] = ids
-        .flatMap((id) => {
-          const t = topMap.get(id);
-          if (!t) return [];
-          const row: ToponymWithCountRow = {
-            id: t.id,
-            name: t.name.trim(),
-            contact_count: countMap.get(id) ?? 0,
-            municipality_id: t.municipality_id,
-            municipality_name: mMap.get(t.municipality_id) ?? null,
-            electoral_district_id: t.electoral_district_id,
-            electoral_district_name: t.electoral_district_id ? (dMap.get(t.electoral_district_id) ?? null) : null,
+      const toponyms: ToponymWithCountRow[] = (
+        (counts as { name?: string; contact_count?: number | string }[] | null) ?? []
+      )
+        .map((row) => {
+          const name = String(row.name ?? "").trim();
+          return {
+            id: name,
+            name,
+            contact_count: Number(row.contact_count ?? 0),
           };
-          return [row];
         })
+        .filter((row) => row.name.length > 2)
         .sort((a, b) => a.name.localeCompare(b.name, "el"));
 
       return NextResponse.json({ toponyms });

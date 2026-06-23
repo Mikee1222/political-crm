@@ -14,36 +14,21 @@ export async function POST(request: NextRequest) {
       return forbidden();
     }
 
-    const body = (await request.json()) as { from_id?: string; to_id?: string };
-    const from_id = String(body.from_id ?? "").trim();
-    const to_id = String(body.to_id ?? "").trim();
-    if (!from_id || !to_id) {
-      return NextResponse.json({ error: "Απαιτούνται from_id και to_id" }, { status: 400 });
+    const body = (await request.json()) as { from?: string; to?: string; from_id?: string; to_id?: string };
+    const from = String(body.from ?? body.from_id ?? "").trim();
+    const to = String(body.to ?? body.to_id ?? "").trim();
+    if (!from || !to) {
+      return NextResponse.json({ error: "Απαιτούνται from και to" }, { status: 400 });
     }
-    if (from_id === to_id) {
+    if (from === to) {
       return NextResponse.json({ error: "Τα τοπωνύμια πρέπει να διαφέρουν" }, { status: 400 });
     }
 
     const service = createServiceClient();
-    const [{ data: fromRow, error: fromErr }, { data: toRow, error: toErr }] = await Promise.all([
-      service.from("toponyms").select("name").eq("id", from_id).maybeSingle(),
-      service.from("toponyms").select("name").eq("id", to_id).maybeSingle(),
-    ]);
-
-    if (fromErr || toErr) {
-      return NextResponse.json({ error: fromErr?.message ?? toErr?.message ?? "Σφάλμα" }, { status: 400 });
-    }
-    if (!fromRow?.name || !toRow?.name) {
-      return NextResponse.json({ error: "Τοπωνύμιο δεν βρέθηκε" }, { status: 404 });
-    }
-
-    const fromName = String(fromRow.name).trim();
-    const toName = String(toRow.name).trim();
-
     const { data: updated, error } = await service
       .from("contacts")
-      .update({ toponym: toName })
-      .eq("toponym", fromName)
+      .update({ toponym: to })
+      .eq("toponym", from)
       .select("id");
 
     if (error) {

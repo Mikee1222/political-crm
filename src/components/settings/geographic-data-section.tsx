@@ -92,26 +92,19 @@ export function GeographicDataSection() {
   const filteredMunis = useMemo(() => {
     const t = norm(q.trim());
     if (!t) return munis;
-    return munis.filter((m) => norm(m.name).includes(t) || (m.regional_unit && norm(m.regional_unit).includes(t)));
+    return munis.filter((m) => norm(m.name).includes(t));
   }, [munis, q]);
 
   const filteredDists = useMemo(() => {
     const t = norm(q.trim());
     if (!t) return dists;
-    return dists.filter(
-      (d) => norm(d.name).includes(t) || (d.municipality_name && norm(d.municipality_name).includes(t)),
-    );
+    return dists.filter((d) => norm(d.name).includes(t));
   }, [dists, q]);
 
   const filteredTops = useMemo(() => {
     const t = norm(q.trim());
     if (!t) return tops;
-    return tops.filter(
-      (r) =>
-        norm(r.name).includes(t) ||
-        (r.municipality_name && norm(r.municipality_name).includes(t)) ||
-        (r.electoral_district_name && norm(r.electoral_district_name).includes(t)),
-    );
+    return tops.filter((r) => norm(r.name).includes(t));
   }, [tops, q]);
 
   return (
@@ -233,11 +226,10 @@ function MuniTable({
   onDelete: () => void;
 }) {
   return (
-    <table className="w-full min-w-[560px] text-sm">
+    <table className="w-full min-w-[480px] text-sm">
       <thead>
         <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
           <th className="p-2 pl-3 text-left">Όνομα</th>
-          <th className="p-2 text-left">Περιφερ. ενότητα</th>
           <th className="p-2 text-right">Επαφές</th>
           <th className="w-44 p-2 pr-3 text-right">Ενέργειες</th>
         </tr>
@@ -245,7 +237,7 @@ function MuniTable({
       <tbody>
         {rows.length === 0 && (
           <tr>
-            <td colSpan={4} className="p-4 text-center text-[var(--text-muted)]">
+            <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
               Δεν βρέθηκαν.
             </td>
           </tr>
@@ -253,7 +245,6 @@ function MuniTable({
         {rows.map((r) => (
           <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
             <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
-            <td className="p-2 text-[var(--text-secondary)]">{r.regional_unit ?? "—"}</td>
             <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
             <td className="p-2 pr-3 text-right">
               <div className="inline-flex flex-wrap justify-end gap-1">
@@ -284,7 +275,6 @@ function MuniTable({
 
 function DistTable({
   rows,
-  munis,
   onEdit,
   onDelete,
 }: {
@@ -294,11 +284,11 @@ function DistTable({
   onDelete: () => void;
 }) {
   return (
-    <table className="w-full min-w-[560px] text-sm">
+    <table className="w-full min-w-[480px] text-sm">
       <thead>
         <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-          <th className="p-2 pl-3 text-left">Δήμος</th>
-          <th className="p-2 text-left">Όνομα</th>
+          <th className="p-2 pl-3 text-left">Όνομα</th>
+          <th className="p-2 text-right">Επαφές</th>
           <th className="w-28 p-2 pr-3 text-right">Ενέργειες</th>
         </tr>
       </thead>
@@ -312,10 +302,8 @@ function DistTable({
         )}
         {rows.map((r) => (
           <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
-            <td className="p-2 pl-3 text-[var(--text-secondary)]">
-              {r.municipality_name ?? munis.find((m) => m.id === r.municipality_id)?.name ?? "—"}
-            </td>
-            <td className="p-2 font-medium text-[var(--text-primary)]">{r.name}</td>
+            <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
+            <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count ?? 0}</td>
             <td className="p-2 pr-3 text-right">
               <RowActions
                 onEdit={() => onEdit(r)}
@@ -335,8 +323,6 @@ function DistTable({
 
 function TopTable({
   rows,
-  munis,
-  dists,
   onEdit,
   onTransfer,
   onDelete,
@@ -349,12 +335,10 @@ function TopTable({
   onDelete: () => void;
 }) {
   return (
-    <table className="w-full min-w-[720px] text-sm">
+    <table className="w-full min-w-[560px] text-sm">
       <thead>
         <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
           <th className="p-2 pl-3 text-left">Όνομα</th>
-          <th className="p-2 text-left">Δήμος</th>
-          <th className="p-2 text-left">Διαμέρισμα</th>
           <th className="p-2 text-right">Επαφές</th>
           <th className="w-44 p-2 pr-3 text-right">Ενέργειες</th>
         </tr>
@@ -362,7 +346,7 @@ function TopTable({
       <tbody>
         {rows.length === 0 && (
           <tr>
-            <td colSpan={5} className="p-4 text-center text-[var(--text-muted)]">
+            <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
               Δεν βρέθηκαν.
             </td>
           </tr>
@@ -370,15 +354,6 @@ function TopTable({
         {rows.map((r) => (
           <tr key={r.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
             <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">{r.name}</td>
-            <td className="p-2 text-[var(--text-secondary)]">
-              {r.municipality_name ?? (r.municipality_id ? munis.find((m) => m.id === r.municipality_id)?.name : null) ?? "—"}
-            </td>
-            <td className="p-2 text-[var(--text-secondary)]">
-              {r.electoral_district_name ??
-                (r.electoral_district_id ? dists.find((d) => d.id === r.electoral_district_id)?.name : null) ??
-                "—"}
-            </td>
-            <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.contact_count}</td>
             <td className="p-2 pr-3 text-right">
               <div className="inline-flex flex-wrap justify-end gap-1">
                 <button
@@ -517,19 +492,19 @@ function ToponymTransferModal({
   onTransferred: () => Promise<void>;
 }) {
   const { showToast } = useFormToast();
-  const [toId, setToId] = useState("");
+  const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const options = useMemo(
-    () => toponyms.filter((t) => t.id !== from.id).sort((a, b) => a.name.localeCompare(b.name, "el")),
-    [toponyms, from.id],
+    () => toponyms.filter((t) => t.name !== from.name).sort((a, b) => a.name.localeCompare(b.name, "el")),
+    [toponyms, from.name],
   );
 
   useEffect(() => {
-    setToId(options[0]?.id ?? "");
-  }, [from.id, options]);
+    setTo(options[0]?.name ?? "");
+  }, [from.name, options]);
 
   const submit = async () => {
-    if (!toId) {
+    if (!to.trim()) {
       showToast("Επιλέξτε προορισμό.", "error");
       return;
     }
@@ -538,7 +513,7 @@ function ToponymTransferModal({
       const res = await fetchWithTimeout("/api/admin/contacts/bulk-transfer-toponym", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_id: from.id, to_id: toId }),
+        body: JSON.stringify({ from: from.name, to: to.trim() }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; transferred?: number };
       if (!res.ok) {
@@ -552,7 +527,7 @@ function ToponymTransferModal({
     }
   };
 
-  const toLabel = options.find((t) => t.id === toId)?.name ?? "";
+  const toLabel = to.trim();
 
   return (
     <CenteredModal
@@ -566,7 +541,7 @@ function ToponymTransferModal({
           <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
             Άκυρο
           </button>
-          <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy || !toId}>
+          <button type="button" onClick={() => void submit()} className={lux.btnPrimary} disabled={busy || !to.trim()}>
             {busy ? "…" : `Μεταφορά ${from.contact_count} επαφών`}
           </button>
         </>
@@ -579,10 +554,10 @@ function ToponymTransferModal({
         </p>
         <div>
           <HqLabel htmlFor="top-to">Τοπωνύμιο προορισμού</HqLabel>
-          <HqSelect id="top-to" className={lux.select + " mt-1"} value={toId} onChange={(e) => setToId(e.target.value)}>
+          <HqSelect id="top-to" className={lux.select + " mt-1"} value={to} onChange={(e) => setTo(e.target.value)}>
             {options.length === 0 && <option value="">— (δεν υπάρχει άλλο τοπωνύμιο) —</option>}
             {options.map((t) => (
-              <option key={t.id} value={t.id}>
+              <option key={t.id} value={t.name}>
                 {t.name}
               </option>
             ))}
@@ -601,7 +576,6 @@ function ToponymTransferModal({
 function MuniModal({ open, v, onClose, onSave }: { open: boolean; v: MunicipalityWithCountRow | "add" | null; onClose: () => void; onSave: () => void }) {
   const { showToast } = useFormToast();
   const [name, setName] = useState("");
-  const [reg, setReg] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const isAdd = v === "add";
   const row = v !== "add" && v != null ? v : null;
@@ -609,10 +583,8 @@ function MuniModal({ open, v, onClose, onSave }: { open: boolean; v: Municipalit
     if (!open) return;
     if (isAdd) {
       setName("");
-      setReg("");
     } else if (row) {
       setName(row.name);
-      setReg(row.regional_unit ?? "");
     }
     setErr(null);
   }, [open, isAdd, row]);
@@ -640,8 +612,7 @@ function MuniModal({ open, v, onClose, onSave }: { open: boolean; v: Municipalit
                 showToast("Υποχρεωτικό όνομα.", "error");
                 return;
               }
-              const ru = reg.trim() || null;
-              const bodyOut = { name: n, regional_unit: ru };
+              const bodyOut = { name: n, regional_unit: null };
               const url = isAdd ? "/api/admin/municipalities" : `/api/admin/municipalities/${row!.id}`;
               const res = await fetchWithTimeout(url, {
                 method: isAdd ? "POST" : "PATCH",
@@ -668,9 +639,7 @@ function MuniModal({ open, v, onClose, onSave }: { open: boolean; v: Municipalit
     >
       {err && <p className="mb-2 text-sm text-red-300">{err}</p>}
       <label className={lux.label}>Όνομα *</label>
-      <input className={lux.input + " mb-3"} value={name} onChange={(e) => setName(e.target.value)} />
-      <label className={lux.label}>Περιφερ. ενότητα</label>
-      <input className={lux.input + " mb-1"} value={reg} onChange={(e) => setReg(e.target.value)} />
+      <input className={lux.input + " mb-1"} value={name} onChange={(e) => setName(e.target.value)} />
     </CenteredModal>
   );
 }

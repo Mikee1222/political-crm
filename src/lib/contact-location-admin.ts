@@ -30,19 +30,22 @@ export async function countContactsByMunicipality(service: SupabaseClient, name:
   return count ?? 0;
 }
 
-/** Contacts store toponym as text (not toponym_id); counts match contacts.toponym to toponyms.name. */
+/** Contacts store toponym as text; counts come from distinct contacts.toponym values. */
 export async function listToponymsWithContactCounts(service: SupabaseClient): Promise<ToponymWithCount[]> {
   const { data, error } = await service.rpc("get_contact_toponym_counts");
   if (error) throw error;
 
-  type RpcRow = { id?: string; name?: string; contact_count?: number | string };
+  type RpcRow = { name?: string; contact_count?: number | string };
   return (data as RpcRow[] | null ?? [])
-    .map((row) => ({
-      id: String(row.id ?? ""),
-      name: String(row.name ?? "").trim(),
-      contact_count: Number(row.contact_count ?? 0),
-    }))
-    .filter((row) => row.id && row.name && row.name.length > 2);
+    .map((row) => {
+      const name = String(row.name ?? "").trim();
+      return {
+        id: name,
+        name,
+        contact_count: Number(row.contact_count ?? 0),
+      };
+    })
+    .filter((row) => row.name.length > 2);
 }
 
 export async function countContactsByToponymName(service: SupabaseClient, name: string): Promise<number> {
