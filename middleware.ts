@@ -1,0 +1,311 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { pathAllowedByPermissions } from "@/lib/middleware-permissions";
+import { getAllowedPermissionKeysForRole } from "@/lib/permission-check";
+import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
+import { isPortalOnlyUser } from "@/lib/portal-user-status";
+
+function isPortalPublicPath(pathname: string) {
+  if (pathname === "/portal" || pathname === "/portal/") return true;
+  if (pathname === "/portal/login" || pathname === "/portal/register") return true;
+  if (pathname === "/portal/news" || pathname.startsWith("/portal/news/")) return true;
+  if (pathname === "/portal/about" || pathname.startsWith("/portal/about/")) return true;
+  if (pathname === "/portal/appointment" || pathname.startsWith("/portal/appointment/")) return true;
+  return false;
+}
+
+function isAlwaysPublicApi(pathname: string) {
+  return pathname.startsWith("/api/public/");
+}
+
+function isApiPortalPublic(pathname: string) {
+  if (pathname === "/api/portal/auth/register" || pathname === "/api/portal/auth/login") return true;
+  if (pathname === "/api/portal/news" || pathname.startsWith("/api/portal/news/")) return true;
+  if (pathname === "/api/portal/chat" || pathname === "/api/portal/voice/session") return true;
+  if (pathname === "/api/portal/appointments/slots" || pathname === "/api/portal/appointments/book") {
+    return true;
+  }
+  if (pathname === "/api/portal/social" || pathname === "/api/portal/social/tiktok") return true;
+  return false;
+}
+
+function isRetellPublic(pathname: string) {
+  return pathname.startsWith("/api/retell/webhook") || pathname.startsWith("/api/retell/llm");
+}
+
+function isWhatsAppPublic(pathname: string) {
+  return pathname === "/api/whatsapp/webhook";
+}
+
+function isPollPublicPath(pathname: string) {
+  if (pathname.startsWith("/poll/")) return true;
+  if (pathname.startsWith("/api/public/polls/")) return true;
+  return false;
+}
+
+function jsonWithSession(
+  _request: NextRequest,
+  message: string,
+  status: number,
+  sessionRes: NextResponse,
+) {
+  const r = NextResponse.json({ error: message }, { status });
+  for (const c of sessionRes.cookies.getAll()) {
+    r.cookies.set(c);
+  }
+  return r;
+}
+
+function isNextStaticOrAsset(pathname: string) {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/sw.js" ||
+    pathname === "/manifest.json" ||
+    pathname === "/offline.html" ||
+    /^\/icon(-\d+)?\.(png|svg)$/.test(pathname) ||
+    pathname === "/icon.svg"
+  );
+}
+
+/** Browser routes under the portal app (excludes e.g. /api/portal/… which is the API namespace). */
+function isPortalAppPath(pathname: string) {
+  return pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/");
+}
+
+const PORTAL_HOSTS = new Set(["kkaragkounis.com", "www.kkaragkounis.com"]);
+const CRM_HOST = "crm.kkaragkounis.com";
+
+function isPortalProductionHost(host: string) {
+  return PORTAL_HOSTS.has(host);
+}
+
+function isCrmProductionHost(host: string) {
+  return host === CRM_HOST;
+}
+
+/** Local + Vercel preview: do not apply apex/crm domain split. */
+function isDevOrPreviewHost(host: string) {
+  return host === "localhost" || host.startsWith("127.0.0.1") || host.endsWith(".vercel.app");
+}
+
+function portalOrigin(): string {
+  return (process.env.NEXT_PUBLIC_PORTAL_URL || "https://kkaragkounis.com").replace(/\/$/, "");
+}
+
+function portalDashboardRedirectUrl(): URL {
+  return new URL("/portal/dashboard", portalOrigin());
+}
+
+export async function middleware(request: NextRequest) {
+  const hostname = request.headers.get("host") || "";
+  const host = hostname.split(":")[0]?.toLowerCase() ?? "";
+  const pathname = request.nextUrl.pathname;
+
+  // Production domain split (same Vercel deployment, two hostnames):
+  // - kkaragkounis.com / www → portal only: /portal/*, portal APIs, static
+  // - crm.kkaragkounis.com → CRM only: block browser /portal/* (send to public portal origin)
+  if (!isDevOrPreviewHost(host)) {
+    if (isPortalProductionHost(host)) {
+      const portalDomainAllowed =
+        isNextStaticOrAsset(pathname) ||
+        pathname === "/portal" ||
+        pathname === "/portal/" ||
+        pathname.startsWith("/portal/") ||
+        pathname.startsWith("/api/portal/") ||
+        pathname.startsWith("/api/public/") ||
+        pathname.startsWith("/_next/") ||
+        pathname === "/favicon.ico" ||
+        pathname === "/hero-karagkounis.png" ||
+        pathname === "/viografiko2-682x1024.jpg";
+      if (!portalDomainAllowed) {
+        const u = request.nextUrl.clone();
+        u.pathname = "/portal";
+        u.search = "";
+        return NextResponse.redirect(u);
+      }
+    } else if (isCrmProductionHost(host)) {
+      if (pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/")) {
+        const dest = new URL(pathname + request.nextUrl.search, `${portalOrigin()}/`);
+        return NextResponse.redirect(dest);
+      }
+    }
+  }
+
+  if (
+    isNextStaticOrAsset(pathname) ||
+    isAlwaysPublicApi(pathname) ||
+    isRetellPublic(pathname) ||
+    isWhatsAppPublic(pathname) ||
+    isPollPublicPath(pathname)
+  ) {
+    return NextResponse.next();
+  }
+
+  const { supabase, response: sessionResponse, user: authUser } = await updateSession(request);
+  const isLoggedIn = Boolean(authUser);
+  const isCrmLoginPage = pathname === "/login";
+
+  if (!isLoggedIn) {
+    if (isCrmLoginPage) return sessionResponse;
+    if (isPortalPublicPath(pathname)) return sessionResponse;
+    if (isPollPublicPath(pathname) && !pathname.startsWith("/api/")) {
+      return sessionResponse;
+    }
+    if (pathname.startsWith("/api/")) {
+      if (
+        isApiPortalPublic(pathname) ||
+        isAlwaysPublicApi(pathname) ||
+        isRetellPublic(pathname) ||
+        isWhatsAppPublic(pathname) ||
+        (isPollPublicPath(pathname) && pathname.startsWith("/api/public/"))
+      ) {
+        return sessionResponse;
+      }
+      return jsonWithSession(request, "Μη εξουσιοδότηση", 401, sessionResponse);
+    }
+    if (pathname.startsWith("/portal/") && !isPortalPublicPath(pathname)) {
+      const u = new URL("/portal/login", request.url);
+      u.searchParams.set("next", pathname);
+      return redirectWithSession(request, u.pathname + u.search, sessionResponse);
+    }
+    if (!pathname.startsWith("/portal/")) {
+      return redirectWithSession(request, "/login", sessionResponse);
+    }
+  }
+
+  let isPortalUser = false;
+  let role: string = "caller";
+  if (isLoggedIn && authUser) {
+    let portalFromService = false;
+    let serviceResolved = false;
+    try {
+      portalFromService = await isPortalOnlyUser(authUser.id);
+      serviceResolved = true;
+    } catch (e) {
+      console.error("[middleware] isPortalOnlyUser (service role) failed; falling back to RLS profile", e);
+    }
+    const { data: pRow } = await supabase
+      .from("profiles")
+      .select("is_portal, role")
+      .eq("id", authUser.id)
+      .maybeSingle();
+    role = (pRow?.role as string) ?? "caller";
+    isPortalUser = serviceResolved
+      ? portalFromService
+      : Boolean((pRow as { is_portal?: boolean } | null)?.is_portal);
+  }
+
+  if (isLoggedIn && authUser) {
+    if (isCrmLoginPage) {
+      if (isPortalUser) {
+        return NextResponse.redirect(portalDashboardRedirectUrl());
+      }
+      return redirectWithSession(request, "/dashboard", sessionResponse);
+    }
+    if (isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
+      return redirectWithSession(request, "/portal/dashboard", sessionResponse);
+    }
+    if (!isPortalUser && (pathname === "/portal/login" || pathname === "/portal/register")) {
+      return redirectWithSession(request, "/dashboard", sessionResponse);
+    }
+    if (!isPortalUser && (pathname === "/portal" || pathname === "/portal/" || pathname.startsWith("/portal/"))) {
+      return redirectWithSession(request, "/dashboard", sessionResponse);
+    }
+
+    if (pathname.startsWith("/api/")) {
+      if (isAlwaysPublicApi(pathname) || isRetellPublic(pathname) || isApiPortalPublic(pathname)) {
+        return sessionResponse;
+      }
+      if (isPortalUser) {
+        if (pathname.startsWith("/api/portal") || pathname.startsWith("/api/public")) {
+          return sessionResponse;
+        }
+        return jsonWithSession(request, "Η πρόσβαση στο CRM δεν επιτρέπεται", 403, sessionResponse);
+      }
+      if (pathname.startsWith("/api/portal/") && !isApiPortalPublic(pathname)) {
+        return jsonWithSession(request, "Μόνο πολίτες πύλης", 403, sessionResponse);
+      }
+    }
+
+    if (isPortalUser) {
+      // Block all non-portal app routes (/dashboard, /, /contacts, etc.); /api/CRM 403 above.
+      const blockedCrmPages =
+        pathname === "/" ||
+        pathname === "/login" ||
+        pathname === "/dashboard" ||
+        pathname === "/contacts" ||
+        pathname === "/requests" ||
+        pathname === "/campaigns" ||
+        pathname === "/tasks" ||
+        pathname === "/settings" ||
+        pathname === "/analytics" ||
+        pathname === "/events" ||
+        pathname === "/volunteers" ||
+        pathname === "/documents" ||
+        pathname === "/content" ||
+        pathname === "/polls" ||
+        pathname === "/schedule" ||
+        pathname === "/namedays" ||
+        pathname === "/heatmap" ||
+        pathname === "/alexandra" ||
+        pathname.startsWith("/dashboard/") ||
+        pathname.startsWith("/contacts/") ||
+        pathname.startsWith("/requests/") ||
+        pathname.startsWith("/campaigns/") ||
+        pathname.startsWith("/tasks/") ||
+        pathname.startsWith("/settings/") ||
+        pathname.startsWith("/analytics/") ||
+        pathname.startsWith("/events/") ||
+        pathname.startsWith("/volunteers/") ||
+        pathname.startsWith("/documents/") ||
+        pathname.startsWith("/content/") ||
+        pathname.startsWith("/polls/") ||
+        pathname.startsWith("/schedule/") ||
+        pathname.startsWith("/namedays/") ||
+        pathname.startsWith("/heatmap/") ||
+        pathname.startsWith("/alexandra/");
+      if (blockedCrmPages) {
+        return NextResponse.redirect(portalDashboardRedirectUrl());
+      }
+      if (isPortalAppPath(pathname)) {
+        // ok
+      } else if (isNextStaticOrAsset(pathname)) {
+        // ok
+      } else if (pathname.startsWith("/api/")) {
+        // handled
+      } else {
+        return NextResponse.redirect(portalDashboardRedirectUrl());
+      }
+    }
+  }
+
+  if (isLoggedIn && !isCrmLoginPage && !isRetellPublic(pathname) && !isPortalUser) {
+    let navTier: "caller" | "manager" | "admin" =
+      role === "admin" ? "admin" : role === "manager" ? "manager" : "caller";
+    try {
+      const { data: tierRow } = await supabase.from("roles").select("access_tier").eq("name", role).maybeSingle();
+      const t = (tierRow as { access_tier?: string } | null)?.access_tier;
+      if (t === "admin" || t === "manager" || t === "caller") navTier = t;
+    } catch {
+      /* roles table may not exist before migration */
+    }
+    const legacyCallerBlocked = navTier === "caller";
+    let allowedKeys: Set<string> | null = null;
+    try {
+      allowedKeys = await getAllowedPermissionKeysForRole(role);
+    } catch {
+      /* migration not applied */
+    }
+    if (!pathAllowedByPermissions(pathname, allowedKeys, legacyCallerBlocked)) {
+      return redirectWithSession(request, "/contacts", sessionResponse);
+    }
+  }
+
+  return sessionResponse;
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
