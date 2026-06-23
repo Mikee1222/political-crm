@@ -1,6 +1,6 @@
 /**
  * Sample CRM routes that return 403 for signed-in portal-only users (and redirect in middleware for pages).
- * See `checkCRMAccess` and `middleware.ts`.
+ * See `checkCRMAccess` and `src/middleware.ts`.
  */
 export const representativeCrmApiPathsBlockedForPortal = [
   "/api/contacts",

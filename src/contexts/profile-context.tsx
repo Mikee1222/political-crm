@@ -121,6 +121,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       if (!user) {
         setProfile(null);
         setLoading(false);
+        window.location.assign("/login");
         return;
       }
       await loadProfile();
