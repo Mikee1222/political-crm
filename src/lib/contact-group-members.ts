@@ -13,8 +13,47 @@ export type GroupFilterResolution = {
   excludeContactIds: string[];
 };
 
-const NO_MATCH_ID = "00000000-0000-0000-0000-000000000000";
+export const NO_MATCH_CONTACT_ID = "00000000-0000-0000-0000-000000000000";
+/** PostgREST rejects `in.()` / `not.in.()` — keep URL chunks small when SELECT embeds are present. */
+const MAX_ID_IN_CLAUSE = 80;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function uniqueIds(ids: string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
+
+/** `.in('id', [])` → PostgREST 400 (`in.()`). Use sentinel or chunked `.or()`. */
+export function applyContactIdIncludeFilter(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  ids: string[],
+) {
+  const unique = uniqueIds(ids);
+  if (!unique.length) return query.eq("id", NO_MATCH_CONTACT_ID);
+  if (unique.length <= MAX_ID_IN_CLAUSE) return query.in("id", unique);
+  const clauses: string[] = [];
+  for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
+    clauses.push(`id.in.(${unique.slice(i, i + MAX_ID_IN_CLAUSE).join(",")})`);
+  }
+  return query.or(clauses.join(","));
+}
+
+/** Skip when empty; chunk large exclude lists (multiple `not.in` params are ANDed). */
+export function applyContactIdExcludeFilter(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  ids: string[],
+) {
+  const unique = uniqueIds(ids);
+  if (!unique.length) return query;
+
+  let q = query;
+  for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
+    const chunk = unique.slice(i, i + MAX_ID_IN_CLAUSE);
+    q = typeof q.notIn === "function" ? q.notIn("id", chunk) : q.not("id", "in", `(${chunk.join(",")})`);
+  }
+  return q;
+}
 
 function intersectIdSets(sets: string[][]): string[] {
   if (!sets.length) return [];
@@ -106,8 +145,10 @@ export async function resolveGroupFilterContactIds(
   const excludeGroupIds = await resolveGroupIdsToUuids(supabase, f.exclude_group_ids);
 
   let includeContactIds: string[] | null = null;
-  if (includeGroupIds.length) {
-    if (f.group_match === "and" && includeGroupIds.length > 1) {
+  if (rawInclude.length) {
+    if (!includeGroupIds.length) {
+      includeContactIds = [];
+    } else if (f.group_match === "and" && includeGroupIds.length > 1) {
       const perGroup: string[][] = [];
       for (const gid of includeGroupIds) {
         perGroup.push(await contactIdsInSingleGroup(supabase, gid));
@@ -195,14 +236,10 @@ export async function resolveContactListFilterIds(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function applyGroupMembershipFiltersToBuilder(query: any, resolution: GroupFilterResolution) {
   if (resolution.includeContactIds !== null) {
-    if (resolution.includeContactIds.length === 0) {
-      query = query.eq("id", NO_MATCH_ID);
-    } else {
-      query = query.in("id", resolution.includeContactIds);
-    }
+    query = applyContactIdIncludeFilter(query, resolution.includeContactIds);
   }
   if (resolution.excludeContactIds.length) {
-    query = query.notIn("id", resolution.excludeContactIds);
+    query = applyContactIdExcludeFilter(query, resolution.excludeContactIds);
   }
   return query;
 }

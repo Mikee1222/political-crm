@@ -5,7 +5,11 @@ import { hasMinRole } from "@/lib/roles";
 import { MUNI_CENTROIDS, findCanonicalMuni, KNOWN_MUNICIPALITY_NAMES } from "@/lib/aitoloakarnania-map-centroids";
 import { MUNICIPALITIES } from "@/lib/aitoloakarnania-data";
 import { nextJsonError } from "@/lib/api-resilience";
-import { resolveGroupFilterContactIds } from "@/lib/contact-group-members";
+import {
+  applyContactIdExcludeFilter,
+  applyContactIdIncludeFilter,
+  resolveGroupFilterContactIds,
+} from "@/lib/contact-group-members";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 import type { SupabaseClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
@@ -70,13 +74,10 @@ async function loadHeatmapContactRows(supabase: SupabaseClient, searchParams: UR
   let query = supabase.from("contacts").select("id, municipality, call_status");
   if (groupResolution) {
     if (groupResolution.includeContactIds !== null) {
-      if (!groupResolution.includeContactIds.length) {
-        return [] as { id: string; municipality: string | null; call_status: string | null }[];
-      }
-      query = query.in("id", groupResolution.includeContactIds);
+      query = applyContactIdIncludeFilter(query, groupResolution.includeContactIds);
     }
     if (groupResolution.excludeContactIds.length) {
-      query = query.notIn("id", groupResolution.excludeContactIds);
+      query = applyContactIdExcludeFilter(query, groupResolution.excludeContactIds);
     }
   }
 

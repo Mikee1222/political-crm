@@ -16,6 +16,7 @@ import {
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
   resolveContactListFilterIds,
+  type GroupFilterResolution,
 } from "@/lib/contact-group-members";
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ function applyBirthdayAgeFilters(query: QueryBuilder, ageMin: string, ageMax: st
 function applyApiContactFilters(
   query: QueryBuilder,
   f: ReturnType<typeof getDefaultContactFilters>,
-  groupResolution: Awaited<ReturnType<typeof resolveContactListFilterIds>>,
+  groupResolution: GroupFilterResolution | undefined,
   partialLocation = false,
 ) {
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
@@ -88,6 +89,43 @@ async function enrichContactsWithGroupCount(
   );
 }
 
+function logContactsQueryError(
+  context: string,
+  error: { message: string; code?: string; details?: string; hint?: string },
+  extra?: Record<string, unknown>,
+) {
+  console.error(`[api/contacts GET] ${context}`, {
+    message: error.message,
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+    ...extra,
+  });
+}
+
+async function resolveGroupFilterSafe(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  f: ReturnType<typeof getDefaultContactFilters>,
+): Promise<GroupFilterResolution | undefined> {
+  const hasGroupFilter =
+    f.group_ids.length > 0 || Boolean(f.group_id?.trim()) || f.exclude_group_ids.length > 0;
+  if (!hasGroupFilter) return undefined;
+  try {
+    return await resolveContactListFilterIds(supabase, f);
+  } catch (groupErr) {
+    console.error("[api/contacts GET] group filter resolution failed", {
+      error: groupErr instanceof Error ? groupErr.message : groupErr,
+      stack: groupErr instanceof Error ? groupErr.stack : undefined,
+      group_ids: f.group_ids,
+      group_id: f.group_id,
+      exclude_group_ids: f.exclude_group_ids,
+      group_match: f.group_match,
+    });
+    return undefined;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
@@ -96,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
     const partialLocation = request.nextUrl.searchParams.get("partial_location") === "1";
-    const groupResolution = await resolveContactListFilterIds(supabase, f);
+    const groupResolution = await resolveGroupFilterSafe(supabase, f);
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;
     const listLimit = Number.isFinite(parsedLimit) ? Math.min(10_000, Math.max(1, parsedLimit)) : null;
@@ -128,7 +166,10 @@ export async function GET(request: NextRequest) {
         query = query.limit(cap);
       }
       const { data, error } = await query;
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) {
+        logContactsQueryError("nameday query", error, { group_ids: f.group_ids, nameday_today: true });
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
       const rows = data ?? [];
       const work = f.search ? afterFilterRows(rows, f.search) : rows;
       if (comboboxMode) {
@@ -145,7 +186,10 @@ export async function GET(request: NextRequest) {
       query = applyApiContactFilters(query, f, groupResolution, partialLocation);
       query = query.limit(12_000);
       const { data, error } = await query;
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) {
+        logContactsQueryError("search query", error, { group_ids: f.group_ids, search: f.search });
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
       const rows = data ?? [];
       const list = afterFilterRows(rows, f.search);
       if (comboboxMode) {
@@ -166,20 +210,28 @@ export async function GET(request: NextRequest) {
     if (comboboxMode) {
       query = query.limit(listLimit!);
       const { data, error } = await query;
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
-      return NextResponse.json({ contacts: enriched.slice(0, listLimit!) });
+      if (error) {
+        logContactsQueryError("combobox query", error, { group_ids: f.group_ids });
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
     }
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     query = query.range(from, to);
     const { data, error, count } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      logContactsQueryError("paginated query", error, { group_ids: f.group_ids, page, pageSize });
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
     return NextResponse.json({ contacts: enriched, total: count ?? 0, page, pageSize });
   } catch (e) {
-    console.error("[api/contacts GET]", e);
+    console.error("[api/contacts GET] unhandled", {
+      error: e instanceof Error ? e.message : e,
+      stack: e instanceof Error ? e.stack : undefined,
+      search: request.nextUrl.search,
+    });
     return nextJsonError();
   }
 }
