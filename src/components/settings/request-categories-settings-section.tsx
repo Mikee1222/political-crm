@@ -9,14 +9,9 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { requiredText } from "@/lib/form-validation";
+import { ClientPaginationBar } from "@/components/ui/client-pagination-bar";
+import { useClientPagination } from "@/hooks/use-client-pagination";
 import type { RequestCategoryWithCount } from "@/lib/request-admin";
-
-function norm(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 export function RequestCategoriesSettingsSection() {
   const [rows, setRows] = useState<RequestCategoryWithCount[]>([]);
@@ -55,11 +50,12 @@ export function RequestCategoriesSettingsSection() {
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const t = norm(q.trim());
-    if (!t) return rows;
-    return rows.filter((r) => norm(r.name).includes(t));
-  }, [rows, q]);
+  const { pageItems, page, totalPages, totalCount, goToPrev, goToNext } = useClientPagination({
+    items: rows,
+    pageSize: 50,
+    searchQuery: q,
+    getSearchText: (r) => r.name,
+  });
 
   const addCategory = async () => {
     setNameErr(null);
@@ -169,60 +165,63 @@ export function RequestCategoriesSettingsSection() {
       {loading ? (
         <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>
       ) : (
-        <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-          <table className="w-full min-w-[520px] text-sm">
-            <thead>
-              <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
-                <th className="p-2 pl-3 text-left">Όνομα</th>
-                <th className="p-2 text-right">Αιτήματα</th>
-                <th className="w-56 p-2 pr-3 text-right">Ενέργειες</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
-                    Δεν βρέθηκαν.
-                  </td>
+        <div className="space-y-3">
+          <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+            <table className="w-full min-w-[520px] text-sm">
+              <thead>
+                <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
+                  <th className="p-2 pl-3 text-left">Όνομα</th>
+                  <th className="p-2 text-right">Αιτήματα</th>
+                  <th className="w-56 p-2 pr-3 text-right">Ενέργειες</th>
                 </tr>
-              )}
-              {filtered.map((r) => (
-                <tr key={r.name} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
-                  <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
-                        style={{ background: r.color }}
-                      />
-                      {r.name}
-                    </span>
-                  </td>
-                  <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.request_count}</td>
-                  <td className="p-2 pr-3 text-right">
-                    <div className="inline-flex flex-wrap justify-end gap-1">
-                      <button
-                        type="button"
-                        className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
-                        disabled={r.request_count === 0}
-                        onClick={() => setTransferFrom(r)}
-                      >
-                        Μεταφορά αιτημάτων
-                      </button>
-                      <button
-                        type="button"
-                        className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
-                        disabled={r.request_count > 0}
-                        title={r.request_count > 0 ? "Υπάρχουν αιτήματα με αυτή την κατηγορία" : undefined}
-                        onClick={() => void deleteCategory(r)}
-                      >
-                        Διαγραφή
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {totalCount === 0 && (
+                  <tr>
+                    <td colSpan={3} className="p-4 text-center text-[var(--text-muted)]">
+                      Δεν βρέθηκαν.
+                    </td>
+                  </tr>
+                )}
+                {pageItems.map((r) => (
+                  <tr key={r.name} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-elevated)]/50">
+                    <td className="p-2 pl-3 font-medium text-[var(--text-primary)]">
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full border border-[var(--border)]"
+                          style={{ background: r.color }}
+                        />
+                        {r.name}
+                      </span>
+                    </td>
+                    <td className="p-2 text-right tabular-nums text-[var(--text-secondary)]">{r.request_count}</td>
+                    <td className="p-2 pr-3 text-right">
+                      <div className="inline-flex flex-wrap justify-end gap-1">
+                        <button
+                          type="button"
+                          className={lux.btnSecondary + " !px-2 !py-1.5 text-xs"}
+                          disabled={r.request_count === 0}
+                          onClick={() => setTransferFrom(r)}
+                        >
+                          Μεταφορά αιτημάτων
+                        </button>
+                        <button
+                          type="button"
+                          className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
+                          disabled={r.request_count > 0}
+                          title={r.request_count > 0 ? "Υπάρχουν αιτήματα με αυτή την κατηγορία" : undefined}
+                          onClick={() => void deleteCategory(r)}
+                        >
+                          Διαγραφή
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ClientPaginationBar page={page} totalPages={totalPages} onPrev={goToPrev} onNext={goToNext} />
         </div>
       )}
 

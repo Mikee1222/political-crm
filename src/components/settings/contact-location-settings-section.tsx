@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { fetchWithTimeout } from "@/lib/client-fetch";
+import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { HqSelect } from "@/components/ui/hq-select";
@@ -37,9 +37,10 @@ export function ContactLocationSettingsSection() {
     setLoadErr(null);
     setLoading(true);
     try {
+      const fetchOpts = { timeoutMs: CLIENT_FETCH_TIMEOUT_MS * 3 };
       const [rm, rt] = await Promise.all([
-        fetchWithTimeout("/api/admin/municipalities/with-counts"),
-        fetchWithTimeout("/api/admin/toponyms/with-counts"),
+        fetchWithTimeout("/api/admin/municipalities/with-counts", fetchOpts),
+        fetchWithTimeout("/api/admin/toponyms/with-counts", fetchOpts),
       ]);
       const errors: string[] = [];
       if (rm.ok) {
