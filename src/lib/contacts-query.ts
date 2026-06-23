@@ -434,9 +434,9 @@ export async function fetchContactsNameOnlyFuzzySearch(
   select: string,
 ): Promise<Record<string, unknown>[]> {
   const rows = await fetchContactRowsInBatches(supabase, select, (query) => query);
-  console.log("FETCHED CONTACTS COUNT:", rows.length);
+  console.log("NAME ONLY FETCHED:", rows.length);
   const filtered = filterContactRowsByListFilters(rows as ContactListFilterRow[], f);
-  console.log("AFTER ALL FILTERS:", filtered.length);
+  console.log("NAME ONLY AFTER FUZZY:", filtered.length);
   return filtered;
 }
 

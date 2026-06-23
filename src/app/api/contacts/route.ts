@@ -274,6 +274,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (canUseNameOnlyFuzzySearchPath(f)) {
+      console.log("NAME ONLY PATH TRIGGERED");
       const rows = await fetchContactsNameOnlyFuzzySearch(supabase, f, SELECT_LIST);
       return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
     }
