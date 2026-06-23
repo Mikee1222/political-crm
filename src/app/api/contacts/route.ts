@@ -15,10 +15,13 @@ import {
   applyColumnContactFiltersToBuilder,
   applyContactListFiltersToBuilder,
   canUseGroupNameSearchFastPath,
+  canUseNameOnlyFuzzySearchPath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
+  fetchContactsNameOnlyFuzzySearch,
   filterContactRowsByListFilters,
   hasColumnListFilters,
+  hasGroupIncludeFilter,
   hasNameColumnFilters,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
@@ -108,10 +111,6 @@ function emptyContactsResponse(comboboxMode: boolean, page: number, pageSize: nu
     return NextResponse.json({ contacts: [] });
   }
   return NextResponse.json({ contacts: [], total: 0, page, pageSize });
-}
-
-function hasGroupIncludeFilter(f: ContactFilters): boolean {
-  return f.group_ids.length > 0 || Boolean(f.group_id?.trim());
 }
 
 async function fetchContactsByResolvedIds(
@@ -266,6 +265,11 @@ export async function GET(request: NextRequest) {
 
     if (canUseGroupNameSearchFastPath(f)) {
       const rows = await fetchContactsViaGroupNameSearch(supabase, f, partialLocation);
+      return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
+    }
+
+    if (canUseNameOnlyFuzzySearchPath(f)) {
+      const rows = await fetchContactsNameOnlyFuzzySearch(supabase, f, SELECT_LIST);
       return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
     }
 

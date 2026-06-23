@@ -4,10 +4,14 @@ import { getDefaultContactFilters } from "@/lib/contacts-filters";
 import {
   applyColumnContactFiltersToBuilder,
   canUseGroupNameSearchFastPath,
+  canUseNameOnlyFuzzySearchPath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
   filterContactRowsByListFilters,
+  groupRequiresInMemoryPipeline,
   hasNameColumnFilters,
+  isNameOnlyFilter,
+  nameRequiresInMemoryPipeline,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import { fetchContactsByIncludeIdBatches, searchContactsInGroups } from "@/lib/contact-group-members";
@@ -91,6 +95,15 @@ describe("canUseGroupNameSearchFastPath", () => {
         ...base,
         group_ids: ["g1"],
         first_name: "ΜΑΡΙΑ",
+        gender: "Γυναίκα",
+        municipalities: ["Αθήνα"],
+      }),
+    ).toBe(true);
+    expect(
+      canUseGroupNameSearchFastPath({
+        ...base,
+        group_ids: ["g1"],
+        first_name: "ΜΑΡΙΑ",
         search: "μαρια",
       }),
     ).toBe(false);
@@ -102,29 +115,154 @@ describe("canUseGroupNameSearchFastPath", () => {
         father_name: "ΝΙΚ",
       }),
     ).toBe(false);
+    expect(
+      canUseGroupNameSearchFastPath({ ...base, first_name: "ΜΑΡΙΑ" }),
+    ).toBe(false);
   });
 });
 
-describe("needsInMemoryContactListPipeline", () => {
-  it("requires in-memory pipeline for name filters and large include lists", () => {
+describe("isNameOnlyFilter / canUseNameOnlyFuzzySearchPath", () => {
+  it("matches only first/last name with no other filters", () => {
     const base = getDefaultContactFilters();
-    expect(needsInMemoryContactListPipeline(base, null)).toBe(false);
-    expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, null)).toBe(true);
-    expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(true);
-    const smallGroupIds = Array.from({ length: 10 }, (_, i) =>
-      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    expect(isNameOnlyFilter({ ...base, first_name: "ΜΑΡΙΑ" })).toBe(true);
+    expect(isNameOnlyFilter({ ...base, last_name: "ΠΑΠ" })).toBe(true);
+    expect(isNameOnlyFilter({ ...base, first_name: "ΜΑΡΙΑ", last_name: "ΠΑΠ" })).toBe(true);
+    expect(isNameOnlyFilter({ ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" })).toBe(false);
+    expect(isNameOnlyFilter({ ...base, first_name: "ΜΑΡΙΑ", municipalities: ["Αθήνα"] })).toBe(
+      false,
     );
-    expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, smallGroupIds)).toBe(
+    expect(isNameOnlyFilter({ ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" })).toBe(false);
+    expect(canUseNameOnlyFuzzySearchPath({ ...base, first_name: "ΜΑΡΙΑ" })).toBe(true);
+  });
+});
+
+describe("needsInMemoryContactListPipeline routing matrix", () => {
+  const base = getDefaultContactFilters();
+  const smallGroupIds = Array.from({ length: 10 }, (_, i) =>
+    `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+  );
+  const manyIds = Array.from({ length: 81 }, (_, i) =>
+    `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+  );
+
+  it("name only → dedicated fuzzy path (not in-memory pipeline)", () => {
+    expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, null)).toBe(false);
+    expect(canUseNameOnlyFuzzySearchPath({ ...base, first_name: "ΜΑΡΙΑ" })).toBe(true);
+  });
+
+  it("group only → in-memory pipeline", () => {
+    expect(needsInMemoryContactListPipeline({ ...base, group_ids: ["g1"] }, smallGroupIds)).toBe(
       true,
     );
+    expect(groupRequiresInMemoryPipeline({ ...base, group_ids: ["g1"] })).toBe(true);
+  });
+
+  it("name + group → fast path RPC (not in-memory)", () => {
     expect(
-      needsInMemoryContactListPipeline({ ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" }, null),
+      needsInMemoryContactListPipeline(
+        { ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" },
+        null,
+      ),
     ).toBe(false);
-    const manyIds = Array.from({ length: 81 }, (_, i) =>
-      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    expect(canUseGroupNameSearchFastPath({ ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" })).toBe(
+      true,
     );
+  });
+
+  it("gender only, municipality only, gender+municipality → default DB", () => {
+    expect(needsInMemoryContactListPipeline({ ...base, gender: "Άντρας" }, null)).toBe(false);
+    expect(needsInMemoryContactListPipeline({ ...base, municipalities: ["Αθήνα"] }, null)).toBe(
+      false,
+    );
+    expect(
+      needsInMemoryContactListPipeline(
+        { ...base, gender: "Άντρας", municipalities: ["Αθήνα"] },
+        null,
+      ),
+    ).toBe(false);
+  });
+
+  it("name + gender and name + municipality → in-memory", () => {
+    expect(
+      needsInMemoryContactListPipeline(
+        { ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" },
+        null,
+      ),
+    ).toBe(true);
+    expect(
+      needsInMemoryContactListPipeline(
+        { ...base, first_name: "ΜΑΡΙΑ", municipalities: ["Αθήνα"] },
+        null,
+      ),
+    ).toBe(true);
+    expect(
+      nameRequiresInMemoryPipeline({ ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" }),
+    ).toBe(true);
+  });
+
+  it("group + gender and group + municipality → in-memory", () => {
+    expect(
+      needsInMemoryContactListPipeline(
+        { ...base, group_ids: ["g1"], gender: "Άντρας" },
+        smallGroupIds,
+      ),
+    ).toBe(true);
+    expect(
+      needsInMemoryContactListPipeline(
+        { ...base, group_ids: ["g1"], municipalities: ["Αθήνα"] },
+        smallGroupIds,
+      ),
+    ).toBe(true);
+  });
+
+  it("group + name + gender + municipality → fast RPC (not in-memory)", () => {
+    const combo = {
+      ...base,
+      group_ids: ["g1"],
+      first_name: "ΜΑΡΙΑ",
+      gender: "Γυναίκα",
+      municipalities: ["Αθήνα"],
+    };
+    expect(needsInMemoryContactListPipeline(combo, null)).toBe(false);
+    expect(canUseGroupNameSearchFastPath(combo)).toBe(true);
+  });
+
+  it("requires in-memory for search and large include lists", () => {
+    expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(true);
     expect(needsInMemoryContactListPipeline(base, manyIds)).toBe(true);
     expect(needsInMemoryContactListPipeline(base, manyIds.slice(0, 80))).toBe(false);
+  });
+});
+
+describe("fetchContactsNameOnlyFuzzySearch", () => {
+  it("batch-fetches all contacts then fuzzy-filters by first_name", async () => {
+    const { fetchContactsNameOnlyFuzzySearch } = await import("@/lib/contacts-query");
+    const allRows = [
+      { id: "1", first_name: "Μαρία", last_name: "Α" },
+      { id: "2", first_name: "Γιώργος", last_name: "Β" },
+      { id: "3", first_name: "Μαρια", last_name: "Γ" },
+    ];
+    const supabase = {
+      from() {
+        return {
+          select() {
+            const builder = {
+              order() {
+                return builder;
+              },
+              range() {
+                return Promise.resolve({ data: allRows, error: null });
+              },
+            };
+            return builder;
+          },
+        };
+      },
+    };
+    const f = getDefaultContactFilters();
+    f.first_name = "ΜΑΡΙΑ";
+    const rows = await fetchContactsNameOnlyFuzzySearch(supabase, f, "id, first_name, last_name");
+    expect(rows.map((r) => r.id)).toEqual(["1", "3"]);
   });
 });
 

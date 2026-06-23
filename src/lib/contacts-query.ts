@@ -320,6 +320,85 @@ export function hasNameColumnFilters(f: ContactListFilters): boolean {
   return Boolean(f.first_name?.trim() || f.last_name?.trim() || f.father_name?.trim());
 }
 
+export function hasFirstOrLastNameFilter(f: ContactListFilters): boolean {
+  return Boolean(f.first_name?.trim() || f.last_name?.trim());
+}
+
+export function hasGroupIncludeFilter(f: ContactListFilters): boolean {
+  return f.group_ids.length > 0 || Boolean(f.group_id?.trim());
+}
+
+/** Only first_name and/or last_name — no group, gender, municipality, or other column filters. */
+export function isNameOnlyFilter(f: ContactListFilters): boolean {
+  if (!hasFirstOrLastNameFilter(f)) return false;
+  const d = getDefaultContactFilters();
+  const ignore: (keyof ContactListFilters)[] = ["first_name", "last_name", "page", "limit"];
+  for (const k of ignore) {
+    d[k] = f[k] as never;
+  }
+  const keys: (keyof ContactListFilters)[] = [
+    "search",
+    "father_name",
+    "call_status",
+    "area",
+    "priority",
+    "tag",
+    "political_stance",
+    "phone",
+    "mobile_presence",
+    "landline_presence",
+    "email_presence",
+    "not_contacted_days",
+    "score_tier",
+    "volunteer_area",
+    "gender",
+    "ekl_ar",
+    "electoral_district",
+    "has_request",
+    "request_status",
+    "age_min",
+    "age_max",
+    "birth_year_from",
+    "birth_year_to",
+    "group_id",
+    "group_match",
+    "nameday_today",
+    "birthday_today",
+    "is_volunteer",
+  ];
+  for (const k of keys) {
+    if (f[k] !== d[k]) return false;
+  }
+  if (f.call_statuses.length) return false;
+  if (f.municipalities.length) return false;
+  if (f.toponyms.length) return false;
+  if (f.group_ids.length) return false;
+  if (f.exclude_group_ids.length) return false;
+  if (f.source_ids.length) return false;
+  if (f.exclude_source_ids.length) return false;
+  return true;
+}
+
+/** Name-only: accent-insensitive fuzzy match over all contacts (not the generic in-memory pipeline). */
+export function canUseNameOnlyFuzzySearchPath(f: ContactListFilters): boolean {
+  return isNameOnlyFilter(f);
+}
+
+/** Name + any non-name column filter (gender, municipality, father_name, …) — not group+name fast path. */
+export function nameRequiresInMemoryPipeline(f: ContactListFilters): boolean {
+  if (!hasNameColumnFilters(f)) return false;
+  if (canUseGroupNameSearchFastPath(f)) return false;
+  if (isNameOnlyFilter(f)) return false;
+  return true;
+}
+
+/** Group without name fast path: group-only, group+gender, group+municipality, … */
+export function groupRequiresInMemoryPipeline(f: ContactListFilters): boolean {
+  if (!hasGroupIncludeFilter(f)) return false;
+  if (canUseGroupNameSearchFastPath(f)) return false;
+  return true;
+}
+
 const FUZZY_NAME_FETCH_BATCH = 1000;
 
 /** Page through contacts when fuzzy name columns must be matched in memory (no row cap). */
@@ -347,14 +426,27 @@ export async function fetchContactRowsInBatches(
   return rows;
 }
 
-/** Fetch all matches in memory before paginating (name filters, search, large include lists). */
+/** Accent-insensitive first/last name search — scans contacts in batches, fuzzy-filters, full count. */
+export async function fetchContactsNameOnlyFuzzySearch(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  f: ContactListFilters,
+  select: string,
+): Promise<Record<string, unknown>[]> {
+  const rows = await fetchContactRowsInBatches(supabase, select, (query) => query);
+  return filterContactRowsByListFilters(rows, f);
+}
+
+/** Fetch all matches in memory before paginating (search, name combos, group-only, large include lists). */
 export function needsInMemoryContactListPipeline(
   f: ContactListFilters,
   resolvedIds: string[] | null,
 ): boolean {
   if (canUseGroupNameSearchFastPath(f)) return false;
+  if (canUseNameOnlyFuzzySearchPath(f)) return false;
   if (f.search?.trim()) return true;
-  if (hasNameColumnFilters(f)) return true;
+  if (nameRequiresInMemoryPipeline(f)) return true;
+  if (groupRequiresInMemoryPipeline(f)) return true;
   if (resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE) return true;
   return false;
 }
