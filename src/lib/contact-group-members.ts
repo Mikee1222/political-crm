@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { ContactListFilters } from "@/lib/contacts-filters";
