@@ -197,6 +197,7 @@ function respondWithContactList(
 }
 
 export async function GET(request: NextRequest) {
+  console.log("ROUTE ENTRY", JSON.stringify(Object.fromEntries(request.nextUrl.searchParams)));
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
