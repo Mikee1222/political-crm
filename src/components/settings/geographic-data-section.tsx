@@ -11,21 +11,18 @@ import { CenteredModal } from "@/components/ui/centered-modal";
 import { HqSelect } from "@/components/ui/hq-select";
 import { HqLabel } from "@/components/ui/hq-form-primitives";
 import { useFormToast } from "@/contexts/form-toast-context";
+import { ClientPaginationBar } from "@/components/ui/client-pagination-bar";
+import { useClientPagination } from "@/hooks/use-client-pagination";
 
 type Tab = "municipalities" | "districts" | "toponyms";
+
+type GeographicRow = MunicipalityWithCountRow | ElectoralDistrictListRow | ToponymWithCountRow;
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "municipalities", label: "Δήμοι" },
   { id: "districts", label: "Εκλογικά διαμερίσματα" },
   { id: "toponyms", label: "Τοπωνύμια" },
 ];
-
-function norm(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 export function GeographicDataSection() {
   const [tab, setTab] = useState<Tab>("municipalities");
@@ -89,23 +86,19 @@ export function GeographicDataSection() {
     void load();
   }, [load]);
 
-  const filteredMunis = useMemo(() => {
-    const t = norm(q.trim());
-    if (!t) return munis;
-    return munis.filter((m) => norm(m.name).includes(t));
-  }, [munis, q]);
+  const activeItems = useMemo((): GeographicRow[] => {
+    if (tab === "municipalities") return munis;
+    if (tab === "districts") return dists;
+    return tops;
+  }, [tab, munis, dists, tops]);
 
-  const filteredDists = useMemo(() => {
-    const t = norm(q.trim());
-    if (!t) return dists;
-    return dists.filter((d) => norm(d.name).includes(t));
-  }, [dists, q]);
-
-  const filteredTops = useMemo(() => {
-    const t = norm(q.trim());
-    if (!t) return tops;
-    return tops.filter((r) => norm(r.name).includes(t));
-  }, [tops, q]);
+  const { pageItems, page, totalPages, goToPrev, goToNext } = useClientPagination({
+    items: activeItems,
+    pageSize: 50,
+    searchQuery: q,
+    getSearchText: (r) => r.name,
+    resetWhen: tab,
+  });
 
   return (
     <section className={lux.card}>
@@ -165,21 +158,36 @@ export function GeographicDataSection() {
       {loading ? (
         <p className="text-sm text-[var(--text-muted)]">Φόρτωση…</p>
       ) : (
-        <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
-          {tab === "municipalities" && (
-            <MuniTable
-              rows={filteredMunis}
-              onEdit={(r) => setEditM(r)}
-              onTransfer={(r) => setTransferMuni(r)}
-              onDelete={load}
-            />
-          )}
-          {tab === "districts" && (
-            <DistTable rows={filteredDists} munis={munis} onEdit={(r) => setEditD(r)} onDelete={load} />
-          )}
-          {tab === "toponyms" && (
-            <TopTable rows={filteredTops} munis={munis} dists={dists} onEdit={(r) => setEditT(r)} onTransfer={(r) => setTransferTop(r)} onDelete={load} />
-          )}
+        <div className="space-y-3">
+          <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
+            {tab === "municipalities" && (
+              <MuniTable
+                rows={pageItems as MunicipalityWithCountRow[]}
+                onEdit={(r) => setEditM(r)}
+                onTransfer={(r) => setTransferMuni(r)}
+                onDelete={load}
+              />
+            )}
+            {tab === "districts" && (
+              <DistTable
+                rows={pageItems as ElectoralDistrictListRow[]}
+                munis={munis}
+                onEdit={(r) => setEditD(r)}
+                onDelete={load}
+              />
+            )}
+            {tab === "toponyms" && (
+              <TopTable
+                rows={pageItems as ToponymWithCountRow[]}
+                munis={munis}
+                dists={dists}
+                onEdit={(r) => setEditT(r)}
+                onTransfer={(r) => setTransferTop(r)}
+                onDelete={load}
+              />
+            )}
+          </div>
+          <ClientPaginationBar page={page} totalPages={totalPages} onPrev={goToPrev} onNext={goToNext} />
         </div>
       )}
 
