@@ -5,8 +5,33 @@ import {
   applyColumnContactFiltersToBuilder,
   contactRowMatchesListFilters,
   filterContactRowsByListFilters,
+  needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import { fetchContactsByIncludeIdBatches } from "@/lib/contact-group-members";
+import { contactFieldMatchesFuzzyName } from "@/lib/greek-fuzzy-name";
+
+describe("contactFieldMatchesFuzzyName", () => {
+  it("matches accent variants and maria cluster", () => {
+    expect(contactFieldMatchesFuzzyName("Μαρία", "ΜΑΡΙΑ")).toBe(true);
+    expect(contactFieldMatchesFuzzyName("ΜΑΡΙΑ", "μαρια")).toBe(true);
+    expect(contactFieldMatchesFuzzyName("Μαρια", "ΜΑΡΙΑ")).toBe(true);
+    expect(contactFieldMatchesFuzzyName("Γιώργος", "ΜΑΡΙΑ")).toBe(false);
+  });
+});
+
+describe("needsInMemoryContactListPipeline", () => {
+  it("requires in-memory pipeline for name filters and large include lists", () => {
+    const base = getDefaultContactFilters();
+    expect(needsInMemoryContactListPipeline(base, null)).toBe(false);
+    expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, null)).toBe(true);
+    expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(true);
+    const manyIds = Array.from({ length: 81 }, (_, i) =>
+      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    );
+    expect(needsInMemoryContactListPipeline(base, manyIds)).toBe(true);
+    expect(needsInMemoryContactListPipeline(base, manyIds.slice(0, 80))).toBe(false);
+  });
+});
 
 describe("contactRowMatchesListFilters", () => {
   const base = getDefaultContactFilters();
@@ -59,6 +84,15 @@ describe("contactRowMatchesListFilters", () => {
     ];
     expect(filterContactRowsByListFilters(rows, f).map((r) => r.id)).toEqual(["a"]);
   });
+
+  it("matches first_name with fuzzy Greek logic", () => {
+    const f = { ...base, first_name: "ΜΑΡΙΑ" };
+    const rows = [
+      { id: "a", first_name: "Μαρία" },
+      { id: "b", first_name: "Γιώργος" },
+    ];
+    expect(filterContactRowsByListFilters(rows, f).map((r) => r.id)).toEqual(["a"]);
+  });
 });
 
 describe("fetchContactsByIncludeIdBatches filter order", () => {
@@ -102,5 +136,55 @@ describe("fetchContactsByIncludeIdBatches filter order", () => {
     );
 
     expect(order).toEqual(["ilike", "in"]);
+  });
+
+  it("fetches every id chunk and merges results", async () => {
+    const ids = Array.from({ length: 165 }, (_, i) =>
+      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    );
+    const fetchedChunks: string[][] = [];
+    const supabase = {
+      from() {
+        return {
+          select() {
+            const builder = {
+              eq(..._: unknown[]) {
+                return builder;
+              },
+              in(_col: string, chunk: string[]) {
+                fetchedChunks.push(chunk);
+                const data = chunk.map((id, idx) => ({
+                  id,
+                  first_name: idx % 2 === 0 ? "Μαρία" : "Γιώργος",
+                  created_at: `2026-01-${String((idx % 28) + 1).padStart(2, "0")}`,
+                }));
+                return Promise.resolve({ data, error: null });
+              },
+            };
+            return builder;
+          },
+        };
+      },
+    };
+
+    const f = getDefaultContactFilters();
+    f.first_name = "ΜΑΡΙΑ";
+
+    const rows = await fetchContactsByIncludeIdBatches(
+      supabase,
+      ids,
+      "id, first_name, created_at",
+      (q) =>
+        applyColumnContactFiltersToBuilder(q, f, {
+          partialLocation: true,
+          skipNameColumnFilters: true,
+        }),
+    );
+
+    expect(fetchedChunks).toHaveLength(3);
+    expect(fetchedChunks[0]).toHaveLength(80);
+    expect(fetchedChunks[1]).toHaveLength(80);
+    expect(fetchedChunks[2]).toHaveLength(5);
+    expect(rows).toHaveLength(165);
   });
 });

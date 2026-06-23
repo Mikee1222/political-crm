@@ -3,7 +3,12 @@ import {
   applyGroupMembershipFiltersToBuilder,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
-import { contactMatchesFuzzyGreekSearch, normalizeGreekNameKey } from "@/lib/greek-fuzzy-name";
+import {
+  contactFieldMatchesFuzzyName,
+  contactMatchesFuzzyGreekSearch,
+  normalizeGreekNameKey,
+} from "@/lib/greek-fuzzy-name";
+import { MAX_ID_IN_CLAUSE } from "@/lib/contact-group-members";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 
@@ -126,9 +131,9 @@ export function contactRowMatchesListFilters(
       : [];
   if (callStatuses.length && !callStatuses.includes(String(row.call_status ?? ""))) return false;
 
-  if (f.first_name?.trim() && !ilikeMatch(row.first_name, f.first_name)) return false;
-  if (f.last_name?.trim() && !ilikeMatch(row.last_name, f.last_name)) return false;
-  if (f.father_name?.trim() && !ilikeMatch(row.father_name, f.father_name)) return false;
+  if (f.first_name?.trim() && !contactFieldMatchesFuzzyName(row.first_name, f.first_name)) return false;
+  if (f.last_name?.trim() && !contactFieldMatchesFuzzyName(row.last_name, f.last_name)) return false;
+  if (f.father_name?.trim() && !contactFieldMatchesFuzzyName(row.father_name, f.father_name)) return false;
 
   const partial = opts?.partialLocation ?? false;
   if (f.area && !partialLocationMatch(row.area, f.area, partial)) return false;
@@ -298,7 +303,7 @@ export function applyColumnContactFiltersToBuilder(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
   f: ContactListFilters,
-  opts?: { partialLocation?: boolean; excludeContactIds?: string[] },
+  opts?: { partialLocation?: boolean; excludeContactIds?: string[]; skipNameColumnFilters?: boolean },
 ) {
   const groupResolution: GroupFilterResolution | undefined = opts?.excludeContactIds?.length
     ? { includeContactIds: null, excludeContactIds: opts.excludeContactIds }
@@ -306,8 +311,20 @@ export function applyColumnContactFiltersToBuilder(
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
   const q = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
     partialLocation: opts?.partialLocation,
+    skipNameColumnFilters: opts?.skipNameColumnFilters,
   });
   return applyBirthdayAgeFiltersToBuilder(q, f.age_min, f.age_max);
+}
+
+/** Fetch all matches in memory before paginating (name filters, search, large include lists). */
+export function needsInMemoryContactListPipeline(
+  f: ContactListFilters,
+  resolvedIds: string[] | null,
+): boolean {
+  if (f.search?.trim()) return true;
+  if (f.first_name?.trim() || f.last_name?.trim() || f.father_name?.trim()) return true;
+  if (resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE) return true;
+  return false;
 }
 
 export function applyContactListFiltersToBuilder(
@@ -315,7 +332,7 @@ export function applyContactListFiltersToBuilder(
   query: any,
   f: ContactListFilters,
   groupResolution?: GroupFilterResolution,
-  opts?: { partialLocation?: boolean },
+  opts?: { partialLocation?: boolean; skipNameColumnFilters?: boolean },
 ) {
   const callStatuses = f.call_statuses.length
     ? f.call_statuses
@@ -327,9 +344,11 @@ export function applyContactListFiltersToBuilder(
   } else if (callStatuses.length > 1) {
     query = query.in("call_status", callStatuses);
   }
-  if (f.first_name?.trim()) query = query.ilike("first_name", `%${f.first_name.trim()}%`);
-  if (f.last_name?.trim()) query = query.ilike("last_name", `%${f.last_name.trim()}%`);
-  if (f.father_name?.trim()) query = query.ilike("father_name", `%${f.father_name.trim()}%`);
+  if (!opts?.skipNameColumnFilters) {
+    if (f.first_name?.trim()) query = query.ilike("first_name", `%${f.first_name.trim()}%`);
+    if (f.last_name?.trim()) query = query.ilike("last_name", `%${f.last_name.trim()}%`);
+    if (f.father_name?.trim()) query = query.ilike("father_name", `%${f.father_name.trim()}%`);
+  }
   if (f.area) {
     query = opts?.partialLocation
       ? query.ilike("area", partialIlikePattern(f.area))

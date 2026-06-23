@@ -188,6 +188,21 @@ export function buildNameSearchHaystack(c: ContactFuzzy): string {
     .join(" ");
 }
 
+/** Accent-insensitive, cluster-aware match for a single name field (first/last/father). */
+export function contactFieldMatchesFuzzyName(
+  value: string | null | undefined,
+  filter: string | null | undefined,
+): boolean {
+  const f = filter?.trim() ?? "";
+  if (!f) return true;
+  const v = (value ?? "").trim();
+  if (!v) return false;
+  const hay = ` ${normalizeGreekNameKey(v)} ${greekNameToLatin(v)} `;
+  const needles = expandTokenNeedles(f);
+  if (!needles.length) return false;
+  return needles.some((n) => needleInHay(n, hay));
+}
+
 function needleInHay(needle: string, hay: string): boolean {
   if (needle.length < 1) return false;
   if (hay.includes(needle)) return true;

@@ -16,6 +16,7 @@ import {
   applyContactListFiltersToBuilder,
   filterContactRowsByListFilters,
   hasColumnListFilters,
+  needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import {
   enrichContactsWithGroupCountsAndNames,
@@ -45,10 +46,12 @@ function applyApiContactFilters(
   f: ContactFilters,
   groupResolution: GroupFilterResolution,
   partialLocation = false,
+  opts?: { skipNameColumnFilters?: boolean },
 ) {
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
   query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
     partialLocation,
+    skipNameColumnFilters: opts?.skipNameColumnFilters,
   });
   return applyBirthdayAgeFiltersToBuilder(query, f.age_min, f.age_max);
 }
@@ -121,9 +124,71 @@ async function fetchContactsByResolvedIds(
       applyColumnContactFiltersToBuilder(q, f, {
         partialLocation,
         excludeContactIds: filterResolution.excludeContactIds,
+        skipNameColumnFilters: true,
       }),
   );
   return refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+}
+
+async function fetchContactsInMemoryPipeline(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  f: ContactFilters,
+  filterResolution: GroupFilterResolution,
+  resolvedIds: string[] | null,
+  partialLocation: boolean,
+) {
+  let rows: Record<string, unknown>[];
+  if (includeContactIdsNeedBatchFetch(resolvedIds)) {
+    rows = (await fetchContactsByResolvedIds(
+      supabase,
+      resolvedIds!,
+      f,
+      filterResolution,
+      partialLocation,
+    )) as Record<string, unknown>[];
+  } else {
+    let query: QueryBuilder = supabase
+      .from("contacts")
+      .select(SELECT_LIST)
+      .order("created_at", { ascending: false });
+    query = applyApiContactFilters(query, f, filterResolution, partialLocation, {
+      skipNameColumnFilters: true,
+    });
+    query = query.limit(f.search?.trim() ? 12_000 : 15_000);
+    const { data, error } = await query;
+    if (error) throw error;
+    rows = (data ?? []) as Record<string, unknown>[];
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation) as Record<
+      string,
+      unknown
+    >[];
+  }
+  if (f.search?.trim()) {
+    rows = afterFilterRows(rows, f.search) as Record<string, unknown>[];
+  }
+  return rows;
+}
+
+function respondWithContactList(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  rows: Record<string, unknown>[],
+  comboboxMode: boolean,
+  listLimit: number | null,
+  page: number,
+  pageSize: number,
+) {
+  if (comboboxMode) {
+    const slice = rows.slice(0, listLimit!);
+    return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
+      NextResponse.json({ contacts: enriched }),
+    );
+  }
+  const { slice, total } = paginateList(rows, page, pageSize);
+  return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
+    NextResponse.json({ contacts: enriched, total, page, pageSize }),
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -172,59 +237,24 @@ export async function GET(request: NextRequest) {
       }
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      let rows = data ?? [];
-      rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
-      const work = f.search ? afterFilterRows(rows, f.search) : rows;
-      if (comboboxMode) {
-        const enriched = await enrichContactsWithGroupCount(supabase, work.slice(0, listLimit!) as Record<string, unknown>[]);
-        return NextResponse.json({ contacts: enriched });
-      }
-      const { slice, total } = paginateList(work, page, pageSize);
-      const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
-      return NextResponse.json({ contacts: enriched, total, page, pageSize });
+      let rows = (data ?? []) as Record<string, unknown>[];
+      rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation) as Record<
+        string,
+        unknown
+      >[];
+      const work = f.search ? (afterFilterRows(rows, f.search) as Record<string, unknown>[]) : rows;
+      return respondWithContactList(supabase, work, comboboxMode, listLimit, page, pageSize);
     }
 
-    if (f.search) {
-      if (includeContactIdsNeedBatchFetch(resolvedIds)) {
-        let list = await fetchContactsByResolvedIds(supabase, resolvedIds!, f, filterResolution, partialLocation);
-        list = afterFilterRows(list, f.search);
-        if (comboboxMode) {
-          const enriched = await enrichContactsWithGroupCount(supabase, list.slice(0, listLimit!) as Record<string, unknown>[]);
-          return NextResponse.json({ contacts: enriched });
-        }
-        const { slice, total } = paginateList(list, page, pageSize);
-        const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
-        return NextResponse.json({ contacts: enriched, total, page, pageSize });
-      }
-      let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
-      query = applyApiContactFilters(query, f, filterResolution, partialLocation);
-      query = query.limit(12_000);
-      const { data, error } = await query;
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      let rows = data ?? [];
-      rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
-      const list = afterFilterRows(rows, f.search);
-      if (comboboxMode) {
-        const enriched = await enrichContactsWithGroupCount(supabase, list.slice(0, listLimit!) as Record<string, unknown>[]);
-        return NextResponse.json({ contacts: enriched });
-      }
-      const { slice, total } = paginateList(list, page, pageSize);
-      const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
-      return NextResponse.json({ contacts: enriched, total, page, pageSize });
-    }
-
-    if (includeContactIdsNeedBatchFetch(resolvedIds)) {
-      const rows = await fetchContactsByResolvedIds(supabase, resolvedIds!, f, filterResolution, partialLocation);
-      if (comboboxMode) {
-        const enriched = await enrichContactsWithGroupCount(
-          supabase,
-          rows.slice(0, listLimit!) as Record<string, unknown>[],
-        );
-        return NextResponse.json({ contacts: enriched });
-      }
-      const { slice, total } = paginateList(rows, page, pageSize);
-      const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
-      return NextResponse.json({ contacts: enriched, total, page, pageSize });
+    if (needsInMemoryContactListPipeline(f, resolvedIds)) {
+      const rows = await fetchContactsInMemoryPipeline(
+        supabase,
+        f,
+        filterResolution,
+        resolvedIds,
+        partialLocation,
+      );
+      return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
     }
 
     let query: QueryBuilder = supabase
