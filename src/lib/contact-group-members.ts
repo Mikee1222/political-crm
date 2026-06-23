@@ -120,6 +120,9 @@ async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: string[]): 
   return [...uuids];
 }
 
+/** PostgREST returns at most 1000 rows per request — paginate to fetch every member. */
+const RPC_PAGE_SIZE = 1000;
+
 /** Contact IDs in groups via RPC (junction + contacts.group_id). AND = all groups; OR = any. */
 async function contactIdsForGroups(
   supabase: SupabaseClient,
@@ -128,15 +131,25 @@ async function contactIdsForGroups(
 ): Promise<string[]> {
   if (!groupIds.length) return [];
 
-  const { data, error } = await supabase.rpc("get_contacts_in_groups", {
-    group_ids: groupIds,
-    match_mode: matchMode,
-  });
-  if (error) throw error;
+  const allIds: string[] = [];
+  let from = 0;
 
-  return uniqueIds(
-    (data ?? []).map((r: { contact_id: string }) => String(r.contact_id)),
-  );
+  while (true) {
+    const { data, error } = await supabase
+      .rpc("get_contacts_in_groups", {
+        group_ids: groupIds,
+        match_mode: matchMode,
+      })
+      .range(from, from + RPC_PAGE_SIZE - 1);
+    if (error) throw error;
+
+    const page = (data ?? []).map((r: { contact_id: string }) => String(r.contact_id));
+    allIds.push(...page);
+    if (page.length < RPC_PAGE_SIZE) break;
+    from += RPC_PAGE_SIZE;
+  }
+
+  return uniqueIds(allIds);
 }
 
 type GroupFilterInput = Pick<

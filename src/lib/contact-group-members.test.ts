@@ -39,6 +39,20 @@ function mockQuery() {
   return q;
 }
 
+function mockRpcData(pages: Array<Array<{ contact_id: string }>>) {
+  let callCount = 0;
+  return vi.fn(() => ({
+    range(_from: number, _to: number) {
+      const page = pages[callCount] ?? [];
+      callCount += 1;
+      return Promise.resolve({
+        data: page,
+        error: null,
+      });
+    },
+  }));
+}
+
 describe("applyContactIdIncludeFilter", () => {
   it("uses sentinel instead of in() for empty ids", () => {
     const q = mockQuery();
@@ -100,10 +114,7 @@ describe("resolveGroupFilterContactIds", () => {
   const contact2 = "22222222-2222-2222-2222-222222222222";
 
   it("calls RPC with or mode for multiple include groups", async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: [{ contact_id: contact1 }, { contact_id: contact2 }],
-      error: null,
-    });
+    const rpc = mockRpcData([[{ contact_id: contact1 }, { contact_id: contact2 }]]);
     const supabase = {
       from: () => ({
         select: () =>
@@ -134,10 +145,7 @@ describe("resolveGroupFilterContactIds", () => {
   });
 
   it("calls RPC with and mode when group_match is and", async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: [{ contact_id: contact1 }],
-      error: null,
-    });
+    const rpc = mockRpcData([[{ contact_id: contact1 }]]);
     const supabase = {
       from: () => ({
         select: () =>
@@ -167,10 +175,7 @@ describe("resolveGroupFilterContactIds", () => {
   });
 
   it("resolves exclude groups via RPC with or mode", async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: [{ contact_id: contact2 }],
-      error: null,
-    });
+    const rpc = mockRpcData([[{ contact_id: contact2 }]]);
     const supabase = {
       from: () => ({
         select: () =>
@@ -196,6 +201,35 @@ describe("resolveGroupFilterContactIds", () => {
     expect(result.includeContactIds).toBeNull();
     expect(result.excludeContactIds).toEqual([contact2]);
   });
+
+  it("paginates RPC when a group has more than 1000 members", async () => {
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({
+      contact_id: `${String(i).padStart(8, "0")}-0000-4000-8000-000000000001`,
+    }));
+    const page2 = [{ contact_id: "ffffffff-ffff-ffff-ffff-ffffffffffff" }];
+    const rpc = mockRpcData([page1, page2]);
+    const supabase = {
+      from: () => ({
+        select: () =>
+          Promise.resolve({
+            data: [{ id: groupA, name: "Group A" }],
+            error: null,
+          }),
+      }),
+      rpc,
+    };
+
+    const result = await resolveGroupFilterContactIds(supabase as never, {
+      group_id: "",
+      group_ids: [groupA],
+      exclude_group_ids: [],
+      group_match: "or",
+    });
+
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(result.includeContactIds).toHaveLength(1001);
+    expect(result.includeContactIds).toContain("ffffffff-ffff-ffff-ffff-ffffffffffff");
+  });
 });
 
 describe("groupIncludeFilterMatchesNone", () => {
@@ -215,7 +249,7 @@ describe("groupIncludeFilterMatchesNone", () => {
   });
 
   it("returns true when RPC returns no contacts", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const rpc = mockRpcData([[]]);
     const supabase = {
       from: () => ({
         select: () =>
@@ -243,10 +277,7 @@ describe("applyGroupFiltersToQuery", () => {
   const contact1 = "11111111-1111-1111-1111-111111111111";
 
   it("applies chunked include filter from RPC", async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: [{ contact_id: contact1 }],
-      error: null,
-    });
+    const rpc = mockRpcData([[{ contact_id: contact1 }]]);
     const supabase = {
       from: () => ({
         select: () =>
