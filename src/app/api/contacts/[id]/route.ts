@@ -32,6 +32,13 @@ function enrichContact(
   };
 }
 
+function omitAiSummaryFields<T extends Record<string, unknown>>(row: T): T {
+  const rest = { ...row };
+  delete rest.ai_summary;
+  delete rest.ai_summary_updated_at;
+  return rest;
+}
+
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
   const crm = await checkCRMAccess();
@@ -41,6 +48,11 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const canEditContact = await hasPermissionFlexible(
     user.id,
     "contacts_edit",
+    hasMinRole(role, "manager", profile?.access_tier),
+  );
+  const canViewAiSummary = await hasPermissionFlexible(
+    user.id,
+    "ai_summary_view",
     hasMinRole(role, "manager", profile?.access_tier),
   );
 
@@ -64,6 +76,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     }),
     all_groups: allGroups,
   };
+  const contactResponse = canViewAiSummary ? contactOut : omitAiSummaryFields(contactOut as Record<string, unknown>);
 
   const { data: calls } = await supabase
     .from("calls")
@@ -73,7 +86,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   if (!canEditContact) {
     return NextResponse.json({
-      contact: contactOut,
+      contact: contactResponse,
       calls: calls ?? [],
       tasks: [],
       requests: [],
@@ -92,7 +105,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     .eq("contact_id", params.id)
     .order("created_at", { ascending: false });
 
-  return NextResponse.json({ contact: contactOut, calls, tasks, requests });
+  return NextResponse.json({ contact: contactResponse, calls, tasks, requests });
   } catch (e) {
     console.error("[api/contacts/id GET]", e);
     return nextJsonError();

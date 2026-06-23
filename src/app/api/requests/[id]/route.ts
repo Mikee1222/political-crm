@@ -1,6 +1,7 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { hasMinRole } from "@/lib/roles";
+import { hasPermissionFlexible } from "@/lib/permission-check";
 import { requirePermissionFlexible } from "@/lib/require-permission-api";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
@@ -85,17 +86,29 @@ function groupPersons(rows: PersonRow[]) {
   return { requesters, affected, helpers, handlers };
 }
 
+function omitAiSummaryFields<T extends Record<string, unknown>>(row: T): T {
+  const rest = { ...row };
+  delete rest.ai_summary;
+  delete rest.ai_summary_updated_at;
+  return rest;
+}
+
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { profile, supabase } = crm;
+  const { user, profile, supabase } = crm;
   const deniedGet = await requirePermissionFlexible(
     crm,
     "requests_view",
     hasMinRole(profile?.role, "manager"),
   );
   if (deniedGet) return deniedGet;
+  const canViewAiSummary = await hasPermissionFlexible(
+    user.id,
+    "ai_summary_view",
+    hasMinRole(profile?.role ?? "caller", "manager", profile?.access_tier),
+  );
   const requestId = await resolveRequestId(supabase, params.id);
   if (!requestId) {
     return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
@@ -103,7 +116,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const { data: row, error } = await supabase
     .from("requests")
     .select(
-      "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, portal_message, portal_visible",
+      "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, portal_message, portal_visible, ai_summary, ai_summary_updated_at",
     )
     .eq("id", requestId)
     .single();
@@ -181,9 +194,13 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const regularNotes = allNotes.filter((n: any) => !n.content?.startsWith('[Χειριστής:'));
 
+  const requestRow = canViewAiSummary
+    ? row
+    : omitAiSummaryFields(row as Record<string, unknown>);
+
   return NextResponse.json({
     request: {
-      ...row,
+      ...requestRow,
       status: normalizeRequestStatus((row as { status?: string | null }).status ?? null),
       requester,
       affected: affectedOne,

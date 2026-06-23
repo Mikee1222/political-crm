@@ -2,6 +2,7 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { hasPermissionFlexible } from "@/lib/permission-check";
 import { nextJsonError } from "@/lib/api-resilience";
 import { generateSummaryText, readCachedSummary } from "@/lib/ai-summary";
 import { fetchRequestSummaryPack } from "@/lib/ai-summary-request-data";
@@ -17,8 +18,13 @@ export async function GET(
     const { id } = await context.params;
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) return forbidden();
+    const { profile, supabase, user } = crm;
+    const canViewAiSummary = await hasPermissionFlexible(
+      user.id,
+      "ai_summary_view",
+      hasMinRole(profile?.role, "manager", profile?.access_tier),
+    );
+    if (!canViewAiSummary) return forbidden();
 
     const { data: row, error } = await supabase
       .from("requests")
@@ -47,8 +53,13 @@ export async function POST(
     const { id } = await context.params;
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) return forbidden();
+    const { profile, supabase, user } = crm;
+    const canViewAiSummary = await hasPermissionFlexible(
+      user.id,
+      "ai_summary_view",
+      hasMinRole(profile?.role, "manager", profile?.access_tier),
+    );
+    if (!canViewAiSummary) return forbidden();
 
     const pack = await fetchRequestSummaryPack(supabase, id);
     if (!pack) {

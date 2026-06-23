@@ -60,6 +60,7 @@ export const ALL_PERMISSION_KEYS = [
   "access_code_view",
   "access_code_revoke",
   "communication_logs_delete",
+  "ai_summary_view",
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSION_KEYS)[number];
@@ -125,6 +126,7 @@ export const PERMISSION_ROLE_DEFAULTS: Record<PermissionKey, readonly ("admin" |
   access_code_view: ["admin"],
   access_code_revoke: ["admin"],
   communication_logs_delete: ["admin"],
+  ai_summary_view: ["admin", "manager"],
 };
 
 export type PermissionCategoryId =
@@ -201,6 +203,7 @@ export const PERMISSION_TOOLTIPS: Record<PermissionKey, string> = {
   access_code_view: "Προβολή κλειδαριθμού τρέχουσας ώρας",
   access_code_revoke: "Ανάκληση πρόσβασης χρηστών",
   communication_logs_delete: "Διαγραφή καταγραφών επικοινωνίας από την καρτέλα επαφής",
+  ai_summary_view: "Προβολή AI σύνοψης σε καρτέλες επαφής και αιτήματος",
   settings_view: "Προβολή σελίδας ρυθμίσεων",
   settings_edit: "Επεξεργασία ρυθμίσεων CRM",
   users_manage: "Διαχείριση χρηστών (προσθήκη/διαγραφή)",
@@ -220,6 +223,7 @@ export const PERMISSION_CATEGORIES: readonly PermissionCategory[] = [
       "contacts_import",
       "contacts_bulk",
       "communication_logs_delete",
+      "ai_summary_view",
     ],
   },
   {
@@ -345,6 +349,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   access_code_view: "Κλειδαριθμός — προβολή",
   access_code_revoke: "Κλειδαριθμός — ανάκληση",
   communication_logs_delete: "Διαγραφή καταγραφών επικοινωνίας",
+  ai_summary_view: "AI σύνοψη — προβολή",
   campaigns_view: "Προβολή καμπανιών",
   campaigns_create: "Δημιουργία καμπανιών",
   campaigns_start: "Εκκίνηση κλήσεων καμπάνιας",

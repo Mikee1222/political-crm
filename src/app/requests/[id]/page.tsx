@@ -153,6 +153,7 @@ export default function RequestDetailPage() {
   const resolveName = useResolveAuthorName();
   const id = typeof params?.id === "string" ? params.id : "";
   const canEdit = can(profile, "requests_edit");
+  const canViewAiSummary = can(profile, "ai_summary_view");
 
   const [data, setData] = useState<RequestDetail | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -253,13 +254,13 @@ export default function RequestDetailPage() {
             <PriorityBadge p={data.priority} />
           </div>
         </div>
-        {canEdit && requestApiId ? (
+        {canViewAiSummary && requestApiId ? (
           <div className="mt-4">
             <AISummaryCard
               entityType="request"
               entityId={requestApiId}
               apiEndpoint={`/api/requests/${encodeURIComponent(requestApiId)}/ai-summary`}
-              canManage={canEdit}
+              canManage={canViewAiSummary}
             />
           </div>
         ) : null}

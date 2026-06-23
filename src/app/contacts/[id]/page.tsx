@@ -47,6 +47,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactElectoralLocationEdit } from "@/components/contact-electoral-location-edit";
 import { ContactGroupsSection } from "@/components/contact-groups-section";
 import { ContactExtraSections } from "@/components/contact-extra-sections";
+import { AISummaryCard } from "@/components/ai-summary-card";
 import { ContactRelatedPersonsSection } from "@/components/contact-related-persons-section";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { HqSelect } from "@/components/ui/hq-select";
@@ -369,6 +370,7 @@ function ContactDetailPage() {
   const { openTab } = useContactTabs();
   const canManage = hasMinRole(profile?.role, "manager", profile?.access_tier);
   const canEdit = can(profile, "contacts_edit");
+  const canViewAiSummary = can(profile, "ai_summary_view");
   const isCaller = !canEdit;
   const canDeleteCommLogs = can(profile, "communication_logs_delete");
   const { showToast } = useFormToast();
@@ -1630,6 +1632,17 @@ function ContactDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-5">
+        {canViewAiSummary && c.id ? (
+          <div className="min-w-0 md:col-span-2">
+            <AISummaryCard
+              entityType="contact"
+              entityId={c.id}
+              apiEndpoint={`/api/contacts/${encodeURIComponent(c.id)}/ai-summary`}
+              compact
+              canManage={canViewAiSummary}
+            />
+          </div>
+        ) : null}
         {canManage && (
           <div className="min-w-0 md:col-span-2">
             <ContactExtraSections contactId={c.id} phone={c.phone} canManage={canManage} />

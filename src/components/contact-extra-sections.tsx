@@ -6,8 +6,6 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateTimeAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 import { CenteredModal } from "@/components/ui/centered-modal";
-import { AISummaryCard } from "@/components/ai-summary-card";
-
 type DocRow = {
   id: string;
   name: string;
@@ -109,13 +107,6 @@ export function ContactExtraSections({
   return (
     <div className="col-span-full flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <AISummaryCard
-          entityType="contact"
-          entityId={contactId}
-          apiEndpoint={`/api/contacts/${encodeURIComponent(contactId)}/ai-summary`}
-          compact
-          canManage={canManage}
-        />
         <div className="flex justify-end">
           <button
             type="button"
