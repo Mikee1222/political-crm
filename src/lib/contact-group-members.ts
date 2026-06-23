@@ -15,14 +15,29 @@ export type GroupFilterResolution = {
 
 export const NO_MATCH_CONTACT_ID = "00000000-0000-0000-0000-000000000000";
 /** PostgREST rejects `in.()` / `not.in.()` — keep URL chunks small when SELECT embeds are present. */
-const MAX_ID_IN_CLAUSE = 80;
+export const MAX_ID_IN_CLAUSE = 80;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function uniqueIds(ids: string[]): string[] {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
 }
 
-/** `.in('id', [])` → PostgREST 400 (`in.()`). Use sentinel or chunked `.or()`. */
+/** PostgREST `.or('id.in.(...)')` needs quoted UUIDs — hyphens parse as operators otherwise. */
+export function buildIdInOrFilter(ids: string[]): string {
+  const clauses: string[] = [];
+  for (let i = 0; i < ids.length; i += MAX_ID_IN_CLAUSE) {
+    const chunk = ids.slice(i, i + MAX_ID_IN_CLAUSE);
+    clauses.push(`id.in.(${chunk.map((id) => `"${id}"`).join(",")})`);
+  }
+  return clauses.join(",");
+}
+
+/** True when include list must be fetched in multiple `.in()` queries (URL length). */
+export function includeContactIdsNeedBatchFetch(ids: string[] | null): ids is string[] {
+  return ids !== null && uniqueIds(ids).length > MAX_ID_IN_CLAUSE;
+}
+
+/** `.in('id', [])` → PostgREST 400 (`in.()`). Use sentinel, chunked `.or()`, or batch fetch. */
 export function applyContactIdIncludeFilter(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
@@ -31,11 +46,7 @@ export function applyContactIdIncludeFilter(
   const unique = uniqueIds(ids);
   if (!unique.length) return query.eq("id", NO_MATCH_CONTACT_ID);
   if (unique.length <= MAX_ID_IN_CLAUSE) return query.in("id", unique);
-  const clauses: string[] = [];
-  for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
-    clauses.push(`id.in.(${unique.slice(i, i + MAX_ID_IN_CLAUSE).join(",")})`);
-  }
-  return query.or(clauses.join(","));
+  return query.or(buildIdInOrFilter(unique));
 }
 
 /** Skip when empty; chunk large exclude lists (multiple `not.in` params are ANDed). */
@@ -50,9 +61,38 @@ export function applyContactIdExcludeFilter(
   let q = query;
   for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
     const chunk = unique.slice(i, i + MAX_ID_IN_CLAUSE);
-    q = typeof q.notIn === "function" ? q.notIn("id", chunk) : q.not("id", "in", `(${chunk.join(",")})`);
+    const quoted = `(${chunk.map((id) => `"${id}"`).join(",")})`;
+    q = typeof q.notIn === "function" ? q.notIn("id", chunk) : q.not("id", "in", quoted);
   }
   return q;
+}
+
+/** Large include lists: several short `.in()` queries instead of one giant `.or()` URL. */
+export async function fetchContactsByIncludeIdBatches<T extends { id: string; created_at?: string | null }>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  ids: string[],
+  select: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  applyFilters: (query: any) => any,
+): Promise<T[]> {
+  const unique = uniqueIds(ids);
+  const byId = new Map<string, T>();
+  for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
+    const chunk = unique.slice(i, i + MAX_ID_IN_CLAUSE);
+    let query = supabase.from("contacts").select(select).in("id", chunk);
+    query = applyFilters(query);
+    const { data, error } = await query;
+    if (error) throw error;
+    for (const row of (data ?? []) as T[]) {
+      byId.set(String(row.id), row);
+    }
+  }
+  return [...byId.values()].sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return tb - ta;
+  });
 }
 
 /** Resolve group filter values to contact_groups UUIDs (accepts names or ids). */

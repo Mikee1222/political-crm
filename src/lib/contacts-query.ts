@@ -112,9 +112,6 @@ export function applyContactListFiltersToBuilder(
   if (f.tag) query = query.contains("tags", [f.tag]);
   if (f.political_stance) query = query.eq("political_stance", f.political_stance);
   if (f.phone) query = query.ilike("phone", `%${f.phone}%`);
-  if (groupResolution) {
-    query = applyGroupMembershipFiltersToBuilder(query, groupResolution);
-  }
   if (f.age_min) {
     const n = parseInt(f.age_min, 10);
     if (Number.isFinite(n)) query = query.gte("age", n);
@@ -152,6 +149,9 @@ export function applyContactListFiltersToBuilder(
   }
   if (f.volunteer_area) {
     query = query.ilike("volunteer_area", `%${f.volunteer_area}%`);
+  }
+  if (groupResolution) {
+    query = applyGroupMembershipFiltersToBuilder(query, groupResolution);
   }
   return query;
 }

@@ -13,6 +13,8 @@ import { searchParamsToFilters, getDefaultContactFilters } from "@/lib/contacts-
 import { applyContactListFiltersToBuilder } from "@/lib/contacts-query";
 import {
   enrichContactsWithGroupCountsAndNames,
+  fetchContactsByIncludeIdBatches,
+  includeContactIdsNeedBatchFetch,
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
   resolveContactListFilterIds,
@@ -21,6 +23,8 @@ export const dynamic = "force-dynamic";
 
 const SELECT_LIST =
   "id, first_name, last_name, phone, phone2, landline, email, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, is_dead, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )";
+
+const SELECT_LIST_BATCH = `${SELECT_LIST}, created_at`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QueryBuilder = any;
@@ -117,6 +121,10 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(200, Math.max(1, parseInt(request.nextUrl.searchParams.get("page_size") || "50", 10) || 50));
 
     const filterResolution = await resolveContactListFilterIds(supabase, f);
+    const resolvedIds = filterResolution.includeContactIds;
+    console.log("[contacts] group_ids:", f.group_ids);
+    console.log("[contacts] resolved contact IDs count:", resolvedIds?.length ?? null);
+    console.log("[contacts] first few IDs:", resolvedIds?.slice(0, 3) ?? null);
     if (
       hasGroupIncludeFilter(f) &&
       filterResolution.includeContactIds !== null &&
@@ -157,9 +165,34 @@ export async function GET(request: NextRequest) {
     }
 
     if (f.search) {
+      console.log("[contacts] applying filter with", resolvedIds?.length ?? 0, "IDs");
       let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
+      if (includeContactIdsNeedBatchFetch(resolvedIds)) {
+        console.log("[contacts] query built, about to execute (batch include)");
+        const rows = await fetchContactsByIncludeIdBatches(
+          supabase,
+          resolvedIds,
+          SELECT_LIST_BATCH,
+          (q) =>
+            applyApiContactFilters(
+              q,
+              f,
+              { ...filterResolution, includeContactIds: null },
+              partialLocation,
+            ),
+        );
+        const list = afterFilterRows(rows, f.search);
+        if (comboboxMode) {
+          const enriched = await enrichContactsWithGroupCount(supabase, list.slice(0, listLimit!) as Record<string, unknown>[]);
+          return NextResponse.json({ contacts: enriched });
+        }
+        const { slice, total } = paginateList(list, page, pageSize);
+        const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
+        return NextResponse.json({ contacts: enriched, total, page, pageSize });
+      }
       query = applyApiContactFilters(query, f, filterResolution, partialLocation);
       query = query.limit(12_000);
+      console.log("[contacts] query built, about to execute");
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       const rows = data ?? [];
@@ -173,6 +206,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ contacts: enriched, total, page, pageSize });
     }
 
+    console.log("[contacts] applying filter with", resolvedIds?.length ?? 0, "IDs");
+
+    if (includeContactIdsNeedBatchFetch(resolvedIds)) {
+      console.log("[contacts] query built, about to execute (batch include)");
+      const rows = await fetchContactsByIncludeIdBatches(
+        supabase,
+        resolvedIds,
+        SELECT_LIST_BATCH,
+        (q) =>
+          applyApiContactFilters(
+            q,
+            f,
+            { ...filterResolution, includeContactIds: null },
+            partialLocation,
+          ),
+      );
+      if (comboboxMode) {
+        const enriched = await enrichContactsWithGroupCount(
+          supabase,
+          rows.slice(0, listLimit!) as Record<string, unknown>[],
+        );
+        return NextResponse.json({ contacts: enriched });
+      }
+      const { slice, total } = paginateList(rows, page, pageSize);
+      const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
+      return NextResponse.json({ contacts: enriched, total, page, pageSize });
+    }
+
     let query: QueryBuilder = supabase
       .from("contacts")
       .select(SELECT_LIST, { count: "exact" })
@@ -181,6 +242,7 @@ export async function GET(request: NextRequest) {
 
     if (comboboxMode) {
       query = query.limit(listLimit!);
+      console.log("[contacts] query built, about to execute");
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
@@ -190,6 +252,7 @@ export async function GET(request: NextRequest) {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     query = query.range(from, to);
+    console.log("[contacts] query built, about to execute");
     const { data, error, count } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);

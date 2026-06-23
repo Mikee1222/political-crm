@@ -3,6 +3,7 @@ import {
   applyContactIdExcludeFilter,
   applyContactIdIncludeFilter,
   applyGroupFiltersToQuery,
+  buildIdInOrFilter,
   groupIncludeFilterMatchesNone,
   NO_MATCH_CONTACT_ID,
   resolveGroupFilterContactIds,
@@ -61,8 +62,19 @@ describe("applyContactIdIncludeFilter", () => {
     expect(q._calls).toHaveLength(1);
     expect(q._calls[0]?.method).toBe("or");
     const clause = String(q._calls[0]?.args[0]);
-    expect(clause).toContain("id.in.(");
+    expect(clause).toContain('id.in.("');
     expect(clause.split("id.in.(").length - 1).toBe(2);
+  });
+
+  it("quotes UUIDs in chunked or filter string", () => {
+    const ids = [
+      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    ];
+    const clause = buildIdInOrFilter([...ids, ...Array.from({ length: 79 }, (_, i) =>
+      `${String(i + 2).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    )]);
+    expect(clause).toMatch(/id\.in\.\("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"/);
   });
 });
 
