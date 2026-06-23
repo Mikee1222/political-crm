@@ -21,6 +21,7 @@ import {
   buildContactsPageUrl,
   contactFiltersToSearchParams,
   getDefaultContactFilters,
+  searchParamsToFilters,
 } from "@/lib/contacts-filters";
 import { buildAlexandraPdf } from "@/lib/alexandra-pdf";
 import { storeAlexandraExport } from "@/lib/alexandra-storage";
@@ -53,7 +54,12 @@ import {
 } from "@/lib/municipality-search";
 import {
   alexandraContactSearchLimit,
+  countAlexandraContacts,
+  filtersAllowAlexandraNameRpc,
+  normalizeContactListFiltersForNameRpc,
   normalizeContactSearchFilters,
+  resolveAlexandraNameSearch,
+  searchAlexandraContacts,
 } from "@/lib/alexandra-contact-search";
 
 export type FindRow = {
@@ -1122,17 +1128,47 @@ async function resolveFindContactsFilters(
     if (jSaved) f = applySavedFilterJson(jSaved, gMap);
   }
   f = applyFindContactsToolInput(f, raw, gMap);
+  f = normalizeContactListFiltersForNameRpc(f);
   f.limit = "";
   return { f, filterUrl: buildContactsPageUrl(f) };
 }
 
-/** Paginated /api/contacts — never combobox `limit` mode so `total` is returned. */
+function alexandraHitsToFindRows(
+  hits: Awaited<ReturnType<typeof searchAlexandraContacts>>,
+): FindRow[] {
+  return hits.map((h) => ({
+    id: h.id,
+    first_name: h.first_name,
+    last_name: h.last_name,
+    phone: h.phone,
+    call_status: h.call_status ?? null,
+    contact_code: h.contact_code ?? null,
+  }));
+}
+
+/** Paginated /api/contacts — or RPC name path via alexandra-contact-search. */
 async function queryContactsApi(
   ctx: ToolContext,
   f: ContactListFilters,
   opts: { page?: number; pageSize?: number },
 ): Promise<{ ok: true; contacts: FindRow[]; total: number } | { ok: false; error: string }> {
-  const params = contactFiltersToSearchParams(f);
+  const pageSize = opts.pageSize ?? 50;
+  if (filtersAllowAlexandraNameRpc(f)) {
+    const nameOpts = resolveAlexandraNameSearch(f);
+    if (nameOpts) {
+      const total = await countAlexandraContacts(ctx.supabase, nameOpts);
+      const hits = await searchAlexandraContacts(ctx.supabase, {
+        firstName: nameOpts.firstName,
+        lastName: nameOpts.lastName,
+        fatherName: nameOpts.fatherName,
+        phone: nameOpts.phone,
+        limit: pageSize,
+      });
+      return { ok: true, contacts: alexandraHitsToFindRows(hits), total };
+    }
+  }
+
+  const params = contactFiltersToSearchParams(normalizeContactListFiltersForNameRpc(f));
   params.delete("limit");
   params.set("page", String(opts.page ?? 1));
   params.set("page_size", String(opts.pageSize ?? 50));
@@ -1892,17 +1928,19 @@ async function runAlexToolInner(
     const fl = (raw.filters as Record<string, unknown>) || {};
     const lim = alexandraContactSearchLimit({ limit: raw.limit });
     const params = new URLSearchParams(buildAdvancedContactFilters(fl, {}));
-    params.set("page", "1");
-    params.set("page_size", String(lim));
-    const r = await ctx.forward(`/api/contacts?${params.toString()}`, { method: "GET" });
-    const j = (await r.json()) as { contacts?: FindRow[]; total?: number; error?: string };
-    if (!r.ok) {
-      return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
+    const f = searchParamsToFilters(params, getDefaultContactFilters());
+    const result = await queryContactsApi(ctx, f, { page: 1, pageSize: lim });
+    if (!result.ok) {
+      return { content: JSON.stringify({ error: result.error }) };
     }
-    const list = (j.contacts ?? []).slice(0, lim) as FindRow[];
-    const total = typeof j.total === "number" ? j.total : list.length;
+    const list = result.contacts.slice(0, lim) as FindRow[];
     return {
-      content: JSON.stringify({ ok: true, total_count: total, returned: list.length, contacts: list }),
+      content: JSON.stringify({
+        ok: true,
+        total_count: result.total,
+        returned: list.length,
+        contacts: list,
+      }),
       findResults: list,
       executedToolName: "search_contacts_advanced",
     };

@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   alexandraContactSearchLimit,
+  countAlexandraContacts,
+  filtersAllowAlexandraNameRpc,
+  normalizeContactListFiltersForNameRpc,
   normalizeContactSearchFilters,
   parseNameSearchTokens,
   searchAlexandraContacts,
 } from "@/lib/alexandra-contact-search";
+import { getDefaultContactFilters } from "@/lib/contacts-filters";
 
 describe("alexandraContactSearchLimit", () => {
   it("defaults to 75 and caps at 100", () => {
@@ -37,6 +41,48 @@ describe("normalizeContactSearchFilters", () => {
     expect(normalizeContactSearchFilters({ name: "Μαρία Παπα" })).toEqual({
       first_name: "Μαρία",
       last_name: "Παπα",
+    });
+  });
+});
+
+describe("normalizeContactListFiltersForNameRpc", () => {
+  it("maps search to first_name for single-token name", () => {
+    const f = normalizeContactListFiltersForNameRpc({
+      ...getDefaultContactFilters(),
+      search: "ΜΑΡΙΑ",
+    });
+    expect(f.first_name).toBe("ΜΑΡΙΑ");
+    expect(f.search).toBe("");
+  });
+});
+
+describe("filtersAllowAlexandraNameRpc", () => {
+  it("allows name-only search after normalization", () => {
+    const f = normalizeContactListFiltersForNameRpc({
+      ...getDefaultContactFilters(),
+      search: "ΜΑΡΙΑ",
+    });
+    expect(filtersAllowAlexandraNameRpc(f)).toBe(true);
+  });
+});
+
+describe("countAlexandraContacts", () => {
+  it("counts RPC rows for name search", async () => {
+    const rpc = vi.fn().mockReturnValue({
+      range: vi.fn().mockResolvedValue({
+        data: [
+          { id: "1", first_name: "Μαρία", last_name: "Α" },
+          { id: "2", first_name: "Μαρία", last_name: "Β" },
+        ],
+        error: null,
+      }),
+    });
+    const count = await countAlexandraContacts({ rpc } as never, { firstName: "ΜΑΡΙΑ" });
+    expect(count).toBe(2);
+    expect(rpc).toHaveBeenCalledWith("search_contacts_by_name", {
+      p_first_name: "ΜΑΡΙΑ",
+      p_last_name: null,
+      p_father_name: null,
     });
   });
 });

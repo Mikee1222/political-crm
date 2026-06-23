@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { searchContactsByName } from "@/lib/contacts-query";
-import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
+import type { ContactListFilters } from "@/lib/contacts-filters";
+import { isNameOnlyFilter, searchContactsByName } from "@/lib/contacts-query";
 
 /** Default/max rows returned by Alexandra broad contact search tools. */
 export const ALEXANDRA_CONTACT_SEARCH_DEFAULT_LIMIT = 75;
@@ -76,6 +76,46 @@ export function normalizeContactSearchFilters(filters: Record<string, unknown>):
   return out;
 }
 
+export type AlexandraNameSearchOpts = {
+  firstName?: string | null;
+  lastName?: string | null;
+  fatherName?: string | null;
+  phone?: string | null;
+};
+
+/** Map free-text `search` into first/last/father columns (same as advanced search UI). */
+export function normalizeContactListFiltersForNameRpc(f: ContactListFilters): ContactListFilters {
+  if (!f.search?.trim()) return f;
+  const norm = normalizeContactSearchFilters({ search: f.search });
+  const out = { ...f, search: "" };
+  if (norm.first_name) out.first_name = String(norm.first_name);
+  if (norm.last_name) out.last_name = String(norm.last_name);
+  if (norm.father_name) out.father_name = String(norm.father_name);
+  if (typeof norm.search === "string" && norm.search.trim()) out.search = norm.search.trim();
+  return out;
+}
+
+export function resolveAlexandraNameSearch(f: ContactListFilters): AlexandraNameSearchOpts | null {
+  const n = normalizeContactListFiltersForNameRpc(f);
+  const phone = n.phone?.trim() || null;
+  const firstName = n.first_name?.trim() || null;
+  const lastName = n.last_name?.trim() || null;
+  const fatherName = n.father_name?.trim() || null;
+  if (phone && !firstName && !lastName && !fatherName) return { phone };
+  if (!firstName && !lastName && !fatherName) return null;
+  return { firstName, lastName, fatherName };
+}
+
+/** Name-only or phone-only filters — use search_contacts_by_name RPC (not in-memory scan). */
+export function filtersAllowAlexandraNameRpc(f: ContactListFilters): boolean {
+  const n = normalizeContactListFiltersForNameRpc(f);
+  const hasPhone = Boolean(n.phone?.trim());
+  const hasName = Boolean(n.first_name?.trim() || n.last_name?.trim() || n.father_name?.trim());
+  if (hasPhone && !hasName) return true;
+  if (!hasName) return false;
+  return isNameOnlyFilter(n);
+}
+
 function mapHits(rows: Record<string, unknown>[]): AlexandraContactHit[] {
   return rows.map((r) => ({
     id: String(r.id),
@@ -90,12 +130,31 @@ function mapHits(rows: Record<string, unknown>[]): AlexandraContactHit[] {
   }));
 }
 
-type FuzzyContact = Parameters<typeof contactMatchesFuzzyGreekSearch>[0];
-
 /**
  * Accent-insensitive contact search for Alexandra context and direct Supabase callers.
- * Phone/code-style lookups keep exact ilike; names use search_contacts_by_name RPC + fuzzy refine.
+ * Phone/code-style lookups keep exact ilike; names use search_contacts_by_name RPC.
  */
+export async function countAlexandraContacts(
+  supabase: SupabaseClient,
+  opts: AlexandraNameSearchOpts,
+): Promise<number> {
+  const phone = opts.phone?.trim() ?? "";
+  if (phone) {
+    const { count, error } = await supabase
+      .from("contacts")
+      .select("id", { count: "exact", head: true })
+      .or(`phone.ilike.%${phone}%,phone2.ilike.%${phone}%,landline.ilike.%${phone}%`);
+    if (error) throw new Error(error.message);
+    return count ?? 0;
+  }
+  const rows = await searchContactsByName(supabase, {
+    firstName: opts.firstName,
+    lastName: opts.lastName,
+    fatherName: opts.fatherName,
+  });
+  return rows.length;
+}
+
 export async function searchAlexandraContacts(
   supabase: SupabaseClient,
   opts: {
@@ -124,33 +183,19 @@ export async function searchAlexandraContacts(
   }
 
   const search = opts.search?.trim() ?? "";
-  const firstName = opts.firstName?.trim() || null;
-  const lastName = opts.lastName?.trim() || null;
-  const fatherName = opts.fatherName?.trim() || null;
+  let firstName = opts.firstName?.trim() || null;
+  let lastName = opts.lastName?.trim() || null;
+  let fatherName = opts.fatherName?.trim() || null;
 
-  let rows: Record<string, unknown>[] = [];
-
-  if (firstName || lastName || fatherName) {
-    rows = await searchContactsByName(supabase, { firstName, lastName, fatherName });
-  } else if (search) {
+  if (!firstName && !lastName && !fatherName && search) {
     const tokens = parseNameSearchTokens(search);
-    if (tokens.firstName && tokens.lastName) {
-      rows = await searchContactsByName(supabase, tokens);
-    } else if (tokens.firstName) {
-      rows = await searchContactsByName(supabase, { firstName: tokens.firstName });
-    } else {
-      const { data, error } = await supabase
-        .from("contacts")
-        .select(CONTACT_SEARCH_SELECT)
-        .order("created_at", { ascending: false })
-        .limit(12_000);
-      if (error) throw new Error(error.message);
-      rows = ((data ?? []) as FuzzyContact[]).filter((c) => contactMatchesFuzzyGreekSearch(c, search)) as Record<
-        string,
-        unknown
-      >[];
-    }
+    firstName = tokens.firstName;
+    lastName = tokens.lastName;
+    fatherName = tokens.fatherName;
   }
 
+  if (!firstName && !lastName && !fatherName) return [];
+
+  const rows = await searchContactsByName(supabase, { firstName, lastName, fatherName });
   return mapHits(rows.slice(0, limit));
 }
