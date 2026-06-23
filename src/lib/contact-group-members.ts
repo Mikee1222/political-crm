@@ -187,13 +187,14 @@ async function contactIdsWithRequests(supabase: SupabaseClient): Promise<string[
   return [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)).filter(Boolean))];
 }
 
-/** Merges source and request id-based filters (group filters are applied separately in GET /api/contacts). */
+/** Merges group, source, and request id-based filters into one resolution. */
 export async function resolveContactListFilterIds(
   supabase: SupabaseClient,
   f: ContactListFilters,
 ): Promise<GroupFilterResolution> {
-  let includeContactIds: string[] | null = null;
-  const excludeSet = new Set<string>();
+  const groupRes = await resolveGroupFilterContactIds(supabase, f);
+  let includeContactIds = groupRes.includeContactIds;
+  const excludeSet = new Set(groupRes.excludeContactIds);
 
   if (f.source_ids.length) {
     const ids = await contactIdsForSources(supabase, f.source_ids);
