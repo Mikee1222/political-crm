@@ -1,8 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +10,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const body = (await request.json()) as { name?: string; regional_unit?: string | null };
     const patch: Record<string, string | null> = {};
     if (body.name != null) patch.name = String(body.name).trim();
@@ -46,10 +45,9 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const { error } = await supabase.from("municipalities").delete().eq("id", params.id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

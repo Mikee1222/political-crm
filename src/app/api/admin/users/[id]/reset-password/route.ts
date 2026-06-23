@@ -1,8 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
+import { requireAdminOnlyPermission } from "@/lib/require-permission-api";
 export const dynamic = 'force-dynamic';
 
 /**
@@ -12,8 +12,9 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
   try {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { profile } = crm;
-  if (profile?.role !== "admin") return forbidden();
+  
+  const denied = await requireAdminOnlyPermission(crm, "users_manage");
+  if (denied) return denied;
 
   const admin = createServiceClient();
   const { data: udata, error: uerr } = await admin.auth.admin.getUserById(params.id);

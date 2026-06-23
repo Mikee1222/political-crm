@@ -2,6 +2,7 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { hasPermissionFlexible } from "@/lib/permission-check";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
@@ -35,8 +36,13 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   try {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { profile, supabase } = crm;
+  const { user, profile, supabase } = crm;
   const role = profile?.role ?? "caller";
+  const canEditContact = await hasPermissionFlexible(
+    user.id,
+    "contacts_edit",
+    hasMinRole(role, "manager", profile?.access_tier),
+  );
 
   const { data: contact, error } = await supabase
     .from("contacts")
@@ -65,7 +71,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     .eq("contact_id", params.id)
     .order("called_at", { ascending: false });
 
-  if (role === "caller") {
+  if (!canEditContact) {
     return NextResponse.json({
       contact: contactOut,
       calls: calls ?? [],
@@ -100,8 +106,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const { user, profile, supabase } = crm;
   const body = (await request.json()) as Record<string, unknown>;
   const role = profile?.role ?? "caller";
+  const canEditContact = await hasPermissionFlexible(
+    user.id,
+    "contacts_edit",
+    hasMinRole(role, "manager", profile?.access_tier),
+  );
 
-  if (role === "caller") {
+  if (!canEditContact) {
     const allowedKeys = new Set(["call_status", "last_contacted_at"]);
     for (const k of Object.keys(body)) {
       if (!allowedKeys.has(k)) {
@@ -161,9 +172,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ contact: data });
   }
 
-  if (!hasMinRole(profile?.role, "manager")) {
-    return forbidden();
-  }
   delete body.contact_code;
   delete (body as { created_by?: unknown }).created_by;
   delete (body as { updated_by?: unknown }).updated_by;
@@ -226,8 +234,8 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   try {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { profile } = crm;
-  if (profile?.role !== "admin") {
+  const { user, profile } = crm;
+  if (!(await hasPermissionFlexible(user.id, "contacts_delete", profile?.role === "admin"))) {
     return forbidden();
   }
   const admin = createServiceClient();

@@ -1163,14 +1163,14 @@ async function runAlexToolInner(
   ctx: ToolContext,
 ): Promise<ToolRunResult> {
   const raw = input && typeof input === "object" ? input : {};
-  const isMgr = hasMinRole(ctx.profile.role, "manager");
-  const isCaller = ctx.profile.role === "caller";
+  const isMgr = hasMinRole(ctx.profile.role, "manager", ctx.profile.access_tier);
   function permLegacy(permissionKey: string, legacy: boolean): boolean {
     if (ctx.allowedPermissionKeys !== undefined) {
       return ctx.allowedPermissionKeys.has(permissionKey);
     }
     return legacy;
   }
+  const canEditContacts = permLegacy("contacts_edit", isMgr);
 
   if (name === "find_contacts") {
     const gMap = await buildGroupNameToIdMap(ctx.supabase);
@@ -1302,7 +1302,7 @@ async function runAlexToolInner(
     if (!contact_id || !status) {
       return { content: JSON.stringify({ error: "Άκυρα δεδομένα" }) };
     }
-    if (isCaller) {
+    if (!canEditContacts) {
       const { data, error } = await ctx.supabase
         .from("contacts")
         .update({ call_status: status })

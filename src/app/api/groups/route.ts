@@ -1,8 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 export const dynamic = 'force-dynamic';
 
 export type { ContactGroupRow } from "@/lib/contact-groups";
@@ -33,10 +33,9 @@ export async function POST(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
+    const { supabase } = crm;
     const body = (await request.json()) as {
       name?: string;
       color?: string;

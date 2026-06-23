@@ -1,8 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { RequestCategoryRow } from "@/lib/request-categories";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 export const dynamic = "force-dynamic";
 
 const HEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
@@ -11,10 +11,9 @@ export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const { data, error } = await supabase
       .from("request_categories")
       .select("id, name, color, sort_order, created_at")
@@ -34,10 +33,9 @@ export async function POST(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const body = (await request.json()) as { name?: string; color?: string; sort_order?: number };
     const name = String(body.name ?? "").trim();
     if (!name) {

@@ -367,9 +367,9 @@ function ContactDetailPage() {
   const { profile } = useProfile();
   const resolveName = useResolveAuthorName();
   const { openTab } = useContactTabs();
-  const isCaller = profile?.role === "caller";
   const canManage = hasMinRole(profile?.role, "manager", profile?.access_tier);
   const canEdit = can(profile, "contacts_edit");
+  const isCaller = !canEdit;
   const canDeleteCommLogs = can(profile, "communication_logs_delete");
   const { showToast } = useFormToast();
   const [contact, setContact] = useState<Contact | null>(null);

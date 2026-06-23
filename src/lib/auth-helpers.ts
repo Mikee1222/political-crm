@@ -9,6 +9,8 @@ export type UserProfile = {
   full_name: string | null;
   /** `profiles.role` — system names admin|manager|caller or custom role from `roles`. */
   role: string;
+  /** Resolved from `roles.access_tier` when available. */
+  access_tier?: Role | string;
   is_portal?: boolean;
   created_at?: string;
   email?: string | null;
@@ -16,6 +18,7 @@ export type UserProfile = {
   preferences?: UserPreferences;
   /** CRM theme: dark | light */
   theme?: "dark" | "light" | string;
+  permissions?: Record<string, boolean>;
 };
 
 function profileFromRow(

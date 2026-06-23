@@ -1,8 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { ContactGroupRow } from "@/lib/contact-groups";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 export const dynamic = 'force-dynamic';
 
 type Ctx = { params: { id: string } };
@@ -11,10 +11,9 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
+    const { supabase } = crm;
     const id = params.id;
     if (!id) {
       return NextResponse.json({ error: "Άκυρο" }, { status: 400 });
@@ -64,10 +63,9 @@ export async function DELETE(_: NextRequest, { params }: Ctx) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
+    const { supabase } = crm;
     const id = params.id;
     if (!id) {
       return NextResponse.json({ error: "Άκυρο" }, { status: 400 });

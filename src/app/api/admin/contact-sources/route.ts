@@ -1,7 +1,7 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +14,9 @@ export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const { data, error } = await supabase
       .from("contact_sources")
       .select("id, name")
@@ -36,10 +35,9 @@ export async function POST(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const body = (await request.json()) as { name?: string };
     const name = String(body.name ?? "").trim();
     if (!name) {

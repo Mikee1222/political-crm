@@ -1,25 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { pathAllowedByPermissions } from "@/lib/middleware-permissions";
+import { getAllowedPermissionKeysForRole } from "@/lib/permission-check";
 import { redirectWithSession, updateSession } from "@/lib/supabase/middleware";
 import { isPortalOnlyUser } from "@/lib/portal-user-status";
-
-const CALLER_BLOCKED_PREFIXES = [
-  "/dashboard",
-  "/campaigns",
-  "/events",
-  "/volunteers",
-  "/tasks",
-  "/requests",
-  "/schedule",
-  "/api/schedule",
-  "/api/data-tools",
-  "/api/events",
-  "/api/volunteers",
-  "/api/media",
-  "/data-tools",
-  "/settings",
-  "/documents",
-  "/content",
-] as const;
 
 function isPortalPublicPath(pathname: string) {
   if (pathname === "/portal" || pathname === "/portal/") return true;
@@ -306,12 +289,15 @@ export async function middleware(request: NextRequest) {
     } catch {
       /* roles table may not exist before migration */
     }
-    if (navTier === "caller") {
-      for (const p of CALLER_BLOCKED_PREFIXES) {
-        if (pathname === p || pathname.startsWith(`${p}/`)) {
-          return redirectWithSession(request, "/contacts", sessionResponse);
-        }
-      }
+    const legacyCallerBlocked = navTier === "caller";
+    let allowedKeys: Set<string> | null = null;
+    try {
+      allowedKeys = await getAllowedPermissionKeysForRole(role);
+    } catch {
+      /* migration not applied */
+    }
+    if (!pathAllowedByPermissions(pathname, allowedKeys, legacyCallerBlocked)) {
+      return redirectWithSession(request, "/contacts", sessionResponse);
     }
   }
 

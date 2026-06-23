@@ -2,6 +2,7 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { hasPermissionFlexible } from "@/lib/permission-check";
 import { actionPayloadSchema, type ActionPayload } from "@/lib/ai-assistant-actions";
 import { REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ function buildContactsSearchParams(
 export async function POST(request: NextRequest) {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { profile, supabase } = crm;
+  const { user, profile, supabase } = crm;
 
   let action: ActionPayload;
   try {
@@ -35,8 +36,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Άκυρο αίτημα" }, { status: 400 });
   }
 
-  const isMgr = hasMinRole(profile?.role, "manager");
-  const isCaller = profile?.role === "caller";
+  const isMgr = hasMinRole(profile?.role, "manager", profile?.access_tier);
+  const canEditContacts = await hasPermissionFlexible(
+    user.id,
+    "contacts_edit",
+    isMgr,
+  );
+  const isLimitedContactEditor = !canEditContacts;
   const origin = request.nextUrl.origin;
   const cookie = request.headers.get("cookie") ?? "";
 
@@ -175,7 +181,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (action.action === "update_status") {
-    if (isCaller) {
+    if (isLimitedContactEditor) {
       const { data, error } = await supabase
         .from("contacts")
         .update({ call_status: action.status })

@@ -2,6 +2,7 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { requirePermissionFlexible } from "@/lib/require-permission-api";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -90,9 +91,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
   const { profile, supabase } = crm;
-  if (!hasMinRole(profile?.role, "manager")) {
-    return forbidden();
-  }
+  const deniedGet = await requirePermissionFlexible(
+    crm,
+    "requests_view",
+    hasMinRole(profile?.role, "manager"),
+  );
+  if (deniedGet) return deniedGet;
   const requestId = await resolveRequestId(supabase, params.id);
   if (!requestId) {
     return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
@@ -207,9 +211,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
   const { user, profile, supabase } = crm;
-  if (!hasMinRole(profile?.role, "manager")) {
-    return forbidden();
-  }
+  const deniedEdit = await requirePermissionFlexible(
+    crm,
+    "requests_edit",
+    hasMinRole(profile?.role, "manager"),
+  );
+  if (deniedEdit) return deniedEdit;
   const requestId = await resolveRequestId(supabase, params.id);
   if (!requestId) {
     return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
@@ -293,9 +300,12 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
   const { profile, supabase } = crm;
-  if (!hasMinRole(profile?.role, "manager")) {
-    return forbidden();
-  }
+  const deniedDelete = await requirePermissionFlexible(
+    crm,
+    "requests_delete",
+    hasMinRole(profile?.role, "manager"),
+  );
+  if (deniedDelete) return deniedDelete;
   const requestId = await resolveRequestId(supabase, params.id);
   if (!requestId) {
     return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });

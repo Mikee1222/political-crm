@@ -1,8 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import type { ToponymRow } from "@/app/api/geo/toponyms/route";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +15,9 @@ export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const { data, error } = await supabase
       .from("toponyms")
       .select("id, name, municipality_id, electoral_district_id, created_at")
@@ -46,10 +45,9 @@ export async function POST(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const body = (await request.json()) as { name?: string; municipality_id?: string; electoral_district_id?: string | null };
     const name = String(body.name ?? "").trim();
     const municipality_id = String(body.municipality_id ?? "").trim();

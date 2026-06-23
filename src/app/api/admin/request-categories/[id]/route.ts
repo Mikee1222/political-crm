@@ -1,6 +1,5 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -8,6 +7,7 @@ import {
   deleteRequestCategoryLookup,
 } from "@/lib/request-admin";
 import type { RequestCategoryRow } from "@/lib/request-categories";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +29,9 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const param = decodeCategoryParam(params.id);
     if (!param) {
       return NextResponse.json({ error: "Άκυρο" }, { status: 400 });
@@ -86,10 +85,9 @@ export async function DELETE(_: NextRequest, { params }: Ctx) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const name = decodeCategoryParam(params.id);
     if (!name) {
       return NextResponse.json({ error: "Άκυρο" }, { status: 400 });

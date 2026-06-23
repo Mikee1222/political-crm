@@ -1,9 +1,9 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { transferRequestCategory } from "@/lib/request-admin";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +11,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    if (crm.profile?.role !== "admin") {
-      return forbidden();
-    }
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
 
     const body = (await request.json()) as {
       from_name?: string;

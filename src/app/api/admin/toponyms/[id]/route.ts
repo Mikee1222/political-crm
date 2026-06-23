@@ -1,11 +1,10 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
-import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { countContactsByToponymId } from "@/lib/contact-location-admin";
 import type { ToponymRow } from "@/app/api/geo/toponyms/route";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +12,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const body = (await request.json()) as {
       name?: string;
       municipality_id?: string;
@@ -66,10 +64,9 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile } = crm;
-    if (!hasMinRole(profile?.role, "manager")) {
-      return forbidden();
-    }
+    
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
 
     const service = createServiceClient();
     const contact_count = await countContactsByToponymId(service, params.id);

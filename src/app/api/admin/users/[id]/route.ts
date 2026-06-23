@@ -1,8 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
+import { requireAdminOnlyPermission } from "@/lib/require-permission-api";
 export const dynamic = 'force-dynamic';
 
 export async function PUT(
@@ -12,8 +12,9 @@ export async function PUT(
   try {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { user, profile } = crm;
-  if (profile?.role !== "admin") return forbidden();
+  const { user } = crm;
+  const denied = await requireAdminOnlyPermission(crm, "users_manage");
+  if (denied) return denied;
   if (params.id === user.id) {
     return NextResponse.json({ error: "Δεν μπορείς να αλλάξεις το δικό σου ρόλο εδώ" }, { status: 400 });
   }
@@ -45,8 +46,9 @@ export async function DELETE(
   try {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
-  const { user, profile } = crm;
-  if (profile?.role !== "admin") return forbidden();
+  const { user } = crm;
+  const denied = await requireAdminOnlyPermission(crm, "users_manage");
+  if (denied) return denied;
   if (params.id === user.id) {
     return NextResponse.json({ error: "Δεν μπορείτε να διαγράψετε τον εαυτό σας" }, { status: 400 });
   }

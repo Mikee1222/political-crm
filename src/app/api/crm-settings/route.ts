@@ -1,8 +1,9 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { hasPermissionFlexible } from "@/lib/permission-check";
+import { requirePermissionFlexible } from "@/lib/require-permission-api";
 import { nextJsonError } from "@/lib/api-resilience";
 import {
   CRM_SETTINGS_KEY_REQUEST_STATUS_COLORS,
@@ -52,10 +53,15 @@ export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
+    const { user, profile, supabase } = crm;
     const request_status_colors = await loadRequestStatusColors(supabase);
 
-    if (!hasMinRole(profile?.role, "manager")) {
+    const canViewSettings = await hasPermissionFlexible(
+      user.id,
+      "settings_view",
+      hasMinRole(profile?.role, "manager"),
+    );
+    if (!canViewSettings) {
       return NextResponse.json({ settings: { request_status_colors } });
     }
 
@@ -130,9 +136,12 @@ async function handleSettingsWrite(request: NextRequest) {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
   const { profile, supabase } = crm;
-  if (!hasMinRole(profile?.role, "manager")) {
-    return forbidden();
-  }
+  const deniedWrite = await requirePermissionFlexible(
+    crm,
+    "settings_edit",
+    hasMinRole(profile?.role, "manager"),
+  );
+  if (deniedWrite) return deniedWrite;
 
   const body = (await request.json()) as {
     telegram_bot_token?: string;

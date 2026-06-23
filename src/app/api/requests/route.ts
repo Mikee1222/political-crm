@@ -1,7 +1,7 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
+import { requirePermissionFlexible } from "@/lib/require-permission-api";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -110,9 +110,12 @@ export async function GET(request: NextRequest) {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
     const { profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) {
-      return forbidden();
-    }
+    const denied = await requirePermissionFlexible(
+      crm,
+      "requests_view",
+      hasMinRole(profile?.role, "manager"),
+    );
+    if (denied) return denied;
 
     const sp = request.nextUrl.searchParams;
     const f = searchParamsToRequestFilters(sp);
@@ -174,9 +177,12 @@ export async function POST(request: NextRequest) {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
     const { user, profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) {
-      return forbidden();
-    }
+    const denied = await requirePermissionFlexible(
+      crm,
+      "requests_create",
+      hasMinRole(profile?.role, "manager"),
+    );
+    if (denied) return denied;
 
     const body = (await request.json()) as Record<string, unknown>;
     const initialNote = String((body as { initial_note?: string }).initial_note ?? "").trim();

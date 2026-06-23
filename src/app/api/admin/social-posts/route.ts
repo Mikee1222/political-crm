@@ -1,7 +1,8 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { isCrmUser, forbidden } from "@/lib/auth-helpers";
+
 import { nextJsonError } from "@/lib/api-resilience";
+import { requireSettingsEdit } from "@/lib/require-permission-api";
 export const dynamic = "force-dynamic";
 
 const PLATFORMS = new Set(["tiktok", "facebook"]);
@@ -20,10 +21,9 @@ export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (!isCrmUser(profile) || profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const { data, error } = await supabase
       .from("social_posts")
       .select("id, platform, url, active, sort_order, created_at")
@@ -44,10 +44,9 @@ export async function POST(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (!isCrmUser(profile) || profile?.role !== "admin") {
-      return forbidden();
-    }
+    const { supabase } = crm;
+    const denied = await requireSettingsEdit(crm);
+    if (denied) return denied;
     const body = (await request.json()) as {
       platform: string;
       url: string;
