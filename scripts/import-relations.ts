@@ -20,6 +20,9 @@ import {
 
 const RELATION_TYPE_OTHER = "other";
 const CONTACT_FETCH_BATCH = 1000;
+const INSERT_BATCH_SIZE = 100;
+const PROGRESS_EVERY_PERSONS = 500;
+const MATCHING_TIMEOUT_MS = 10 * 60 * 1000;
 
 function normHeader(h: string): string {
   return normalizeGreekNameKey(h).replace(/\s+/g, "");
@@ -75,6 +78,13 @@ function resolveExcelPath(arg?: string): string {
 }
 
 type ContactRow = { id: string; first_name: string; last_name: string };
+type NormalizedContact = ContactRow & { normLast: string; normFirst: string };
+
+type RelationInsertRow = {
+  contact_id_1: string;
+  contact_id_2: string;
+  relation_type: string;
+};
 
 function personKey(lastName: string, firstName: string): string {
   return `${normalizeGreekNameKey(lastName)}|${normalizeGreekNameKey(firstName)}`;
@@ -126,37 +136,37 @@ function dedupeRowsByPerson(rows: SheetRow[]): SheetRow[] {
 }
 
 type ContactLookup = {
-  byLastName: Map<string, ContactRow[]>;
-  find: (lastName: string, firstName: string) => ContactRow | null;
+  find: (lastName: string, firstName: string) => NormalizedContact | null;
 };
 
 function buildContactLookup(contacts: ContactRow[]): ContactLookup {
-  const byLastName = new Map<string, ContactRow[]>();
+  const byLastName = new Map<string, NormalizedContact[]>();
   for (const c of contacts) {
-    const k = normalizeGreekNameKey(c.last_name);
-    const list = byLastName.get(k) ?? [];
-    list.push(c);
-    byLastName.set(k, list);
+    const normLast = normalizeGreekNameKey(c.last_name);
+    const normFirst = normalizeGreekNameKey(c.first_name);
+    const entry: NormalizedContact = { ...c, normLast, normFirst };
+    const list = byLastName.get(normLast) ?? [];
+    list.push(entry);
+    byLastName.set(normLast, list);
   }
 
-  function find(lastName: string, firstName: string): ContactRow | null {
+  function find(lastName: string, firstName: string): NormalizedContact | null {
     const nl = normalizeGreekNameKey(lastName);
     const nf = normalizeGreekNameKey(firstName);
     const candidates = byLastName.get(nl) ?? [];
 
-    const exact = candidates.filter((c) => normalizeGreekNameKey(c.first_name) === nf);
-    if (exact.length === 1) return exact[0]!;
-    if (exact.length > 1) return exact[0]!;
+    const exact = candidates.filter((c) => c.normFirst === nf);
+    if (exact.length >= 1) return exact[0]!;
 
     if (nf.length >= 2) {
-      const prefixed = candidates.filter((c) => normalizeGreekNameKey(c.first_name).startsWith(nf));
+      const prefixed = candidates.filter((c) => c.normFirst.startsWith(nf));
       if (prefixed.length >= 1) return prefixed[0]!;
     }
 
     return null;
   }
 
-  return { byLastName, find };
+  return { find };
 }
 
 async function fetchAllContacts(supabase: SupabaseClient): Promise<ContactRow[]> {
@@ -177,37 +187,96 @@ async function fetchAllContacts(supabase: SupabaseClient): Promise<ContactRow[]>
   return all;
 }
 
-async function debugSampleNotFound(
-  supabase: SupabaseClient,
+async function fetchExistingRelationPairs(supabase: SupabaseClient): Promise<Set<string>> {
+  const pairs = new Set<string>();
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("contact_relations")
+      .select("contact_id_1, contact_id_2")
+      .order("contact_id_1", { ascending: true })
+      .range(from, from + CONTACT_FETCH_BATCH - 1);
+    if (error) throw new Error(error.message);
+    const chunk = (data ?? []) as Array<{ contact_id_1: string; contact_id_2: string }>;
+    for (const r of chunk) {
+      pairs.add(`${r.contact_id_1}|${r.contact_id_2}`);
+    }
+    if (chunk.length < CONTACT_FETCH_BATCH) break;
+    from += CONTACT_FETCH_BATCH;
+  }
+  return pairs;
+}
+
+function logFailedMainSamples(
   lookup: ContactLookup,
   samples: Array<{ lastName: string; firstName: string }>,
-): Promise<void> {
-  console.log("\n--- Debug: first failed main-contact lookups ---");
+): void {
+  console.log("\n--- Debug: first failed main-contact lookups (in-memory only) ---");
   for (const s of samples) {
-    const nl = normalizeGreekNameKey(s.lastName);
-    const nf = normalizeGreekNameKey(s.firstName);
     console.log({
       excel_last: s.lastName,
       excel_first: s.firstName,
-      norm_last: nl,
-      norm_first: nf,
+      norm_last: normalizeGreekNameKey(s.lastName),
+      norm_first: normalizeGreekNameKey(s.firstName),
       lookup_hit: lookup.find(s.lastName, s.firstName)?.id ?? null,
     });
-
-    const { data: byLast } = await supabase
-      .from("contacts")
-      .select("id, first_name, last_name")
-      .ilike("last_name", s.lastName)
-      .limit(3);
-    console.log("  DB ilike last_name:", byLast ?? []);
-
-    const { data: byFirst } = await supabase
-      .from("contacts")
-      .select("id, first_name, last_name")
-      .ilike("first_name", `${s.firstName}%`)
-      .limit(3);
-    console.log("  DB ilike first_name prefix:", byFirst ?? []);
   }
+}
+
+function assertMatchingNotTimedOut(startedAt: number, lastProgressAt: number): void {
+  const now = Date.now();
+  if (now - startedAt > MATCHING_TIMEOUT_MS) {
+    throw new Error(
+      `Matching exceeded ${MATCHING_TIMEOUT_MS / 1000}s — aborting. All lookups must use the in-memory map (no per-row Supabase queries).`,
+    );
+  }
+  if (now - lastProgressAt > 60_000) {
+    throw new Error(
+      "No matching progress for 60s — possible hang. Ensure no Supabase queries run inside the person loop.",
+    );
+  }
+}
+
+async function flushRelationInserts(
+  supabase: SupabaseClient,
+  batch: RelationInsertRow[],
+  existingPairs: Set<string>,
+): Promise<{ inserted: number; skippedExisting: number }> {
+  if (!batch.length) return { inserted: 0, skippedExisting: 0 };
+
+  const { error } = await supabase.from("contact_relations").insert(batch);
+  if (!error) {
+    for (const row of batch) {
+      existingPairs.add(`${row.contact_id_1}|${row.contact_id_2}`);
+    }
+    return { inserted: batch.length, skippedExisting: 0 };
+  }
+
+  if (error.code === "23505") {
+    let inserted = 0;
+    let skippedExisting = 0;
+    for (const row of batch) {
+      const pairKey = `${row.contact_id_1}|${row.contact_id_2}`;
+      if (existingPairs.has(pairKey)) {
+        skippedExisting += 1;
+        continue;
+      }
+      const { error: oneErr } = await supabase.from("contact_relations").insert(row);
+      if (oneErr) {
+        if (oneErr.code === "23505") {
+          skippedExisting += 1;
+          existingPairs.add(pairKey);
+          continue;
+        }
+        throw new Error(`Insert failed: ${oneErr.message}`);
+      }
+      existingPairs.add(pairKey);
+      inserted += 1;
+    }
+    return { inserted, skippedExisting };
+  }
+
+  throw new Error(`Batch insert failed: ${error.message}`);
 }
 
 async function main(): Promise<void> {
@@ -231,7 +300,16 @@ async function main(): Promise<void> {
   if (!sheetName) throw new Error("Workbook has no sheets");
   const rawRows = XLSX.utils.sheet_to_json<SheetRow>(wb.Sheets[sheetName]!, { defval: "" });
   const uniqueRows = dedupeRowsByPerson(rawRows);
-  console.log(`Sheet "${sheetName}": ${rawRows.length} rows → ${uniqueRows.length} unique persons`);
+  const rowsToProcess = uniqueRows.filter((row) => {
+    const lastName = cell(row, "Επώνυμο", "επωνυμο", "last_name");
+    const firstName = cell(row, "Όνομα", "ονομα", "first_name");
+    const relationsRaw = cell(row, "Συσχετίσεις", "συσχετίσεις", "συσχετισεις");
+    return Boolean(lastName && firstName && !isTrivialRelationsCell(relationsRaw));
+  });
+  const skippedTrivial = uniqueRows.length - rowsToProcess.length;
+  console.log(
+    `Sheet "${sheetName}": ${rawRows.length} rows → ${uniqueRows.length} unique persons → ${rowsToProcess.length} with relations`,
+  );
 
   const supabase = createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -242,17 +320,9 @@ async function main(): Promise<void> {
   console.log(`Loaded ${contacts.length} contacts`);
   const lookup = buildContactLookup(contacts);
 
-  const { data: existingRels, error: relErr } = await supabase
-    .from("contact_relations")
-    .select("contact_id_1, contact_id_2");
-  if (relErr) throw new Error(relErr.message);
-
-  const existingPairs = new Set(
-    (existingRels ?? []).map(
-      (r) =>
-        `${(r as { contact_id_1: string; contact_id_2: string }).contact_id_1}|${(r as { contact_id_1: string; contact_id_2: string }).contact_id_2}`,
-    ),
-  );
+  console.log("Fetching existing relation pairs…");
+  const existingPairs = await fetchExistingRelationPairs(supabase);
+  console.log(`Loaded ${existingPairs.size} existing relation pairs`);
 
   let processedPersons = 0;
   let matchedMainContacts = 0;
@@ -262,23 +332,30 @@ async function main(): Promise<void> {
   let skippedExisting = 0;
   let skippedSelf = 0;
   let skippedBadName = 0;
-  let skippedTrivial = 0;
 
   const failedMainSamples: Array<{ lastName: string; firstName: string }> = [];
   const successSamples: string[] = [];
+  const pendingInserts: RelationInsertRow[] = [];
 
-  for (const row of uniqueRows) {
+  const matchingStartedAt = Date.now();
+  let lastProgressAt = matchingStartedAt;
+  console.log(`Matching ${rowsToProcess.length} persons in-memory (no per-row DB queries)…`);
+
+  for (const row of rowsToProcess) {
+    assertMatchingNotTimedOut(matchingStartedAt, lastProgressAt);
+
     const lastName = cell(row, "Επώνυμο", "επωνυμο", "last_name");
     const firstName = cell(row, "Όνομα", "ονομα", "first_name");
     const relationsRaw = cell(row, "Συσχετίσεις", "συσχετίσεις", "συσχετισεις");
 
-    if (!lastName || !firstName) continue;
-    if (isTrivialRelationsCell(relationsRaw)) {
-      skippedTrivial += 1;
-      continue;
+    processedPersons += 1;
+    if (processedPersons % PROGRESS_EVERY_PERSONS === 0) {
+      lastProgressAt = Date.now();
+      console.log(
+        `  … ${processedPersons}/${rowsToProcess.length} persons | matched ${matchedMainContacts} | pending inserts ${pendingInserts.length}${dryRun ? ` | would insert ${wouldInsertRelations}` : ` | inserted ${insertedRelations}`}`,
+      );
     }
 
-    processedPersons += 1;
     const main = lookup.find(lastName, firstName);
     if (!main) {
       skippedNotFound += 1;
@@ -329,28 +406,32 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const { error: insErr } = await supabase.from("contact_relations").insert({
+      pendingInserts.push({
         contact_id_1,
         contact_id_2,
         relation_type: RELATION_TYPE_OTHER,
       });
 
-      if (insErr) {
-        if (insErr.code === "23505") {
-          skippedExisting += 1;
-          existingPairs.add(pairKey);
-          continue;
-        }
-        throw new Error(`Insert failed: ${insErr.message}`);
+      if (pendingInserts.length >= INSERT_BATCH_SIZE) {
+        const batch = pendingInserts.splice(0, INSERT_BATCH_SIZE);
+        const result = await flushRelationInserts(supabase, batch, existingPairs);
+        insertedRelations += result.inserted;
+        skippedExisting += result.skippedExisting;
+        lastProgressAt = Date.now();
+        console.log(`  … flushed ${result.inserted} relations (${insertedRelations} total inserted)`);
       }
-
-      existingPairs.add(pairKey);
-      insertedRelations += 1;
     }
   }
 
+  if (!dryRun && pendingInserts.length > 0) {
+    const result = await flushRelationInserts(supabase, pendingInserts.splice(0), existingPairs);
+    insertedRelations += result.inserted;
+    skippedExisting += result.skippedExisting;
+    console.log(`  … flushed final ${result.inserted} relations`);
+  }
+
   if (failedMainSamples.length) {
-    await debugSampleNotFound(supabase, lookup, failedMainSamples);
+    logFailedMainSamples(lookup, failedMainSamples);
   }
 
   if (successSamples.length) {
