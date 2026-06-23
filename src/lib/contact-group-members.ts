@@ -231,6 +231,35 @@ export async function searchContactsInGroups(
   return allRows;
 }
 
+export type SearchContactsByGroupsPaginatedRow = SearchContactsInGroupsRow & { total: number };
+
+/** One page of contacts in groups via get_contacts_by_groups_paginated RPC. */
+export async function searchContactsByGroupsPaginated(
+  supabase: SupabaseClient,
+  opts: {
+    groupIds: string[];
+    matchMode?: "or" | "and";
+    offset: number;
+    limit: number;
+  },
+): Promise<{ contacts: SearchContactsInGroupsRow[]; total: number }> {
+  const { groupIds, matchMode = "or", offset, limit } = opts;
+  if (!groupIds.length) return { contacts: [], total: 0 };
+
+  const { data, error } = await supabase.rpc("get_contacts_by_groups_paginated", {
+    p_group_ids: groupIds,
+    p_match_mode: matchMode,
+    p_offset: offset,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  const rows = (data ?? []) as SearchContactsByGroupsPaginatedRow[];
+  const total = rows.length > 0 ? Number(rows[0]!.total) : 0;
+  const contacts = rows.map(({ total: _total, ...contact }) => contact);
+  return { contacts, total };
+}
+
 /** Resolve include/exclude group filters via get_contacts_in_groups RPC. */
 async function resolveGroupFilterResolution(
   supabase: SupabaseClient,

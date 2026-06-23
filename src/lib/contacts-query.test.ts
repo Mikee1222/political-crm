@@ -4,17 +4,23 @@ import { getDefaultContactFilters } from "@/lib/contacts-filters";
 import {
   applyColumnContactFiltersToBuilder,
   canUseGroupNameSearchFastPath,
+  canUseGroupOnlyFastPath,
   canUseNameOnlyFuzzySearchPath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
   filterContactRowsByListFilters,
   groupRequiresInMemoryPipeline,
   hasNameColumnFilters,
+  isGroupOnlyFilter,
   isNameOnlyFilter,
   nameRequiresInMemoryPipeline,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
-import { fetchContactsByIncludeIdBatches, searchContactsInGroups } from "@/lib/contact-group-members";
+import {
+  fetchContactsByIncludeIdBatches,
+  searchContactsByGroupsPaginated,
+  searchContactsInGroups,
+} from "@/lib/contact-group-members";
 import { contactFieldMatchesFuzzyName } from "@/lib/greek-fuzzy-name";
 
 describe("contactFieldMatchesFuzzyName", () => {
@@ -150,11 +156,18 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
     expect(canUseNameOnlyFuzzySearchPath({ ...base, first_name: "ΜΑΡΙΑ" })).toBe(true);
   });
 
-  it("group only → in-memory pipeline", () => {
+  it("group only → paginated RPC fast path (not in-memory pipeline)", () => {
     expect(needsInMemoryContactListPipeline({ ...base, group_ids: ["g1"] }, smallGroupIds)).toBe(
-      true,
+      false,
     );
-    expect(groupRequiresInMemoryPipeline({ ...base, group_ids: ["g1"] })).toBe(true);
+    expect(groupRequiresInMemoryPipeline({ ...base, group_ids: ["g1"] })).toBe(false);
+    expect(isGroupOnlyFilter({ ...base, group_ids: ["g1"] })).toBe(true);
+    expect(canUseGroupOnlyFastPath({ ...base, group_ids: ["g1"] })).toBe(true);
+    expect(canUseGroupOnlyFastPath({ ...base, group_ids: ["g1"] }, smallGroupIds)).toBe(true);
+    expect(canUseGroupOnlyFastPath({ ...base, group_ids: ["g1"] }, null)).toBe(false);
+    expect(
+      isGroupOnlyFilter({ ...base, group_ids: ["g1"], gender: "Άντρας" }),
+    ).toBe(false);
   });
 
   it("name + group → fast path RPC (not in-memory)", () => {

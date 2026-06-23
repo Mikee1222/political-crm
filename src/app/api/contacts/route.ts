@@ -15,6 +15,7 @@ import {
   applyColumnContactFiltersToBuilder,
   applyContactListFiltersToBuilder,
   canUseGroupNameSearchFastPath,
+  canUseGroupOnlyFastPath,
   canUseNameOnlyFuzzySearchPath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
@@ -33,6 +34,7 @@ import {
   normalizeGroupIdsInput,
   resolveContactListFilterIds,
   resolveGroupIdsToUuids,
+  searchContactsByGroupsPaginated,
   searchContactsInGroups,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
@@ -280,6 +282,31 @@ export async function GET(request: NextRequest) {
         fatherName: f.father_name || null,
       });
       return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
+    }
+
+    if (canUseGroupOnlyFastPath(f)) {
+      const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+      const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+      if (rawInclude.length && !groupIds.length) {
+        return emptyContactsResponse(comboboxMode, page, pageSize);
+      }
+      const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
+      const rpcLimit = comboboxMode ? listLimit! : pageSize;
+      const rpcOffset = comboboxMode ? 0 : (page - 1) * pageSize;
+      const { contacts, total } = await searchContactsByGroupsPaginated(supabase, {
+        groupIds,
+        matchMode,
+        offset: rpcOffset,
+        limit: rpcLimit,
+      });
+      const enriched = await enrichContactsWithGroupCount(
+        supabase,
+        contacts as Record<string, unknown>[],
+      );
+      if (comboboxMode) {
+        return NextResponse.json({ contacts: enriched });
+      }
+      return NextResponse.json({ contacts: enriched, total, page, pageSize });
     }
 
     const filterResolution = await resolveContactListFilterIds(supabase, f);

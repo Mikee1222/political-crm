@@ -357,3 +357,41 @@ describe("searchContactsInGroups", () => {
     expect(rows).toHaveLength(1001);
   });
 });
+
+describe("searchContactsByGroupsPaginated", () => {
+  const groupA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+  it("calls get_contacts_by_groups_paginated RPC with offset/limit and reads total", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          first_name: "Μαρία",
+          last_name: "Παπ",
+          created_at: "2026-01-01",
+          total: 23936,
+        },
+      ],
+      error: null,
+    });
+    const supabase = { rpc };
+
+    const { searchContactsByGroupsPaginated } = await import("./contact-group-members");
+    const result = await searchContactsByGroupsPaginated(supabase as never, {
+      groupIds: [groupA],
+      matchMode: "or",
+      offset: 50,
+      limit: 50,
+    });
+
+    expect(rpc).toHaveBeenCalledWith("get_contacts_by_groups_paginated", {
+      p_group_ids: [groupA],
+      p_match_mode: "or",
+      p_offset: 50,
+      p_limit: 50,
+    });
+    expect(result.total).toBe(23936);
+    expect(result.contacts).toHaveLength(1);
+    expect(result.contacts[0]).not.toHaveProperty("total");
+  });
+});

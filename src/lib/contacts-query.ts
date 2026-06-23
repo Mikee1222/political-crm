@@ -392,10 +392,33 @@ export function nameRequiresInMemoryPipeline(f: ContactListFilters): boolean {
   return true;
 }
 
-/** Group without name fast path: group-only, group+gender, group+municipality, … */
+/** Only group include filter — no name, column, exclude-group, or source filters. */
+export function isGroupOnlyFilter(f: ContactListFilters): boolean {
+  if (!hasGroupIncludeFilter(f)) return false;
+  if (f.search?.trim()) return false;
+  if (hasNameColumnFilters(f)) return false;
+  if (hasColumnListFilters(f)) return false;
+  if (f.exclude_group_ids.length) return false;
+  if (f.source_ids.length) return false;
+  if (f.exclude_source_ids.length) return false;
+  return true;
+}
+
+/** Group-only: get_contacts_by_groups_paginated RPC instead of batch id fetch. */
+export function canUseGroupOnlyFastPath(
+  f: ContactListFilters,
+  resolvedIds?: string[] | null,
+): boolean {
+  if (!isGroupOnlyFilter(f)) return false;
+  if (resolvedIds !== undefined && resolvedIds === null) return false;
+  return true;
+}
+
+/** Group without name fast path: group+gender, group+municipality, … */
 export function groupRequiresInMemoryPipeline(f: ContactListFilters): boolean {
   if (!hasGroupIncludeFilter(f)) return false;
   if (canUseGroupNameSearchFastPath(f)) return false;
+  if (isGroupOnlyFilter(f)) return false;
   return true;
 }
 
@@ -466,6 +489,7 @@ export function needsInMemoryContactListPipeline(
   resolvedIds: string[] | null,
 ): boolean {
   if (canUseGroupNameSearchFastPath(f)) return false;
+  if (canUseGroupOnlyFastPath(f, resolvedIds)) return false;
   if (canUseNameOnlyFuzzySearchPath(f)) return false;
   if (f.search?.trim()) return true;
   if (nameRequiresInMemoryPipeline(f)) return true;
