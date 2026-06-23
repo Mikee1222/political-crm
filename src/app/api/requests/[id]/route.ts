@@ -1,6 +1,5 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { requirePermissionFlexible } from "@/lib/require-permission-api";
 import { logActivity } from "@/lib/activity-log";
