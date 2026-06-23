@@ -6,6 +6,13 @@ import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { nextPaddedCode } from "@/lib/codes";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
+import {
+  buildImportDedupIndex,
+  findDuplicateForRow,
+  type DuplicateMatch,
+  type ImportContactRow,
+} from "@/lib/import-dedup";
+import { resolveDuplicateMode } from "@/lib/chunked-contact-import";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +38,11 @@ const rowSchema = z.object({
 });
 
 const bodySchema = z.object({
-  contacts: z.array(rowSchema).min(1).max(2000),
+  contacts: z.array(rowSchema).min(1).max(200),
+  dry_run: z.boolean().optional(),
+  duplicate_mode: z.enum(["skip", "update"]).optional(),
+  skip_duplicates: z.boolean().optional(),
+  update_existing: z.boolean().optional(),
 });
 
 type InsertRow = {
@@ -55,6 +66,25 @@ type InsertRow = {
   group_id: string | null;
 };
 
+const UPDATE_FIELDS = [
+  "first_name",
+  "last_name",
+  "father_name",
+  "mother_name",
+  "phone2",
+  "landline",
+  "email",
+  "area",
+  "municipality",
+  "electoral_district",
+  "toponym",
+  "political_stance",
+  "notes",
+  "call_status",
+  "priority",
+  "tags",
+] as const;
+
 export const maxDuration = 120;
 
 async function resolveGroupId(
@@ -68,6 +98,17 @@ async function resolveGroupId(
   if (exact) return String((exact as { id: string }).id);
   const first = (data ?? [])[0] as { id: string } | undefined;
   return first?.id ?? null;
+}
+
+function toImportContactRow(r: z.infer<typeof rowSchema>): ImportContactRow {
+  return {
+    first_name: r.first_name.trim(),
+    last_name: r.last_name.trim(),
+    phone: r.phone.trim(),
+    phone2: r.phone2,
+    landline: r.landline,
+    father_name: r.father_name,
+  };
 }
 
 export async function POST(request: Request) {
@@ -84,12 +125,66 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "Άκυρα δεδομένα" }, { status: 400 });
     }
-    const { contacts: rows } = parsed.data;
+    const { contacts: rows, dry_run } = parsed.data;
+    const dupMode = resolveDuplicateMode(parsed.data);
+
+    const index = await buildImportDedupIndex(
+      supabase,
+      rows.map(toImportContactRow),
+    );
+
+    const duplicates: DuplicateMatch[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const dup = findDuplicateForRow(toImportContactRow(rows[i]!), i + 1, index);
+      if (dup) duplicates.push(dup);
+    }
+
+    if (dry_run) {
+      return NextResponse.json({
+        duplicates,
+        would_insert: rows.length - duplicates.length,
+        would_update: dupMode === "update" ? duplicates.length : 0,
+        would_skip: dupMode === "skip" ? duplicates.length : 0,
+        processed: rows.length,
+      });
+    }
 
     let inserted = 0;
+    let updated = 0;
+    let skipped_duplicates = 0;
     let errorCount = 0;
     const lastErrors: { phone: string; message: string }[] = [];
-    for (const r of rows) {
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]!;
+      const dup = findDuplicateForRow(toImportContactRow(r), i + 1, index);
+
+      if (dup) {
+        if (dupMode === "skip") {
+          skipped_duplicates += 1;
+          continue;
+        }
+        const patch: Record<string, unknown> = {};
+        for (const k of UPDATE_FIELDS) {
+          const v = r[k as keyof typeof r];
+          if (v !== undefined && v !== null && v !== "") {
+            patch[k] = v;
+          }
+        }
+        const group_id = await resolveGroupId(supabase, r.group);
+        if (group_id) patch.group_id = group_id;
+        const { error } = await supabase.from("contacts").update(patch).eq("id", dup.contact_id);
+        if (error) {
+          errorCount += 1;
+          if (lastErrors.length < 12) {
+            lastErrors.push({ phone: r.phone, message: error.message });
+          }
+        } else {
+          updated += 1;
+        }
+        continue;
+      }
+
       const code = await nextPaddedCode(supabase, "contacts", "contact_code", "EP");
       const autoNd = nameDayDateStringFromFirstName(r.first_name);
       const group_id = await resolveGroupId(supabase, r.group);
@@ -125,10 +220,14 @@ export async function POST(request: Request) {
         inserted += 1;
       }
     }
+
     return NextResponse.json({
       inserted,
+      updated,
+      skipped_duplicates,
       errors: errorCount,
       errorDetails: lastErrors,
+      duplicates: duplicates.slice(0, 20),
       processed: rows.length,
     });
   } catch (e) {

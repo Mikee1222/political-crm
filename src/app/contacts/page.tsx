@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  Upload,
   User,
   Users,
   X,
@@ -776,6 +777,7 @@ function ContactsPage() {
   const { profile } = useProfile();
   const pageCtx = useOptionalAlexandraPageContact();
   const canCreate = can(profile, "contacts_create");
+  const canImportContacts = can(profile, "contacts_import");
   const canBulk = can(profile, "contacts_bulk");
   const canExport = can(profile, "contacts_export");
   const canDelete = can(profile, "contacts_delete");
@@ -1168,6 +1170,15 @@ function ContactsPage() {
                 <Maximize2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Εστίαση</span>
               </button>
+            )}
+            {canImportContacts && (
+              <Link
+                href="/contacts/import"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm transition-colors hover:bg-muted sm:w-auto"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Εισαγωγή</span>
+              </Link>
             )}
             {canCreate && (
               <button

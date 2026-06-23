@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { splitFullName as splitGreekFullName } from "@/lib/spreadsheet-import";
 
 export const CRM_FIELD_IDS = [
   "first_name",
@@ -198,12 +199,13 @@ function parseTags(s: string): string[] | null {
   return parts.length ? parts : null;
 }
 
+/** Greek order: last token = first_name, preceding tokens = last_name. */
 function splitFullName(s: string): { first: string; last: string } {
-  const t = s.trim();
-  if (!t) return { first: "—", last: "—" };
-  const parts = t.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return { first: parts[0] ?? "—", last: "—" };
-  return { first: parts[0] ?? "—", last: parts.slice(1).join(" ") || "—" };
+  const { first_name, last_name } = splitGreekFullName(s);
+  return {
+    first: first_name || "—",
+    last: last_name || "—",
+  };
 }
 
 export function mapRowsToContacts(
