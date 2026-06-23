@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { parseLevel1RelationNames, splitRelatedPersonName } from "./import-relations-parse";
+import {
+  isTrivialRelationsCell,
+  parseLevel1RelationNames,
+  splitRelatedPersonName,
+} from "./import-relations-parse";
+
+describe("isTrivialRelationsCell", () => {
+  it("treats bare 1ο επίπεδο as trivial", () => {
+    expect(isTrivialRelationsCell("1ο επίπεδο")).toBe(true);
+    expect(isTrivialRelationsCell("  1ο επίπεδο  ")).toBe(true);
+  });
+
+  it("does not treat cells with names as trivial", () => {
+    expect(isTrivialRelationsCell("1ο επίπεδοKONSTANTINOS GOULAS,  - 2ο επίπεδο")).toBe(false);
+  });
+});
 
 describe("parseLevel1RelationNames", () => {
-  it("extracts comma-separated names from 1ο επίπεδο bracket", () => {
+  it("extracts names from bracket format", () => {
     const raw =
       "1ο επίπεδο[ΓΙΩΡΓΟΣ ΠΑΠΑΔΟΠΟΥΛΟΣ, ΜΑΡΙΑ ΚΩΝΣΤΑΝΤΙΝΟΥ] - 2ο επίπεδο[ΝΙΚΟΣ ΑΘΑΝΑΣΙΟΥ]";
     expect(parseLevel1RelationNames(raw)).toEqual([
@@ -11,7 +26,22 @@ describe("parseLevel1RelationNames", () => {
     ]);
   });
 
-  it("returns empty for missing bracket", () => {
+  it("extracts names from unbracketed export format", () => {
+    expect(
+      parseLevel1RelationNames("1ο επίπεδοKONSTANTINOS GOULAS,  - 2ο επίπεδο"),
+    ).toEqual(["KONSTANTINOS GOULAS"]);
+  });
+
+  it("extracts multiple comma-separated names", () => {
+    expect(
+      parseLevel1RelationNames(
+        "1ο επίπεδοΣΤΥΛΙΑΝΟΣ ΓΡΕΝΤΖΕΛΟΣ, ΔΗΜΗΤΡΗΣ ΓΡΕΝΤΖΕΛΟΣ,  - 2ο επίπεδο",
+      ),
+    ).toEqual(["ΣΤΥΛΙΑΝΟΣ ΓΡΕΝΤΖΕΛΟΣ", "ΔΗΜΗΤΡΗΣ ΓΡΕΝΤΖΕΛΟΣ"]);
+  });
+
+  it("returns empty for bare 1ο επίπεδο", () => {
+    expect(parseLevel1RelationNames("1ο επίπεδο")).toEqual([]);
     expect(parseLevel1RelationNames("χωρίς σχέσεις")).toEqual([]);
   });
 });
