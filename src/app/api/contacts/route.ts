@@ -96,7 +96,6 @@ export async function GET(request: NextRequest) {
 
     const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
     const partialLocation = request.nextUrl.searchParams.get("partial_location") === "1";
-    console.log("contacts query filters:", JSON.stringify(f));
     const groupResolution = await resolveContactListFilterIds(supabase, f);
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;

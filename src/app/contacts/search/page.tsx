@@ -151,7 +151,6 @@ function ContactSearchPageInner() {
     try {
       const params = contactFiltersToSearchParams({ ...f, page: String(pageNum) });
       params.set("page_size", String(PAGE_SIZE));
-      console.log("Search params:", params);
       const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
       const data = (await res.json().catch(() => ({}))) as {
         contacts?: ContactSearchResult[];

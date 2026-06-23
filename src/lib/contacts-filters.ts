@@ -62,15 +62,21 @@ function uniq(ids: string[]): string[] {
   return [...new Set(ids)];
 }
 
-/** Comma-separated query param; optional legacy single-value key. */
+/** Comma-separated or repeated query param (`key` / `key[]`); optional legacy single-value key. */
 function parseCsvParam(
   sp: URLSearchParams,
   key: string,
   prev: string[] | undefined,
   legacyKey?: string,
 ): string[] {
-  const a = sp.get(key);
-  if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
+  const collected: string[] = [];
+  for (const paramKey of [key, `${key}[]`]) {
+    for (const raw of sp.getAll(paramKey)) {
+      if (!raw?.trim()) continue;
+      collected.push(...raw.split(",").map((x) => x.trim()).filter(Boolean));
+    }
+  }
+  if (collected.length) return uniq(collected);
   if (legacyKey) {
     const leg = sp.get(legacyKey)?.trim();
     if (leg) return [leg];
@@ -108,16 +114,8 @@ export function searchParamsToFilters(sp: URLSearchParams, prev?: Partial<Contac
     landline_presence: presence("landline_presence"),
     email_presence: presence("email_presence"),
     group_id: sp.get("group_id") ?? prev?.group_id ?? "",
-    group_ids: (() => {
-      const a = sp.get("group_ids");
-      if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
-      return prev?.group_ids ?? [];
-    })(),
-    exclude_group_ids: (() => {
-      const a = sp.get("exclude_group_ids");
-      if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
-      return prev?.exclude_group_ids ?? [];
-    })(),
+    group_ids: parseCsvParam(sp, "group_ids", prev?.group_ids),
+    exclude_group_ids: parseCsvParam(sp, "exclude_group_ids", prev?.exclude_group_ids),
     group_match: sp.get("group_match") === "and" ? "and" : (prev?.group_match ?? "or"),
     source_ids: (() => {
       const a = sp.get("source_ids");

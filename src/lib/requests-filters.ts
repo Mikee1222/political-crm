@@ -28,8 +28,14 @@ function uniq(ids: string[]): string[] {
 }
 
 function parseCsvParam(sp: URLSearchParams, key: string, prev?: string[]): string[] {
-  const a = sp.get(key);
-  if (a) return uniq(a.split(",").map((x) => x.trim()).filter(Boolean));
+  const collected: string[] = [];
+  for (const paramKey of [key, `${key}[]`]) {
+    for (const raw of sp.getAll(paramKey)) {
+      if (!raw?.trim()) continue;
+      collected.push(...raw.split(",").map((x) => x.trim()).filter(Boolean));
+    }
+  }
+  if (collected.length) return uniq(collected);
   return prev ?? [];
 }
 

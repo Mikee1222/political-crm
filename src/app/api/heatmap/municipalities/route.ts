@@ -76,7 +76,7 @@ async function loadHeatmapContactRows(supabase: SupabaseClient, searchParams: UR
       query = query.in("id", groupResolution.includeContactIds);
     }
     if (groupResolution.excludeContactIds.length) {
-      query = query.not("id", "in", `(${groupResolution.excludeContactIds.join(",")})`);
+      query = query.notIn("id", groupResolution.excludeContactIds);
     }
   }
 

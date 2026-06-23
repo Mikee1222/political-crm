@@ -203,7 +203,7 @@ export function applyRequestListFiltersToBuilder(
     query = query.in("category", resolution.categoryNames);
   }
   if (resolution.excludeCategoryNames.length) {
-    query = query.not("category", "in", `(${resolution.excludeCategoryNames.join(",")})`);
+    query = query.notIn("category", resolution.excludeCategoryNames);
   }
 
   const dateFrom = f.created_from.trim()
