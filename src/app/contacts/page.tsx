@@ -1757,7 +1757,6 @@ function CreateContactModal({
     if (!form.first_name.trim()) err.first_name = "Υποχρεωτικό";
     if (!form.last_name.trim()) err.last_name = "Υποχρεωτικό";
     if (!form.phone.trim()) err.phone = "Υποχρεωτικό";
-    if (!form.municipality.trim()) err.municipality = "Υποχρεωτικό";
     if (Object.keys(err).length) {
       setFieldErrors(err);
       showToast("Συμπληρώστε τα υποχρεωτικά πεδία.", "error");
@@ -1803,7 +1802,7 @@ function CreateContactModal({
     ? conflict.phoneMatch?.id ?? conflict.nameMatch?.id
     : null;
 
-  const onBlurRequired = (field: "first_name" | "last_name" | "phone" | "municipality") => () => {
+  const onBlurRequired = (field: "first_name" | "last_name" | "phone") => () => {
     const v = String(form[field]).trim();
     setFieldErrors((p) => {
       const next = { ...p };
@@ -1886,21 +1885,13 @@ function CreateContactModal({
               placeholder="π.χ. 2101234567"
               onChange={(v) => setForm({ ...form, landline: v })}
             />
-            <div
-              className="md:col-span-2"
-              onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                  onBlurRequired("municipality")();
-                }
-              }}
-            >
+            <div className="md:col-span-2">
               <AitoloakarnaniaLocationFields
                 values={{
                   municipality: form.municipality,
                   electoral_district: form.electoral_district,
                   toponym: form.toponym,
                 }}
-                errorMunicipality={fieldErrors.municipality}
                 onChange={(v) =>
                   setForm((f) => ({
                     ...f,

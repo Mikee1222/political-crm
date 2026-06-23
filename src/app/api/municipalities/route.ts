@@ -44,16 +44,17 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("get_distinct_municipalities");
+  const { data, error } = await supabase.rpc("get_contact_municipality_counts");
 
   if (error) {
     return NextResponse.json([]);
   }
 
-  const municipalities = (data as { municipality: string }[])
-    .map((r) => r.municipality)
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, "el"));
+  const municipalities = (
+    (data as { name?: string }[] | null) ?? []
+  )
+    .map((r) => String(r.name ?? "").trim())
+    .filter(Boolean);
 
   return NextResponse.json(municipalities);
 }

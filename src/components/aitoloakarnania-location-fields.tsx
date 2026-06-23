@@ -240,7 +240,6 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
       <SearchableSelect
         id="ait-muni"
         label="Δήμος"
-        required
         value={muni}
         onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: null })}
         options={muniList}
@@ -248,9 +247,6 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
         placeholder="Επιλέξτε δήμο"
         emptyMessage="Δοκιμάστε άλλο κείμενο αναζήτησης"
       />
-      {muni && !muniData && (
-        <p className="text-xs text-amber-200/90">Η αποθηκευμένη τιμή δημου· επιλέξτε τυπικό δήμο από τη λίστα.</p>
-      )}
 
       <SearchableSelect
         id="ait-dist"
@@ -440,7 +436,6 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
       <SearchableSelect
         id="ait-muni-api"
         label="Δήμος"
-        required
         value={muni}
         onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: null })}
         options={muniList}
@@ -448,9 +443,6 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
         placeholder="Επιλέξτε δήμο"
         emptyMessage="Προσθέστε δεδομένα στις ρυθμίσεις ή αλλάξτε αναζήτηση"
       />
-      {muni && !muniInDb && (
-        <p className="text-xs text-amber-200/90">Η τιμή δήμου δεν ταιριάζει στη βάση· επιλέξτε από τη λίστα (Ρυθμίσεις → Γεωγραφικά δεδομένα).</p>
-      )}
 
       {showDistFree ? (
         <div>
