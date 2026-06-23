@@ -7,7 +7,14 @@ import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { useProfile } from "@/contexts/profile-context";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import type { AlexandraPageContext } from "@/contexts/alexandra-page-context";
-import { mapDbToMsg, type Msg, type MsgWithT, type RowConv, type StreamMeta } from "./alexandra-chat-helpers";
+import {
+  mapDbToMsg,
+  type Msg,
+  type MsgWithT,
+  type RowConv,
+  type SpreadsheetAttachmentMeta,
+  type StreamMeta,
+} from "./alexandra-chat-helpers";
 import { clientUploadSpreadsheetStash } from "@/lib/alexandra-spreadsheet-upload";
 import { spreadsheetNeedsChunkedUpload } from "@/lib/alexandra-spreadsheet-stash";
 import { IMPORT_CHUNK_SIZE } from "@/lib/chunked-contact-import";
@@ -354,7 +361,24 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
 
       const optimisticId = `local-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())}`;
       const sentAt = new Date().toISOString();
-      setMessages((m) => [...m, { id: optimisticId, role: "user" as const, content: text, _createdAt: sentAt }]);
+      const stashForOptimistic = importStashRef.current;
+      let spreadsheetAttachment: SpreadsheetAttachmentMeta | undefined;
+      if (stashForOptimistic && stashForOptimistic.conversationId === convId) {
+        spreadsheetAttachment = {
+          fileName: stashForOptimistic.fileName?.trim() || "αρχείο.xlsx",
+          rowCount: stashForOptimistic.rows.length,
+        };
+      }
+      setMessages((m) => [
+        ...m,
+        {
+          id: optimisticId,
+          role: "user" as const,
+          content: text,
+          _createdAt: sentAt,
+          ...(spreadsheetAttachment ? { spreadsheetAttachment } : {}),
+        },
+      ]);
 
       sendInFlight.current = true;
       setStreamMode("typing");

@@ -68,6 +68,15 @@ export type StreamMeta = {
   bulkProgress?: { current: number; total: number };
 };
 
+export type SpreadsheetAttachmentMeta = {
+  fileName: string;
+  rowCount: number;
+};
+
+export type StoredUserAction = {
+  spreadsheetAttachment?: SpreadsheetAttachmentMeta;
+} | null;
+
 export type Msg = {
   id: string;
   role: "user" | "assistant";
@@ -81,6 +90,7 @@ export type Msg = {
   toolsExecutedFromDb?: string[] | null;
   isStreaming?: boolean;
   streamMeta?: StreamMeta | null;
+  spreadsheetAttachment?: SpreadsheetAttachmentMeta | null;
 };
 
 export type RowConv = {
@@ -207,10 +217,12 @@ export function mapDbToMsg(row: {
   created_at: string;
 }): Msg & { _createdAt: string } {
   if (row.role === "user") {
+    const userAction = row.action as StoredUserAction;
     return {
       id: row.id,
       role: "user" as const,
       content: row.content,
+      spreadsheetAttachment: userAction?.spreadsheetAttachment ?? null,
       _createdAt: row.created_at,
     };
   }

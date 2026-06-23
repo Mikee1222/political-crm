@@ -7,6 +7,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
   Menu,
   Mic,
   Paperclip,
@@ -39,6 +40,7 @@ import {
   type FindRow,
   type Msg,
   type RowConv,
+  type SpreadsheetAttachmentMeta,
 } from "./alexandra-chat-helpers";
 import { useAlexandraSpeechToText } from "@/hooks/use-alexandra-speech-to-text";
 import { useAlexandraChat, type BriefingToday } from "./alexandra-chat-provider";
@@ -50,6 +52,19 @@ import { formatTodayLabelAthens } from "@/lib/date-format";
 
 function isBriefingReady(b: BriefingToday | "loading" | null): b is BriefingToday {
   return b != null && b !== "loading";
+}
+
+function SpreadsheetAttachmentChip({ attachment }: { attachment: SpreadsheetAttachmentMeta }) {
+  return (
+    <div
+      className="mb-2 inline-flex max-w-full items-center gap-2 rounded-full border border-[var(--accent-gold)]/55 bg-white/10 px-2.5 py-1 text-left"
+      title={attachment.fileName}
+    >
+      <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-[var(--accent-gold)]" aria-hidden />
+      <span className="min-w-0 truncate text-[11px] font-medium text-white/95">{attachment.fileName}</span>
+      <span className="shrink-0 text-[10px] text-white/75">{attachment.rowCount} γραμμές</span>
+    </div>
+  );
 }
 
 function BriefingDetails({ b }: { b: BriefingToday }) {
@@ -750,7 +765,12 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                       }
                     >
                       {m.role === "user" ? (
-                        <p className="whitespace-pre-wrap text-white">{m.content}</p>
+                        <>
+                          {m.spreadsheetAttachment && (
+                            <SpreadsheetAttachmentChip attachment={m.spreadsheetAttachment} />
+                          )}
+                          <p className="whitespace-pre-wrap text-white">{m.content}</p>
+                        </>
                       ) : (
                         <>
                           <div className="ai-md max-w-none">

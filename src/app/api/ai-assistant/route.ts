@@ -374,11 +374,28 @@ export async function POST(request: NextRequest) {
 
         const reply = fullTextParts.join("").trim() || "—";
 
+        const attachmentRowCount =
+          rawAttachment?.type === "spreadsheet_import"
+            ? (rawAttachment.totalRows ??
+              rawAttachment.rows.length ??
+              importRowsForTool?.length ??
+              0)
+            : 0;
+        const userAction =
+          rawAttachment?.type === "spreadsheet_import" && attachmentRowCount > 0
+            ? {
+                spreadsheetAttachment: {
+                  fileName: rawAttachment.fileName?.trim() || "αρχείο.xlsx",
+                  rowCount: attachmentRowCount,
+                },
+              }
+            : null;
+
         const { error: uErr } = await supabase.from("ai_messages").insert({
           conversation_id: conversationId,
           role: "user",
           content: message,
-          action: null,
+          action: userAction,
           context_label: null,
         });
         if (uErr) {
