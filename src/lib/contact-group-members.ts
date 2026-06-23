@@ -239,17 +239,15 @@ export async function searchContactsByGroupsPaginated(
   supabase: SupabaseClient,
   opts: {
     groupIds: string[];
-    matchMode?: "or" | "and";
     offset: number;
     limit: number;
   },
 ): Promise<{ contacts: SearchContactsInGroupsRow[]; total: number }> {
-  const { groupIds, matchMode = "or", offset, limit } = opts;
+  const { groupIds, offset, limit } = opts;
   if (!groupIds.length) return { contacts: [], total: 0 };
 
   const { data, error } = await supabase.rpc("get_contacts_by_groups_paginated", {
     p_group_ids: groupIds,
-    p_match_mode: matchMode,
     p_offset: offset,
     p_limit: limit,
   });

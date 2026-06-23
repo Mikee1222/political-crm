@@ -303,12 +303,10 @@ export async function GET(request: NextRequest) {
       if (rawInclude.length && !groupIds.length) {
         return emptyContactsResponse(comboboxMode, page, pageSize);
       }
-      const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
       const rpcLimit = comboboxMode ? listLimit! : pageSize;
       const rpcOffset = comboboxMode ? 0 : (page - 1) * pageSize;
       const { contacts, total } = await searchContactsByGroupsPaginated(supabase, {
         groupIds,
-        matchMode,
         offset: rpcOffset,
         limit: rpcLimit,
       });

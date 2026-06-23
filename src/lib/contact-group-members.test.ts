@@ -379,14 +379,12 @@ describe("searchContactsByGroupsPaginated", () => {
     const { searchContactsByGroupsPaginated } = await import("./contact-group-members");
     const result = await searchContactsByGroupsPaginated(supabase as never, {
       groupIds: [groupA],
-      matchMode: "or",
       offset: 50,
       limit: 50,
     });
 
     expect(rpc).toHaveBeenCalledWith("get_contacts_by_groups_paginated", {
       p_group_ids: [groupA],
-      p_match_mode: "or",
       p_offset: 50,
       p_limit: 50,
     });
