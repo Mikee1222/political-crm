@@ -164,9 +164,12 @@ async function fetchContactsInMemoryPipeline(
       unknown
     >[];
   }
+  console.log("FETCHED CONTACTS COUNT:", rows.length);
   if (f.search?.trim()) {
     rows = afterFilterRows(rows, f.search) as Record<string, unknown>[];
   }
+  console.log("AFTER NAME FILTER:", rows.length);
+  console.log("AFTER ALL FILTERS:", rows.length);
   return rows;
 }
 
@@ -185,7 +188,9 @@ function respondWithContactList(
       NextResponse.json({ contacts: enriched }),
     );
   }
+  console.log("BEFORE PAGINATION:", rows.length);
   const { slice, total } = paginateList(rows, page, pageSize);
+  console.log("RETURNED COUNT:", total);
   return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
     NextResponse.json({ contacts: enriched, total, page, pageSize }),
   );
@@ -210,6 +215,7 @@ export async function GET(request: NextRequest) {
 
     const filterResolution = await resolveContactListFilterIds(supabase, f);
     const resolvedIds = filterResolution.includeContactIds;
+    console.log("GROUP IDS COUNT:", resolvedIds?.length ?? null);
     if (
       hasGroupIncludeFilter(f) &&
       filterResolution.includeContactIds !== null &&
