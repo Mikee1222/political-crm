@@ -58,6 +58,7 @@ type Msg = {
 function greekToolLabel(t: string) {
   const m: Record<string, string> = {
     find_contacts: "Αναζήτηση επαφών",
+    count_contacts: "Μέτρηση επαφών",
     update_contact_status: "Κατάσταση κλήσης",
     add_task: "Εργασία",
     create_request: "Αίτημα",

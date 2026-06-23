@@ -53,17 +53,21 @@ export async function POST(request: NextRequest) {
       f = applyFindContactsToolInput(f, action.filters as Record<string, unknown>, new Map());
     }
     const displayLimit = alexandraContactSearchLimit({ limit: (action as { limit?: number }).limit });
-    f.limit = String(displayLimit);
-    const q = contactFiltersToSearchParams(f).toString();
-    const r = await forward(`/api/contacts?${q}`, { method: "GET" });
-    const j = (await r.json()) as { contacts?: unknown[]; error?: string };
+    f.limit = "";
+    const params = contactFiltersToSearchParams(f);
+    params.set("page", "1");
+    params.set("page_size", String(displayLimit));
+    const r = await forward(`/api/contacts?${params.toString()}`, { method: "GET" });
+    const j = (await r.json()) as { contacts?: unknown[]; total?: number; error?: string };
     if (!r.ok) {
       return NextResponse.json({ error: j.error || "Σφάλμα" }, { status: 400 });
     }
     const list = (j.contacts ?? []).slice(0, displayLimit);
+    const total = typeof j.total === "number" ? j.total : list.length;
     return NextResponse.json({
       ok: true,
-      message: `Βρέθηκαν έως ${displayLimit}: ${list.length} επαφές`,
+      message: `Βρέθηκαν ${total.toLocaleString("el-GR")} επαφές${total > list.length ? ` (εμφανίζονται ${list.length})` : ""}`,
+      total_count: total,
       findResults: list,
     });
   }

@@ -94,6 +94,7 @@ export type MsgWithT = Msg & { _createdAt?: string };
 
 export const GREEK_TOOL_LABELS: Record<string, string> = {
   find_contacts: "Αναζήτηση επαφών",
+  count_contacts: "Μέτρηση επαφών",
   get_saved_filters: "Αποθηκευμένα φίλτρα",
   search_contacts_advanced: "Προχωρημένη αναζήτηση",
   get_all_contacts: "Λήψη επαφών",
@@ -113,6 +114,7 @@ export const GREEK_TOOL_LABELS: Record<string, string> = {
   import_csv_data: "Εισαγωγή CSV",
   bulk_create_contacts: "Μαζική δημιουργία",
   smart_excel_import: "Έξυπνη εισαγωγή Excel",
+  smart_excel_import_requests: "Εισαγωγή αιτημάτων Excel",
   generate_import_template: "Πρότυπο εισαγωγής Excel/CSV",
   add_task: "Δημιουργία εργασίας",
   create_request: "Δημιουργία αιτήματος",

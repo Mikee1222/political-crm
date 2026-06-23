@@ -29,10 +29,18 @@ import {
   buildExportRows,
   buildImportPreview,
   buildImportTemplateAoa,
+  cleanPhone,
   DEFAULT_EXPORT_FIELDS,
   detectColumns,
   transformSpreadsheetRow,
 } from "@/lib/spreadsheet-import";
+import { DUPLICATE_FIELD_LABELS, findImportDuplicates, type DuplicateMatch } from "@/lib/import-dedup";
+import { serverChunkedImportMapped } from "@/lib/chunked-contact-import";
+import {
+  detectRequestColumns,
+  transformRequestSpreadsheetRow,
+  type RequestImportRow,
+} from "@/lib/request-spreadsheet-import";
 import { runAlexandraAnalysis } from "@/lib/alexandra-analysis";
 import { scrapePublicUrl } from "@/lib/alexandra-scrape";
 import { fetchWeatherForCity } from "@/lib/alexandra-weather";
@@ -48,35 +56,6 @@ import {
   normalizeContactSearchFilters,
 } from "@/lib/alexandra-contact-search";
 
-/** Fields allowed when merging spreadsheet row into existing contact (no phone change here). */
-const ALEX_BULK_UPDATE_FIELDS = new Set<string>([
-  "first_name",
-  "last_name",
-  "father_name",
-  "mother_name",
-  "email",
-  "phone2",
-  "landline",
-  "age",
-  "gender",
-  "occupation",
-  "nickname",
-  "spouse_name",
-  "municipality",
-  "electoral_district",
-  "toponym",
-  "political_stance",
-  "priority",
-  "call_status",
-  "notes",
-  "area",
-  "tags",
-  "influence",
-  "name_day",
-  "birthday",
-  "source",
-]);
-
 export type FindRow = {
   id: string;
   first_name: string;
@@ -86,50 +65,61 @@ export type FindRow = {
   contact_code?: string | null;
 };
 
+const FIND_CONTACTS_FILTER_PROPERTIES = {
+  search: { type: "string" as const, description: "Όρος αναζήτησης" },
+  saved_filter_name: {
+    type: "string" as const,
+    description: "Όνομα αποθηκευμένου φίλτρου (π.χ. κλασσικά)—φορτώνει τα αποθηκευμένα json φίλτρα",
+  },
+  call_status: {
+    type: "string" as const,
+    enum: ["Pending", "Positive", "Negative", "No Answer"] as const,
+  },
+  call_statuses: {
+    type: "array" as const,
+    items: { type: "string" as const, enum: ["Pending", "Positive", "Negative", "No Answer"] as const },
+    description: "Πολλαπλά status μαζί",
+  },
+  area: { type: "string" as const },
+  municipality: { type: "string" as const },
+  priority: { type: "string" as const, enum: ["High", "Medium", "Low"] as const },
+  tag: { type: "string" as const },
+  phone: { type: "string" as const },
+  political_stance: { type: "string" as const },
+  group_id: { type: "string" as const, description: "Μονή ομάδα (UUID)" },
+  group_ids: { type: "array" as const, items: { type: "string" as const } },
+  exclude_group_ids: { type: "array" as const, items: { type: "string" as const } },
+  groups_include: { type: "array" as const, items: { type: "string" as const }, description: "Όπως group_ids" },
+  groups_exclude: { type: "array" as const, items: { type: "string" as const }, description: "Όνομα ομάδας ή UUID" },
+  birth_year_from: { type: "number" as const },
+  birth_year_to: { type: "number" as const },
+  age_min: { type: "number" as const },
+  age_max: { type: "number" as const },
+  not_contacted_days: { type: "number" as const },
+  score_tier: { type: "string" as const, enum: ["low", "mid", "high"] as const },
+  is_volunteer: { type: "boolean" as const },
+  volunteer_area: { type: "string" as const },
+  nameday_today: { type: "boolean" as const },
+  limit: { type: "number" as const, description: "Μέγιστα αποτελέσματα (προαιρ., default 75, max 100)" },
+} as const;
+
 export const ALEX_TOOLS: Tool[] = [
   {
     name: "find_contacts",
     description:
-      "Αναζήτηση επαφών. Επιστρέφει έως 75 επαφές (προαιρετικό limit έως 100). Fuzzy search: pass το search. Φίλτρα: call_status, call_statuses, ομάδες (group_ids, exclude, groups_include/exclude by name), birth_year_from/to, δήμος, κ.λπ. Αν ο χρήστης αναφέρει αποθηκευμένο φίλτρο (π.χ. ‘κλασσικά’), get_saved_filters ή/και saved_filter_name· επιστρέφει filter_url για /contacts. Πάντα αναφέρει filter_url από το tool result (για κουμπί Ιστορικού/πλοήγησης).",
+      "Αναζήτηση επαφών (λίστα). Επιστρέφει έως 75 επαφές (προαιρετικό limit έως 100) ΚΑΙ total_count (συνολικό πλήθος με τα φίλτρα). Fuzzy search: pass το search. Φίλτρα: call_status, call_statuses, ομάδες (group_ids, exclude, groups_include/exclude by name), birth_year_from/to, δήμος, κ.λπ. Για ερωτήσεις «πόσες/πόσοι» χωρίς λίστα, χρησιμοποίησε count_contacts. Αν ο χρήστης αναφέρει αποθηκευμένο φίλτρο (π.χ. ‘κλασσικά’), get_saved_filters ή/και saved_filter_name· επιστρέφει filter_url για /contacts. Πάντα αναφέρει filter_url από το tool result (για κουμπί Ιστορικού/πλοήγησης).",
     input_schema: {
       type: "object" as const,
-      properties: {
-        search: { type: "string" as const, description: "Όρος αναζήτησης" },
-        saved_filter_name: {
-          type: "string" as const,
-          description: "Όνομα αποθηκευμένου φίλτρου (π.χ. κλασσικά)—φορτώνει τα αποθηκευμένα json φίλτρα",
-        },
-        call_status: {
-          type: "string" as const,
-          enum: ["Pending", "Positive", "Negative", "No Answer"] as const,
-        },
-        call_statuses: {
-          type: "array" as const,
-          items: { type: "string" as const, enum: ["Pending", "Positive", "Negative", "No Answer"] as const },
-          description: "Πολλαπλά status μαζί",
-        },
-        area: { type: "string" as const },
-        municipality: { type: "string" as const },
-        priority: { type: "string" as const, enum: ["High", "Medium", "Low"] as const },
-        tag: { type: "string" as const },
-        phone: { type: "string" as const },
-        political_stance: { type: "string" as const },
-        group_id: { type: "string" as const, description: "Μονή ομάδα (UUID)" },
-        group_ids: { type: "array" as const, items: { type: "string" as const } },
-        exclude_group_ids: { type: "array" as const, items: { type: "string" as const } },
-        groups_include: { type: "array" as const, items: { type: "string" as const }, description: "Όπως group_ids" },
-        groups_exclude: { type: "array" as const, items: { type: "string" as const }, description: "Όνομα ομάδας ή UUID" },
-        birth_year_from: { type: "number" as const },
-        birth_year_to: { type: "number" as const },
-        age_min: { type: "number" as const },
-        age_max: { type: "number" as const },
-        not_contacted_days: { type: "number" as const },
-        score_tier: { type: "string" as const, enum: ["low", "mid", "high"] as const },
-        is_volunteer: { type: "boolean" as const },
-        volunteer_area: { type: "string" as const },
-        nameday_today: { type: "boolean" as const },
-        limit: { type: "number" as const, description: "Μέγιστα αποτελέσματα (προαιρ., default 75, max 100)" },
-      },
+      properties: FIND_CONTACTS_FILTER_PROPERTIES,
+    },
+  },
+  {
+    name: "count_contacts",
+    description:
+      "Μετράει επαφές με τα ίδια φίλτρα με find_contacts. Χρησιμοποίησε για ερωτήσεις «πόσες/πόσοι» (π.χ. «πόσες επαφές με όνομα ΜΑΡΙΑ», «πόσοι είναι θετικοί») — επιστρέφει μόνο count, όχι λίστα ονομάτων.",
+    input_schema: {
+      type: "object" as const,
+      properties: FIND_CONTACTS_FILTER_PROPERTIES,
     },
   },
   {
@@ -318,7 +308,7 @@ export const ALEX_TOOLS: Tool[] = [
   {
     name: "search_contacts_advanced",
     description:
-      "Προχωρημένη αναζήτηση επαφών με πολλαπλά φίλτρα. Input: filters (name, phone, municipality, area, call_status, priority, political_stance, age_min, age_max, tag), limit (προαιρετικό).",
+      "Προχωρημένη αναζήτηση επαφών με πολλαπλά φίλτρα. Input: filters (name, phone, municipality, area, call_status, priority, political_stance, age_min, age_max, tag), limit (προαιρετικό). Επιστρέφει total_count και έως limit επαφές. Για μόνο αριθμό χωρίς λίστα, χρησιμοποίησε count_contacts.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -389,6 +379,20 @@ export const ALEX_TOOLS: Tool[] = [
           enum: ["ask_user" as const, "skip" as const, "update" as const],
           description: "ask_user: μόνον αναφορά διπλοτύπων· skip/update: ίδιο με τα flags",
         },
+      },
+    },
+  },
+  {
+    name: "smart_excel_import_requests",
+    description:
+      "Έξυπνο import αιτημάτων από Excel/CSV: title, description, category, status, contact_phone ή contact_name, notes. Βρίσκει επαφή και δημιουργεί αίτημα. Πρώτα confirmed=false για preview.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        rows: { type: "array" as const, items: { type: "object" as const } },
+        mapping: { type: "object" as const },
+        confirmed: { type: "boolean" as const },
+        user_confirmed: { type: "boolean" as const },
       },
     },
   },
@@ -1045,23 +1049,44 @@ async function fetchContactsForExport(
   };
 }
 
-async function resolveImportGroupId(
-  supabase: SupabaseClient,
-  groupName: string,
-): Promise<string | null> {
-  const t = groupName.trim();
-  if (!t) return null;
-  const { data } = await supabase.from("contact_groups").select("id,name").ilike("name", t).limit(5);
-  const exact = data?.find((g) => String(g.name).toLowerCase() === t.toLowerCase());
-  if (exact?.id) return String(exact.id);
-  const partial = data?.find((g) => String(g.name).toLowerCase().includes(t.toLowerCase()));
-  return partial?.id ? String(partial.id) : null;
+function spreadsheetPayloadToImportMappedRow(payload: Record<string, unknown>): Record<string, unknown> {
+  const row: Record<string, unknown> = { ...payload };
+  const groupName = typeof row._import_group_name === "string" ? row._import_group_name.trim() : "";
+  delete row._import_group_name;
+  if (groupName) row.group = groupName;
+  return row;
 }
 
-function contactPayloadForApi(payload: Record<string, unknown>): Record<string, unknown> {
-  const body = { ...payload };
-  delete body._import_group_name;
-  return body;
+async function resolveContactIdForRequestImport(
+  supabase: SupabaseClient,
+  row: {
+    contact_phone: string | null;
+    contact_first_name: string | null;
+    contact_last_name: string | null;
+  },
+): Promise<string | null> {
+  if (row.contact_phone) {
+    const ph = cleanPhone(row.contact_phone) || row.contact_phone.trim();
+    const quoted = `"${ph}"`;
+    const { data } = await supabase
+      .from("contacts")
+      .select("id")
+      .or(`phone.in.(${quoted}),phone2.in.(${quoted}),landline.in.(${quoted})`)
+      .limit(1);
+    if (data?.[0]?.id) return String(data[0].id);
+  }
+  const fn = row.contact_first_name?.trim();
+  const ln = row.contact_last_name?.trim();
+  if (fn) {
+    const { data } = await supabase.rpc("search_contacts_by_name", {
+      p_first_name: fn,
+      p_last_name: ln || null,
+      p_father_name: null,
+    });
+    const hit = (data as { id?: string }[] | null)?.[0];
+    if (hit?.id) return String(hit.id);
+  }
+  return null;
 }
 
 /**
@@ -1078,6 +1103,47 @@ export function mapSpreadsheetRowToContactPayload(
     return { payload: null, skip: "incomplete_name" };
   }
   return result;
+}
+
+type ContactListFilters = ReturnType<typeof getDefaultContactFilters>;
+
+async function resolveFindContactsFilters(
+  ctx: ToolContext,
+  raw: Record<string, unknown>,
+): Promise<{ f: ContactListFilters; filterUrl: string }> {
+  const gMap = await buildGroupNameToIdMap(ctx.supabase);
+  let f = getDefaultContactFilters();
+  const sfn =
+    (typeof raw.saved_filter_name === "string" && raw.saved_filter_name.trim() ? raw.saved_filter_name : null) ??
+    (typeof raw.filter_alias === "string" && raw.filter_alias.trim() ? raw.filter_alias : null) ??
+    (typeof raw.saved_filter === "string" && raw.saved_filter.trim() ? raw.saved_filter : null);
+  if (sfn) {
+    const jSaved = await findSavedFilterJson(ctx.supabase, sfn);
+    if (jSaved) f = applySavedFilterJson(jSaved, gMap);
+  }
+  f = applyFindContactsToolInput(f, raw, gMap);
+  f.limit = "";
+  return { f, filterUrl: buildContactsPageUrl(f) };
+}
+
+/** Paginated /api/contacts — never combobox `limit` mode so `total` is returned. */
+async function queryContactsApi(
+  ctx: ToolContext,
+  f: ContactListFilters,
+  opts: { page?: number; pageSize?: number },
+): Promise<{ ok: true; contacts: FindRow[]; total: number } | { ok: false; error: string }> {
+  const params = contactFiltersToSearchParams(f);
+  params.delete("limit");
+  params.set("page", String(opts.page ?? 1));
+  params.set("page_size", String(opts.pageSize ?? 50));
+  const r = await ctx.forward(`/api/contacts?${params.toString()}`, { method: "GET" });
+  const j = (await r.json()) as { contacts?: FindRow[]; total?: number; error?: string };
+  if (!r.ok) {
+    return { ok: false, error: j.error || "Σφάλμα αναζήτησης" };
+  }
+  const contacts = (j.contacts ?? []) as FindRow[];
+  const total = typeof j.total === "number" ? j.total : contacts.length;
+  return { ok: true, contacts, total };
 }
 
 function buildAdvancedContactFilters(f: Record<string, unknown>, extra?: { limit?: number }): string {
@@ -1181,33 +1247,30 @@ async function runAlexToolInner(
   }
   const canEditContacts = permLegacy("contacts_edit", isMgr);
 
-  if (name === "find_contacts") {
-    const gMap = await buildGroupNameToIdMap(ctx.supabase);
-    let f = getDefaultContactFilters();
-    const sfn =
-      (typeof raw.saved_filter_name === "string" && raw.saved_filter_name.trim() ? raw.saved_filter_name : null) ??
-      (typeof raw.filter_alias === "string" && raw.filter_alias.trim() ? raw.filter_alias : null) ??
-      (typeof raw.saved_filter === "string" && raw.saved_filter.trim() ? raw.saved_filter : null);
-    if (sfn) {
-      const jSaved = await findSavedFilterJson(ctx.supabase, sfn);
-      if (jSaved) f = applySavedFilterJson(jSaved, gMap);
+  if (name === "find_contacts" || name === "count_contacts") {
+    const { f, filterUrl } = await resolveFindContactsFilters(ctx, raw);
+    if (name === "count_contacts") {
+      const result = await queryContactsApi(ctx, f, { page: 1, pageSize: 1 });
+      if (!result.ok) {
+        return { content: JSON.stringify({ error: result.error }), filterUrl };
+      }
+      return {
+        content: JSON.stringify({ ok: true, count: result.total, filter_url: filterUrl }),
+        filterUrl,
+        executedToolName: "count_contacts",
+      };
     }
-    f = applyFindContactsToolInput(f, raw, gMap);
     const displayLimit = alexandraContactSearchLimit(raw);
-    f.limit = String(displayLimit);
-    const filterUrl = buildContactsPageUrl(f);
-    const q = contactFiltersToSearchParams(f).toString();
-    const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
-    const j = (await r.json()) as { contacts?: FindRow[]; error?: string };
-    if (!r.ok) {
-      return { content: JSON.stringify({ error: j.error || "Σφάλμα αναζήτησης" }), filterUrl };
+    const result = await queryContactsApi(ctx, f, { page: 1, pageSize: displayLimit });
+    if (!result.ok) {
+      return { content: JSON.stringify({ error: result.error }), filterUrl };
     }
-    const all = (j.contacts ?? []) as FindRow[];
-    const list = all.slice(0, displayLimit) as FindRow[];
+    const list = result.contacts.slice(0, displayLimit) as FindRow[];
     return {
       content: JSON.stringify({
         ok: true,
-        count: all.length,
+        total_count: result.total,
+        returned: list.length,
         filter_url: filterUrl,
         contacts: list,
       }),
@@ -1714,17 +1777,15 @@ async function runAlexToolInner(
     if (contacts.length === 0) {
       return { content: JSON.stringify({ error: "Δεν εξήχθησαν έγκυρες γραμμές" }) };
     }
-    const r = await ctx.forward("/api/contacts/import-mapped", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts }),
-    });
-    const j = (await r.json()) as { inserted?: number; errors?: number; error?: string };
-    if (!r.ok) {
-      return { content: JSON.stringify({ error: j.error || "import-mapped" }) };
-    }
+    const agg = await serverChunkedImportMapped(ctx.forward, contacts as Record<string, unknown>[]);
     return {
-      content: JSON.stringify({ ok: true, inserted: j.inserted, error_rows: j.errors, message: "Εισήχθησαν (ή επιχειρήθηκαν) οι εγγραφές." }),
+      content: JSON.stringify({
+        ok: true,
+        inserted: agg.inserted,
+        updated: agg.updated,
+        error_rows: agg.errors,
+        message: `Εισήχθησαν ${agg.inserted} επαφές${agg.updated ? `, ενημερώθηκαν ${agg.updated}` : ""}.`,
+      }),
       executedToolName: "import_csv_data",
     };
   }
@@ -1830,15 +1891,18 @@ async function runAlexToolInner(
   if (name === "search_contacts_advanced") {
     const fl = (raw.filters as Record<string, unknown>) || {};
     const lim = alexandraContactSearchLimit({ limit: raw.limit });
-    const q = buildAdvancedContactFilters(fl, { limit: Math.min(12_000, lim * 4) });
-    const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
-    const j = (await r.json()) as { contacts?: FindRow[]; error?: string };
+    const params = new URLSearchParams(buildAdvancedContactFilters(fl, {}));
+    params.set("page", "1");
+    params.set("page_size", String(lim));
+    const r = await ctx.forward(`/api/contacts?${params.toString()}`, { method: "GET" });
+    const j = (await r.json()) as { contacts?: FindRow[]; total?: number; error?: string };
     if (!r.ok) {
       return { content: JSON.stringify({ error: j.error || "Σφάλμα" }) };
     }
     const list = (j.contacts ?? []).slice(0, lim) as FindRow[];
+    const total = typeof j.total === "number" ? j.total : list.length;
     return {
-      content: JSON.stringify({ ok: true, count: list.length, contacts: list }),
+      content: JSON.stringify({ ok: true, total_count: total, returned: list.length, contacts: list }),
       findResults: list,
       executedToolName: "search_contacts_advanced",
     };
@@ -1991,54 +2055,26 @@ async function runAlexToolInner(
     const update_ex = raw.update_existing === true;
     const duplicate_mode = (raw.duplicate_mode as string) || (update_ex ? "update" : skip_dup ? "skip" : "skip");
 
-    const phonesForLookup = [
-      ...new Set(
-        rows
-          .map((row) => {
-            const { payload } = transformSpreadsheetRow(row, mapObj, {
-              contextMunicipality: contextMunicipality || undefined,
-            });
-            return payload && typeof payload.phone === "string" ? payload.phone : null;
-          })
-          .filter((x): x is string => Boolean(x)),
-      ),
-    ];
-    const existingPhones = new Set<string>();
-    const phoneToId = new Map<string, string>();
-    for (let b = 0; b < phonesForLookup.length; b += 120) {
-      const part = phonesForLookup.slice(b, b + 120);
-      const { data: phRows } = await ctx.supabase
-        .from("contacts")
-        .select("id, phone, first_name, last_name")
-        .in("phone", part);
-      for (const pr of phRows ?? []) {
-        if (pr.phone) {
-          phoneToId.set(String(pr.phone), String(pr.id));
-          existingPhones.add(String(pr.phone));
-        }
-      }
-    }
-
     const preview = buildImportPreview(rows, mapObj, {
       contextMunicipality: contextMunicipality || undefined,
-      existingPhones,
     });
     const { work } = preview;
 
-    const dups: { row: number; phone: string; contact_id: string; name_hint?: string }[] = [];
+    const importRows: Record<string, unknown>[] = [];
     for (const w of work) {
-      if (!w.payload) continue;
-      const ph = String(w.payload.phone ?? "");
-      const id = phoneToId.get(ph);
-      if (id) {
-        dups.push({
-          row: w.index1,
-          phone: ph,
-          contact_id: id,
-          name_hint: [w.payload.first_name, w.payload.last_name].filter(Boolean).join(" "),
-        });
-      }
+      if (!w.payload || w.skip) continue;
+      importRows.push(spreadsheetPayloadToImportMappedRow(w.payload));
     }
+
+    const dedupInput = importRows.map((r) => ({
+      first_name: String(r.first_name ?? ""),
+      last_name: String(r.last_name ?? ""),
+      phone: String(r.phone ?? ""),
+      phone2: r.phone2 != null ? String(r.phone2) : null,
+      landline: r.landline != null ? String(r.landline) : null,
+      father_name: r.father_name != null ? String(r.father_name) : null,
+    }));
+    const dups: DuplicateMatch[] = await findImportDuplicates(ctx.supabase, dedupInput);
 
     if (!confirmed) {
       const mappingLines = Object.entries(mapObj)
@@ -2051,9 +2087,19 @@ async function runAlexToolInner(
             `${s.first_name} ${s.last_name} — ${s.phone || "χωρίς τηλ."}${s.municipality ? ` — ${s.municipality}` : ""}`,
         )
         .join("\n");
+      const dupLines =
+        dups.length > 0
+          ? dups
+              .slice(0, 5)
+              .map(
+                (d) =>
+                  `• γραμμή ${d.row_index}: ${d.name_hint} — ${DUPLICATE_FIELD_LABELS[d.matched_field]} (${d.matched_value})`,
+              )
+              .join("\n")
+          : "";
       const dupHint =
         dups.length > 0
-          ? `\n\n⚠️ Βρέθηκαν ${dups.length} διπλότυπα (ίδιο τηλέφωνο). Θέλεις να τα παραλείψω ή να τα ενημερώσω;`
+          ? `\n\n⚠️ Βρέθηκαν ${dups.length} διπλότυπα:\n${dupLines}\n\nΘέλεις να τα παραλείψω ή να τα ενημερώσω;`
           : "";
       return {
         content: JSON.stringify({
@@ -2065,13 +2111,12 @@ async function runAlexToolInner(
             valid_rows: preview.validRows,
             invalid_rows: preview.invalidRows,
             duplicates: dups.length,
-            duplicate_phones: preview.duplicatePhones,
             skip_no_phone: preview.sample.filter((s) => s.status === "no_phone").length,
             skip_no_first_name: preview.sample.filter((s) => s.status === "no_first_name").length,
           },
           detected_columns: preview.detectedColumns,
           sample: preview.sample,
-          duplicates: dups.slice(0, 5),
+          duplicates: dups.slice(0, 10),
           pending_rows: preview.pendingRows.slice(0, 10),
           message: `📊 Προεπισκόπηση εισαγωγής:
 - Σύνολο γραμμών: ${preview.totalRows}
@@ -2099,125 +2144,154 @@ ${sampleLines || "—"}${dupHint}
           duplicate_count: dups.length,
           duplicates: dups,
           message:
-            "Βρέθηκαν διπλότυπα (ίδιο phone). Ρώτα τον χρήστη: παράλειψη, ενημέρωση με νέα δεδομένα, ή μόνο λίστα. Ξανακάλεσε smart_excel_import με skip_duplicates / update_existing / duplicate_mode: skip|update αντίστοιχα.",
+            "Βρέθηκαν διπλότυπα (τηλέφωνο ή όνομα+πατρώνυμο). Ρώτα τον χρήστη: παράλειψη ή ενημέρωση. Ξανακάλεσε smart_excel_import με duplicate_mode: skip|update.",
         }),
         showExecutedTag: false,
         executedToolName: "smart_excel_import",
       };
     }
 
-    const totalRows = work.length;
-    const CONCURRENCY = 8;
+    if (importRows.length === 0) {
+      return {
+        content: JSON.stringify({
+          error: "Δεν υπάρχουν έγκυρες γραμμές προς εισαγωγή",
+          skipped_no_phone: work.filter((w) => w.skip === "no_phone").length,
+          skipped_no_first_name: work.filter((w) => w.skip === "no_first_name").length,
+        }),
+      };
+    }
+
+    const mode = duplicate_mode === "update" || update_ex ? "update" : "skip";
+    const agg = await serverChunkedImportMapped(
+      ctx.forward,
+      importRows,
+      { duplicate_mode: mode, skip_duplicates: mode === "skip", update_existing: mode === "update" },
+      (chunkDone, chunkTotal) => {
+        const rowsDone = Math.min(importRows.length, Math.round((chunkDone / chunkTotal) * importRows.length));
+        ctx.onBulkProgress?.(rowsDone, importRows.length);
+      },
+    );
+
+    const skip_no_phone = work.filter((w) => w.skip === "no_phone").length;
+    const skip_name = work.filter((w) => w.skip === "no_first_name").length;
+    return {
+      content: JSON.stringify({
+        ok: true,
+        created: agg.inserted,
+        updated: agg.updated,
+        skipped: agg.skipped_duplicates,
+        skipped_no_phone: skip_no_phone,
+        skipped_no_first_name: skip_name,
+        failed: agg.errorDetails,
+        chunks: { total: agg.chunks_total, completed: agg.chunks_completed },
+        message: `✅ Νέες: ${agg.inserted}, ενημερώσεις: ${agg.updated}, παραλείφθηκαν διπλότυπα: ${agg.skipped_duplicates}${agg.errors > 0 ? ` · σφάλματα: ${agg.errors}` : ""} (${agg.chunks_completed}/${agg.chunks_total} τμήματα)`,
+      }),
+      executedToolName: "smart_excel_import",
+    };
+  }
+
+  if (name === "smart_excel_import_requests") {
+    if (!permLegacy("alexandra_import", isMgr)) {
+      return { content: JSON.stringify({ error: "Δεν επιτρέπεται το import για αυτόν τον ρόλο" }) };
+    }
+    let rows: Array<Record<string, unknown>> = [];
+    if (Array.isArray(raw.rows) && raw.rows.length > 0) {
+      rows = raw.rows as Array<Record<string, unknown>>;
+    } else if (ctx.importRows?.length) {
+      rows = ctx.importRows;
+    }
+    if (rows.length === 0) {
+      return { content: JSON.stringify({ error: "Χρειάζονται γραμμές (rows) ή ενεργό συνημμένο import." }) };
+    }
+
+    let mapObj: Record<string, string>;
+    if (raw.mapping && typeof raw.mapping === "object" && !Array.isArray(raw.mapping)) {
+      mapObj = raw.mapping as Record<string, string>;
+    } else {
+      const headers = Object.keys(rows[0] ?? {});
+      mapObj = detectRequestColumns(headers);
+      if (!Object.keys(mapObj).length) {
+        return {
+          content: JSON.stringify({
+            error: "Δεν αναγνωρίστηκαν στήλες αιτημάτων (title, contact_phone, contact_name…).",
+            headers,
+          }),
+        };
+      }
+    }
+
+    const confirmed = raw.confirmed === true || raw.user_confirmed === true;
+    const valid: { index1: number; payload: RequestImportRow }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const { payload, skip } = transformRequestSpreadsheetRow(rows[i]!, mapObj);
+      if (!skip && payload) {
+        valid.push({ index1: i + 1, payload });
+      }
+    }
+
+    if (!confirmed) {
+      return {
+        content: JSON.stringify({
+          ok: true,
+          preview: true,
+          requires_user_confirmation: true,
+          detected_columns: mapObj,
+          summary: {
+            total_rows: rows.length,
+            valid_rows: valid.length,
+            skipped: rows.length - valid.length,
+          },
+          sample: valid.slice(0, 5).map((v) => v.payload),
+          message: `Προεπισκόπηση εισαγωγής ${valid.length} αιτημάτων από ${rows.length} γραμμές. Επιβεβαιώνεις;`,
+        }),
+        showExecutedTag: false,
+        executedToolName: "smart_excel_import_requests",
+      };
+    }
+
+    let created = 0;
+    let skipped_no_contact = 0;
     const failed: { index: number; err: string }[] = [];
-    const outcome = new Array<string>(totalRows).fill("pending");
-    await runIndexRangeWithConcurrency(0, totalRows, CONCURRENCY, async (i) => {
-      const w = work[i]!;
-      if (w.skip === "no_phone") {
-        outcome[i] = "skip_no_phone";
-        ctx.onBulkProgress?.(i + 1, totalRows);
-        return;
+    const total = valid.length;
+    for (let i = 0; i < valid.length; i++) {
+      const { index1, payload } = valid[i]!;
+      const contactId = await resolveContactIdForRequestImport(ctx.supabase, payload);
+      if (!contactId) {
+        skipped_no_contact += 1;
+        ctx.onBulkProgress?.(i + 1, total);
+        continue;
       }
-      if (w.skip === "no_first_name") {
-        outcome[i] = "skip_no_first_name";
-        ctx.onBulkProgress?.(i + 1, totalRows);
-        return;
-      }
-      if (!w.payload) {
-        outcome[i] = "skip_other";
-        ctx.onBulkProgress?.(i + 1, totalRows);
-        return;
-      }
-      const pl = { ...w.payload };
-      const groupName = typeof pl._import_group_name === "string" ? pl._import_group_name.trim() : "";
-      delete pl._import_group_name;
-      const ph = String(pl.phone);
-      const existing = phoneToId.get(ph);
-      if (existing) {
-        if (update_ex) {
-          const body: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(pl)) {
-            if (k === "phone" || k.startsWith("_")) continue;
-            if (ALEX_BULK_UPDATE_FIELDS.has(k) && v !== undefined) {
-              body[k] = v;
-            }
-          }
-          const r = await ctx.forward(`/api/contacts/${existing}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          if (!r.ok) {
-            const j = (await r.json().catch(() => ({}))) as { error?: string };
-            failed.push({ index: w.index1, err: j.error || "PATCH" });
-            outcome[i] = "failed";
-          } else {
-            if (groupName) {
-              const gid = await resolveImportGroupId(ctx.supabase, groupName);
-              if (gid) {
-                await ctx.forward(`/api/contacts/${existing}/groups`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ group_id: gid }),
-                });
-              }
-            }
-            outcome[i] = "updated";
-          }
-        } else if (skip_dup) {
-          outcome[i] = "skipped_dup";
-        } else {
-          failed.push({ index: w.index1, err: "duplicate_phone" });
-          outcome[i] = "failed";
-        }
-        ctx.onBulkProgress?.(i + 1, totalRows);
-        return;
-      }
-      const apiBody = contactPayloadForApi(pl);
-      if (groupName) {
-        const gid = await resolveImportGroupId(ctx.supabase, groupName);
-        if (gid) apiBody.group_id = gid;
-      }
-      const r = await ctx.forward("/api/contacts", {
+      const body: Record<string, unknown> = {
+        contact_id: contactId,
+        title: payload.title,
+        description: payload.description,
+        category: payload.category,
+        status: payload.status,
+      };
+      if (payload.notes) body.initial_note = payload.notes;
+      const r = await ctx.forward("/api/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiBody),
+        body: JSON.stringify(body),
       });
-      const postBody = (await r.text().catch(() => "")) || "{}";
-      let jr: { contact?: { id?: string }; error?: string } = {};
-      try {
-        jr = JSON.parse(postBody) as { contact?: { id?: string }; error?: string };
-      } catch {
-        /* ignore */
-      }
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
       if (!r.ok) {
-        failed.push({ index: w.index1, err: jr.error || "POST" });
-        outcome[i] = "failed";
+        failed.push({ index: index1, err: j.error || "POST" });
       } else {
-        if (jr.contact?.id) {
-          phoneToId.set(ph, String(jr.contact.id));
-        }
-        outcome[i] = "created";
+        created += 1;
       }
-      ctx.onBulkProgress?.(i + 1, totalRows);
-    });
-    const created = outcome.filter((o) => o === "created").length;
-    const updated = outcome.filter((o) => o === "updated").length;
-    const skipped = outcome.filter((o) => o === "skipped_dup" || o === "skip_other").length;
-    const skip_no_phone = outcome.filter((o) => o === "skip_no_phone").length;
-    const skip_name = outcome.filter((o) => o === "skip_no_first_name").length;
+      ctx.onBulkProgress?.(i + 1, total);
+    }
+
     return {
       content: JSON.stringify({
         ok: true,
         created,
-        updated,
-        skipped,
-        skipped_no_phone: skip_no_phone,
-        skipped_no_first_name: skip_name,
+        skipped_no_contact,
         failed,
-        duplicates_skipped: dups.length > 0 && skip_dup && !update_ex ? dups.length : 0,
-        message: `✅ Νέες: ${created}, ενημερώσεις: ${updated}, παραλείφθηκαν: ${skipped + skip_no_phone + skip_name}${failed.length > 0 ? ` · αποτυχίες: ${failed.length}` : ""}`,
+        message: `✅ Δημιουργήθηκαν ${created} αιτήματα, ${skipped_no_contact} χωρίς επαφή${failed.length ? `, ${failed.length} αποτυχίες` : ""}.`,
       }),
-      executedToolName: "smart_excel_import",
+      executedToolName: "smart_excel_import_requests",
     };
   }
 
@@ -3261,6 +3335,10 @@ export function buildSystemPrompt({
 Περιεχόμενο: γράμματα, δελτία τύπου, social posts
 Μνήμη: αποθήκευση και ανάκτηση πληροφοριών
 
+ΑΡΙΘΜΟΣ ΕΠΑΦΩΝ:
+- Για ερωτήσεις «πόσες/πόσοι» (π.χ. «πόσες επαφές με όνομα ΜΑΡΙΑ», «πόσοι είναι θετικοί») χρησιμοποίησε count_contacts — απάντησε ΜΟΝΟ με τον συνολικό αριθμό (π.χ. «Βρέθηκαν 2181 επαφές με όνομα ΜΑΡΙΑ»), χωρίς να απαριθμείς ονόματα.
+- Για λίστα επαφών χρησιμοποίησε find_contacts. Το αποτέλεσμα περιλαμβάνει total_count· αν total_count > returned, πες το σύνολο και δείξε μόνο τα returned (όχι όλη τη λίστα στο κείμενο).
+
 ΚΑΝΟΝΕΣ:
 - Χρησιμοποίησε tools ΑΜΕΣΩΣ για απλές ενέργειες χωρίς να ρωτάς άδεια
 - Για διαγραφές/μαζικές ενέργειες: ανακοίνωσε τι θα κάνεις και περίμενε επιβεβαίωση
@@ -3288,6 +3366,7 @@ export function buildSystemPrompt({
 - Αν κάτι είναι ασαφές, ρώτα πριν εισάγεις
 - Μετά την εισαγωγή, πες πόσες επαφές μπήκαν και αν υπήρξαν προβλήματα
 - Για πρότυπο εισαγωγής: generate_import_template
+- Για εισαγωγή αιτημάτων από Excel: smart_excel_import_requests (στήλες: title, contact_phone ή contact_name)
 - Ποτέ μη δημιουργείς επαφή χωρίς όνομα (first_name) και τηλέφωνο
 
 ΠΟΛΙΤΙΚΗ ΕΡΕΥΝΑ & ΑΝΑΛΥΣΗ:
