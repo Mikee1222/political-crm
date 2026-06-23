@@ -1,14 +1,14 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { accessGrantExpiresAt, generateHourlyCode } from "@/lib/access-code";
+import { accessGrantExpiresAt, generateAccessCode } from "@/lib/access-code";
 import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
 
 const ACCESS_COOKIE = "crm_access_granted";
 
-/** POST { code } — verify hourly code; grant via cookie (+ DB audit). */
+/** POST { code } — verify current window code; grant via cookie (+ DB audit). */
 export async function POST(req: NextRequest) {
   try {
     const crm = await checkCRMAccess(req);
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Λάθος κλειδαριθμός." }, { status: 400 });
     }
 
-    const expected = generateHourlyCode();
+    const expected = generateAccessCode();
     if (submitted !== expected) {
       return NextResponse.json({ error: "Λάθος κλειδαριθμός." }, { status: 400 });
     }

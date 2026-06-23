@@ -11,6 +11,17 @@ type AccessCodePayload = {
   error?: string;
 };
 
+function formatAthensChangeTime(iso: string): string {
+  return new Intl.DateTimeFormat("el-GR", {
+    timeZone: "Europe/Athens",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
 function formatCountdown(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(totalSec / 60);
@@ -71,20 +82,21 @@ export function AccessCodeSecuritySection() {
     <section className={lux.card}>
       <h2 className={lux.pageTitle + " mb-1"}>ΑΣΦΑΛΕΙΑ ΠΡΟΣΒΑΣΗΣ</h2>
       <p className="mb-4 text-sm text-[var(--text-secondary)]">
-        Κλειδαριθμός πρόσβασης CRM για μη-διαχειριστές (αλλάζει κάθε ώρα UTC).
+        Κλειδαριθμός πρόσβασης CRM για μη-διαχειριστές (αλλάζει κάθε 8 ώρες: 00:00, 08:00, 16:00 ώρα
+        Αθήνας).
       </p>
       {loadErr ? <p className="text-sm text-amber-200">{loadErr}</p> : null}
       {accessCode ? (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--accent-gold)]">
-            Κλειδαριθμός τρέχουσας ώρας
+            Κλειδαριθμός τρέχοντος διαστήματος
           </p>
           <div className="flex flex-wrap items-center gap-4">
             <span className="font-mono text-4xl font-bold tracking-widest text-[var(--text-primary)]">
               {accessCode.code}
             </span>
             <div className="text-xs text-[var(--text-muted)]">
-              <p>Αλλαγή σε:</p>
+              <p>Επόμενη αλλαγή ({formatAthensChangeTime(accessCode.validUntil)} ώρα Αθήνας):</p>
               <p className="font-mono text-lg font-semibold tabular-nums text-[var(--accent-gold)]">{countdown || "—"}</p>
             </div>
           </div>
