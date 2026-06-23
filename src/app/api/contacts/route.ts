@@ -10,7 +10,13 @@ import { nextJsonError } from "@/lib/api-resilience";
 import { nextPaddedCode } from "@/lib/codes";
 import { nameDayDateStringFromFirstName } from "@/lib/greek-namedays";
 import { searchParamsToFilters, getDefaultContactFilters } from "@/lib/contacts-filters";
-import { applyContactListFiltersToBuilder } from "@/lib/contacts-query";
+import {
+  applyBirthdayAgeFiltersToBuilder,
+  applyColumnContactFiltersToBuilder,
+  applyContactListFiltersToBuilder,
+  filterContactRowsByListFilters,
+  hasColumnListFilters,
+} from "@/lib/contacts-query";
 import {
   enrichContactsWithGroupCountsAndNames,
   fetchContactsByIncludeIdBatches,
@@ -18,51 +24,33 @@ import {
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
   resolveContactListFilterIds,
+  type GroupFilterResolution,
 } from "@/lib/contact-group-members";
 export const dynamic = "force-dynamic";
 
 const SELECT_LIST =
-  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, is_dead, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )";
+  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, toponym, gender, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, is_dead, electoral_district, may_not_have_mobile, may_not_have_landline, may_not_have_email, contact_groups!contacts_group_id_fkey ( id, name, color, description, year )";
 
-const SELECT_LIST_BATCH = `${SELECT_LIST}, created_at`;
+/** Flat select for batch id queries — no embeds (avoids PostgREST filter issues). */
+const SELECT_LIST_BATCH =
+  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, toponym, gender, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, is_dead, electoral_district, may_not_have_mobile, may_not_have_landline, may_not_have_email, created_at";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QueryBuilder = any;
 
-function parseOptionalInt(value: string | null | undefined): number | null {
-  if (!value?.trim()) return null;
-  const parsed = parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function applyBirthdayAgeFilters(query: QueryBuilder, ageMin: string, ageMax: string) {
-  const minAge = parseOptionalInt(ageMin);
-  const maxAge = parseOptionalInt(ageMax);
-  if (minAge == null && maxAge == null) return query;
-
-  const now = new Date();
-  if (maxAge != null) {
-    const minDate = new Date(now.getFullYear() - maxAge, now.getMonth(), now.getDate());
-    query = query.gte("birthday", minDate.toISOString().split("T")[0]);
-  }
-  if (minAge != null) {
-    const maxDate = new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate());
-    query = query.lte("birthday", maxDate.toISOString().split("T")[0]);
-  }
-  return query;
-}
+type ContactFilters = ReturnType<typeof getDefaultContactFilters>;
 
 function applyApiContactFilters(
   query: QueryBuilder,
-  f: ReturnType<typeof getDefaultContactFilters>,
-  groupResolution: Awaited<ReturnType<typeof resolveContactListFilterIds>>,
+  f: ContactFilters,
+  groupResolution: GroupFilterResolution,
   partialLocation = false,
 ) {
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
   query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
     partialLocation,
   });
-  return applyBirthdayAgeFilters(query, f.age_min, f.age_max);
+  return applyBirthdayAgeFiltersToBuilder(query, f.age_min, f.age_max);
 }
 
 function afterFilterRows(
@@ -72,6 +60,20 @@ function afterFilterRows(
 ) {
   if (!search) return rows;
   return rows.filter((c) => contactMatchesFuzzyGreekSearch(c, search));
+}
+
+function refineRowsWithColumnFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rows: any[],
+  f: ContactFilters,
+  filterResolution: GroupFilterResolution,
+  partialLocation: boolean,
+) {
+  if (!hasColumnListFilters(f)) return rows;
+  return filterContactRowsByListFilters(rows, f, {
+    partialLocation,
+    excludeContactIds: filterResolution.excludeContactIds,
+  });
 }
 
 function paginateList<T>(rows: T[], page: number, pageSize: number) {
@@ -99,8 +101,29 @@ function emptyContactsResponse(comboboxMode: boolean, page: number, pageSize: nu
   return NextResponse.json({ contacts: [], total: 0, page, pageSize });
 }
 
-function hasGroupIncludeFilter(f: ReturnType<typeof getDefaultContactFilters>): boolean {
+function hasGroupIncludeFilter(f: ContactFilters): boolean {
   return f.group_ids.length > 0 || Boolean(f.group_id?.trim());
+}
+
+async function fetchContactsByResolvedIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  ids: string[],
+  f: ContactFilters,
+  filterResolution: GroupFilterResolution,
+  partialLocation: boolean,
+) {
+  const rows = await fetchContactsByIncludeIdBatches(
+    supabase,
+    ids,
+    SELECT_LIST_BATCH,
+    (q) =>
+      applyColumnContactFiltersToBuilder(q, f, {
+        partialLocation,
+        excludeContactIds: filterResolution.excludeContactIds,
+      }),
+  );
+  return refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
 }
 
 export async function GET(request: NextRequest) {
@@ -122,9 +145,6 @@ export async function GET(request: NextRequest) {
 
     const filterResolution = await resolveContactListFilterIds(supabase, f);
     const resolvedIds = filterResolution.includeContactIds;
-    console.log("[contacts] group_ids:", f.group_ids);
-    console.log("[contacts] resolved contact IDs count:", resolvedIds?.length ?? null);
-    console.log("[contacts] first few IDs:", resolvedIds?.slice(0, 3) ?? null);
     if (
       hasGroupIncludeFilter(f) &&
       filterResolution.includeContactIds !== null &&
@@ -148,12 +168,12 @@ export async function GET(request: NextRequest) {
       if (comboboxMode) {
         query = query.limit(listLimit!);
       } else {
-        const cap = 15_000;
-        query = query.limit(cap);
+        query = query.limit(15_000);
       }
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      const rows = data ?? [];
+      let rows = data ?? [];
+      rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
       const work = f.search ? afterFilterRows(rows, f.search) : rows;
       if (comboboxMode) {
         const enriched = await enrichContactsWithGroupCount(supabase, work.slice(0, listLimit!) as Record<string, unknown>[]);
@@ -165,23 +185,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (f.search) {
-      console.log("[contacts] applying filter with", resolvedIds?.length ?? 0, "IDs");
-      let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
       if (includeContactIdsNeedBatchFetch(resolvedIds)) {
-        console.log("[contacts] query built, about to execute (batch include)");
-        const rows = await fetchContactsByIncludeIdBatches(
-          supabase,
-          resolvedIds,
-          SELECT_LIST_BATCH,
-          (q) =>
-            applyApiContactFilters(
-              q,
-              f,
-              { ...filterResolution, includeContactIds: null },
-              partialLocation,
-            ),
-        );
-        const list = afterFilterRows(rows, f.search);
+        let list = await fetchContactsByResolvedIds(supabase, resolvedIds!, f, filterResolution, partialLocation);
+        list = afterFilterRows(list, f.search);
         if (comboboxMode) {
           const enriched = await enrichContactsWithGroupCount(supabase, list.slice(0, listLimit!) as Record<string, unknown>[]);
           return NextResponse.json({ contacts: enriched });
@@ -190,12 +196,13 @@ export async function GET(request: NextRequest) {
         const enriched = await enrichContactsWithGroupCount(supabase, slice as Record<string, unknown>[]);
         return NextResponse.json({ contacts: enriched, total, page, pageSize });
       }
+      let query: QueryBuilder = supabase.from("contacts").select(SELECT_LIST).order("created_at", { ascending: false });
       query = applyApiContactFilters(query, f, filterResolution, partialLocation);
       query = query.limit(12_000);
-      console.log("[contacts] query built, about to execute");
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      const rows = data ?? [];
+      let rows = data ?? [];
+      rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
       const list = afterFilterRows(rows, f.search);
       if (comboboxMode) {
         const enriched = await enrichContactsWithGroupCount(supabase, list.slice(0, listLimit!) as Record<string, unknown>[]);
@@ -206,22 +213,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ contacts: enriched, total, page, pageSize });
     }
 
-    console.log("[contacts] applying filter with", resolvedIds?.length ?? 0, "IDs");
-
     if (includeContactIdsNeedBatchFetch(resolvedIds)) {
-      console.log("[contacts] query built, about to execute (batch include)");
-      const rows = await fetchContactsByIncludeIdBatches(
-        supabase,
-        resolvedIds,
-        SELECT_LIST_BATCH,
-        (q) =>
-          applyApiContactFilters(
-            q,
-            f,
-            { ...filterResolution, includeContactIds: null },
-            partialLocation,
-          ),
-      );
+      const rows = await fetchContactsByResolvedIds(supabase, resolvedIds!, f, filterResolution, partialLocation);
       if (comboboxMode) {
         const enriched = await enrichContactsWithGroupCount(
           supabase,
@@ -242,17 +235,17 @@ export async function GET(request: NextRequest) {
 
     if (comboboxMode) {
       query = query.limit(listLimit!);
-      console.log("[contacts] query built, about to execute");
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
+      let rows = data ?? [];
+      rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+      const enriched = await enrichContactsWithGroupCount(supabase, rows);
       return NextResponse.json({ contacts: enriched.slice(0, listLimit!) });
     }
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     query = query.range(from, to);
-    console.log("[contacts] query built, about to execute");
     const { data, error, count } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);

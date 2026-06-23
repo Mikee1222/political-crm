@@ -80,8 +80,9 @@ export async function fetchContactsByIncludeIdBatches<T extends { id: string; cr
   const byId = new Map<string, T>();
   for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
     const chunk = unique.slice(i, i + MAX_ID_IN_CLAUSE);
-    let query = supabase.from("contacts").select(select).in("id", chunk);
+    let query = supabase.from("contacts").select(select);
     query = applyFilters(query);
+    query = query.in("id", chunk);
     const { data, error } = await query;
     if (error) throw error;
     for (const row of (data ?? []) as T[]) {

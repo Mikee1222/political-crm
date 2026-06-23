@@ -3,7 +3,7 @@ import {
   applyGroupMembershipFiltersToBuilder,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
-import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
+import { contactMatchesFuzzyGreekSearch, normalizeGreekNameKey } from "@/lib/greek-fuzzy-name";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 
@@ -29,6 +29,285 @@ function escapeIlike(value: string): string {
 
 function partialIlikePattern(value: string): string {
   return `%${escapeIlike(value.trim())}%`;
+}
+
+function parseOptionalInt(value: string | null | undefined): number | null {
+  if (!value?.trim()) return null;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Birthday range from age_min/age_max (matches GET /api/contacts). */
+export function applyBirthdayAgeFiltersToBuilder(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  ageMin: string,
+  ageMax: string,
+) {
+  const minAge = parseOptionalInt(ageMin);
+  const maxAge = parseOptionalInt(ageMax);
+  if (minAge == null && maxAge == null) return query;
+
+  const now = new Date();
+  if (maxAge != null) {
+    const minDate = new Date(now.getFullYear() - maxAge, now.getMonth(), now.getDate());
+    query = query.gte("birthday", minDate.toISOString().split("T")[0]);
+  }
+  if (minAge != null) {
+    const maxDate = new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate());
+    query = query.lte("birthday", maxDate.toISOString().split("T")[0]);
+  }
+  return query;
+}
+
+export type ContactListFilterRow = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  father_name?: string | null;
+  call_status?: string | null;
+  area?: string | null;
+  municipality?: string | null;
+  toponym?: string | null;
+  gender?: string | null;
+  birthday?: string | null;
+  age?: number | null;
+  phone?: string | null;
+  phone2?: string | null;
+  landline?: string | null;
+  email?: string | null;
+  priority?: string | null;
+  tags?: string[] | null;
+  political_stance?: string | null;
+  electoral_district?: string | null;
+  predicted_score?: number | null;
+  is_volunteer?: boolean | null;
+  volunteer_area?: string | null;
+  last_contacted_at?: string | null;
+  may_not_have_mobile?: boolean | null;
+  may_not_have_landline?: boolean | null;
+  may_not_have_email?: boolean | null;
+};
+
+function partialLocationMatch(
+  value: string | null | undefined,
+  filter: string,
+  partial: boolean,
+): boolean {
+  const v = (value ?? "").trim();
+  const f = filter.trim();
+  if (!f) return true;
+  if (!v) return false;
+  if (partial) {
+    return normalizeGreekNameKey(v).includes(normalizeGreekNameKey(f));
+  }
+  return v === f;
+}
+
+function ilikeMatch(value: string | null | undefined, filter: string): boolean {
+  const v = (value ?? "").trim().toLowerCase();
+  const f = filter.trim().toLowerCase();
+  if (!f) return true;
+  return v.includes(f);
+}
+
+/** In-memory AND filter — used after batch id fetches when SQL filters may not apply. */
+export function contactRowMatchesListFilters(
+  row: ContactListFilterRow,
+  f: ContactListFilters,
+  opts?: { partialLocation?: boolean; excludeContactIds?: ReadonlySet<string> },
+): boolean {
+  if (opts?.excludeContactIds?.has(String(row.id))) return false;
+
+  const callStatuses = f.call_statuses.length
+    ? f.call_statuses
+    : f.call_status
+      ? [f.call_status]
+      : [];
+  if (callStatuses.length && !callStatuses.includes(String(row.call_status ?? ""))) return false;
+
+  if (f.first_name?.trim() && !ilikeMatch(row.first_name, f.first_name)) return false;
+  if (f.last_name?.trim() && !ilikeMatch(row.last_name, f.last_name)) return false;
+  if (f.father_name?.trim() && !ilikeMatch(row.father_name, f.father_name)) return false;
+
+  const partial = opts?.partialLocation ?? false;
+  if (f.area && !partialLocationMatch(row.area, f.area, partial)) return false;
+  if (f.municipalities.length) {
+    const muni = (row.municipality ?? "").trim();
+    if (!muni) return false;
+    const ok = f.municipalities.some((m) => partialLocationMatch(muni, m, partial));
+    if (!ok) return false;
+  }
+  if (f.toponyms.length) {
+    const top = (row.toponym ?? "").trim();
+    if (!top) return false;
+    const ok = f.toponyms.some((t) => partialLocationMatch(top, t, partial));
+    if (!ok) return false;
+  }
+
+  if (f.gender && String(row.gender ?? "") !== f.gender) return false;
+
+  if (f.birthday_today) {
+    const b = row.birthday ?? "";
+    if (!b) return false;
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    if (!b.endsWith(`-${mm}-${dd}`)) return false;
+  }
+
+  if (f.ekl_ar === "has") {
+    const ed = (row.electoral_district ?? "").trim();
+    if (!ed) return false;
+  } else if (f.ekl_ar === "not") {
+    if ((row.electoral_district ?? "").trim()) return false;
+  }
+  if (f.electoral_district?.trim()) {
+    if (!ilikeMatch(row.electoral_district, f.electoral_district)) return false;
+  }
+
+  if (f.mobile_presence === "has") {
+    const hasPhone = Boolean((row.phone ?? "").trim() || (row.phone2 ?? "").trim());
+    if (!hasPhone || row.may_not_have_mobile === true) return false;
+  } else if (f.mobile_presence === "not") {
+    const hasPhone = Boolean((row.phone ?? "").trim() || (row.phone2 ?? "").trim());
+    if (row.may_not_have_mobile === true || hasPhone) return false;
+  }
+
+  if (f.landline_presence === "has") {
+    if (!(row.landline ?? "").trim() || row.may_not_have_landline === true) return false;
+  } else if (f.landline_presence === "not") {
+    if (row.may_not_have_landline === true || (row.landline ?? "").trim()) return false;
+  }
+
+  if (f.email_presence === "has") {
+    if (!(row.email ?? "").trim() || row.may_not_have_email === true) return false;
+  } else if (f.email_presence === "not") {
+    if (row.may_not_have_email === true || (row.email ?? "").trim()) return false;
+  }
+
+  if (f.priority && String(row.priority ?? "") !== f.priority) return false;
+  if (f.tag) {
+    const tags = row.tags ?? [];
+    if (!Array.isArray(tags) || !tags.includes(f.tag)) return false;
+  }
+  if (f.political_stance && String(row.political_stance ?? "") !== f.political_stance) return false;
+  if (f.phone && !ilikeMatch(row.phone, f.phone) && !ilikeMatch(row.phone2, f.phone)) return false;
+
+  const ageMin = parseOptionalInt(f.age_min);
+  const ageMax = parseOptionalInt(f.age_max);
+  if (ageMin != null || ageMax != null) {
+    const birthday = row.birthday ?? "";
+    if (birthday) {
+      const now = new Date();
+      if (ageMax != null) {
+        const minDate = new Date(now.getFullYear() - ageMax, now.getMonth(), now.getDate());
+        if (birthday < minDate.toISOString().split("T")[0]!) return false;
+      }
+      if (ageMin != null) {
+        const maxDate = new Date(now.getFullYear() - ageMin, now.getMonth(), now.getDate());
+        if (birthday > maxDate.toISOString().split("T")[0]!) return false;
+      }
+    } else if (row.age != null) {
+      if (ageMin != null && row.age < ageMin) return false;
+      if (ageMax != null && row.age > ageMax) return false;
+    } else if (ageMin != null || ageMax != null) {
+      return false;
+    }
+  }
+
+  const birthFrom = parseOptionalInt(f.birth_year_from);
+  const birthTo = parseOptionalInt(f.birth_year_to);
+  if (birthFrom != null && (!row.birthday || row.birthday < `${birthFrom}-01-01`)) return false;
+  if (birthTo != null && (!row.birthday || row.birthday > `${birthTo}-12-31`)) return false;
+
+  if (f.not_contacted_days) {
+    const n = parseInt(f.not_contacted_days, 10);
+    if (Number.isFinite(n) && n > 0) {
+      const cut = new Date();
+      cut.setDate(cut.getDate() - n);
+      const lc = row.last_contacted_at;
+      if (lc && new Date(lc) >= cut) return false;
+    }
+  }
+
+  const score = row.predicted_score;
+  if (f.score_tier === "low" && (score == null || score > 33)) return false;
+  if (f.score_tier === "mid" && (score == null || score < 34 || score > 66)) return false;
+  if (f.score_tier === "high" && (score == null || score < 67)) return false;
+
+  if (f.is_volunteer && row.is_volunteer !== true) return false;
+  if (f.volunteer_area && !ilikeMatch(row.volunteer_area, f.volunteer_area)) return false;
+
+  return true;
+}
+
+export function filterContactRowsByListFilters<T extends ContactListFilterRow>(
+  rows: T[],
+  f: ContactListFilters,
+  opts?: { partialLocation?: boolean; excludeContactIds?: readonly string[] },
+): T[] {
+  const exclude = opts?.excludeContactIds?.length
+    ? new Set(opts.excludeContactIds)
+    : undefined;
+  return rows.filter((row) => contactRowMatchesListFilters(row, f, { ...opts, excludeContactIds: exclude }));
+}
+
+export function hasColumnListFilters(f: ContactListFilters): boolean {
+  const d = getDefaultContactFilters();
+  const keys: (keyof ContactListFilters)[] = [
+    "first_name",
+    "last_name",
+    "father_name",
+    "call_status",
+    "area",
+    "priority",
+    "tag",
+    "political_stance",
+    "phone",
+    "mobile_presence",
+    "landline_presence",
+    "email_presence",
+    "not_contacted_days",
+    "score_tier",
+    "volunteer_area",
+    "gender",
+    "ekl_ar",
+    "electoral_district",
+    "has_request",
+    "request_status",
+    "age_min",
+    "age_max",
+    "birth_year_from",
+    "birth_year_to",
+  ];
+  for (const k of keys) {
+    if (f[k] !== d[k]) return true;
+  }
+  if (f.call_statuses.length) return true;
+  if (f.municipalities.length) return true;
+  if (f.toponyms.length) return true;
+  if (f.is_volunteer) return true;
+  if (f.nameday_today) return true;
+  if (f.birthday_today) return true;
+  return false;
+}
+
+/** Column + exclude-group filters only (include ids applied separately in batch fetches). */
+export function applyColumnContactFiltersToBuilder(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  f: ContactListFilters,
+  opts?: { partialLocation?: boolean; excludeContactIds?: string[] },
+) {
+  const groupResolution: GroupFilterResolution | undefined = opts?.excludeContactIds?.length
+    ? { includeContactIds: null, excludeContactIds: opts.excludeContactIds }
+    : undefined;
+  const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
+  let q = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
+    partialLocation: opts?.partialLocation,
+  });
+  return applyBirthdayAgeFiltersToBuilder(q, f.age_min, f.age_max);
 }
 
 export function applyContactListFiltersToBuilder(
