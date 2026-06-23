@@ -161,6 +161,7 @@ function onlyDigits(s: string): string {
 type ContactFuzzy = {
   first_name: string;
   last_name: string;
+  father_name?: string | null;
   nickname: string | null;
   phone?: string | null;
   phone2?: string | null;
@@ -172,9 +173,11 @@ type ContactFuzzy = {
 export function buildNameSearchHaystack(c: ContactFuzzy): string {
   const fn = normalizeGreekNameKey(c.first_name);
   const ln = normalizeGreekNameKey(c.last_name);
+  const fan = c.father_name ? normalizeGreekNameKey(c.father_name) : "";
   const nn = c.nickname ? normalizeGreekNameKey(c.nickname) : "";
   const fnL = greekNameToLatin(c.first_name);
   const lnL = greekNameToLatin(c.last_name);
+  const fanL = c.father_name ? greekNameToLatin(c.father_name) : "";
   const nnL = c.nickname ? greekNameToLatin(c.nickname) : "";
   const fullG = fn + " " + ln;
   const fullL = greekNameToLatin(`${c.first_name} ${c.last_name}`.trim());
@@ -183,7 +186,24 @@ export function buildNameSearchHaystack(c: ContactFuzzy): string {
   const pl = c.landline != null ? onlyDigits(String(c.landline)) : "";
   const a = c.area != null ? normalizeGreekNameKey(c.area) : "";
   const m = c.municipality != null ? normalizeGreekNameKey(c.municipality) : "";
-  return [fullG, fn, ln, nn, fullL, fnL, lnL, nnL, ph, p2, pl, a, m, `${fnL} ${lnL}`.trim()]
+  return [
+    fullG,
+    fn,
+    ln,
+    fan,
+    nn,
+    fullL,
+    fnL,
+    lnL,
+    fanL,
+    nnL,
+    ph,
+    p2,
+    pl,
+    a,
+    m,
+    `${fnL} ${lnL}`.trim(),
+  ]
     .filter(Boolean)
     .join(" ");
 }

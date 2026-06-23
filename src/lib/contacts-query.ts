@@ -514,7 +514,34 @@ export async function fetchContactRowsInBatches(
 
 const NAME_SEARCH_RPC_PAGE_SIZE = 1000;
 
-/** First/last/father name search via search_contacts_by_name RPC (paginated). */
+function rowMatchesNameSearchRpc(
+  row: Record<string, unknown>,
+  opts: {
+    firstName?: string | null;
+    lastName?: string | null;
+    fatherName?: string | null;
+  },
+): boolean {
+  const { firstName, lastName, fatherName } = opts;
+  if (firstName?.trim()) {
+    const hit =
+      contactFieldMatchesFuzzyName(row.first_name as string | null | undefined, firstName) ||
+      contactFieldMatchesFuzzyName(row.nickname as string | null | undefined, firstName);
+    if (!hit) return false;
+  }
+  if (lastName?.trim() && !contactFieldMatchesFuzzyName(row.last_name as string | null | undefined, lastName)) {
+    return false;
+  }
+  if (
+    fatherName?.trim() &&
+    !contactFieldMatchesFuzzyName(row.father_name as string | null | undefined, fatherName)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** First/last/father/nickname search via search_contacts_by_name RPC + fuzzy refine (paginated). */
 export async function searchContactsByName(
   supabase: SupabaseClient,
   opts: {
@@ -543,7 +570,7 @@ export async function searchContactsByName(
     from += NAME_SEARCH_RPC_PAGE_SIZE;
   }
 
-  return allRows;
+  return allRows.filter((row) => rowMatchesNameSearchRpc(row, opts));
 }
 
 /** Fetch all matches in memory before paginating (search, name combos, group-only, large include lists). */

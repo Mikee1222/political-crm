@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeGreekNameKey } from "@/lib/greek-fuzzy-name";
+import { listContactMunicipalitiesWithCounts } from "@/lib/contact-location-admin";
 
 export type MunicipalitySearchRow = {
   id: string;
@@ -114,4 +115,47 @@ export async function resolveMunicipalityExportFilters(
     queries,
     municipalityExact: true,
   };
+}
+
+export type ResolvedContactMunicipality = {
+  municipality: string;
+  resolved: boolean;
+  source: "registry" | "contact_counts" | "unresolved";
+};
+
+/**
+ * Resolve free-text municipality for contact create/update to an existing CRM value.
+ * Prefers the municipalities registry, then distinct contact.municipality values.
+ */
+export async function resolveContactMunicipalityForWrite(
+  supabase: SupabaseClient,
+  raw: string,
+): Promise<ResolvedContactMunicipality> {
+  const query = raw.trim();
+  if (!query) {
+    return { municipality: "", resolved: false, source: "unresolved" };
+  }
+
+  const registryHits = await searchMunicipalities(supabase, query);
+  if (registryHits.length === 1) {
+    return { municipality: registryHits[0]!.name, resolved: true, source: "registry" };
+  }
+  if (registryHits.length > 1) {
+    const exact = registryHits.find(
+      (row) => normalizeGreekNameKey(row.name) === normalizeGreekNameKey(query),
+    );
+    if (exact) {
+      return { municipality: exact.name, resolved: true, source: "registry" };
+    }
+    return { municipality: registryHits[0]!.name, resolved: true, source: "registry" };
+  }
+
+  const contactMunicipalities = await listContactMunicipalitiesWithCounts(supabase);
+  const contactHits = contactMunicipalities.filter((row) => municipalityNameMatchesQuery(row.name, query));
+  if (contactHits.length) {
+    contactHits.sort((a, b) => b.contact_count - a.contact_count || a.name.localeCompare(b.name, "el"));
+    return { municipality: contactHits[0]!.name, resolved: true, source: "contact_counts" };
+  }
+
+  return { municipality: query, resolved: false, source: "unresolved" };
 }

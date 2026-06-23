@@ -5,19 +5,13 @@ import { hasMinRole } from "@/lib/roles";
 import { hasPermissionFlexible } from "@/lib/permission-check";
 import { actionPayloadSchema, type ActionPayload } from "@/lib/ai-assistant-actions";
 import { REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+import {
+  applyFindContactsToolInput,
+  contactFiltersToSearchParams,
+  getDefaultContactFilters,
+} from "@/lib/contacts-filters";
+import { alexandraContactSearchLimit } from "@/lib/alexandra-contact-search";
 export const dynamic = 'force-dynamic';
-
-function buildContactsSearchParams(
-  filters?: { call_status?: string; area?: string; municipality?: string; priority?: string },
-) {
-  const p = new URLSearchParams();
-  if (!filters) return p;
-  if (filters.call_status) p.set("call_status", filters.call_status);
-  if (filters.area) p.set("area", filters.area);
-  if (filters.municipality) p.set("municipality", filters.municipality);
-  if (filters.priority) p.set("priority", filters.priority);
-  return p;
-}
 
 export async function POST(request: NextRequest) {
   const crm = await checkCRMAccess();
@@ -53,16 +47,22 @@ export async function POST(request: NextRequest) {
   };
 
   if (action.action === "find_contacts") {
-    const p = buildContactsSearchParams(action.filters ?? undefined);
-    const r = await forward(`/api/contacts?${p.toString()}`, { method: "GET" });
+    let f = getDefaultContactFilters();
+    if (action.filters && typeof action.filters === "object") {
+      f = applyFindContactsToolInput(f, action.filters as Record<string, unknown>, new Map());
+    }
+    const displayLimit = alexandraContactSearchLimit({ limit: (action as { limit?: number }).limit });
+    f.limit = String(displayLimit);
+    const q = contactFiltersToSearchParams(f).toString();
+    const r = await forward(`/api/contacts?${q}`, { method: "GET" });
     const j = (await r.json()) as { contacts?: unknown[]; error?: string };
     if (!r.ok) {
       return NextResponse.json({ error: j.error || "Σφάλμα" }, { status: 400 });
     }
-    const list = (j.contacts ?? []).slice(0, 25);
+    const list = (j.contacts ?? []).slice(0, displayLimit);
     return NextResponse.json({
       ok: true,
-      message: `Βρέθηκαν έως 25: ${list.length} επαφές`,
+      message: `Βρέθηκαν έως ${displayLimit}: ${list.length} επαφές`,
       findResults: list,
     });
   }

@@ -39,9 +39,11 @@ import { fetchWeatherForCity } from "@/lib/alexandra-weather";
 import { fetchNews, fetchSports } from "@/lib/alexandra-news";
 import { runPoliticalResearch, runPoliticalDailyBriefing, type PoliticalResearchType } from "@/lib/alexandra-political-research";
 import {
+  resolveContactMunicipalityForWrite,
   resolveMunicipalityExportFilters,
   searchMunicipalities,
 } from "@/lib/municipality-search";
+import { alexandraContactSearchLimit } from "@/lib/alexandra-contact-search";
 
 /** Fields allowed when merging spreadsheet row into existing contact (no phone change here). */
 const ALEX_BULK_UPDATE_FIELDS = new Set<string>([
@@ -85,7 +87,7 @@ export const ALEX_TOOLS: Tool[] = [
   {
     name: "find_contacts",
     description:
-      "Αναζήτηση επαφών. Επιστρέφει έως 25 επαφές. Fuzzy search: pass το search. Φίλτρα: call_status, call_statuses, ομάδες (group_ids, exclude, groups_include/exclude by name), birth_year_from/to, δήμος, κ.λπ. Αν ο χρήστης αναφέρει αποθηκευμένο φίλτρο (π.χ. ‘κλασσικά’), get_saved_filters ή/και saved_filter_name· επιστρέφει filter_url για /contacts. Πάντα αναφέρει filter_url από το tool result (για κουμπί Ιστορικού/πλοήγησης).",
+      "Αναζήτηση επαφών. Επιστρέφει έως 75 επαφές (προαιρετικό limit έως 100). Fuzzy search: pass το search. Φίλτρα: call_status, call_statuses, ομάδες (group_ids, exclude, groups_include/exclude by name), birth_year_from/to, δήμος, κ.λπ. Αν ο χρήστης αναφέρει αποθηκευμένο φίλτρο (π.χ. ‘κλασσικά’), get_saved_filters ή/και saved_filter_name· επιστρέφει filter_url για /contacts. Πάντα αναφέρει filter_url από το tool result (για κουμπί Ιστορικού/πλοήγησης).",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -123,7 +125,7 @@ export const ALEX_TOOLS: Tool[] = [
         is_volunteer: { type: "boolean" as const },
         volunteer_area: { type: "string" as const },
         nameday_today: { type: "boolean" as const },
-        limit: { type: "number" as const, description: "Μέγιστα αποτελέσματα API (προαιρ.)" },
+        limit: { type: "number" as const, description: "Μέγιστα αποτελέσματα (προαιρ., default 75, max 100)" },
       },
     },
   },
@@ -1079,6 +1081,9 @@ function buildAdvancedContactFilters(f: Record<string, unknown>, extra?: { limit
   const p = new URLSearchParams();
   if (f.search) p.set("search", String(f.search));
   if (f.name) p.set("name", String(f.name));
+  if (f.first_name) p.set("first_name", String(f.first_name));
+  if (f.last_name) p.set("last_name", String(f.last_name));
+  if (f.father_name) p.set("father_name", String(f.father_name));
   if (f.phone) p.set("phone", String(f.phone));
   if (Array.isArray(f.municipalities) && f.municipalities.length) {
     p.set("municipalities", f.municipalities.map(String).join(","));
@@ -1184,6 +1189,8 @@ async function runAlexToolInner(
       if (jSaved) f = applySavedFilterJson(jSaved, gMap);
     }
     f = applyFindContactsToolInput(f, raw, gMap);
+    const displayLimit = alexandraContactSearchLimit(raw);
+    f.limit = String(displayLimit);
     const filterUrl = buildContactsPageUrl(f);
     const q = contactFiltersToSearchParams(f).toString();
     const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
@@ -1192,7 +1199,7 @@ async function runAlexToolInner(
       return { content: JSON.stringify({ error: j.error || "Σφάλμα αναζήτησης" }), filterUrl };
     }
     const all = (j.contacts ?? []) as FindRow[];
-    const list = all.slice(0, 25) as FindRow[];
+    const list = all.slice(0, displayLimit) as FindRow[];
     return {
       content: JSON.stringify({
         ok: true,
@@ -1276,6 +1283,10 @@ async function runAlexToolInner(
     }
     if (Object.keys(body).length === 0) {
       return { content: JSON.stringify({ error: "Καθόλου επιτρεπτά πεδία" }) };
+    }
+    if (typeof body.municipality === "string" && body.municipality.trim()) {
+      const resolved = await resolveContactMunicipalityForWrite(ctx.supabase, body.municipality);
+      body.municipality = resolved.municipality;
     }
     const r = await ctx.forward(`/api/contacts/${contact_id}`, {
       method: "PUT",
@@ -1540,6 +1551,10 @@ async function runAlexToolInner(
       "landline",
     ] as const) {
       if (raw[k] != null && String(raw[k]).trim() !== "") body[k] = raw[k];
+    }
+    if (typeof body.municipality === "string" && body.municipality.trim()) {
+      const resolved = await resolveContactMunicipalityForWrite(ctx.supabase, body.municipality);
+      body.municipality = resolved.municipality;
     }
     const r = await ctx.forward("/api/contacts", {
       method: "POST",
@@ -1810,7 +1825,7 @@ async function runAlexToolInner(
 
   if (name === "search_contacts_advanced") {
     const fl = (raw.filters as Record<string, unknown>) || {};
-    const lim = Math.min(100, Math.max(1, Number(raw.limit) || 25));
+    const lim = alexandraContactSearchLimit({ limit: raw.limit });
     const q = buildAdvancedContactFilters(fl, { limit: Math.min(12_000, lim * 4) });
     const r = await ctx.forward(`/api/contacts?${q}`, { method: "GET" });
     const j = (await r.json()) as { contacts?: FindRow[]; error?: string };

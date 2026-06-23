@@ -278,6 +278,24 @@ describe("searchContactsByName", () => {
     });
     expect(rows).toHaveLength(1001);
   });
+
+  it("refines RPC rows with accent-insensitive fuzzy matching", async () => {
+    const { searchContactsByName } = await import("@/lib/contacts-query");
+    const rpc = vi.fn().mockReturnValue({
+      range: vi.fn().mockResolvedValue({
+        data: [
+          { id: "1", first_name: "Μαρία", last_name: "Παπα", nickname: null, father_name: null },
+          { id: "2", first_name: "Γιώργος", last_name: "Α", nickname: null, father_name: null },
+        ],
+        error: null,
+      }),
+    });
+    const supabase = { rpc };
+
+    const rows = await searchContactsByName(supabase as never, { firstName: "ΜΑΡΙΑ" });
+
+    expect(rows.map((r) => r.id)).toEqual(["1"]);
+  });
 });
 
 describe("contactRowMatchesListFilters", () => {
