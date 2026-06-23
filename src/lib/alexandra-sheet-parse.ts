@@ -137,7 +137,7 @@ export function buildImportPreviewMessage(
   fileName: string,
   columns: string[],
   previewRows: Array<Record<string, string | number | null | undefined>>,
-  options?: { headerRowIndex?: number; sheetName?: string },
+  options?: { headerRowIndex?: number; sheetName?: string; totalRows?: number },
 ): string {
   const colLine = columns.join(", ");
   const dataPreview = JSON.stringify(previewRows, null, 0);
@@ -146,5 +146,9 @@ export function buildImportPreviewMessage(
       ? ` Η σειρά επικεφαλίδων (αυτόματη) είναι η γραμμή ${options.headerRowIndex + 1} του φύλλου.`
       : "";
   const s = options?.sheetName?.trim() ? ` Φύλλο: ${options.sheetName}.` : "";
-  return `Ανέβασα αρχείο «${fileName}».${s}${h} Στήλες: [${colLine}]. Πρώτες 5 γραμμές δεδομένων: ${dataPreview}. Αν ο τίτλος/όνομα αρχείου υποδηλώνει τόπο (π.χ. δήμος), το χρησιμοποιείς ως municipality+area+toponym. Χωρίς όνομα (first_name) ή κύριο phone δεν γίνεται επαφή. Χρήση full_name: τελευταίο token = first_name, προηγούμενα = last_name. Πολλαπλοί αριθμοί: → phone, phone2, landline. Κάλεσε smart_excel_import με confirmed=false για preview πριν την εισαγωγή.`;
+  const total =
+    options?.totalRows != null && options.totalRows > previewRows.length
+      ? ` Σύνολο ${options.totalRows} γραμμές δεδομένων.`
+      : "";
+  return `Ανέβασα αρχείο «${fileName}».${s}${h}${total} Στήλες: [${colLine}]. Πρώτες 5 γραμμές δεδομένων: ${dataPreview}. Αν ο τίτλος/όνομα αρχείου υποδηλώνει τόπο (π.χ. δήμος), το χρησιμοποιείς ως municipality+area+toponym. Χωρίς όνομα (first_name) ή κύριο phone δεν γίνεται επαφή. Χρήση full_name: τελευταίο token = first_name, προηγούμενα = last_name. Πολλαπλοί αριθμοί: → phone, phone2, landline. Κάλεσε smart_excel_import με confirmed=false για preview πριν την εισαγωγή.`;
 }

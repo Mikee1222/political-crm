@@ -22,6 +22,10 @@ import { z } from "zod";
 import type { ActionPayload } from "@/lib/ai-assistant-actions";
 import { formatTodayLabelAthens } from "@/lib/date-format";
 import { inferSpreadsheetContextMunicipality } from "@/lib/alexandra-sheet-parse";
+import {
+  loadSpreadsheetStash,
+  SPREADSHEET_ATTACHMENT_ROW_THRESHOLD,
+} from "@/lib/alexandra-spreadsheet-stash";
 export const dynamic = 'force-dynamic';
 
 const pageContextSchema = z.discriminatedUnion("type", [
@@ -68,7 +72,11 @@ const bodySchema = z.object({
   attachment: z
     .object({
       type: z.literal("spreadsheet_import"),
-      rows: z.array(z.record(z.string(), z.unknown())),
+      rows: z.array(z.record(z.string(), z.unknown())).max(SPREADSHEET_ATTACHMENT_ROW_THRESHOLD).optional().default([]),
+      /** Large files: rows uploaded via /api/ai-assistant/spreadsheet-stash in chunks */
+      stashed: z.boolean().optional(),
+      totalRows: z.number().int().positive().optional(),
+      columns: z.array(z.string()).optional(),
       fileName: z.string().max(200).optional(),
       /** First sheet name when it is a place (e.g. Αστακός), not generic Sheet1 */
       sheetName: z.string().max(200).optional(),
@@ -145,17 +153,47 @@ export async function POST(request: NextRequest) {
 
   const { message, conversationId, pageContext: rawPageContext, attachment: rawAttachment } = bodyIn;
   const pageContext = rawPageContext ?? undefined;
-  const importRowsForTool =
-    hasMinRole(p.role, "manager") && rawAttachment?.type === "spreadsheet_import" ? rawAttachment.rows : undefined;
 
-  const importContextMunicipality: string | undefined = (() => {
-    if (!hasMinRole(p.role, "manager") || rawAttachment?.type !== "spreadsheet_import") return undefined;
-    return inferSpreadsheetContextMunicipality(
-      rawAttachment.fileName,
-      rawAttachment.sheetName,
-      rawAttachment.contextMunicipality,
-    );
-  })();
+  let importRowsForTool: Array<Record<string, unknown>> | undefined;
+  let importContextMunicipality: string | undefined;
+
+  if (hasMinRole(p.role, "manager") && rawAttachment?.type === "spreadsheet_import") {
+    if (rawAttachment.stashed) {
+      try {
+        const loaded = await loadSpreadsheetStash(user.id, conversationId);
+        if (!loaded) {
+          return NextResponse.json(
+            { error: "Δεν βρέθηκαν τα δεδομένα του αρχείου. Ξανανέβασε το Excel." },
+            { status: 400 },
+          );
+        }
+        if (rawAttachment.totalRows != null && loaded.rows.length !== rawAttachment.totalRows) {
+          return NextResponse.json(
+            { error: "Ατελές αρχείο import — λείπουν γραμμές. Ξανανέβασε το Excel." },
+            { status: 400 },
+          );
+        }
+        importRowsForTool = loaded.rows;
+        importContextMunicipality = inferSpreadsheetContextMunicipality(
+          loaded.meta.fileName ?? rawAttachment.fileName,
+          loaded.meta.sheetName ?? rawAttachment.sheetName,
+          loaded.meta.contextMunicipality ?? rawAttachment.contextMunicipality,
+        );
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Σφάλμα φόρτωσης αρχείου" },
+          { status: 500 },
+        );
+      }
+    } else if (rawAttachment.rows.length > 0) {
+      importRowsForTool = rawAttachment.rows;
+      importContextMunicipality = inferSpreadsheetContextMunicipality(
+        rawAttachment.fileName,
+        rawAttachment.sheetName,
+        rawAttachment.contextMunicipality,
+      );
+    }
+  }
   const cookie = request.headers.get("cookie") ?? "";
   const origin = request.nextUrl.origin;
 
@@ -246,6 +284,7 @@ export async function POST(request: NextRequest) {
         profile: p,
         role: p.role,
         userId: user.id,
+        conversationId,
         allowedPermissionKeys: allowedKeys === null ? undefined : allowedKeys,
         defaultContactId: pageContext?.type === "contact" ? pageContext.contactId : null,
         importRows: importRowsForTool,

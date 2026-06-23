@@ -37,6 +37,7 @@ import {
 } from "@/lib/spreadsheet-import";
 import { DUPLICATE_FIELD_LABELS, findImportDuplicates, type DuplicateMatch } from "@/lib/import-dedup";
 import { serverChunkedImportMapped } from "@/lib/chunked-contact-import";
+import { deleteSpreadsheetStash } from "@/lib/alexandra-spreadsheet-stash";
 import {
   detectRequestColumns,
   transformRequestSpreadsheetRow,
@@ -911,6 +912,7 @@ export type ToolContext = {
   profile: UserProfile;
   role: string;
   userId: string;
+  conversationId?: string;
   /** When set, tool gates use this matrix; when omitted, legacy hasMinRole checks apply. */
   allowedPermissionKeys?: ReadonlySet<string>;
   /** Επαφή από /contacts/[id] — default για tools με contact_id */
@@ -2212,6 +2214,9 @@ ${sampleLines || "—"}${dupHint}
 
     const skip_no_phone = work.filter((w) => w.skip === "no_phone").length;
     const skip_name = work.filter((w) => w.skip === "no_first_name").length;
+    if (ctx.conversationId) {
+      await deleteSpreadsheetStash(ctx.userId, ctx.conversationId).catch(() => undefined);
+    }
     return {
       content: JSON.stringify({
         ok: true,
@@ -2319,6 +2324,10 @@ ${sampleLines || "—"}${dupHint}
         created += 1;
       }
       ctx.onBulkProgress?.(i + 1, total);
+    }
+
+    if (ctx.conversationId) {
+      await deleteSpreadsheetStash(ctx.userId, ctx.conversationId).catch(() => undefined);
     }
 
     return {

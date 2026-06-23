@@ -95,7 +95,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
     listLoading, messagesLoading, input, setInput, error, toDelete, setToDelete,
     setError, hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, bottomRef, newConversation,
     deleteConv, execute, send, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, showChips, enterMiniFromPage,
-    loadList, loadMessages, setSpreadsheetImport, leftPanelTab, setLeftPanelTab, briefingToday, contactPageContext, openMiniFromBubble,
+    loadList, loadMessages, setSpreadsheetImport, spreadsheetUploadProgress, leftPanelTab, setLeftPanelTab, briefingToday, contactPageContext, openMiniFromBubble,
   } = useAlexandraChat();
   const canSeeBriefing = hasMinRole(role as Role | null | undefined, "manager");
   const canSeeActivity = hasMinRole(role as Role | null | undefined, "manager");
@@ -268,10 +268,12 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           fileName: file.name,
           sheetName: p.sheetName,
           contextMunicipality: inferSpreadsheetContextMunicipality(file.name, p.sheetName),
+          columns: p.columns,
         });
         const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows, {
           headerRowIndex: p.headerRowIndex,
           sheetName: p.sheetName,
+          totalRows: p.rows.length,
         });
         void send(text, convId);
         showToast("Το υπολογιστικό φύλλο φορτώθηκε για προεπισκόπηση.", "success");
@@ -316,10 +318,12 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
           fileName: file.name,
           sheetName: p.sheetName,
           contextMunicipality: inferSpreadsheetContextMunicipality(file.name, p.sheetName),
+          columns: p.columns,
         });
         const text = buildImportPreviewMessage(file.name, p.columns, p.previewRows, {
           headerRowIndex: p.headerRowIndex,
           sheetName: p.sheetName,
+          totalRows: p.rows.length,
         });
         void send(text, convId);
         showToast("Το υπολογιστικό φύλλο φορτώθηκε για προεπισκόπηση.", "success");
@@ -991,6 +995,11 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
                     </button>
                   ))}
                 </div>
+              )}
+              {spreadsheetUploadProgress && (
+                <p className="mb-2 text-xs font-medium text-[var(--accent-gold)]" role="status">
+                  Αποστολή αρχείου… τμήμα {spreadsheetUploadProgress.done} από {spreadsheetUploadProgress.total}
+                </p>
               )}
               <form
                 className="group/form flex items-end gap-1 rounded-2xl border border-[var(--border)]/80 bg-[color-mix(in_srgb,var(--bg-elevated)_65%,transparent)] px-2 py-1.5 shadow-sm transition duration-200 focus-within:border-[var(--accent-gold)]/45 focus-within:ring-2 focus-within:ring-[var(--accent-gold)]/20"

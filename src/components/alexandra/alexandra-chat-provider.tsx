@@ -8,6 +8,9 @@ import { useProfile } from "@/contexts/profile-context";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import type { AlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { mapDbToMsg, type Msg, type MsgWithT, type RowConv, type StreamMeta } from "./alexandra-chat-helpers";
+import { clientUploadSpreadsheetStash } from "@/lib/alexandra-spreadsheet-upload";
+import { spreadsheetNeedsChunkedUpload } from "@/lib/alexandra-spreadsheet-stash";
+import { IMPORT_CHUNK_SIZE } from "@/lib/chunked-contact-import";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const AlexandraChatContext = createContext<any>(null);
@@ -52,7 +55,13 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     fileName?: string;
     sheetName?: string;
     contextMunicipality?: string;
+    columns?: string[];
+    /** Large files uploaded to server stash in chunks */
+    serverStashed?: boolean;
   } | null>(null);
+  const [spreadsheetUploadProgress, setSpreadsheetUploadProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
   const role = profile?.role;
   const router = useRouter();
   const pathname = usePathname();
@@ -238,6 +247,8 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
       fileName?: string;
       sheetName?: string;
       contextMunicipality?: string;
+      columns?: string[];
+      serverStashed?: boolean;
     } | null) => {
       importStashRef.current = p;
     },
@@ -499,7 +510,10 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
           pageContext?: AlexandraPageContext;
           attachment?: {
             type: "spreadsheet_import";
-            rows: Array<Record<string, unknown>>;
+            rows?: Array<Record<string, unknown>>;
+            stashed?: boolean;
+            totalRows?: number;
+            columns?: string[];
             fileName?: string;
             sheetName?: string;
             contextMunicipality?: string;
@@ -509,13 +523,47 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
           payload.pageContext = pageContextForApi;
         }
         if (stash && stash.conversationId === convId) {
-          payload.attachment = {
-            type: "spreadsheet_import",
-            rows: stash.rows,
-            fileName: stash.fileName,
-            sheetName: stash.sheetName,
-            contextMunicipality: stash.contextMunicipality,
-          };
+          const useServerStash = spreadsheetNeedsChunkedUpload(stash.rows.length);
+          if (useServerStash) {
+            if (!stash.serverStashed) {
+              const totalChunks = Math.ceil(stash.rows.length / IMPORT_CHUNK_SIZE);
+              setSpreadsheetUploadProgress({ done: 0, total: totalChunks });
+              try {
+                await clientUploadSpreadsheetStash(
+                  convId,
+                  {
+                    rows: stash.rows,
+                    fileName: stash.fileName,
+                    sheetName: stash.sheetName,
+                    contextMunicipality: stash.contextMunicipality,
+                    columns: stash.columns,
+                  },
+                  (done, total) => setSpreadsheetUploadProgress({ done, total }),
+                );
+                importStashRef.current = { ...stash, serverStashed: true };
+              } finally {
+                setSpreadsheetUploadProgress(null);
+              }
+            }
+            payload.attachment = {
+              type: "spreadsheet_import",
+              stashed: true,
+              totalRows: stash.rows.length,
+              columns: stash.columns,
+              fileName: stash.fileName,
+              sheetName: stash.sheetName,
+              contextMunicipality: stash.contextMunicipality,
+              rows: [],
+            };
+          } else {
+            payload.attachment = {
+              type: "spreadsheet_import",
+              rows: stash.rows,
+              fileName: stash.fileName,
+              sheetName: stash.sheetName,
+              contextMunicipality: stash.contextMunicipality,
+            };
+          }
         }
         const res = await fetch("/api/ai-assistant", {
           method: "POST",
@@ -627,6 +675,7 @@ export function AlexandraChatProvider({ children }: { children: ReactNode }) {
     listLoading, setListLoading, messagesLoading, setMessagesLoading, input, setInput, error, setError, toDelete, setToDelete,
     hoveredId, setHoveredId, sideOpen, setSideOpen, streamMode, setStreamMode, bottomRef, loadList, loadMessages, newConversation,
     deleteConv, execute, send, startWithChip, confirmStartCall, rejectStartCall, rejectCreate, selectConversation, currentTitle, isEmpty, showChips, scrollToBottom, setSpreadsheetImport,
+    spreadsheetUploadProgress,
     miniWindowOpen, setMiniWindowOpen, miniWindowMinimized, setMiniWindowMinimized, enterMiniFromPage, openMiniFromBubble, goToFullAlexandra, closeMiniWindow,
     leftPanelTab, setLeftPanelTab, briefingToday,
     pageContext: alexPage?.pageContext ?? null,
