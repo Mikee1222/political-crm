@@ -52,7 +52,7 @@ export function MobileGlassHeader({
         {showBack ? (
           <button
             type="button"
-            className="hq-press-mobile flex h-10 min-h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-primary)]"
+            className="hq-press-mobile flex h-11 min-h-[44px] w-11 min-w-[44px] shrink-0 items-center justify-center rounded-xl text-[var(--text-primary)]"
             onClick={onBack}
             aria-label="Πίσω"
           >
@@ -61,7 +61,7 @@ export function MobileGlassHeader({
         ) : (
           <button
             type="button"
-            className="hq-press-mobile flex h-10 min-h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-primary)]"
+            className="hq-press-mobile flex h-11 min-h-[44px] w-11 min-w-[44px] shrink-0 items-center justify-center rounded-xl text-[var(--text-primary)]"
             onClick={onToggleMenu}
             aria-label={mobileNavOpen ? "Κλείσιμο μενού" : "Μενού"}
           >
@@ -85,13 +85,13 @@ export function MobileGlassHeader({
           {requestsHref ? (
             <Link
               href={requestsHref}
-              className="hq-press-mobile flex h-10 w-10 items-center justify-center rounded-xl text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)]"
+              className="hq-press-mobile flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-xl text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)]"
               aria-label="Αιτήματα"
             >
               <Bell className="h-[1.15rem] w-[1.15rem]" strokeWidth={2.1} />
             </Link>
           ) : (
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--text-muted)] opacity-40" aria-hidden>
+            <span className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-xl text-[var(--text-muted)] opacity-40" aria-hidden>
               <Bell className="h-[1.15rem] w-[1.15rem]" strokeWidth={2.1} />
             </span>
           )}
@@ -99,7 +99,7 @@ export function MobileGlassHeader({
           {canGlobalSearch ? (
             <button
               type="button"
-              className="hq-press-mobile flex h-10 w-10 items-center justify-center rounded-xl text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)]"
+              className="hq-press-mobile flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-xl text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)]"
               aria-label="Αναζήτηση"
               onClick={onOpenSearch}
             >
@@ -108,7 +108,7 @@ export function MobileGlassHeader({
           ) : (
             <Link
               href="/contacts"
-              className="hq-press-mobile flex h-10 w-10 items-center justify-center rounded-xl text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)]"
+              className="hq-press-mobile flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-xl text-[var(--text-secondary)] transition hover:text-[var(--accent-gold)]"
               aria-label="Επαφές"
             >
               <Search className="h-[1.15rem] w-[1.15rem]" strokeWidth={2.1} />

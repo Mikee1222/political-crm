@@ -1282,7 +1282,7 @@ function ContactDetailPage() {
       {focusMode && c ? (
         <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-xs font-bold text-white">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent-blue)] to-[color-mix(in_srgb,var(--accent-blue)_55%,var(--bg-primary))] text-xs font-bold text-white">
               {initials}
             </div>
             <div className="min-w-0">
@@ -1306,7 +1306,7 @@ function ContactDetailPage() {
         </div>
       ) : null}
       <div className={cn(focusMode && "max-w-6xl mx-auto px-6 py-4")}>
-    <div className="min-h-full -m-6 overflow-x-hidden bg-[var(--bg-primary)] p-4 pb-20 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8 md:pb-8">
+    <div className="min-h-full -m-6 overflow-x-hidden bg-[var(--bg-primary)] p-4 pb-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8 md:pb-8">
       <div className="mb-4 flex min-w-0 items-center justify-between gap-2">
         <button
           type="button"
@@ -1322,7 +1322,7 @@ function ContactDetailPage() {
               type="button"
               onClick={() => navInfo.prev && router.push(contactDetailHref(navInfo.prev))}
               disabled={!navInfo.prev}
-              className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:px-3 sm:py-1.5 sm:text-sm"
+              className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
             >
               <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
               <span className="sm:inline">Προηγούμενο</span>
@@ -1334,7 +1334,7 @@ function ContactDetailPage() {
               type="button"
               onClick={() => navInfo.next && router.push(contactDetailHref(navInfo.next))}
               disabled={!navInfo.next}
-              className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:px-3 sm:py-1.5 sm:text-sm"
+              className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
             >
               <span className="sm:inline">Επόμενο</span>
               <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
@@ -1343,7 +1343,7 @@ function ContactDetailPage() {
         ) : null}
       </div>
       {isCaller && (
-        <p className="mb-4 rounded-[12px] border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">
+        <p className="mb-4 rounded-[12px] border border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] px-3 py-2 text-xs text-[var(--status-noanswer-text)]">
           Προβολή — μπορείτε να αλλάξετε μόνο την <strong>κατάσταση κλήσης</strong>· αποθήκευση παρακάτω.
         </p>
       )}
@@ -1372,7 +1372,7 @@ function ContactDetailPage() {
           </button>
           <div className="flex min-w-0 flex-col gap-3 pr-11 md:pr-0">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#003476] to-[#0a1f3a] text-base font-bold text-white shadow-lg ring-2 ring-[var(--accent-gold)] ring-offset-2 ring-offset-[var(--bg-card)] sm:h-16 sm:w-16 sm:text-lg">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent-blue)] to-[color-mix(in_srgb,var(--accent-blue)_55%,var(--bg-primary))] text-base font-bold text-white shadow-lg ring-2 ring-[var(--accent-gold)] ring-offset-2 ring-offset-[var(--bg-card)] sm:h-16 sm:w-16 sm:text-lg">
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
@@ -1411,7 +1411,7 @@ function ContactDetailPage() {
                 </span>
               ) : null}
               {((c as Contact).language ?? "el") !== "el" ? (
-                <span className="inline-flex min-h-7 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                <span className="inline-flex min-h-7 items-center rounded-md border border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] px-2 py-0.5 text-[10px] font-semibold text-[var(--status-noanswer-text)]">
                   {(c as Contact).language}
                 </span>
               ) : null}
@@ -1476,7 +1476,7 @@ function ContactDetailPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => void saveCallerStatus()}
-                  className="inline-flex min-h-[44px] w-auto shrink-0 items-center justify-center rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white hover:bg-[#002255] disabled:opacity-50"
+                  className="inline-flex min-h-[44px] w-auto shrink-0 items-center justify-center rounded-lg bg-[var(--accent-blue)] px-3 text-xs font-semibold text-white hover:bg-[color-mix(in_srgb,var(--accent-blue)_85%,var(--bg-primary))] disabled:opacity-50"
                 >
                   Αποθήκευση
                 </button>
@@ -1543,7 +1543,7 @@ function ContactDetailPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => void saveCallerStatus()}
-                  className="h-9 rounded-lg bg-[#003476] px-3 text-xs font-semibold text-white hover:bg-[#002255] disabled:opacity-50"
+                  className="h-9 rounded-lg bg-[var(--accent-blue)] px-3 text-xs font-semibold text-white hover:bg-[color-mix(in_srgb,var(--accent-blue)_85%,var(--bg-primary))] disabled:opacity-50"
                 >
                   Αποθήκευση
                 </button>
@@ -1569,7 +1569,7 @@ function ContactDetailPage() {
                 {c.phone?.trim() ? (
                   <a
                     href={`tel:${c.phone.replace(/\s/g, "")}`}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    className="inline-flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
                     title="Κλήση"
                     aria-label="Κλήση τηλεφώνου"
                   >
@@ -1580,7 +1580,7 @@ function ContactDetailPage() {
                   <button
                     type="button"
                     onClick={() => startEdit("personal")}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
+                    className="inline-flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)]/90 text-[var(--text-primary)] transition hover:border-[var(--accent-gold)]/50"
                     title="Επεξεργασία"
                     aria-label="Επεξεργασία"
                   >
@@ -1589,7 +1589,7 @@ function ContactDetailPage() {
                 )}
                 <Link
                   href="/alexandra"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--accent-gold)]/35 bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)] text-[var(--accent-gold)] transition hover:brightness-110"
+                  className="inline-flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-full border border-[var(--accent-gold)]/35 bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)] text-[var(--accent-gold)] transition hover:brightness-110"
                   title="Αλεξάνδρα"
                   aria-label="Ανοιχτό Αλεξάνδρα"
                 >
@@ -1846,7 +1846,7 @@ function ContactDetailPage() {
                       <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-[var(--text-primary)]">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-[var(--border)] accent-[#003476]"
+                          className="h-4 w-4 rounded border-[var(--border)] accent-[var(--accent-blue)]"
                           checked={Boolean(w.is_dead)}
                           onChange={(e) => setBuf({ ...w, is_dead: e.target.checked })}
                         />
@@ -2242,7 +2242,7 @@ function ContactDetailPage() {
                     <button
                       type="button"
                       onClick={() => void handleAddAddress()}
-                      className="flex-1 rounded-xl bg-[#003476] py-2 text-sm font-semibold text-white"
+                      className="flex-1 rounded-xl bg-[var(--accent-blue)] py-2 text-sm font-semibold text-white"
                     >
                       Αποθήκευση
                     </button>
@@ -2404,7 +2404,7 @@ function ContactDetailPage() {
                           setNoteSending(false);
                         }
                       }}
-                      className="inline-flex min-h-9 min-w-[100px] items-center justify-center rounded-lg bg-[#003476] px-4 text-xs font-semibold text-white disabled:opacity-50"
+                      className="inline-flex min-h-9 min-w-[100px] items-center justify-center rounded-lg bg-[var(--accent-blue)] px-4 text-xs font-semibold text-white disabled:opacity-50"
                     >
                       {noteSending ? "…" : "Αποστολή"}
                     </button>
@@ -2949,7 +2949,7 @@ function ContactDetailPage() {
                       {i < calls.length - 1 && (
                         <span className="absolute left-2 top-4 h-[calc(100%-4px)] w-px bg-[var(--border)]" />
                       )}
-                      <span className="relative z-[1] mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#C9A84C] ring-2 ring-white" />
+                      <span className="relative z-[1] mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-gold)] ring-2 ring-[var(--bg-card)]" />
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-[var(--text-primary)]">
                           {cl.called_at ? formatCallLogDateTime(cl.called_at) : "—"}

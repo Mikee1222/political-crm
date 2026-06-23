@@ -223,7 +223,7 @@ export default function RequestDetailPage() {
   }
 
   return (
-    <div className="min-h-0 space-y-6 overflow-x-hidden p-4 pb-24 sm:p-6 sm:pb-6">
+    <div className="min-h-0 space-y-6 overflow-x-hidden p-4 pb-4 sm:p-6 sm:pb-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button type="button" onClick={() => router.push("/requests")} className={lux.btnSecondary + " w-fit gap-1"}>
           <ArrowLeft className="h-4 w-4" /> Λίστα αιτημάτων

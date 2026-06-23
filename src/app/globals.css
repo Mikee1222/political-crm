@@ -18,7 +18,7 @@ body {
 }
 
 html {
-  background-color: #080d1a;
+  background-color: var(--bg-primary);
   min-height: 100%;
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
@@ -90,7 +90,9 @@ html {
   --border: rgba(201, 168, 76, 0.15);
   --border-hover: rgba(201, 168, 76, 0.4);
   --success: #10b981;
+  --status-success: #10b981;
   --danger: #ef4444;
+  --text-danger: #fca5a5;
   --warning: #f59e0b;
   --status-positive-bg: rgba(16, 185, 129, 0.15);
   --status-positive-text: #10b981;
@@ -189,7 +191,9 @@ html {
   --border: rgba(139, 105, 20, 0.2);
   --border-hover: rgba(139, 105, 20, 0.45);
   --success: #10b981;
+  --status-success: #10b981;
   --danger: #ef4444;
+  --text-danger: #dc2626;
   --warning: #f59e0b;
   --status-positive-bg: #dcfce7;
   --status-positive-text: #15803d;
@@ -246,6 +250,21 @@ html {
   /* Modal / sheet backdrops (light — cream, not pure black) */
   --overlay-scrim: rgba(10, 15, 26, 0.38);
   --surface-bulk: rgba(255, 255, 255, 0.97);
+  color-scheme: light;
+}
+
+/* Native date/time pickers follow CRM theme */
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="time"],
+[data-theme="dark"] input[type="datetime-local"],
+[data-theme="dark"] .hq-form-control[type="date"] {
+  color-scheme: dark;
+}
+
+[data-theme="light"] input[type="date"],
+[data-theme="light"] input[type="time"],
+[data-theme="light"] input[type="datetime-local"],
+[data-theme="light"] .hq-form-control[type="date"] {
   color-scheme: light;
 }
 

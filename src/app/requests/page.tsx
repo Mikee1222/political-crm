@@ -28,6 +28,7 @@ import {
   REQUEST_STATUS_OPEN,
 } from "@/lib/request-statuses";
 import { lux, priorityPill } from "@/lib/luxury-styles";
+import { useRegisterMobileRefresh } from "@/contexts/mobile-refresh-context";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { requestCardStatusStyle } from "@/lib/request-status-card-style";
@@ -231,6 +232,8 @@ export default function RequestsPage() {
     void load();
   }, [load]);
 
+  useRegisterMobileRefresh(load);
+
   const setPageContext = alexPage?.setPageContext;
   useEffect(() => {
     if (!setPageContext) return;
@@ -302,7 +305,7 @@ export default function RequestsPage() {
   const rangeTo = Math.min(currentPage * pageSize, listTotal);
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden px-4 pb-24 md:px-0 md:pb-6">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden px-4 pb-4 md:px-0 md:pb-6">
       <PageHeader
         title="Αιτήματα"
         subtitle="Φιλτράρισμα και διαχείριση αιτημάτων πολιτών — κάρτες με SLA και κατάσταση."
@@ -473,7 +476,7 @@ export default function RequestsPage() {
       )}
 
       {!listLoading && rows.length > 0 && totalPages > 1 ? (
-        <div className="mb-24 flex flex-col items-center justify-between gap-3 border-t border-[var(--border)] pt-4 sm:flex-row">
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-[var(--border)] pt-4 sm:flex-row">
           <p className="text-xs text-[var(--text-muted)]">
             {rangeFrom}–{rangeTo} από {listTotal}
           </p>
@@ -522,13 +525,13 @@ function categoryStyle(cat: string | null | undefined): {
 } {
   const c = (cat || "").toLowerCase();
   if (c.includes("υγεία"))
-    return { left: "border-l-4 border-l-emerald-500", Icon: Stethoscope };
+    return { left: "border-l-4 border-l-[var(--status-success)]", Icon: Stethoscope };
   if (c.includes("εκπαίδευ"))
     return { left: "border-l-4 border-l-[var(--accent)]", Icon: FileText };
   if (c.includes("δημόσια") || c.includes("υπηρεσ"))
     return { left: "border-l-4 border-l-[var(--accent)]", Icon: Wrench };
   if (c.includes("άλλο"))
-    return { left: "border-l-4 border-l-slate-500", Icon: HelpCircle };
+    return { left: "border-l-4 border-l-[var(--text-muted)]", Icon: HelpCircle };
   return {
     left: "border-l-4 border-l-[var(--accent-gold)]",
     Icon: Inbox,

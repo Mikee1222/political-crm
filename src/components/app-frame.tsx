@@ -57,6 +57,7 @@ import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { MobileGlassHeader } from "@/components/mobile/mobile-glass-header";
 import { MobilePullToRefresh } from "@/components/mobile/mobile-pull-to-refresh";
 import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-sheet";
+import { MobileRefreshProvider, useMobileRefresh } from "@/contexts/mobile-refresh-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { useProfile, type Profile } from "@/contexts/profile-context";
@@ -68,6 +69,16 @@ import type { PermissionKey } from "@/lib/permissions";
 import { hasMinRole, ROLE_BADGE, type Role } from "@/lib/roles";
 import type { LucideIcon } from "lucide-react";
 import { normalizeRequestStatus, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+
+function MobilePullToRefreshBridge({ enabled }: { enabled: boolean }) {
+  const ctx = useMobileRefresh();
+  return (
+    <MobilePullToRefresh
+      enabled={enabled}
+      onRefresh={ctx ? () => ctx.refresh() : undefined}
+    />
+  );
+}
 
 const STORAGE_SIDEBAR = "crm-sidebar-expanded";
 const STORAGE_NAV_GROUPS = "crm-nav-groups";
@@ -890,6 +901,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const showSidebarNavSkeleton = profileLoading;
 
   return (
+    <MobileRefreshProvider>
     <div
       className="crm-app-frame flex min-h-[-webkit-fill-available] min-h-screen min-h-[100dvh] w-full min-w-full max-w-none flex-col overflow-x-hidden bg-background"
       style={shellStyle}
@@ -1162,7 +1174,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           ) : null}
-          <MobilePullToRefresh enabled={pullRefreshEnabled} />
+          <MobilePullToRefreshBridge enabled={pullRefreshEnabled} />
           <div
             key={pathname}
             data-page-enter={mobilePageEnter || undefined}
@@ -1249,5 +1261,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     </div>
+    </MobileRefreshProvider>
   );
 }

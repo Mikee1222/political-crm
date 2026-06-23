@@ -22,7 +22,7 @@ export const lux = {
   textarea:
     "hq-form-control min-h-[100px] w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-[var(--text-input)] placeholder:text-[var(--text-placeholder)] transition-[border-color,box-shadow] duration-150 focus:border-[var(--accent-gold)] focus:outline focus:outline-2 focus:outline-[var(--accent-gold)] focus:outline-offset-2 focus:ring-0 disabled:opacity-50",
   dateInput:
-    "hq-form-control h-[42px] w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-input)] transition-[border-color,box-shadow] duration-150 focus:border-[var(--accent-gold)] focus:outline focus:outline-2 focus:outline-[var(--accent-gold)] focus:outline-offset-2 focus:ring-0 disabled:opacity-50 [color-scheme:dark]",
+    "hq-form-control h-[42px] w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 text-sm text-[var(--text-input)] transition-[border-color,box-shadow] duration-150 focus:border-[var(--accent-gold)] focus:outline focus:outline-2 focus:outline-[var(--accent-gold)] focus:outline-offset-2 focus:ring-0 disabled:opacity-50",
   /** Gold fill — spec: #C9A84C background, #0A0F1A text (≥4.5:1) */
   btnPrimary:
     "btn-scale hq-btn-gold-glow inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-[#C9A84C] bg-gradient-to-b from-[#C9A84C] to-[#8b6914] px-4 py-2.5 text-sm font-bold text-[var(--text-badge-on-gold)] shadow-sm transition duration-150 hover:brightness-110 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50",

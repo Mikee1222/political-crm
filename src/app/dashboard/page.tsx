@@ -452,7 +452,7 @@ export default function DashboardPage() {
             description="Αιτήματα σε κατάσταση «Ανοικτό» με παρελθούσα ημ/νια λήξης"
             href="/requests"
             linkText="Προβολή"
-            accent="text-red-600 dark:text-red-300"
+            accent="text-[var(--text-danger)]"
           />
           <AlertCard
             borderClass="border-amber-500/35 bg-amber-500/[0.08]"
@@ -463,7 +463,7 @@ export default function DashboardPage() {
             description="Επαφές χωρίς κινητό (κενό ή null)"
             href="/contacts"
             linkText="Προβολή"
-            accent="text-amber-700 dark:text-amber-200"
+            accent="text-[var(--status-noanswer-text)]"
           />
           <AlertCard
             borderClass="border-sky-500/35 bg-sky-500/[0.08]"
@@ -474,7 +474,7 @@ export default function DashboardPage() {
             description="Μη ολοκληρωμένες εργασίες με deadline σήμερα"
             href="/tasks"
             linkText="Προβολή"
-            accent="text-sky-700 dark:text-sky-200"
+            accent="text-[var(--accent-blue-bright)]"
           />
         </div>
       </section>
@@ -794,7 +794,13 @@ export default function DashboardPage() {
         ) : (
           <ul className="space-y-0">
             {acts.map((item, i) => {
-              const palette = ["#C9A84C", "#10B981", "#0EA5E9", "#A855F7", "#F43F5E"];
+              const palette = [
+                "var(--accent-gold)",
+                "var(--success)",
+                "var(--accent-blue-bright)",
+                "color-mix(in srgb, var(--accent-gold) 55%, var(--accent-blue))",
+                "var(--danger)",
+              ];
               const dot = palette[i % palette.length];
               return (
                 <li

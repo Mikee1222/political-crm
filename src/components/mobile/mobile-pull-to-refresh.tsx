@@ -7,13 +7,15 @@ const THRESHOLD = 72;
 
 type Props = {
   enabled: boolean;
+  /** Optional page-specific refresh (e.g. contacts/requests `load()`). Falls back to `router.refresh()`. */
+  onRefresh?: () => void | Promise<void>;
 };
 
 /**
  * Pull down on the main scroll surface to refresh (contacts / requests).
- * Gold spinner; calls `router.refresh()`.
+ * Gold spinner; calls `onRefresh` when provided, else `router.refresh()`.
  */
-export function MobilePullToRefresh({ enabled }: Props) {
+export function MobilePullToRefresh({ enabled, onRefresh }: Props) {
   const router = useRouter();
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -21,17 +23,29 @@ export function MobilePullToRefresh({ enabled }: Props) {
   const active = useRef(false);
   const pullRef = useRef(0);
   const refreshingRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
+
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
 
   const finishRefresh = useCallback(() => {
     refreshingRef.current = true;
     setRefreshing(true);
-    router.refresh();
-    window.setTimeout(() => {
-      refreshingRef.current = false;
-      setRefreshing(false);
-      pullRef.current = 0;
-      setPull(0);
-    }, 650);
+    void (async () => {
+      try {
+        const fn = onRefreshRef.current;
+        if (fn) await fn();
+        else router.refresh();
+      } finally {
+        window.setTimeout(() => {
+          refreshingRef.current = false;
+          setRefreshing(false);
+          pullRef.current = 0;
+          setPull(0);
+        }, 650);
+      }
+    })();
   }, [router]);
 
   useEffect(() => {

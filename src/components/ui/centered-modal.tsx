@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 
 /** CRM standard dialog layer: above nav/sheets, below command palette (400). */
 const MODAL_OVERLAY_CLASS =
-  "fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm max-sm:items-stretch max-sm:justify-stretch sm:p-4";
+  "fixed inset-0 z-[9998] flex items-center justify-center bg-[var(--overlay-scrim)] p-0 backdrop-blur-sm max-sm:items-stretch max-sm:justify-stretch sm:p-4";
 
 export type ModalShellProps = {
   open: boolean;
@@ -139,7 +139,7 @@ export function CenteredModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-sm transition hover:border-[#C9A84C]/60 hover:bg-[#C9A84C]/15 hover:text-[#C9A84C]"
+          className="absolute right-3 top-3 z-10 flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-sm transition hover:border-[color-mix(in_srgb,var(--accent-gold)_60%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent-gold)_15%,transparent)] hover:text-[var(--accent-gold)]"
           aria-label="Κλείσιμο"
         >
           <X className="h-5 w-5" aria-hidden strokeWidth={2.25} />

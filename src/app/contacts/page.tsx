@@ -55,6 +55,7 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
+import { useRegisterMobileRefresh } from "@/contexts/mobile-refresh-context";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
@@ -449,11 +450,19 @@ function ContactSwipeCard({
   onNavigateDetail,
   canDelete,
   onDeleted,
+  selectMode = false,
+  selected = false,
+  onToggleSelected,
+  onEnterSelectMode,
 }: {
   c: Contact;
   onNavigateDetail: () => void;
   canDelete: boolean;
   onDeleted: () => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelected?: () => void;
+  onEnterSelectMode?: () => void;
 }) {
   const tel = contactTelHref(c);
   const pr = c.priority ?? "Medium";
@@ -463,6 +472,14 @@ function ContactSwipeCard({
   const [touching, setTouching] = useState(false);
   const drag = useRef<{ x0: number; tx0: number } | null>(null);
   const skipTapNav = useRef(false);
+  const longPressTimer = useRef<number | null>(null);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   const delW = canDelete ? SW_DEL : 0;
   const minTx = -(SW_CALL + delW);
@@ -577,26 +594,51 @@ function ContactSwipeCard({
           transition: touching ? "none" : "transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}
         onTouchStart={(e) => {
+          if (selectMode) {
+            clearLongPress();
+            return;
+          }
           setTouching(true);
           drag.current = { x0: e.touches[0].clientX, tx0: tx };
+          clearLongPress();
+          longPressTimer.current = window.setTimeout(() => {
+            longPressTimer.current = null;
+            skipTapNav.current = true;
+            onEnterSelectMode?.();
+            onToggleSelected?.();
+            setTx(0);
+            if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+              navigator.vibrate(12);
+            }
+          }, 480);
         }}
         onTouchMove={(e) => {
+          if (selectMode) return;
           if (!drag.current) return;
           const dx = e.touches[0].clientX - drag.current.x0;
+          if (Math.abs(dx) > 10) clearLongPress();
           if (Math.abs(dx) > 10) skipTapNav.current = true;
           setTx(clamp(drag.current.tx0 + dx));
         }}
         onTouchEnd={() => {
+          clearLongPress();
+          if (selectMode) return;
           drag.current = null;
           setTouching(false);
           setTx((t) => snapFrom(t));
         }}
         onTouchCancel={() => {
+          clearLongPress();
+          if (selectMode) return;
           drag.current = null;
           setTouching(false);
           setTx((t) => snapFrom(t));
         }}
         onClick={() => {
+          if (selectMode) {
+            onToggleSelected?.();
+            return;
+          }
           if (skipTapNav.current) {
             skipTapNav.current = false;
             return;
@@ -615,6 +657,21 @@ function ContactSwipeCard({
         }}
       >
         <div className="hq-card-tap-inner flex min-w-0 flex-1 items-stretch">
+          {selectMode ? (
+            <div className="flex w-11 shrink-0 items-center justify-center pl-2">
+              <input
+                type="checkbox"
+                className="h-5 w-5 cursor-pointer rounded border-[var(--border)] bg-[var(--input-bg)] accent-[var(--accent-gold)]"
+                checked={selected}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onToggleSelected?.();
+                }}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Επιλογή ${c.first_name} ${c.last_name}`}
+              />
+            </div>
+          ) : null}
           <div
             className="my-4 ml-1 w-[3px] shrink-0 self-stretch rounded-full"
             style={callStatusAccentStyle(c.call_status)}
@@ -752,6 +809,7 @@ function ContactsPage() {
   const [saving, setSaving] = useState(false);
   const [bulkWaMessage, setBulkWaMessage] = useState("");
   const [focusMode, setFocusMode] = useState(false);
+  const [mobileSelectMode, setMobileSelectMode] = useState(false);
   const filtersUrlKeyRef = useRef<string | null>(null);
   const { showToast: showListToast } = useFormToast();
 
@@ -907,6 +965,12 @@ function ContactsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useRegisterMobileRefresh(load);
+
+  useEffect(() => {
+    if (selected.size === 0) setMobileSelectMode(false);
+  }, [selected.size]);
 
   useEffect(() => {
     if (contacts.length === 0) return;
@@ -1068,7 +1132,7 @@ function ContactsPage() {
         <div
           className={cn(
             "w-full max-w-full space-y-6 overflow-x-hidden",
-            focusMode ? "pb-6" : "px-4 pb-24 md:px-0 md:pb-6",
+            focusMode ? "pb-6" : "px-4 pb-4 md:px-0 md:pb-6",
           )}
         >
       {f.nameday_today && (
@@ -1251,7 +1315,7 @@ function ContactsPage() {
                   );
                 }}
                 className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  "min-h-[44px] rounded-full border px-4 py-2 text-xs font-medium transition-colors",
                   ageGroup === label
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-border text-muted-foreground hover:border-primary/40",
@@ -1277,12 +1341,38 @@ function ContactsPage() {
         <ContactsMobileSkeleton />
       ) : contacts.length > 0 ? (
         <div className="md:hidden">
+          {mobileSelectMode ? (
+            <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2">
+              <p className="text-xs font-medium text-[var(--text-secondary)]">Επιλογή επαφών</p>
+              <button
+                type="button"
+                className="text-xs font-semibold text-[var(--accent-gold)]"
+                onClick={() => {
+                  setMobileSelectMode(false);
+                  setSelected(new Set());
+                }}
+              >
+                Ακύρωση
+              </button>
+            </div>
+          ) : null}
           <ul className="space-y-3">
             {contacts.map((c) => (
               <li key={c.id}>
                 <ContactSwipeCard
                   c={c}
                   canDelete={canDelete}
+                  selectMode={mobileSelectMode}
+                  selected={selected.has(c.id)}
+                  onToggleSelected={() =>
+                    setSelected((prev) => {
+                      const n = new Set(prev);
+                      if (n.has(c.id)) n.delete(c.id);
+                      else n.add(c.id);
+                      return n;
+                    })
+                  }
+                  onEnterSelectMode={() => setMobileSelectMode(true)}
                   onNavigateDetail={() => router.push(contactDetailHref(c.id))}
                   onDeleted={() => void load()}
                 />

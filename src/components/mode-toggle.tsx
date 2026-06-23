@@ -34,7 +34,7 @@ export function ModeToggle({ compact = false, className }: ModeToggleProps) {
       }}
       className={clsx(
         compact
-          ? "hq-press-mobile inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/60 text-[var(--accent-gold-light)] transition hover:text-[var(--accent-gold)]"
+          ? "hq-press-mobile inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/60 text-[var(--accent-gold-light)] transition hover:text-[var(--accent-gold)]"
           : "rounded-md border border-[var(--border)] px-3 py-2 text-sm text-foreground",
         className,
       )}
