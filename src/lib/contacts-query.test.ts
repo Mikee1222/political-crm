@@ -68,15 +68,15 @@ describe("fetchContactsByIncludeIdBatches filter order", () => {
         return {
           select() {
             const builder = {
-              eq(..._args: unknown[]) {
+              eq(..._: unknown[]) {
                 order.push("eq");
                 return builder;
               },
-              ilike(..._args: unknown[]) {
+              ilike(..._: unknown[]) {
                 order.push("ilike");
                 return builder;
               },
-              in(..._args: unknown[]) {
+              in(..._: unknown[]) {
                 order.push("in");
                 return Promise.resolve({
                   data: [{ id: "11111111-1111-1111-1111-111111111111", created_at: "2026-01-01" }],

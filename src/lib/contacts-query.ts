@@ -304,7 +304,7 @@ export function applyColumnContactFiltersToBuilder(
     ? { includeContactIds: null, excludeContactIds: opts.excludeContactIds }
     : undefined;
   const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
-  let q = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
+  const q = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
     partialLocation: opts?.partialLocation,
   });
   return applyBirthdayAgeFiltersToBuilder(q, f.age_min, f.age_max);
