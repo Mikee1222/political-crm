@@ -18,6 +18,7 @@ import {
 import { searchParamsToRequestFilters } from "@/lib/requests-filters";
 import {
   applyRequestListFiltersToBuilder,
+  buildRequestListSelect,
   resolvePhoneContactIds,
   resolveRequestListFilters,
 } from "@/lib/requests-query";
@@ -25,11 +26,9 @@ import type { RequestListFilters } from "@/lib/requests-filters";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const BASE_SELECT =
-  "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status, contacts!contact_id(first_name,last_name,phone)";
-
-const FALLBACK_SELECT =
-  "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status";
+const BASE_SELECT = buildRequestListSelect(true, false);
+const SEARCH_SELECT = buildRequestListSelect(true, true);
+const FALLBACK_SELECT = buildRequestListSelect(false);
 
 function mapRequestRows(data: unknown[]) {
   return (data ?? []).map((row) => {
@@ -57,10 +56,12 @@ async function fetchRequestsPage(
 
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
+  const withSearch = Boolean(f.search.trim());
+  const primarySelect = withSearch ? SEARCH_SELECT : BASE_SELECT;
 
-  let query = supabase.from("requests").select(BASE_SELECT, { count: "exact" });
+  let query = supabase.from("requests").select(primarySelect, { count: "exact" });
   query = applyRequestListFiltersToBuilder(query, f, resolution, {
-    withSearchEmbed: Boolean(f.search),
+    withSearchEmbed: withSearch,
     contactIdsFromPhone,
   });
   query = query.order("created_at", { ascending: false }).range(from, to);
@@ -76,7 +77,7 @@ async function fetchRequestsPage(
   error = first.error;
   count = first.count;
 
-  if (error && f.search) {
+  if (error && withSearch) {
     let q2 = supabase.from("requests").select(FALLBACK_SELECT, { count: "exact" });
     q2 = applyRequestListFiltersToBuilder(q2, f, resolution, {
       withSearchEmbed: false,

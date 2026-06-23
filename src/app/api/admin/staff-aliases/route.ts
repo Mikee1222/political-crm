@@ -2,6 +2,7 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { nextJsonError } from "@/lib/api-resilience";
+import { createServiceClient } from "@/lib/supabase/admin";
 import {
   fetchStaffAliasesWithProfiles,
   fetchUnlinkedLegacyNames,
@@ -18,8 +19,9 @@ export async function GET() {
     if (profile?.role !== "admin") {
       return forbidden();
     }
+    const admin = createServiceClient();
     const [{ aliases, profiles }, unlinked] = await Promise.all([
-      fetchStaffAliasesWithProfiles(supabase),
+      fetchStaffAliasesWithProfiles(admin),
       fetchUnlinkedLegacyNames(supabase, 50),
     ]);
     return NextResponse.json({ aliases, profiles, unlinked });
@@ -47,7 +49,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Απαιτείται όνομα alias" }, { status: 400 });
     }
 
-    const { data: prof, error: profErr } = await supabase
+    const admin = createServiceClient();
+    const { data: prof, error: profErr } = await admin
       .from("profiles")
       .select("id, full_name")
       .eq("id", profileId)

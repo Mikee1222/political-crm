@@ -1,12 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  applyContactIdIncludeFilter,
+  MAX_ID_IN_CLAUSE,
+  NO_MATCH_CONTACT_ID,
+} from "@/lib/contact-group-members";
 import { getRequestStatusQueryValues } from "@/lib/request-statuses";
 import type { RequestListFilters } from "@/lib/requests-filters";
+import { isUuid } from "@/lib/resolve-entity-id";
 import { resolveHandlerAssignedValues } from "@/lib/staff-aliases";
 
-const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
+const EMPTY_UUID = NO_MATCH_CONTACT_ID;
 
 function escapeIlike(q: string) {
   return q.replace(/[%_\\,().]/g, (c) => `\\${c}`);
+}
+
+/** PostgREST `.or()` ilike values must be double-quoted when they contain `%` or special chars. */
+function quotedIlikePattern(raw: string): string {
+  const pat = `%${escapeIlike(raw)}%`;
+  return `"${pat.replace(/"/g, '\\"')}"`;
+}
+
+function quoteCsv(values: string[]): string {
+  return values.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(",");
 }
 
 function dateFromForRange(range: string): string | null {
@@ -40,6 +56,7 @@ export type RequestFilterResolution = {
   affectedRequestIds: string[] | null;
   helperRequestIds: string[] | null;
   notesRequestIds: string[] | null;
+  searchNotesRequestIds: string[] | null;
   handlerAssignedValues: string[] | null;
   noMatch: boolean;
 };
@@ -53,11 +70,12 @@ async function resolveContactIdsByPersonName(
   const pat = `%${escapeIlike(raw)}%`;
   const ids = new Set<string>();
 
-  const { data: broad } = await supabase
-    .from("contacts")
-    .select("id")
-    .or(`first_name.ilike.${pat},last_name.ilike.${pat}`);
-  for (const row of broad ?? []) ids.add((row as { id: string }).id);
+  const [firstRes, lastRes] = await Promise.all([
+    supabase.from("contacts").select("id").ilike("first_name", pat),
+    supabase.from("contacts").select("id").ilike("last_name", pat),
+  ]);
+  for (const row of firstRes.data ?? []) ids.add((row as { id: string }).id);
+  for (const row of lastRes.data ?? []) ids.add((row as { id: string }).id);
 
   const parts = raw.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) {
@@ -74,8 +92,40 @@ async function resolveContactIdsByPersonName(
   return [...ids];
 }
 
-function resolveCategoryNames(categoryValues: string[]): string[] {
-  return [...new Set(categoryValues.map((v) => v.trim()).filter(Boolean))];
+async function resolveContactIdsForPersonFilter(
+  supabase: SupabaseClient,
+  contactId: string,
+  name: string,
+): Promise<string[]> {
+  const id = contactId.trim();
+  if (id) {
+    if (isUuid(id)) return [id];
+    const resolved = await resolveContactIdsByPersonName(supabase, id);
+    return resolved.length ? resolved : [];
+  }
+  return resolveContactIdsByPersonName(supabase, name);
+}
+
+async function resolveCategoryFilterNames(
+  supabase: SupabaseClient,
+  categoryValues: string[],
+): Promise<string[]> {
+  const names: string[] = [];
+  const uuidIds: string[] = [];
+  for (const raw of categoryValues) {
+    const v = raw.trim();
+    if (!v) continue;
+    if (isUuid(v)) uuidIds.push(v);
+    else names.push(v);
+  }
+  if (uuidIds.length) {
+    const { data } = await supabase.from("request_categories").select("name").in("id", uuidIds);
+    for (const row of data ?? []) {
+      const n = String((row as { name: string }).name).trim();
+      if (n) names.push(n);
+    }
+  }
+  return [...new Set(names)];
 }
 
 async function requestIdsForPersonRole(
@@ -102,42 +152,89 @@ async function requestIdsForNotes(supabase: SupabaseClient, notes: string): Prom
   return [...ids];
 }
 
+function personFilterActive(contactId: string, name: string): boolean {
+  return Boolean(contactId.trim() || name.trim());
+}
+
+function applyCategoryExcludeFilter(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  names: string[],
+) {
+  if (!names.length) return query;
+  if (typeof query.notIn === "function") {
+    return query.notIn("category", names);
+  }
+  return query.not("category", "in", `(${quoteCsv(names)})`);
+}
+
+function applyRequestIdIncludeFilter(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  ids: string[],
+) {
+  return applyContactIdIncludeFilter(query, ids);
+}
+
+export function buildRequestListSelect(withContactEmbed: boolean, contactInnerJoin = false): string {
+  const base =
+    "id, request_code, title, description, category, status, priority, assigned_to, created_at, updated_at, contact_id, affected_contact_id, sla_due_date, sla_status";
+  if (!withContactEmbed) return base;
+  const embed = contactInnerJoin
+    ? "contacts!contact_id!inner(first_name,last_name,phone)"
+    : "contacts!contact_id(first_name,last_name,phone)";
+  return `${base}, ${embed}`;
+}
+
 export async function resolveRequestListFilters(
   supabase: SupabaseClient,
   f: RequestListFilters,
 ): Promise<RequestFilterResolution> {
   const categoryNames = [
     ...(f.category?.trim() ? [f.category.trim()] : []),
-    ...resolveCategoryNames(f.category_ids),
+    ...(await resolveCategoryFilterNames(supabase, f.category_ids)),
   ];
-  const excludeCategoryNames = resolveCategoryNames(f.exclude_category_ids);
-  const requesterContactIds = await resolveContactIdsByPersonName(supabase, f.requester_name);
-  const affectedContactIds = await resolveContactIdsByPersonName(supabase, f.affected_name);
-  const helperContactIds = await resolveContactIdsByPersonName(supabase, f.helper_name);
+  const excludeCategoryNames = await resolveCategoryFilterNames(supabase, f.exclude_category_ids);
+
+  const requesterActive = personFilterActive(f.requester_contact_id, f.requester_name);
+  const affectedActive = personFilterActive(f.affected_contact_id, f.affected_name);
+  const helperActive = personFilterActive(f.helper_contact_id, f.helper_name);
+
+  const requesterContactIds = requesterActive
+    ? await resolveContactIdsForPersonFilter(supabase, f.requester_contact_id, f.requester_name)
+    : [];
+  const affectedContactIds = affectedActive
+    ? await resolveContactIdsForPersonFilter(supabase, f.affected_contact_id, f.affected_name)
+    : [];
+  const helperContactIds = helperActive
+    ? await resolveContactIdsForPersonFilter(supabase, f.helper_contact_id, f.helper_name)
+    : [];
+
   const notesRequestIds = f.notes.trim() ? await requestIdsForNotes(supabase, f.notes) : null;
+  const searchNotesRequestIds = f.search.trim() ? await requestIdsForNotes(supabase, f.search) : null;
   const handlerAssignedValues = f.handler_id.trim()
     ? await resolveHandlerAssignedValues(supabase, f.handler_id)
     : null;
 
   let noMatch = false;
-  if (f.requester_name.trim() && requesterContactIds.length === 0) noMatch = true;
-  if (f.affected_name.trim() && affectedContactIds.length === 0) noMatch = true;
-  if (f.helper_name.trim() && helperContactIds.length === 0) noMatch = true;
+  if (requesterActive && requesterContactIds.length === 0) noMatch = true;
+  if (affectedActive && affectedContactIds.length === 0) noMatch = true;
+  if (helperActive && helperContactIds.length === 0) noMatch = true;
   if (notesRequestIds && notesRequestIds.length === 0) noMatch = true;
 
-  const requesterRequestIds = f.requester_name.trim()
+  const requesterRequestIds = requesterActive
     ? await collectRequestIdsForContacts(supabase, requesterContactIds, {
         column: "contact_id",
         role: "requester",
       })
     : null;
-  const affectedRequestIds = f.affected_name.trim()
+  const affectedRequestIds = affectedActive
     ? await collectRequestIdsForContacts(supabase, affectedContactIds, {
         column: "affected_contact_id",
         role: "affected",
       })
     : null;
-  const helperRequestIds = f.helper_name.trim()
+  const helperRequestIds = helperActive
     ? await collectRequestIdsForContacts(supabase, helperContactIds, { role: "helper" })
     : null;
 
@@ -151,6 +248,7 @@ export async function resolveRequestListFilters(
     affectedRequestIds,
     helperRequestIds,
     notesRequestIds,
+    searchNotesRequestIds,
     handlerAssignedValues,
     noMatch,
   };
@@ -160,11 +258,16 @@ export async function resolvePhoneContactIds(supabase: SupabaseClient, search: s
   const raw = search.trim();
   if (!raw || !/^\d+/.test(raw)) return [];
   const pat = `%${escapeIlike(raw)}%`;
-  const { data: phoneMatches } = await supabase
-    .from("contacts")
-    .select("id")
-    .or(`phone.ilike.${pat},phone2.ilike.${pat},landline.ilike.${pat}`);
-  return (phoneMatches ?? []).map((c) => (c as { id: string }).id);
+  const [phoneRes, phone2Res, landlineRes] = await Promise.all([
+    supabase.from("contacts").select("id").ilike("phone", pat),
+    supabase.from("contacts").select("id").ilike("phone2", pat),
+    supabase.from("contacts").select("id").ilike("landline", pat),
+  ]);
+  const ids = new Set<string>();
+  for (const row of phoneRes.data ?? []) ids.add((row as { id: string }).id);
+  for (const row of phone2Res.data ?? []) ids.add((row as { id: string }).id);
+  for (const row of landlineRes.data ?? []) ids.add((row as { id: string }).id);
+  return [...ids];
 }
 
 async function collectRequestIdsForContacts(
@@ -213,9 +316,7 @@ export function applyRequestListFiltersToBuilder(
   } else if (resolution.categoryNames.length > 1) {
     query = query.in("category", resolution.categoryNames);
   }
-  if (resolution.excludeCategoryNames.length) {
-    query = query.notIn("category", resolution.excludeCategoryNames);
-  }
+  query = applyCategoryExcludeFilter(query, resolution.excludeCategoryNames);
 
   const dateFrom = f.created_from.trim()
     ? `${f.created_from.trim()}T00:00:00.000Z`
@@ -231,35 +332,53 @@ export function applyRequestListFiltersToBuilder(
   }
 
   if (resolution.requesterRequestIds) {
-    query = resolution.requesterRequestIds.length
-      ? query.in("id", resolution.requesterRequestIds)
-      : query.eq("id", EMPTY_UUID);
+    query =
+      resolution.requesterRequestIds.length > 0
+        ? applyRequestIdIncludeFilter(query, resolution.requesterRequestIds)
+        : query.eq("id", EMPTY_UUID);
   }
 
   if (resolution.affectedRequestIds) {
-    query = resolution.affectedRequestIds.length
-      ? query.in("id", resolution.affectedRequestIds)
-      : query.eq("id", EMPTY_UUID);
+    query =
+      resolution.affectedRequestIds.length > 0
+        ? applyRequestIdIncludeFilter(query, resolution.affectedRequestIds)
+        : query.eq("id", EMPTY_UUID);
   }
 
   if (resolution.helperRequestIds) {
-    query = resolution.helperRequestIds.length
-      ? query.in("id", resolution.helperRequestIds)
-      : query.eq("id", EMPTY_UUID);
+    query =
+      resolution.helperRequestIds.length > 0
+        ? applyRequestIdIncludeFilter(query, resolution.helperRequestIds)
+        : query.eq("id", EMPTY_UUID);
   }
 
   if (resolution.notesRequestIds) {
-    query = query.in("id", resolution.notesRequestIds);
+    query = applyRequestIdIncludeFilter(query, resolution.notesRequestIds);
   }
 
-  if (f.search) {
-    const pat = `%${escapeIlike(f.search)}%`;
-    const parts = [`title.ilike.${pat}`, `description.ilike.${pat}`, `request_code.ilike.${pat}`];
+  if (f.search.trim()) {
+    const qpat = quotedIlikePattern(f.search.trim());
+    const parts = [
+      `title.ilike.${qpat}`,
+      `description.ilike.${qpat}`,
+      `request_code.ilike.${qpat}`,
+    ];
     if (opts?.withSearchEmbed) {
-      parts.push(`contacts.first_name.ilike.${pat}`, `contacts.last_name.ilike.${pat}`);
+      parts.push(`contacts.first_name.ilike.${qpat}`, `contacts.last_name.ilike.${qpat}`);
     }
     if (opts?.contactIdsFromPhone?.length) {
-      parts.push(`contact_id.in.(${opts.contactIdsFromPhone.join(",")})`);
+      parts.push(`contact_id.in.(${quoteCsv(opts.contactIdsFromPhone)})`);
+    }
+    if (resolution.searchNotesRequestIds?.length) {
+      const noteIds = resolution.searchNotesRequestIds;
+      if (noteIds.length <= MAX_ID_IN_CLAUSE) {
+        parts.push(`id.in.(${quoteCsv(noteIds)})`);
+      } else {
+        for (let i = 0; i < noteIds.length; i += MAX_ID_IN_CLAUSE) {
+          const chunk = noteIds.slice(i, i + MAX_ID_IN_CLAUSE);
+          parts.push(`id.in.(${quoteCsv(chunk)})`);
+        }
+      }
     }
     query = query.or(parts.join(","));
   }

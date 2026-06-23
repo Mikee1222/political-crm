@@ -23,9 +23,15 @@ export function buildRequestSearchFilterChips(
   f.exclude_category_ids.forEach((id) =>
     push(`excat:${id}`, `Χωρίς κατηγορία: ${categoryNames.get(id) ?? id}`),
   );
-  if (f.requester_name.trim()) push("requester_name", `Αιτών: ${f.requester_name}`);
-  if (f.affected_name.trim()) push("affected_name", `Επηρεαζόμενος: ${f.affected_name}`);
-  if (f.helper_name.trim()) push("helper_name", `Βοηθός: ${f.helper_name}`);
+  if (f.requester_contact_id || f.requester_name.trim()) {
+    push("requester_contact_id", `Αιτών: ${f.requester_name.trim() || f.requester_contact_id}`);
+  }
+  if (f.affected_contact_id || f.affected_name.trim()) {
+    push("affected_contact_id", `Επηρεαζόμενος: ${f.affected_name.trim() || f.affected_contact_id}`);
+  }
+  if (f.helper_contact_id || f.helper_name.trim()) {
+    push("helper_contact_id", `Βοηθός: ${f.helper_name.trim() || f.helper_contact_id}`);
+  }
   if (f.request_code.trim()) push("request_code", `Κωδικός: ${f.request_code}`);
   if (f.handler_id) push("handler_id", `Υπεύθυνος: ${handlerNames.get(f.handler_id) ?? f.handler_id}`);
   if (f.notes.trim()) push("notes", `Σημειώσεις: ${f.notes}`);

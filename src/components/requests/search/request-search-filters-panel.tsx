@@ -4,6 +4,7 @@ import { Calendar, FileText, FolderOpen, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSection } from "@/components/contacts/search/filter-section";
 import { FilterFieldChips } from "@/components/contacts/search/filter-field-chips";
+import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SearchFilterActions } from "@/components/search/search-filter-actions";
@@ -95,42 +96,39 @@ export function RequestSearchFiltersPanel({
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 pb-4">
         <FilterSection title="Πρόσωπα Αιτήματος" icon={Users}>
-          <div>
-            <label className={filterLabelClass} htmlFor="rs-requester">
-              Αιτών (επαφή)
-            </label>
-            <SearchFilterInput
-              id="rs-requester"
-              withSearchIcon
-              value={draft.requester_name}
-              onChange={(e) => patch({ requester_name: e.target.value })}
-              placeholder="Όνομα ή επώνυμο..."
-            />
-          </div>
-          <div>
-            <label className={filterLabelClass} htmlFor="rs-affected">
-              Επηρεαζόμενος
-            </label>
-            <SearchFilterInput
-              id="rs-affected"
-              withSearchIcon
-              value={draft.affected_name}
-              onChange={(e) => patch({ affected_name: e.target.value })}
-              placeholder="Όνομα ή επώνυμο..."
-            />
-          </div>
-          <div>
-            <label className={filterLabelClass} htmlFor="rs-helper">
-              Βοηθός
-            </label>
-            <SearchFilterInput
-              id="rs-helper"
-              withSearchIcon
-              value={draft.helper_name}
-              onChange={(e) => patch({ helper_name: e.target.value })}
-              placeholder="Όνομα ή επώνυμο..."
-            />
-          </div>
+          <ContactSearchCombobox
+            label="Αιτών (επαφή)"
+            valueId={draft.requester_contact_id}
+            onChange={(id, displayName) =>
+              patch({
+                requester_contact_id: id,
+                requester_name: displayName ?? "",
+              })
+            }
+            placeholder="Όνομα ή τηλέφωνο..."
+          />
+          <ContactSearchCombobox
+            label="Επηρεαζόμενος"
+            valueId={draft.affected_contact_id}
+            onChange={(id, displayName) =>
+              patch({
+                affected_contact_id: id,
+                affected_name: displayName ?? "",
+              })
+            }
+            placeholder="Όνομα ή τηλέφωνο..."
+          />
+          <ContactSearchCombobox
+            label="Βοηθός"
+            valueId={draft.helper_contact_id}
+            onChange={(id, displayName) =>
+              patch({
+                helper_contact_id: id,
+                helper_name: displayName ?? "",
+              })
+            }
+            placeholder="Όνομα ή τηλέφωνο..."
+          />
         </FilterSection>
 
         <FilterSection title="Κατηγορίες Αιτήματος" icon={FolderOpen}>

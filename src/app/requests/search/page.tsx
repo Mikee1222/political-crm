@@ -191,9 +191,16 @@ function RequestSearchPageInner() {
     const f = { ...appliedFilters };
     if (key === "search") f.search = "";
     else if (key === "status") f.status = "";
-    else if (key === "requester_name") f.requester_name = "";
-    else if (key === "affected_name") f.affected_name = "";
-    else if (key === "helper_name") f.helper_name = "";
+    else if (key === "requester_contact_id") {
+      f.requester_contact_id = "";
+      f.requester_name = "";
+    } else if (key === "affected_contact_id") {
+      f.affected_contact_id = "";
+      f.affected_name = "";
+    } else if (key === "helper_contact_id") {
+      f.helper_contact_id = "";
+      f.helper_name = "";
+    }
     else if (key === "request_code") f.request_code = "";
     else if (key === "handler_id") f.handler_id = "";
     else if (key === "notes") f.notes = "";

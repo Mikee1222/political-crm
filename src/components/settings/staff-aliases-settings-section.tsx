@@ -195,7 +195,6 @@ export function StaffAliasesSettingsSection() {
       {addForProfile && (
         <AddAliasModal
           profile={addForProfile}
-          profiles={profiles}
           unlinked={unlinked}
           initialAlias={prefillAlias}
           onClose={() => {
@@ -215,14 +214,12 @@ export function StaffAliasesSettingsSection() {
 
 function AddAliasModal({
   profile,
-  profiles,
   unlinked,
   initialAlias,
   onClose,
   onSaved,
 }: {
   profile: StaffProfileRow;
-  profiles: StaffProfileRow[];
   unlinked: UnlinkedLegacyName[];
   initialAlias: string;
   onClose: () => void;
@@ -230,9 +227,42 @@ function AddAliasModal({
 }) {
   const { showToast } = useFormToast();
   const [profileId, setProfileId] = useState(profile.id);
+  const [crmProfiles, setCrmProfiles] = useState<{ id: string; full_name: string | null }[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [profilesErr, setProfilesErr] = useState<string | null>(null);
   const [aliasName, setAliasName] = useState(initialAlias);
   const [busy, setBusy] = useState(false);
   const [aliasErr, setAliasErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProfilesLoading(true);
+    setProfilesErr(null);
+    void fetchWithTimeout("/api/admin/users")
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          const j = (await res.json().catch(() => ({}))) as { error?: string };
+          setProfilesErr(j.error ?? "Φόρτωση προφίλ απέτυχε");
+          setCrmProfiles([]);
+          return;
+        }
+        const j = (await res.json()) as { users?: { id: string; full_name: string | null }[] };
+        setCrmProfiles(j.users ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProfilesErr("Σφάλμα δικτύου");
+          setCrmProfiles([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setProfilesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const aliasOptions = useMemo(() => {
     const opts = unlinked.map((row) => ({
@@ -287,7 +317,7 @@ function AddAliasModal({
           <button type="button" onClick={onClose} className={lux.btnSecondary} disabled={busy}>
             Άκυρο
           </button>
-          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy || aliasOptions.length === 0}>
+          <button type="button" onClick={() => void save()} className={lux.btnPrimary} disabled={busy || aliasOptions.length === 0 || profilesLoading || crmProfiles.length === 0}>
             {busy ? "…" : "Αποθήκευση"}
           </button>
         </>
@@ -296,18 +326,27 @@ function AddAliasModal({
       <div className="space-y-4">
         <div>
           <HqLabel htmlFor="sa-profile">Προφίλ CRM</HqLabel>
-          <select
-            id="sa-profile"
-            className={lux.select + " mt-1"}
-            value={profileId}
-            onChange={(e) => setProfileId(e.target.value)}
-          >
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name?.trim() || p.id}
-              </option>
-            ))}
-          </select>
+          {profilesLoading ? (
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Φόρτωση προφίλ…</p>
+          ) : profilesErr ? (
+            <p className="mt-1 text-sm text-amber-200" role="status">
+              {profilesErr}
+            </p>
+          ) : (
+            <select
+              id="sa-profile"
+              className={lux.select + " mt-1"}
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              disabled={crmProfiles.length === 0}
+            >
+              {crmProfiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name?.trim() || p.id}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <HqLabel htmlFor="sa-alias" required>
