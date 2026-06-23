@@ -8,6 +8,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { isUuid } from "@/lib/resolve-entity-id";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 
 export type RequestPersonContact = {
   id: string;
@@ -264,8 +265,12 @@ function RequestHandlersSection({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const resolveName = useResolveAuthorName();
 
-  const names = useMemo(() => dedupeNames(handlerNames), [handlerNames]);
+  const names = useMemo(
+    () => dedupeNames(handlerNames.map((name) => resolveName(name))),
+    [handlerNames, resolveName],
+  );
 
   useEffect(() => {
     if (!canManage) return;

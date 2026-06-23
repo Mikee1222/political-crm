@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRequestStatusQueryValues } from "@/lib/request-statuses";
 import type { RequestListFilters } from "@/lib/requests-filters";
+import { resolveHandlerAssignedValues } from "@/lib/staff-aliases";
 
 const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
 
@@ -39,6 +40,7 @@ export type RequestFilterResolution = {
   affectedRequestIds: string[] | null;
   helperRequestIds: string[] | null;
   notesRequestIds: string[] | null;
+  handlerAssignedValues: string[] | null;
   noMatch: boolean;
 };
 
@@ -113,6 +115,9 @@ export async function resolveRequestListFilters(
   const affectedContactIds = await resolveContactIdsByPersonName(supabase, f.affected_name);
   const helperContactIds = await resolveContactIdsByPersonName(supabase, f.helper_name);
   const notesRequestIds = f.notes.trim() ? await requestIdsForNotes(supabase, f.notes) : null;
+  const handlerAssignedValues = f.handler_id.trim()
+    ? await resolveHandlerAssignedValues(supabase, f.handler_id)
+    : null;
 
   let noMatch = false;
   if (f.requester_name.trim() && requesterContactIds.length === 0) noMatch = true;
@@ -146,6 +151,7 @@ export async function resolveRequestListFilters(
     affectedRequestIds,
     helperRequestIds,
     notesRequestIds,
+    handlerAssignedValues,
     noMatch,
   };
 }
@@ -195,7 +201,12 @@ export function applyRequestListFiltersToBuilder(
       statusValues.length > 1 ? query.in("status", statusValues) : query.eq("status", statusValues[0]);
   }
   if (f.priority) query = query.eq("priority", f.priority);
-  if (f.handler_id) query = query.eq("assigned_to", f.handler_id);
+  if (resolution.handlerAssignedValues?.length) {
+    query =
+      resolution.handlerAssignedValues.length === 1
+        ? query.eq("assigned_to", resolution.handlerAssignedValues[0])
+        : query.in("assigned_to", resolution.handlerAssignedValues);
+  }
 
   if (resolution.categoryNames.length === 1) {
     query = query.eq("category", resolution.categoryNames[0]);

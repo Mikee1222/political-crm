@@ -29,6 +29,7 @@ import {
 } from "@/lib/requests-filters";
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { lux } from "@/lib/luxury-styles";
+import type { UnlinkedLegacyName } from "@/lib/staff-aliases";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -49,6 +50,7 @@ function RequestSearchPageInner() {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
   const [assignees, setAssignees] = useState<{ id: string; full_name: string | null }[]>([]);
+  const [unlinkedHandlers, setUnlinkedHandlers] = useState<UnlinkedLegacyName[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
@@ -71,17 +73,27 @@ function RequestSearchPageInner() {
         const d = (await r.json()) as { assignees?: { id: string; full_name: string | null }[] };
         return d.assignees ?? [];
       }),
-    ]).then(([cats, team]) => {
+      fetchWithTimeout("/api/admin/staff-aliases/unlinked").then(async (r) => {
+        if (!r.ok) return [];
+        const d = (await r.json()) as { unlinked?: UnlinkedLegacyName[] };
+        return d.unlinked ?? [];
+      }),
+    ]).then(([cats, team, unlinked]) => {
       setCategories(cats);
       setAssignees(team);
+      setUnlinkedHandlers(unlinked);
     });
   }, []);
 
   const categoryNames = useMemo(() => new Map(categories.map((c) => [c.name, c.name])), [categories]);
-  const handlerNames = useMemo(
-    () => new Map(assignees.map((a) => [a.id, a.full_name ?? a.id])),
-    [assignees],
-  );
+  const handlerNames = useMemo(() => {
+    const map = new Map(assignees.map((a) => [a.id, a.full_name ?? a.id]));
+    for (const row of unlinkedHandlers) {
+      const name = row.name.trim();
+      if (name) map.set(name, name);
+    }
+    return map;
+  }, [assignees, unlinkedHandlers]);
 
   const syncFromUrl = useCallback(() => {
     const sp = new URLSearchParams(searchParams.toString());

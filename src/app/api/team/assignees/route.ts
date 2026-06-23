@@ -19,6 +19,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, role")
+      .eq("is_portal", false)
       .order("full_name", { ascending: true, nullsFirst: false });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

@@ -20,6 +20,7 @@ import { ElectoralSettingsSection } from "@/components/settings/electoral-settin
 import { GeographicDataSection } from "@/components/settings/geographic-data-section";
 import { ContactLocationSettingsSection } from "@/components/settings/contact-location-settings-section";
 import { RequestCategoriesSettingsSection } from "@/components/settings/request-categories-settings-section";
+import { StaffAliasesSettingsSection } from "@/components/settings/staff-aliases-settings-section";
 import { RequestStatusesSettingsSection } from "@/components/settings/request-statuses-settings-section";
 import { SavedFiltersSection } from "@/components/settings/saved-filters-section";
 import { PortalNewsSection } from "@/components/settings/portal-news-section";
@@ -339,6 +340,8 @@ export default function SettingsPage() {
           {isAdmin && <RequestStatusesSettingsSection />}
 
           {isAdmin && <RequestCategoriesSettingsSection />}
+
+          {isAdmin && <StaffAliasesSettingsSection />}
 
           {isAdmin && <TagsSection />}
 

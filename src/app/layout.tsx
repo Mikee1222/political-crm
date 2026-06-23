@@ -12,6 +12,7 @@ import { AlexandraPageProvider } from "@/contexts/alexandra-page-context";
 import { TourProvider } from "@/contexts/tour-context";
 import { FormToastProvider } from "@/contexts/form-toast-context";
 import { ContactTabsProvider } from "@/contexts/contact-tabs-context";
+import { StaffAliasesProvider } from "@/contexts/staff-aliases-context";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -81,7 +82,9 @@ export default function RootLayout({
                   <TourProvider>
                     <AlexandraChatProvider>
                       <ContactTabsProvider>
-                        <AppFrame>{children}</AppFrame>
+                        <StaffAliasesProvider>
+                          <AppFrame>{children}</AppFrame>
+                        </StaffAliasesProvider>
                       </ContactTabsProvider>
                     </AlexandraChatProvider>
                   </TourProvider>

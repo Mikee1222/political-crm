@@ -8,6 +8,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { computeSlaStatus } from "@/lib/request-sla";
 import { formatCalendarDateOnly, formatDateTimeEnGb } from "@/lib/date-format";
 import { useProfile } from "@/contexts/profile-context";
+import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 import { can } from "@/lib/can";
 import { RequestDocumentsSection } from "@/components/request-documents-section";
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
@@ -149,6 +150,7 @@ export default function RequestDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { profile } = useProfile();
+  const resolveName = useResolveAuthorName();
   const id = typeof params?.id === "string" ? params.id : "";
   const canEdit = can(profile, "requests_edit");
 
@@ -327,7 +329,11 @@ export default function RequestDetailPage() {
               {notes.length === 0 ? (
                 <li className="text-xs text-[var(--text-muted)]">Καμία σημείωση ακόμα.</li>
               ) : (
-                notes.map((note) => (
+                notes.map((note) => {
+                  const displayAuthor = note.author_name?.trim()
+                    ? resolveName(note.author_name)
+                    : note.author_full_name || "—";
+                  return (
                   <li key={note.id}>
                     <div className="group relative rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35 p-3 pl-3 pr-2">
                       <div className="flex gap-3 pr-2">
@@ -335,22 +341,23 @@ export default function RequestDetailPage() {
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] font-bold text-[var(--text-primary)]"
                           aria-hidden
                         >
-                          {authorInitials(note.author_name?.trim() || note.author_full_name || "—")}
+                          {authorInitials(displayAuthor)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{note.content}</p>
                           <div className="flex items-center gap-2 mt-1.5">
-                            {note.author_name && (
-                              <span className="text-xs font-medium text-primary/70">{note.author_name}</span>
+                            {displayAuthor && displayAuthor !== "—" && (
+                              <span className="text-xs font-medium text-primary/70">{displayAuthor}</span>
                             )}
-                            {note.author_name && <span className="text-xs text-muted-foreground">·</span>}
+                            {displayAuthor && displayAuthor !== "—" && <span className="text-xs text-muted-foreground">·</span>}
                             <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </li>
-                ))
+                  );
+                })
               )}
             </ul>
             {canEdit && (

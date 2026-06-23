@@ -12,6 +12,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import type { RequestCategoryRow } from "@/lib/request-categories";
 import type { RequestListFilters } from "@/lib/requests-filters";
 import { REQUEST_STATUSES } from "@/lib/request-statuses";
+import type { UnlinkedLegacyName } from "@/lib/staff-aliases";
 import { cn } from "@/lib/utils";
 
 type Assignee = { id: string; full_name: string | null; role: string };
@@ -32,6 +33,7 @@ export function RequestSearchFiltersPanel({
   const [draft, setDraft] = useState<RequestListFilters>(filters);
   const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [unlinkedHandlers, setUnlinkedHandlers] = useState<UnlinkedLegacyName[]>([]);
 
   useEffect(() => {
     setDraft(filters);
@@ -47,9 +49,15 @@ export function RequestSearchFiltersPanel({
         const d = (await r.json()) as { assignees?: Assignee[] };
         return d.assignees ?? [];
       }),
-    ]).then(([cats, team]) => {
+      fetchWithTimeout("/api/admin/staff-aliases/unlinked").then(async (r) => {
+        if (!r.ok) return [];
+        const d = (await r.json()) as { unlinked?: UnlinkedLegacyName[] };
+        return d.unlinked ?? [];
+      }),
+    ]).then(([cats, team, unlinked]) => {
       setCategories(cats);
       setAssignees(team.filter((a) => a.full_name?.trim()));
+      setUnlinkedHandlers(unlinked);
     });
   }, []);
 
@@ -63,10 +71,18 @@ export function RequestSearchFiltersPanel({
     [],
   );
 
-  const assigneeOptions = useMemo(
-    () => assignees.map((a) => ({ value: a.id, label: a.full_name ?? a.id })),
-    [assignees],
-  );
+  const assigneeOptions = useMemo(() => {
+    const options = assignees.map((a) => ({
+      value: a.id,
+      label: a.full_name ?? a.id,
+    }));
+    for (const row of unlinkedHandlers) {
+      const name = row.name.trim();
+      if (!name) continue;
+      options.push({ value: name, label: name });
+    }
+    return options.sort((a, b) => a.label.localeCompare(b.label, "el"));
+  }, [assignees, unlinkedHandlers]);
 
   const patch = (p: Partial<RequestListFilters>) => setDraft((prev) => ({ ...prev, ...p }));
 

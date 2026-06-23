@@ -35,6 +35,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, startTrans
 import type { ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useProfile } from "@/contexts/profile-context";
+import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { can } from "@/lib/can";
@@ -364,6 +365,7 @@ function ContactDetailPage() {
   const searchParams = useSearchParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { profile } = useProfile();
+  const resolveName = useResolveAuthorName();
   const { openTab } = useContactTabs();
   const isCaller = profile?.role === "caller";
   const canManage = hasMinRole(profile?.role, "manager", profile?.access_tier);
@@ -882,8 +884,9 @@ function ContactDetailPage() {
   const w = buf ?? c;
   const latestCommLog = callLogs[0] ?? null;
   const lastCommAt = latestCommLog?.called_at ?? c?.last_contacted_at ?? null;
-  const lastCommMarker =
+  const lastCommMarkerRaw =
     latestCommLog?.marker_name?.trim() || c?.last_contacted_by?.trim() || latestCommLog?.marked_by_name?.trim() || null;
+  const lastCommMarker = lastCommMarkerRaw ? resolveName(lastCommMarkerRaw) : null;
 
   const startEdit = (s: Exclude<Section, null>) => {
     if (!c || !canEdit) return;
@@ -2324,6 +2327,9 @@ function ContactDetailPage() {
                   const canDeleteThis =
                     Boolean(profile?.id) &&
                     (note.user_id === profile?.id || profile?.role === "admin");
+                  const displayAuthor = note.author_name?.trim()
+                    ? resolveName(note.author_name)
+                    : note.author_full_name || "—";
                   return (
                     <li key={note.id}>
                       <div className="group relative rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35 p-3 pl-3 pr-2">
@@ -2352,15 +2358,15 @@ function ContactDetailPage() {
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] font-bold text-[var(--text-primary)]"
                             aria-hidden
                           >
-                            {authorInitials(note.author_name?.trim() || note.author_full_name || "—")}
+                            {authorInitials(displayAuthor)}
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{note.content}</p>
                             <div className="flex items-center gap-2 mt-1.5">
-                              {note.author_name && (
-                                <span className="text-xs font-medium text-primary/70">{note.author_name}</span>
+                              {displayAuthor && displayAuthor !== "—" && (
+                                <span className="text-xs font-medium text-primary/70">{displayAuthor}</span>
                               )}
-                              {note.author_name && <span className="text-xs text-muted-foreground">·</span>}
+                              {displayAuthor && displayAuthor !== "—" && <span className="text-xs text-muted-foreground">·</span>}
                               <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
                             </div>
                           </div>
@@ -2977,7 +2983,7 @@ function ContactDetailPage() {
             <span>
               Δημιουργία από:{" "}
               <span className="font-medium text-[var(--text-secondary)]">
-                {c.author_name?.trim() || c.created_by_name?.trim()}
+                {resolveName(c.author_name?.trim() || c.created_by_name?.trim() || "")}
               </span>
               {c.created_at ? " · " : null}
             </span>
