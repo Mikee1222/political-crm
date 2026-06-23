@@ -23,8 +23,10 @@ describe("resolveAuthorName", () => {
     expect(resolveAuthorName("Unknown Person", aliases)).toBe("Unknown Person");
   });
 
-  it("returns empty-ish input unchanged", () => {
-    expect(resolveAuthorName("  ", aliases)).toBe("  ");
+  it("returns Άγνωστος for null or empty input", () => {
+    expect(resolveAuthorName(null, aliases)).toBe("Άγνωστος");
+    expect(resolveAuthorName("", aliases)).toBe("Άγνωστος");
+    expect(resolveAuthorName("  ", aliases)).toBe("Άγνωστος");
   });
 });
 

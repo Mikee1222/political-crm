@@ -73,7 +73,7 @@ function RequestSearchPageInner() {
         const d = (await r.json()) as { assignees?: { id: string; full_name: string | null }[] };
         return d.assignees ?? [];
       }),
-      fetchWithTimeout("/api/admin/staff-aliases/unlinked").then(async (r) => {
+      fetchWithTimeout("/api/staff-aliases/unlinked").then(async (r) => {
         if (!r.ok) return [];
         const d = (await r.json()) as { unlinked?: UnlinkedLegacyName[] };
         return d.unlinked ?? [];

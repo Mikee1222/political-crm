@@ -39,10 +39,7 @@ export function StaffAliasesProvider({ children }: { children: React.ReactNode }
   }, [load]);
 
   const resolveName = useCallback(
-    (name: string | null | undefined) => {
-      if (!name?.trim()) return name?.trim() ?? "";
-      return resolveAuthorName(name, aliases);
-    },
+    (name: string | null | undefined) => resolveAuthorName(name ?? null, aliases),
     [aliases],
   );
 
@@ -75,7 +72,7 @@ export function useResolveAuthorName() {
   const ctx = useOptionalStaffAliases();
   return useCallback(
     (name: string | null | undefined) => {
-      if (!ctx) return name?.trim() ?? "";
+      if (!ctx) return name?.trim() || "Άγνωστος";
       return ctx.resolveName(name);
     },
     [ctx],

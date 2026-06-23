@@ -45,6 +45,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { can } from "@/lib/can";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
+import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 
 type RequestRow = {
   id: string;
@@ -607,6 +608,7 @@ function RequestCard({
   onQuickComplete: (id: string) => Promise<void>;
 }) {
   const { showToast } = useFormToast();
+  const resolveName = useResolveAuthorName();
   const st = categoryStyle(r.category);
   const Icon = st.Icon;
   const status = normalizeRequestStatus(r.status ?? REQUEST_STATUS_OPEN);
@@ -736,6 +738,9 @@ function RequestCard({
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-current/20 pt-2">
         <RequestStatusBadge status={status} withDot />
         <PriorityPill p={r.priority} />
+        {r.assigned_to?.trim() ? (
+          <span className={`text-[10px] ${cardMuted}`}>{resolveName(r.assigned_to)}</span>
+        ) : null}
         <span className={`ml-auto text-[10px] ${cardMuted}`}>
           {r.created_at ? formatDateAthens(r.created_at) : ""}
         </span>

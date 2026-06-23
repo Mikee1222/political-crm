@@ -35,12 +35,11 @@ export function buildAliasToProfileMap(aliases: StaffAlias[]): Map<string, strin
   return map;
 }
 
-/** Returns profile full_name when alias matched, else original authorName. */
-export function resolveAuthorName(authorName: string, aliases: StaffAlias[]): string {
-  const raw = authorName?.trim();
-  if (!raw) return authorName;
-  const resolved = buildAliasToProfileMap(aliases).get(raw.toLowerCase());
-  return resolved ?? authorName;
+/** Returns profile full_name when alias matched, else original authorName (or Άγνωστος when empty). */
+export function resolveAuthorName(authorName: string | null, aliases: StaffAlias[]): string {
+  if (!authorName?.trim()) return "Άγνωστος";
+  const match = aliases.find((a) => a.alias_name.toLowerCase() === authorName.toLowerCase());
+  return match?.profile_full_name?.trim() ? match.profile_full_name : authorName;
 }
 
 export function groupAliasesByProfile(

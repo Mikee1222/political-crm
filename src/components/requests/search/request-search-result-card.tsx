@@ -1,6 +1,7 @@
 "use client";
 
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
+import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 import { formatDateAthens } from "@/lib/date-format";
 import { requestCardStatusStyle } from "@/lib/request-status-card-style";
 import type { RequestStatusColorsMap } from "@/lib/request-status-colors";
@@ -14,6 +15,7 @@ export type RequestSearchResult = {
   description: string | null;
   category: string | null;
   status: string | null;
+  assigned_to: string | null;
   created_at: string | null;
   contacts: { first_name: string; last_name: string; phone?: string | null } | null;
 };
@@ -42,6 +44,7 @@ export function RequestSearchResultCard({
   statusColors?: RequestStatusColorsMap;
 }) {
   const { colors: fetchedColors } = useRequestStatusColors();
+  const resolveName = useResolveAuthorName();
   const statusColors = statusColorsProp ?? fetchedColors;
   const status = normalizeRequestStatus(r.status);
   const badge = getRequestStatusBadgeClasses(status);
@@ -88,6 +91,9 @@ export function RequestSearchResultCard({
         ) : null}
 
         <div className="text-sm text-[var(--text-secondary)]">{contactLabel(r.contacts)}</div>
+        {r.assigned_to?.trim() ? (
+          <div className="text-[11px] text-[var(--text-muted)]">{resolveName(r.assigned_to)}</div>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 flex-col items-end justify-end self-stretch text-right">
