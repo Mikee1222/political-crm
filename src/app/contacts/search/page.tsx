@@ -2,7 +2,7 @@
 
 import { Filter, Maximize2, Search, SlidersHorizontal, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import {
   buildContactSearchFilterChips,
@@ -23,7 +23,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { useProfile } from "@/contexts/profile-context";
-import { fetchWithTimeout } from "@/lib/client-fetch";
+import { CONTACT_LIST_FETCH_TIMEOUT_MS, fetchWithTimeout } from "@/lib/client-fetch";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import {
   contactFiltersToExportParams,
@@ -64,6 +64,7 @@ function ContactSearchPageInner() {
   const [saveName, setSaveName] = useState("");
   const [savingFilters, setSavingFilters] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const loadSeqRef = useRef(0);
 
   const applyFocusModeDom = useCallback((val: boolean) => {
     if (val) document.body.classList.add("focus-mode");
@@ -147,16 +148,20 @@ function ContactSearchPageInner() {
   }, [focusMode, handleSetFocusMode]);
 
   const loadResults = useCallback(async (f: ContactListFilters, pageNum: number) => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const params = contactFiltersToSearchParams({ ...f, page: String(pageNum) });
       params.set("page_size", String(PAGE_SIZE));
       params.set("partial_location", "1");
-      const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
+      const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`, {
+        timeoutMs: CONTACT_LIST_FETCH_TIMEOUT_MS,
+      });
       const data = (await res.json().catch(() => ({}))) as {
         contacts?: ContactSearchResult[];
         total?: number;
       };
+      if (seq !== loadSeqRef.current) return;
       if (!res.ok) {
         setContacts([]);
         setTotal(0);
@@ -170,10 +175,11 @@ function ContactSearchPageInner() {
       setContacts(list);
       setTotal(typeof data.total === "number" ? data.total : list.length);
     } catch {
+      if (seq !== loadSeqRef.current) return;
       setContacts([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, []);
 

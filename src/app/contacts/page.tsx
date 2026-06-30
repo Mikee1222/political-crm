@@ -45,7 +45,7 @@ import { useProfile } from "@/contexts/profile-context";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { AitoloakarnaniaLocationFields } from "@/components/aitoloakarnania-location-fields";
 import { can } from "@/lib/can";
-import { fetchWithTimeout } from "@/lib/client-fetch";
+import { CONTACT_LIST_FETCH_TIMEOUT_MS, fetchWithTimeout } from "@/lib/client-fetch";
 import { callStatusLabel, lux } from "@/lib/luxury-styles";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import { PageHeader } from "@/components/ui/page-header";
@@ -813,6 +813,7 @@ function ContactsPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [mobileSelectMode, setMobileSelectMode] = useState(false);
   const filtersUrlKeyRef = useRef<string | null>(null);
+  const loadSeqRef = useRef(0);
   const { showToast: showListToast } = useFormToast();
 
   const setPageContext = pageCtx?.setPageContext;
@@ -912,6 +913,7 @@ function ContactsPage() {
 
   const load = useCallback(async () => {
     const q = f;
+    const seq = ++loadSeqRef.current;
     const params = contactFiltersToSearchParams(q);
     if (ageGroup) {
       params.set("age_min", String(AGE_GROUPS[ageGroup].min));
@@ -921,8 +923,11 @@ function ContactsPage() {
     params.set("page_size", String(pageSize));
     setListLoading(true);
     try {
-      const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`);
+      const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`, {
+        timeoutMs: CONTACT_LIST_FETCH_TIMEOUT_MS,
+      });
       const data = (await res.json().catch(() => ({}))) as { contacts?: Contact[]; total?: number };
+      if (seq !== loadSeqRef.current) return;
       if (!res.ok) {
         setContacts([]);
         setListTotal(0);
@@ -936,10 +941,11 @@ function ContactsPage() {
       setContacts(list);
       setListTotal(typeof data.total === "number" ? data.total : list.length);
     } catch {
+      if (seq !== loadSeqRef.current) return;
       setContacts([]);
       setListTotal(0);
     } finally {
-      setListLoading(false);
+      if (seq === loadSeqRef.current) setListLoading(false);
     }
   }, [f, ageGroup, pageSize]);
 
