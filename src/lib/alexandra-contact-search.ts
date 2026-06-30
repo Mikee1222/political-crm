@@ -6,6 +6,14 @@ import { isNameOnlyFilter, searchContactsByName } from "@/lib/contacts-query";
 export const ALEXANDRA_CONTACT_SEARCH_DEFAULT_LIMIT = 75;
 export const ALEXANDRA_CONTACT_SEARCH_MAX_LIMIT = 100;
 
+/** Person-picker comboboxes (requests, related persons, tasks). */
+export const CONTACT_COMBOBOX_SEARCH_LIMIT = 50;
+
+function looksLikePhoneQuery(s: string): boolean {
+  const digits = s.replace(/[\s+()./-]/g, "");
+  return /^\d{6,}$/.test(digits);
+}
+
 const CONTACT_SEARCH_SELECT =
   "id, first_name, last_name, phone, phone2, landline, area, municipality, call_status, priority, nickname, contact_code, father_name";
 
@@ -68,7 +76,11 @@ export function normalizeContactSearchFilters(filters: Record<string, unknown>):
       delete out.search;
       delete out.name;
     } else if (firstName) {
-      out.first_name = firstName;
+      if (looksLikePhoneQuery(firstName)) {
+        out.phone = firstName.replace(/[\s+()./-]/g, "");
+      } else {
+        out.first_name = firstName;
+      }
       delete out.search;
       delete out.name;
     }
@@ -88,11 +100,41 @@ export function normalizeContactListFiltersForNameRpc(f: ContactListFilters): Co
   if (!f.search?.trim()) return f;
   const norm = normalizeContactSearchFilters({ search: f.search });
   const out = { ...f, search: "" };
+  if (norm.phone) out.phone = String(norm.phone);
   if (norm.first_name) out.first_name = String(norm.first_name);
   if (norm.last_name) out.last_name = String(norm.last_name);
   if (norm.father_name) out.father_name = String(norm.father_name);
   if (typeof norm.search === "string" && norm.search.trim()) out.search = norm.search.trim();
   return out;
+}
+
+/** Build GET /api/contacts query for person-picker comboboxes (RPC-friendly params). */
+export function buildContactComboboxSearchParams(
+  query: string,
+  limit: number = CONTACT_COMBOBOX_SEARCH_LIMIT,
+): URLSearchParams {
+  const u = new URLSearchParams();
+  u.set("limit", String(limit));
+  const trimmed = query.trim();
+  if (!trimmed) return u;
+
+  const norm = normalizeContactSearchFilters({ search: trimmed });
+  if (norm.phone) {
+    u.set("phone", String(norm.phone));
+    return u;
+  }
+  if (norm.first_name) {
+    u.set("first_name", String(norm.first_name));
+    if (norm.last_name) u.set("last_name", String(norm.last_name));
+    if (norm.father_name) u.set("father_name", String(norm.father_name));
+    return u;
+  }
+  if (typeof norm.search === "string" && norm.search.trim()) {
+    u.set("search", norm.search.trim());
+    return u;
+  }
+  u.set("search", trimmed);
+  return u;
 }
 
 export function resolveAlexandraNameSearch(f: ContactListFilters): AlexandraNameSearchOpts | null {

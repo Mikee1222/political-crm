@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   alexandraContactSearchLimit,
+  buildContactComboboxSearchParams,
   countAlexandraContacts,
   filtersAllowAlexandraNameRpc,
   normalizeContactListFiltersForNameRpc,
@@ -42,6 +43,27 @@ describe("normalizeContactSearchFilters", () => {
       first_name: "Μαρία",
       last_name: "Παπα",
     });
+  });
+
+  it("maps digit-only query to phone", () => {
+    expect(normalizeContactSearchFilters({ search: "6912345678" })).toEqual({
+      phone: "6912345678",
+    });
+  });
+});
+
+describe("buildContactComboboxSearchParams", () => {
+  it("uses first_name for single-token name (RPC path)", () => {
+    const p = buildContactComboboxSearchParams("ΜΑΡΙΑ");
+    expect(p.get("first_name")).toBe("ΜΑΡΙΑ");
+    expect(p.get("search")).toBeNull();
+    expect(p.get("limit")).toBe("50");
+  });
+
+  it("uses phone param for digit queries", () => {
+    const p = buildContactComboboxSearchParams("6912345678");
+    expect(p.get("phone")).toBe("6912345678");
+    expect(p.get("first_name")).toBeNull();
   });
 });
 

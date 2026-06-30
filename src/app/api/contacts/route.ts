@@ -28,6 +28,7 @@ import {
   hasNameColumnFilters,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
+import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
 import {
   enrichContactsWithGroupCountsAndNames,
   fetchContactsByIncludeIdBatches,
@@ -257,7 +258,8 @@ export async function GET(request: NextRequest) {
     if (!crm.allowed) return crm.response;
     const { supabase } = crm;
 
-    const f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
+    let f = searchParamsToFilters(request.nextUrl.searchParams, getDefaultContactFilters());
+    f = normalizeContactListFiltersForNameRpc(f);
     const partialLocation = request.nextUrl.searchParams.get("partial_location") === "1";
     const limitParam = f.limit;
     const parsedLimit = limitParam != null && limitParam !== "" ? parseInt(limitParam, 10) : NaN;

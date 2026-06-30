@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import { useCallback, useEffect, useId, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
+import { buildContactComboboxSearchParams } from "@/lib/alexandra-contact-search";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { isUuid } from "@/lib/resolve-entity-id";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
@@ -63,9 +64,7 @@ export function ContactSearchCombobox({
     }
     setLoading(true);
     try {
-      const u = new URLSearchParams();
-      u.set("search", search.trim());
-      u.set("limit", "10");
+      const u = buildContactComboboxSearchParams(search);
       const res = await fetchWithTimeout(`/api/contacts?${u.toString()}`);
       const j = (await res.json()) as { contacts?: ContactRow[] };
       setList(j.contacts ?? []);
