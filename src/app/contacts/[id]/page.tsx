@@ -623,6 +623,12 @@ function ContactDetailPage() {
   }, [load]);
 
   useEffect(() => {
+    if (!id || !contact) return;
+    void fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/view`, { method: "POST" }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- track once per contact id load
+  }, [id, contact?.id]);
+
+  useEffect(() => {
     if (!contact) return;
     const name = `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || "Επαφή";
     openTab(contact.id, name);

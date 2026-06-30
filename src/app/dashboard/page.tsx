@@ -35,6 +35,11 @@ import { PwaInstallSteps } from "@/components/pwa-install-guide";
 import { getAgeFromBirthday } from "@/lib/contact-birthday";
 import { formatNowAthens, formatTimeAthens } from "@/lib/date-format";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
+import {
+  DashboardWidgetsGrid,
+  EMPTY_WIDGETS,
+} from "@/components/dashboard/dashboard-widgets";
+import type { DashboardWidgetsData } from "@/lib/dashboard-widgets-data";
 
 type DashboardData = {
   totalContacts: number;
@@ -219,6 +224,31 @@ function parseBriefing(raw: unknown): Briefing {
   };
 }
 
+function parseWidgets(raw: unknown): DashboardWidgetsData {
+  if (!raw || typeof raw !== "object") return EMPTY_WIDGETS;
+  const o = raw as Record<string, unknown>;
+  if ("error" in o && o.error) return EMPTY_WIDGETS;
+  return {
+    namedays: Array.isArray(o.namedays) ? (o.namedays as DashboardWidgetsData["namedays"]) : [],
+    recentInserts: Array.isArray(o.recentInserts)
+      ? (o.recentInserts as DashboardWidgetsData["recentInserts"])
+      : [],
+    recentUpdates: Array.isArray(o.recentUpdates)
+      ? (o.recentUpdates as DashboardWidgetsData["recentUpdates"])
+      : [],
+    recentContactViews: Array.isArray(o.recentContactViews)
+      ? (o.recentContactViews as DashboardWidgetsData["recentContactViews"])
+      : [],
+    recentRequestViews: Array.isArray(o.recentRequestViews)
+      ? (o.recentRequestViews as DashboardWidgetsData["recentRequestViews"])
+      : [],
+    recentRequests: Array.isArray(o.recentRequests)
+      ? (o.recentRequests as DashboardWidgetsData["recentRequests"])
+      : [],
+    groups: Array.isArray(o.groups) ? (o.groups as DashboardWidgetsData["groups"]) : [],
+  };
+}
+
 function parseActs(raw: unknown): Act[] {
   if (!raw || typeof raw !== "object") return [];
   const o = raw as { activities?: unknown };
@@ -258,6 +288,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>(EMPTY_DASH);
   const [briefing, setBriefing] = useState<Briefing>(EMPTY_BRIEF);
   const [acts, setActs] = useState<Act[]>([]);
+  const [widgets, setWidgets] = useState<DashboardWidgetsData>(EMPTY_WIDGETS);
   const [showInstallTutorial, setShowInstallTutorial] = useState(false);
 
   const setPageContext = alexPage?.setPageContext;
@@ -292,15 +323,17 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [d, b, a] = await Promise.all([
+      const [d, b, a, w] = await Promise.all([
         fetchJsonWithTimeout<unknown>("/api/dashboard", {}, CLIENT_FETCH_TIMEOUT_MS),
         fetchJsonWithTimeout<unknown>("/api/briefing/today", {}, CLIENT_FETCH_TIMEOUT_MS),
         fetchJsonWithTimeout<unknown>("/api/activity/recent", {}, CLIENT_FETCH_TIMEOUT_MS),
+        fetchJsonWithTimeout<unknown>("/api/dashboard/widgets", {}, CLIENT_FETCH_TIMEOUT_MS),
       ]);
       if (cancelled) return;
       setData(parseDashboard(d));
       setBriefing(parseBriefing(b));
       setActs(parseActs(a));
+      setWidgets(parseWidgets(w));
       setReady(true);
     })();
     return () => {
@@ -436,6 +469,8 @@ export default function DashboardPage() {
           />
         </div>
       </section>
+
+      <DashboardWidgetsGrid data={widgets} />
 
       <section
         className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 [data-theme='light']:bg-white"

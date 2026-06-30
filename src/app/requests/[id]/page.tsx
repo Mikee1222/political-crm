@@ -195,6 +195,7 @@ export default function RequestDetailPage() {
       setData(req);
       setPortalMsg(req.portal_message?.trim() ?? "");
       setNotes(req.notes ?? []);
+      void fetchWithTimeout(`/api/requests/${encodeURIComponent(req.id)}/view`, { method: "POST" }).catch(() => {});
       if (req.id && req.id !== id) {
         router.replace(`/requests/${req.id}`, { scroll: false });
       }
