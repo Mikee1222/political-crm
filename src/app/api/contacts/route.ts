@@ -89,7 +89,7 @@ function refineRowsWithColumnFilters(
   filterResolution: GroupFilterResolution,
   partialLocation: boolean,
 ) {
-  if (!hasColumnListFilters(f)) return rows;
+  if (!hasColumnListFilters(f) && !filterResolution.excludeContactIds.length) return rows;
   return filterContactRowsByListFilters(rows, f, {
     partialLocation,
     excludeContactIds: filterResolution.excludeContactIds,

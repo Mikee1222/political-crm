@@ -357,6 +357,13 @@ describe("contactRowMatchesListFilters", () => {
     expect(filterContactRowsByListFilters(rows, f).map((r) => r.id)).toEqual(["a"]);
   });
 
+  it("applies excludeContactIds when no column filters are set", () => {
+    const rows = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    expect(
+      filterContactRowsByListFilters(rows, base, { excludeContactIds: ["b"] }).map((r) => r.id),
+    ).toEqual(["a", "c"]);
+  });
+
   it("matches first_name with fuzzy Greek logic", () => {
     const f = { ...base, first_name: "ΜΑΡΙΑ" };
     const rows = [
