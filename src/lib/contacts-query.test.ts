@@ -17,6 +17,7 @@ import {
   isGroupOnlyFilter,
   isNameOnlyFilter,
   nameRequiresInMemoryPipeline,
+  explainInMemoryContactListPipelineDecision,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import {
@@ -256,6 +257,31 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
     expect(needsInMemoryContactListPipeline(base, null, manyExcludeIds.slice(0, 80))).toBe(
       false,
     );
+  });
+
+  it("name + large exclude group → in-memory (not name-column RPC fast path)", () => {
+    const manyExcludeIds = Array.from({ length: 81 }, (_, i) =>
+      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    );
+    const f = {
+      ...base,
+      first_name: "Ιωάννης",
+      exclude_group_ids: ["981ac496-08f8-4348-8200-ffee32df4651"],
+    };
+    expect(canUseNameColumnFastPath(f)).toBe(false);
+    expect(needsInMemoryContactListPipeline(f, null, manyExcludeIds)).toBe(true);
+    const decision = explainInMemoryContactListPipelineDecision(f, null, manyExcludeIds);
+    expect(decision.needsInMemory).toBe(true);
+    expect(decision.reason).toBe("largeExcludeIds");
+    expect(decision.checks.canUseNameColumnFastPath).toBe(false);
+  });
+
+  it("name + gender still uses name-column RPC when no exclude groups", () => {
+    const nameGender = { ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" };
+    expect(canUseNameColumnFastPath(nameGender)).toBe(true);
+    expect(needsInMemoryContactListPipeline(nameGender, null)).toBe(false);
+    const decision = explainInMemoryContactListPipelineDecision(nameGender, null);
+    expect(decision.reason).toBe("canUseNameColumnFastPath");
   });
 });
 

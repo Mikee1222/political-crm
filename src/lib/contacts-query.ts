@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   applyGroupMembershipFiltersToBuilder,
+  excludeContactIdsNeedInMemoryFilter,
   groupResolutionForSqlBuilder,
+  includeContactIdsNeedBatchFetch,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
 import {
@@ -441,6 +443,7 @@ export function canUseGroupColumnFastPath(
 export function canUseNameColumnFastPath(f: ContactListFilters): boolean {
   if (!hasNameColumnFilters(f)) return false;
   if (hasGroupIncludeFilter(f)) return false;
+  if (f.exclude_group_ids.length) return false;
   if (isNameOnlyFilter(f)) return false;
   if (canUseGroupNameSearchFastPath(f)) return false;
   return true;
@@ -574,23 +577,71 @@ export async function searchContactsByName(
   return allRows.filter((row) => rowMatchesNameSearchRpc(row, opts));
 }
 
+export type InMemoryContactListPipelineDecision = {
+  needsInMemory: boolean;
+  reason: string;
+  checks: Record<string, boolean>;
+};
+
+/** Why in-memory vs SQL paginated was chosen (for exclude-debug logging). */
+export function explainInMemoryContactListPipelineDecision(
+  f: ContactListFilters,
+  resolvedIds: string[] | null,
+  excludeIds?: string[] | null,
+): InMemoryContactListPipelineDecision {
+  const checks: Record<string, boolean> = {
+    largeExcludeIds: Boolean(excludeIds && excludeIds.length > MAX_ID_IN_CLAUSE),
+    largeIncludeIds: resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE,
+    hasSearch: Boolean(f.search?.trim()),
+    canUseGroupNameSearchFastPath: canUseGroupNameSearchFastPath(f),
+    canUseGroupOnlyFastPath: canUseGroupOnlyFastPath(f, resolvedIds),
+    canUseGroupColumnFastPath: canUseGroupColumnFastPath(f, resolvedIds),
+    canUseNameOnlyFuzzySearchPath: canUseNameOnlyFuzzySearchPath(f),
+    canUseNameColumnFastPath: canUseNameColumnFastPath(f),
+    nameRequiresInMemoryPipeline: nameRequiresInMemoryPipeline(f),
+    groupRequiresInMemoryPipeline: groupRequiresInMemoryPipeline(f),
+  };
+
+  if (checks.largeExcludeIds) {
+    return { needsInMemory: true, reason: "largeExcludeIds", checks };
+  }
+  if (checks.largeIncludeIds) {
+    return { needsInMemory: true, reason: "largeIncludeIds", checks };
+  }
+  if (canUseGroupNameSearchFastPath(f)) {
+    return { needsInMemory: false, reason: "canUseGroupNameSearchFastPath", checks };
+  }
+  if (canUseGroupOnlyFastPath(f, resolvedIds)) {
+    return { needsInMemory: false, reason: "canUseGroupOnlyFastPath", checks };
+  }
+  if (canUseGroupColumnFastPath(f, resolvedIds)) {
+    return { needsInMemory: false, reason: "canUseGroupColumnFastPath", checks };
+  }
+  if (canUseNameOnlyFuzzySearchPath(f)) {
+    return { needsInMemory: false, reason: "canUseNameOnlyFuzzySearchPath", checks };
+  }
+  if (canUseNameColumnFastPath(f)) {
+    return { needsInMemory: false, reason: "canUseNameColumnFastPath", checks };
+  }
+  if (f.search?.trim()) {
+    return { needsInMemory: true, reason: "hasSearch", checks };
+  }
+  if (nameRequiresInMemoryPipeline(f)) {
+    return { needsInMemory: true, reason: "nameRequiresInMemoryPipeline", checks };
+  }
+  if (groupRequiresInMemoryPipeline(f)) {
+    return { needsInMemory: true, reason: "groupRequiresInMemoryPipeline", checks };
+  }
+  return { needsInMemory: false, reason: "defaultSqlPaginated", checks };
+}
+
 /** Fetch all matches in memory before paginating (search, name combos, group-only, large include lists). */
 export function needsInMemoryContactListPipeline(
   f: ContactListFilters,
   resolvedIds: string[] | null,
   excludeIds?: string[] | null,
 ): boolean {
-  if (canUseGroupNameSearchFastPath(f)) return false;
-  if (canUseGroupOnlyFastPath(f, resolvedIds)) return false;
-  if (canUseGroupColumnFastPath(f, resolvedIds)) return false;
-  if (canUseNameOnlyFuzzySearchPath(f)) return false;
-  if (canUseNameColumnFastPath(f)) return false;
-  if (f.search?.trim()) return true;
-  if (nameRequiresInMemoryPipeline(f)) return true;
-  if (groupRequiresInMemoryPipeline(f)) return true;
-  if (resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE) return true;
-  if (excludeIds && excludeIds.length > MAX_ID_IN_CLAUSE) return true;
-  return false;
+  return explainInMemoryContactListPipelineDecision(f, resolvedIds, excludeIds).needsInMemory;
 }
 
 /** Group + first/last name: search_contacts_in_groups RPC instead of batch id fetch. */

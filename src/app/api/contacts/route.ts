@@ -26,6 +26,7 @@ import {
   hasColumnListFilters,
   hasGroupIncludeFilter,
   hasNameColumnFilters,
+  explainInMemoryContactListPipelineDecision,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
@@ -258,6 +259,14 @@ function debugExcludeGroupFilter(
   console.log("[api/contacts exclude-debug]", label, JSON.stringify(payload));
 }
 
+function isNameExcludeComboFilter(f: ContactFilters): boolean {
+  return f.exclude_group_ids.length > 0 && hasNameColumnFilters(f);
+}
+
+function debugNameExcludeCombo(label: string, payload: Record<string, unknown>) {
+  console.log("[api/contacts name-exclude-debug]", label, JSON.stringify(payload));
+}
+
 function respondWithContactList(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -323,6 +332,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    if (isNameExcludeComboFilter(f)) {
+      debugNameExcludeCombo("request", {
+        queryParams: Object.fromEntries(request.nextUrl.searchParams.entries()),
+        first_name: f.first_name,
+        last_name: f.last_name,
+        father_name: f.father_name,
+        exclude_group_ids_raw: f.exclude_group_ids,
+        hasColumnListFilters: hasColumnListFilters(f),
+        canUseNameOnlyFuzzySearchPath: canUseNameOnlyFuzzySearchPath(f),
+        canUseNameColumnFastPath: canUseNameColumnFastPath(f),
+        comboboxMode,
+        page,
+        pageSize,
+      });
+    }
+
     if (canUseGroupNameSearchFastPath(f)) {
       const rows = await fetchContactsViaGroupNameSearch(supabase, f, partialLocation);
       return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
@@ -334,22 +359,75 @@ export async function GET(request: NextRequest) {
         lastName: f.last_name || null,
         fatherName: f.father_name || null,
       });
-      return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
+      if (isNameExcludeComboFilter(f)) {
+        debugNameExcludeCombo("path-unexpected", {
+          route: "name-only-rpc",
+          note: "exclude present but name-only path taken",
+          rpcRowCount: rows.length,
+        });
+      }
+      return respondWithContactList(
+        supabase,
+        rows,
+        comboboxMode,
+        listLimit,
+        page,
+        pageSize,
+        "name-only-rpc",
+      );
     }
 
     if (canUseNameColumnFastPath(f)) {
+      const resolvedExcludeGroupUuids = f.exclude_group_ids.length
+        ? await resolveGroupIdsToUuids(supabase, f.exclude_group_ids)
+        : [];
       let rows = await searchContactsByName(supabase, {
         firstName: f.first_name || null,
         lastName: f.last_name || null,
         fatherName: f.father_name || null,
       });
+      const rpcRowCount = rows.length;
       const filterResolution = await resolveContactListFilterIds(supabase, f);
+      const needsInMemory = needsInMemoryContactListPipeline(
+        f,
+        filterResolution.includeContactIds,
+        filterResolution.excludeContactIds,
+      );
+      if (isNameExcludeComboFilter(f)) {
+        debugNameExcludeCombo("path", {
+          route: "name-column-rpc",
+          resolvedExcludeGroupUuids,
+          needsInMemoryContactListPipeline: needsInMemory,
+          hasColumnListFilters: hasColumnListFilters(f),
+          excludeContactIdsCount: filterResolution.excludeContactIds.length,
+          rpcRowCount,
+        });
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rows = filterContactRowsByListFilters(rows as any, f, {
         partialLocation,
         excludeContactIds: filterResolution.excludeContactIds,
       });
-      return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
+      if (isNameExcludeComboFilter(f)) {
+        debugNameExcludeCombo("result", {
+          route: "name-column-rpc",
+          resolvedExcludeGroupUuids,
+          needsInMemoryContactListPipeline: needsInMemory,
+          hasColumnListFilters: hasColumnListFilters(f),
+          excludeContactIdsCount: filterResolution.excludeContactIds.length,
+          rpcRowCount,
+          afterFilterRowCount: rows.length,
+        });
+      }
+      return respondWithContactList(
+        supabase,
+        rows,
+        comboboxMode,
+        listLimit,
+        page,
+        pageSize,
+        "name-column-rpc",
+      );
     }
 
     if (canUseGroupOnlyFastPath(f)) {
@@ -417,11 +495,12 @@ export async function GET(request: NextRequest) {
     const resolvedExcludeGroupUuids = f.exclude_group_ids.length
       ? await resolveGroupIdsToUuids(supabase, f.exclude_group_ids)
       : [];
-    const needsInMemory = needsInMemoryContactListPipeline(
+    const pipelineDecision = explainInMemoryContactListPipelineDecision(
       f,
       resolvedIds,
       filterResolution.excludeContactIds,
     );
+    const needsInMemory = pipelineDecision.needsInMemory;
     const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
 
     if (f.exclude_group_ids.length) {
@@ -434,8 +513,24 @@ export async function GET(request: NextRequest) {
         groupResolutionForSqlBuilder_excludeCount: sqlGroupResolution.excludeContactIds.length,
         groupResolutionForSqlBuilder_includeIsNull: sqlGroupResolution.includeContactIds === null,
         needsInMemoryContactListPipeline: needsInMemory,
+        pipelineDecisionReason: pipelineDecision.reason,
+        pipelineDecisionChecks: pipelineDecision.checks,
         includeContactIdsCount: resolvedIds?.length ?? null,
         hasColumnListFilters: hasColumnListFilters(f),
+        hasNameColumnFilters: hasNameColumnFilters(f),
+        canUseNameColumnFastPath: canUseNameColumnFastPath(f),
+        canUseNameOnlyFuzzySearchPath: canUseNameOnlyFuzzySearchPath(f),
+      });
+    }
+    if (isNameExcludeComboFilter(f)) {
+      debugNameExcludeCombo("main-pipeline-resolution", {
+        resolvedExcludeGroupUuids,
+        needsInMemoryContactListPipeline: needsInMemory,
+        pipelineDecisionReason: pipelineDecision.reason,
+        pipelineDecisionChecks: pipelineDecision.checks,
+        hasColumnListFilters: hasColumnListFilters(f),
+        excludeContactIdsCount: filterResolution.excludeContactIds.length,
+        note: "reached main pipeline (not name RPC fast path)",
       });
     }
     if (
@@ -483,7 +578,14 @@ export async function GET(request: NextRequest) {
         partialLocation,
       );
       if (f.exclude_group_ids.length) {
-        debugExcludeGroupFilter("path", { route: "in-memory", subPath });
+        debugExcludeGroupFilter("path", { route: "in-memory", subPath, pipelineDecisionReason: pipelineDecision.reason });
+      }
+      if (isNameExcludeComboFilter(f)) {
+        debugNameExcludeCombo("result", {
+          route: `in-memory:${subPath}`,
+          pipelineDecisionReason: pipelineDecision.reason,
+          rowCountBeforePaginate: rows.length,
+        });
       }
       return respondWithContactList(
         supabase,
@@ -497,7 +599,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (f.exclude_group_ids.length) {
-      debugExcludeGroupFilter("path", { route: "sql-paginated" });
+      debugExcludeGroupFilter("path", {
+        route: "sql-paginated",
+        pipelineDecisionReason: pipelineDecision.reason,
+        pipelineDecisionChecks: pipelineDecision.checks,
+      });
     }
 
     let query: QueryBuilder = supabase
