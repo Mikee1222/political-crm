@@ -18,9 +18,23 @@ const STATUSES = REQUEST_STATUSES;
 
 type StaffUser = { id: string; full_name: string | null; email: string; role: string };
 
-type Props = { open: boolean; onClose: () => void; onCreated: () => void };
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void | Promise<void>;
+  /** Pre-select requester contact (e.g. opened from contact detail page). */
+  defaultContactId?: string;
+  /** When true, requester contact is fixed to defaultContactId. */
+  lockContact?: boolean;
+};
 
-export function NewRequestModal({ open, onClose, onCreated }: Props) {
+export function NewRequestModal({
+  open,
+  onClose,
+  onCreated,
+  defaultContactId = "",
+  lockContact = false,
+}: Props) {
   const [categories, setCategories] = useState<string[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [saving, setSaving] = useState(false);
@@ -55,8 +69,12 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
   useEffect(() => {
     if (!open) return;
     setErr("");
+    if (defaultContactId) {
+      setContactId(defaultContactId);
+      setContactFieldErr(null);
+    }
     void loadMeta();
-  }, [open, loadMeta]);
+  }, [open, loadMeta, defaultContactId]);
 
   useEffect(() => {
     if (!open) return;
@@ -67,7 +85,7 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
   }, [open]);
 
   const reset = () => {
-    setContactId("");
+    setContactId(lockContact && defaultContactId ? defaultContactId : "");
     setAffectedId("");
     setTitle("");
     setDescription("");
@@ -223,10 +241,7 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
                 placeholder="Επιλέξτε κατηγορία"
                 options={
                   categories.length === 0
-                    ? ["Άλλο", "Υγεία", "Εκπαίδευση", "Δημόσια υπηρεσία", "Υποδομές"].map((n) => ({
-                        value: n,
-                        label: n,
-                      }))
+                    ? [{ value: "Άλλο", label: "Άλλο" }]
                     : categories.map((n) => ({ value: n, label: n }))
                 }
               />
@@ -297,10 +312,12 @@ export function NewRequestModal({ open, onClose, onCreated }: Props) {
               label="Πρόσωπο που το ζήτησε"
               valueId={contactId}
               error={contactFieldErr}
+              disabled={lockContact && Boolean(defaultContactId)}
               onBlurValidate={() => {
                 if (!contactId) setContactFieldErr("Επιλέξτε επαφή.");
               }}
               onChange={(id) => {
+                if (lockContact && defaultContactId) return;
                 setContactId(id);
                 if (id) setContactFieldErr(null);
               }}

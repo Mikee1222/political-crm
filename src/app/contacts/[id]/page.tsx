@@ -40,8 +40,9 @@ import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useOptionalAlexandraPageContact } from "@/contexts/alexandra-page-context";
 import { can } from "@/lib/can";
 import { hasMinRole } from "@/lib/roles";
-import { REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+import { REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
+import { NewRequestModal } from "@/components/requests/new-request-modal";
 import { callStatusLabel, callStatusPill, lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactElectoralLocationEdit } from "@/components/contact-electoral-location-edit";
@@ -381,14 +382,7 @@ function ContactDetailPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [saving, setSaving] = useState(false);
-  const [newRequest, setNewRequest] = useState({
-    title: "",
-    description: "",
-    category: "Άλλο",
-    status: REQUEST_STATUS_OPEN,
-    assigned_to: "",
-  });
-  const [openReq, setOpenReq] = useState(false);
+  const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: "", due_date: "" });
   const [openTask, setOpenTask] = useState(false);
   const [headerCopied, setHeaderCopied] = useState(false);
@@ -975,37 +969,6 @@ function ContactDetailPage() {
       });
     } else if (s === "comm") {
       await patch({ phone: buf.phone, phone2: buf.phone2, landline: buf.landline, email: buf.email });
-    }
-  };
-
-  const addRequest = async () => {
-    if (!c || !newRequest.title.trim()) {
-      showToast("Συμπληρώστε τίτλο αιτήματος.", "error");
-      return;
-    }
-    try {
-      const res = await fetchWithTimeout("/api/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newRequest, contact_id: c.id }),
-      });
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        showToast(j.error ?? "Σφάλμα", "error");
-        return;
-      }
-      showToast("Το αίτημα προστέθηκε.", "success");
-      setNewRequest({
-        title: "",
-        description: "",
-        category: "Άλλο",
-        status: REQUEST_STATUS_OPEN,
-        assigned_to: "",
-      });
-      setOpenReq(false);
-      await load();
-    } catch {
-      showToast("Σφάλμα δικτύου.", "error");
     }
   };
 
@@ -2744,112 +2707,21 @@ function ContactDetailPage() {
                     </li>
                   ))}
                 </ul>
-                {openReq ? (
-                  <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent-gold)]">
-                          Νέο Αίτημα
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          Καταχώρηση αιτήματος για αυτή την επαφή
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setOpenReq(false)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--bg-elevated)_80%,var(--bg-card))]"
-                        aria-label="Κλείσιμο φόρμας"
-                      >
-                        <X className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </div>
-                    <div className="h-px bg-border" />
-                    <div>
-                      <label className={inlineFormLabel}>Τίτλος *</label>
-                      <input
-                        type="text"
-                        className={inlineFormControl}
-                        placeholder="Περιγράψτε σύντομα το αίτημα..."
-                        value={newRequest.title}
-                        onChange={(e) => setNewRequest({ ...newRequest, title: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <div>
-                        <label className={inlineFormLabel}>Κατηγορία</label>
-                        <HqSelect
-                          className={inlineFormControl + " !pr-9"}
-                          value={newRequest.category}
-                          onChange={(e) => setNewRequest({ ...newRequest, category: e.target.value })}
-                        >
-                          <option>Υγεία</option>
-                          <option>Εκπαίδευση</option>
-                          <option>Εργασία</option>
-                          <option>Υποδομές</option>
-                          <option>Άλλο</option>
-                        </HqSelect>
-                      </div>
-                      <div>
-                        <label className={inlineFormLabel}>Κατάσταση</label>
-                        <HqSelect
-                          className={inlineFormControl + " !pr-9"}
-                          value={newRequest.status}
-                          onChange={(e) => setNewRequest({ ...newRequest, status: e.target.value })}
-                        >
-                          {REQUEST_STATUSES.map((s) => (
-                            <option key={s}>{s}</option>
-                          ))}
-                        </HqSelect>
-                      </div>
-                    </div>
-                    <div>
-                      <label className={inlineFormLabel}>Ανάθεση σε</label>
-                      <input
-                        type="text"
-                        className={inlineFormControl}
-                        placeholder="Ανάθεση σε"
-                        value={newRequest.assigned_to}
-                        onChange={(e) => setNewRequest({ ...newRequest, assigned_to: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label className={inlineFormLabel}>Περιγραφή</label>
-                      <textarea
-                        rows={3}
-                        className={inlineFormControl + " resize-none"}
-                        placeholder="Λεπτομέρειες αιτήματος..."
-                        value={newRequest.description}
-                        onChange={(e) => setNewRequest({ ...newRequest, description: e.target.value })}
-                      />
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setOpenReq(false)}
-                        className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bg-elevated)_70%,var(--bg-card))]"
-                      >
-                        Άκυρο
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void addRequest()}
-                        className="flex-1 rounded-xl bg-[var(--accent-gold)] py-2.5 text-sm font-semibold text-[var(--text-badge-on-gold)] transition-colors hover:brightness-95"
-                      >
-                        Αποθήκευση
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setOpenReq(true)}
-                    className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_6%,var(--bg-card))]"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Νέο αίτημα
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setCreateRequestOpen(true)}
+                  className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_6%,var(--bg-card))]"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Νέο αίτημα
+                </button>
+                <NewRequestModal
+                  open={createRequestOpen}
+                  onClose={() => setCreateRequestOpen(false)}
+                  onCreated={load}
+                  defaultContactId={id}
+                  lockContact
+                />
               </div>
             )}
 
