@@ -11,7 +11,6 @@ import {
   contactMatchesFuzzyGreekSearch,
   normalizeGreekNameKey,
 } from "@/lib/greek-fuzzy-name";
-import { MAX_ID_IN_CLAUSE } from "@/lib/contact-group-members";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 
@@ -590,8 +589,8 @@ export function explainInMemoryContactListPipelineDecision(
   excludeIds?: string[] | null,
 ): InMemoryContactListPipelineDecision {
   const checks: Record<string, boolean> = {
-    largeExcludeIds: Boolean(excludeIds && excludeIds.length > MAX_ID_IN_CLAUSE),
-    largeIncludeIds: resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE,
+    largeExcludeIds: Boolean(excludeIds?.length && excludeContactIdsNeedInMemoryFilter(excludeIds)),
+    largeIncludeIds: includeContactIdsNeedBatchFetch(resolvedIds),
     hasSearch: Boolean(f.search?.trim()),
     canUseGroupNameSearchFastPath: canUseGroupNameSearchFastPath(f),
     canUseGroupOnlyFastPath: canUseGroupOnlyFastPath(f, resolvedIds),
