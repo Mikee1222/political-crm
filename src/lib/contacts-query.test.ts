@@ -17,7 +17,7 @@ import {
   isGroupOnlyFilter,
   isNameOnlyFilter,
   nameRequiresInMemoryPipeline,
-  explainInMemoryContactListPipelineDecision,
+  buildContactQueryPlan,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import {
@@ -88,6 +88,46 @@ describe("fetchContactRowsInBatches", () => {
       [1000, 1999],
     ]);
     expect(rows).toHaveLength(1181);
+  });
+
+  it("pages correctly when batchSize exceeds Supabase max (1000)", async () => {
+    const ranges: [number, number][] = [];
+    let call = 0;
+    const supabase = {
+      from() {
+        return {
+          select() {
+            const builder = {
+              order() {
+                return builder;
+              },
+              range(from: number, to: number) {
+                ranges.push([from, to]);
+                call += 1;
+                if (call === 1) {
+                  return Promise.resolve({
+                    data: Array.from({ length: 1000 }, (_, i) => ({ id: `a-${i}` })),
+                    error: null,
+                  });
+                }
+                return Promise.resolve({
+                  data: Array.from({ length: 500 }, (_, i) => ({ id: `b-${i}` })),
+                  error: null,
+                });
+              },
+            };
+            return builder;
+          },
+        };
+      },
+    };
+
+    const rows = await fetchContactRowsInBatches(supabase, "id", (q) => q, 2000);
+    expect(ranges).toEqual([
+      [0, 999],
+      [1000, 1999],
+    ]);
+    expect(rows).toHaveLength(1500);
   });
 });
 
@@ -268,20 +308,24 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
       first_name: "Ιωάννης",
       exclude_group_ids: ["981ac496-08f8-4348-8200-ffee32df4651"],
     };
+    const plan = buildContactQueryPlan(f, {
+      includeContactIds: null,
+      excludeContactIds: manyExcludeIds,
+    });
+    expect(plan.path).toBe("in-memory");
     expect(canUseNameColumnFastPath(f)).toBe(false);
     expect(needsInMemoryContactListPipeline(f, null, manyExcludeIds)).toBe(true);
-    const decision = explainInMemoryContactListPipelineDecision(f, null, manyExcludeIds);
-    expect(decision.needsInMemory).toBe(true);
-    expect(decision.reason).toBe("largeExcludeIds");
-    expect(decision.checks.canUseNameColumnFastPath).toBe(false);
   });
 
   it("name + gender still uses name-column RPC when no exclude groups", () => {
     const nameGender = { ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" };
     expect(canUseNameColumnFastPath(nameGender)).toBe(true);
     expect(needsInMemoryContactListPipeline(nameGender, null)).toBe(false);
-    const decision = explainInMemoryContactListPipelineDecision(nameGender, null);
-    expect(decision.reason).toBe("canUseNameColumnFastPath");
+    const plan = buildContactQueryPlan(nameGender, {
+      includeContactIds: null,
+      excludeContactIds: [],
+    });
+    expect(plan.path).toBe("name-column-rpc");
   });
 });
 

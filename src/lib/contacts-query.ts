@@ -489,6 +489,8 @@ export function groupRequiresInMemoryPipeline(f: ContactListFilters): boolean {
 }
 
 const FUZZY_NAME_FETCH_BATCH = 1000;
+/** PostgREST / Supabase caps each `.range()` response at this many rows. */
+const SUPABASE_MAX_PAGE_ROWS = 1000;
 
 /** Page through contacts when fuzzy name columns must be matched in memory (no row cap). */
 export async function fetchContactRowsInBatches(
@@ -499,20 +501,26 @@ export async function fetchContactRowsInBatches(
   applyFilters: (query: any) => any,
   batchSize = FUZZY_NAME_FETCH_BATCH,
 ): Promise<Record<string, unknown>[]> {
+  const pageSize = Math.min(batchSize, SUPABASE_MAX_PAGE_ROWS);
   const rows: Record<string, unknown>[] = [];
   let from = 0;
   while (true) {
-    let query = supabase.from("contacts").select(select).order("created_at", { ascending: false });
+    let query = supabase
+      .from("contacts")
+      .select(select)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true });
     query = applyFilters(query);
-    query = query.range(from, from + batchSize - 1);
+    query = query.range(from, from + pageSize - 1);
     const { data, error } = await query;
     if (error) throw error;
     const chunk = (data ?? []) as Record<string, unknown>[];
+    if (chunk.length === 0) break;
     rows.push(...chunk);
-    if (chunk.length < batchSize) break;
-    from += batchSize;
+    if (chunk.length < pageSize) break;
+    from += pageSize;
   }
-  return rows;
+  return dedupeContactRowsById(rows);
 }
 
 const NAME_SEARCH_RPC_PAGE_SIZE = 1000;
@@ -576,11 +584,130 @@ export async function searchContactsByName(
   return allRows.filter((row) => rowMatchesNameSearchRpc(row, opts));
 }
 
+/** Deduplicate batch-fetched rows by contact id (stable pagination tie-breaker should make this rare). */
+export function dedupeContactRowsById<T extends { id?: unknown }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const id = String(row.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(row);
+  }
+  return out;
+}
+
 export type InMemoryContactListPipelineDecision = {
   needsInMemory: boolean;
   reason: string;
   checks: Record<string, boolean>;
 };
+
+/** Large include/exclude group membership cannot use PostgREST id.in/not.in on list URLs. */
+export function largeGroupMembershipForcesInMemory(resolution: GroupFilterResolution): boolean {
+  if (excludeContactIdsNeedInMemoryFilter(resolution.excludeContactIds)) return true;
+  if (includeContactIdsNeedBatchFetch(resolution.includeContactIds)) return true;
+  return false;
+}
+
+export type ContactQueryPlanPath =
+  | "empty"
+  | "name-only-rpc"
+  | "name-column-rpc"
+  | "group-name-rpc"
+  | "group-only-rpc"
+  | "group-column-rpc"
+  | "nameday"
+  | "in-memory"
+  | "sql-paginated";
+
+export type ContactQueryPlan = {
+  path: ContactQueryPlanPath;
+  reason: string;
+};
+
+/**
+ * WARNING: any filter combination must route through buildContactQueryPlan() — do not add ad-hoc branches.
+ * If you're tempted to special-case a combination, add a test case to contacts-filter-combinations.test.ts first.
+ *
+ * DECISION MATRIX (path = ContactQueryPlanPath; sm = ≤ MAX_ID_IN_CLAUSE / 80 members)
+ * ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ * | search | name cols   | column filt   | incl grp | excl grp | incl sz | excl sz | PATH              |
+ * ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ * | yes    | *           | *             | *        | *        | *       | *       | in-memory         | fuzzy search
+ * | no     | first/last  | none          | no       | no       | -       | -       | name-only-rpc     |
+ * | no     | name+cols   | rpc-supported | no       | no       | -       | sm      | name-column-rpc   |
+ * | no     | name+cols   | complex       | *        | *        | *       | *       | in-memory         |
+ * | no     | first/last  | *             | yes      | no       | sm      | sm      | group-name-rpc    |
+ * | no     | none        | none          | yes      | no       | sm      | sm      | group-only-rpc    |
+ * | no     | none        | rpc-supported | yes      | no       | sm      | sm      | group-column-rpc  |
+ * | no     | *           | *             | *        | *        | >80     | *       | in-memory         | large include
+ * | no     | *           | *             | *        | *        | *       | >80     | in-memory         | large exclude
+ * | no     | *           | complex+grp   | yes      | *        | sm      | sm      | in-memory         | unsupported RPC cols
+ * | no     | none        | columns       | no       | no       | -       | sm      | sql-paginated     |
+ * | no     | *           | *             | yes      | *        | 0       | *       | empty             | zero include matches
+ * | *      | *           | *             | *        | *        | *       | *       | nameday           | when nameday_today set
+ * ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ * Large group membership is checked BEFORE any RPC fast path — name/group fast paths never bypass it.
+ * When in doubt, prefer in-memory.
+ */
+export function buildContactQueryPlan(
+  f: ContactListFilters,
+  resolution: GroupFilterResolution,
+): ContactQueryPlan {
+  if (
+    hasGroupIncludeFilter(f) &&
+    resolution.includeContactIds !== null &&
+    resolution.includeContactIds.length === 0
+  ) {
+    return { path: "empty", reason: "include group matches zero contacts" };
+  }
+
+  if (largeGroupMembershipForcesInMemory(resolution)) {
+    return {
+      path: "in-memory",
+      reason: `large group membership (include=${resolution.includeContactIds?.length ?? "none"}, exclude=${resolution.excludeContactIds.length})`,
+    };
+  }
+
+  if (f.nameday_today) {
+    return { path: "nameday", reason: "nameday_today" };
+  }
+
+  if (f.search?.trim()) {
+    return { path: "in-memory", reason: "free-text search" };
+  }
+
+  if (canUseGroupNameSearchFastPath(f)) {
+    return { path: "group-name-rpc", reason: "group + first/last name RPC" };
+  }
+
+  if (canUseNameOnlyFuzzySearchPath(f)) {
+    return { path: "name-only-rpc", reason: "name-only fuzzy RPC" };
+  }
+
+  if (canUseNameColumnFastPath(f)) {
+    return { path: "name-column-rpc", reason: "name + RPC-supported column refine" };
+  }
+
+  if (canUseGroupOnlyFastPath(f, resolution.includeContactIds)) {
+    return { path: "group-only-rpc", reason: "group-only paginated RPC" };
+  }
+
+  if (canUseGroupColumnFastPath(f, resolution.includeContactIds)) {
+    return { path: "group-column-rpc", reason: "group + RPC column filters" };
+  }
+
+  if (nameRequiresInMemoryPipeline(f)) {
+    return { path: "in-memory", reason: "complex name filter combination" };
+  }
+
+  if (groupRequiresInMemoryPipeline(f)) {
+    return { path: "in-memory", reason: "complex group filter combination" };
+  }
+
+  return { path: "sql-paginated", reason: "column filters with SQL pagination" };
+}
 
 /** Why in-memory vs SQL paginated was chosen (for exclude-debug logging). */
 export function explainInMemoryContactListPipelineDecision(
@@ -588,9 +715,14 @@ export function explainInMemoryContactListPipelineDecision(
   resolvedIds: string[] | null,
   excludeIds?: string[] | null,
 ): InMemoryContactListPipelineDecision {
+  const resolution: GroupFilterResolution = {
+    includeContactIds: resolvedIds,
+    excludeContactIds: excludeIds ?? [],
+  };
+  const plan = buildContactQueryPlan(f, resolution);
   const checks: Record<string, boolean> = {
-    largeExcludeIds: Boolean(excludeIds?.length && excludeContactIdsNeedInMemoryFilter(excludeIds)),
-    largeIncludeIds: includeContactIdsNeedBatchFetch(resolvedIds),
+    largeExcludeIds: excludeContactIdsNeedInMemoryFilter(resolution.excludeContactIds),
+    largeIncludeIds: includeContactIdsNeedBatchFetch(resolution.includeContactIds),
     hasSearch: Boolean(f.search?.trim()),
     canUseGroupNameSearchFastPath: canUseGroupNameSearchFastPath(f),
     canUseGroupOnlyFastPath: canUseGroupOnlyFastPath(f, resolvedIds),
@@ -600,38 +732,11 @@ export function explainInMemoryContactListPipelineDecision(
     nameRequiresInMemoryPipeline: nameRequiresInMemoryPipeline(f),
     groupRequiresInMemoryPipeline: groupRequiresInMemoryPipeline(f),
   };
-
-  if (checks.largeExcludeIds) {
-    return { needsInMemory: true, reason: "largeExcludeIds", checks };
-  }
-  if (checks.largeIncludeIds) {
-    return { needsInMemory: true, reason: "largeIncludeIds", checks };
-  }
-  if (canUseGroupNameSearchFastPath(f)) {
-    return { needsInMemory: false, reason: "canUseGroupNameSearchFastPath", checks };
-  }
-  if (canUseGroupOnlyFastPath(f, resolvedIds)) {
-    return { needsInMemory: false, reason: "canUseGroupOnlyFastPath", checks };
-  }
-  if (canUseGroupColumnFastPath(f, resolvedIds)) {
-    return { needsInMemory: false, reason: "canUseGroupColumnFastPath", checks };
-  }
-  if (canUseNameOnlyFuzzySearchPath(f)) {
-    return { needsInMemory: false, reason: "canUseNameOnlyFuzzySearchPath", checks };
-  }
-  if (canUseNameColumnFastPath(f)) {
-    return { needsInMemory: false, reason: "canUseNameColumnFastPath", checks };
-  }
-  if (f.search?.trim()) {
-    return { needsInMemory: true, reason: "hasSearch", checks };
-  }
-  if (nameRequiresInMemoryPipeline(f)) {
-    return { needsInMemory: true, reason: "nameRequiresInMemoryPipeline", checks };
-  }
-  if (groupRequiresInMemoryPipeline(f)) {
-    return { needsInMemory: true, reason: "groupRequiresInMemoryPipeline", checks };
-  }
-  return { needsInMemory: false, reason: "defaultSqlPaginated", checks };
+  return {
+    needsInMemory: plan.path === "in-memory",
+    reason: plan.reason,
+    checks,
+  };
 }
 
 /** Fetch all matches in memory before paginating (search, name combos, group-only, large include lists). */
@@ -640,7 +745,10 @@ export function needsInMemoryContactListPipeline(
   resolvedIds: string[] | null,
   excludeIds?: string[] | null,
 ): boolean {
-  return explainInMemoryContactListPipelineDecision(f, resolvedIds, excludeIds).needsInMemory;
+  return buildContactQueryPlan(f, {
+    includeContactIds: resolvedIds,
+    excludeContactIds: excludeIds ?? [],
+  }).path === "in-memory";
 }
 
 /** Group + first/last name: search_contacts_in_groups RPC instead of batch id fetch. */

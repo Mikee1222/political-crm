@@ -1,0 +1,374 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
+import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
+import type { ContactListFilters } from "@/lib/contacts-filters";
+import {
+  applyBirthdayAgeFiltersToBuilder,
+  applyColumnContactFiltersToBuilder,
+  applyContactListFiltersToBuilder,
+  buildContactQueryPlan,
+  contactRowMatchesListFilters,
+  fetchContactRowsInBatches,
+  filterContactRowsByListFilters,
+  hasColumnListFilters,
+  hasGroupIncludeFilter,
+  hasNameColumnFilters,
+  searchContactsByName,
+  type ContactQueryPlan,
+} from "@/lib/contacts-query";
+import {
+  excludeContactIdsNeedInMemoryFilter,
+  fetchContactsByIncludeIdBatches,
+  groupResolutionForSqlBuilder,
+  includeContactIdsNeedBatchFetch,
+  resolveContactListFilterIds,
+  resolveGroupIdsToUuids,
+  searchContactsByGroupsPaginated,
+  searchContactsInGroups,
+  searchContactsInGroupsFiltered,
+  type GroupFilterResolution,
+} from "@/lib/contact-group-members";
+
+const COUNT_SELECT =
+  "id, first_name, last_name, father_name, phone, phone2, landline, nickname, area, municipality, toponym, gender, call_status, priority, tags, political_stance, birthday, age, electoral_district, predicted_score, is_volunteer, volunteer_area, last_contacted_at, may_not_have_mobile, may_not_have_landline, may_not_have_email";
+
+const SELECT_LIST =
+  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, toponym, gender, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, is_dead, electoral_district, may_not_have_mobile, may_not_have_landline, may_not_have_email, created_at";
+
+const SELECT_LIST_BATCH =
+  "id, first_name, last_name, phone, phone2, landline, email, area, municipality, toponym, gender, call_status, priority, tags, nickname, contact_code, age, political_stance, group_id, birthday, predicted_score, is_volunteer, volunteer_role, volunteer_area, volunteer_since, language, last_contacted_at, father_name, name_day, is_dead, electoral_district, may_not_have_mobile, may_not_have_landline, may_not_have_email, created_at";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type QueryBuilder = any;
+
+export type ContactsListApiResult = {
+  total: number;
+  plan: ContactQueryPlan;
+  subPath?: string;
+};
+
+function applyApiContactFilters(
+  query: QueryBuilder,
+  f: ContactListFilters,
+  groupResolution: GroupFilterResolution,
+  partialLocation = false,
+  opts?: { skipNameColumnFilters?: boolean },
+) {
+  const filtersWithoutAge = { ...f, age_min: "", age_max: "" };
+  query = applyContactListFiltersToBuilder(query, filtersWithoutAge, groupResolution, {
+    partialLocation,
+    skipNameColumnFilters: opts?.skipNameColumnFilters,
+  });
+  return applyBirthdayAgeFiltersToBuilder(query, f.age_min, f.age_max);
+}
+
+function afterFilterRows(rows: Record<string, unknown>[], search: string | null | undefined) {
+  if (!search) return rows;
+  return rows.filter((c) =>
+    contactMatchesFuzzyGreekSearch(
+      c as Parameters<typeof contactMatchesFuzzyGreekSearch>[0],
+      search,
+    ),
+  );
+}
+
+function refineRowsWithColumnFilters(
+  rows: Record<string, unknown>[],
+  f: ContactListFilters,
+  filterResolution: GroupFilterResolution,
+  partialLocation: boolean,
+) {
+  let working = rows;
+  if (filterResolution.excludeContactIds.length > 0) {
+    const excl = new Set(filterResolution.excludeContactIds);
+    working = working.filter((row) => !excl.has(String(row.id)));
+  }
+  if (!hasColumnListFilters(f)) return working;
+  return filterContactRowsByListFilters(
+    working as Parameters<typeof filterContactRowsByListFilters>[0],
+    f,
+    {
+      partialLocation,
+      excludeContactIds: [],
+    },
+  );
+}
+
+async function fetchContactsByResolvedIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  ids: string[],
+  f: ContactListFilters,
+  filterResolution: GroupFilterResolution,
+  partialLocation: boolean,
+) {
+  const rows = await fetchContactsByIncludeIdBatches(
+    supabase,
+    ids,
+    SELECT_LIST_BATCH,
+    (q) =>
+      applyColumnContactFiltersToBuilder(q, f, {
+        partialLocation,
+        excludeContactIds: filterResolution.excludeContactIds,
+        skipNameColumnFilters: true,
+      }),
+  );
+  return refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+}
+
+async function fetchContactsViaGroupNameSearch(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  f: ContactListFilters,
+  partialLocation: boolean,
+) {
+  const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+  const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+  if (rawInclude.length && !groupIds.length) return [];
+
+  const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
+  let rows = (await searchContactsInGroups(supabase, {
+    groupIds,
+    firstName: f.first_name || null,
+    lastName: f.last_name || null,
+    matchMode,
+  })) as Record<string, unknown>[];
+
+  const filterResolution = await resolveContactListFilterIds(supabase, f, {
+    skipGroupInclude: true,
+  });
+
+  if (filterResolution.includeContactIds !== null) {
+    const allow = new Set(filterResolution.includeContactIds);
+    rows = rows.filter((r) => allow.has(String(r.id)));
+  }
+
+  const exclude = filterResolution.excludeContactIds.length
+    ? new Set(filterResolution.excludeContactIds)
+    : undefined;
+  rows = rows.filter((row) =>
+    contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
+      partialLocation,
+      excludeContactIds: exclude,
+    }),
+  );
+
+  return rows;
+}
+
+async function fetchContactsInMemoryPipeline(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  f: ContactListFilters,
+  filterResolution: GroupFilterResolution,
+  resolvedIds: string[] | null,
+  partialLocation: boolean,
+): Promise<{ rows: Record<string, unknown>[]; subPath: string }> {
+  let rows: Record<string, unknown>[];
+  let subPath: string;
+  if (hasNameColumnFilters(f)) {
+    subPath = "name-search-then-refine";
+    rows = (await searchContactsByName(supabase, {
+      firstName: f.first_name || null,
+      lastName: f.last_name || null,
+      fatherName: f.father_name || null,
+    })) as Record<string, unknown>[];
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+    if (resolvedIds !== null) {
+      const allow = new Set(resolvedIds);
+      rows = rows.filter((row) => allow.has(String(row.id)));
+    }
+  } else if (includeContactIdsNeedBatchFetch(resolvedIds)) {
+    subPath = "include-batch-fetch";
+    rows = (await fetchContactsByResolvedIds(
+      supabase,
+      resolvedIds!,
+      f,
+      filterResolution,
+      partialLocation,
+    )) as Record<string, unknown>[];
+  } else if (
+    !hasGroupIncludeFilter(f) &&
+    excludeContactIdsNeedInMemoryFilter(filterResolution.excludeContactIds)
+  ) {
+    subPath = "large-exclude-batch-fetch";
+    rows = await fetchContactRowsInBatches(supabase, COUNT_SELECT, (query) => query);
+    rows = filterContactRowsByListFilters(
+      rows as Parameters<typeof filterContactRowsByListFilters>[0],
+      f,
+      {
+        partialLocation,
+        excludeContactIds: filterResolution.excludeContactIds,
+      },
+    );
+  } else if (f.search?.trim()) {
+    subPath = "search-batch-fetch";
+    rows = await fetchContactRowsInBatches(supabase, COUNT_SELECT, (query) =>
+      applyApiContactFilters(query, f, groupResolutionForSqlBuilder(filterResolution), partialLocation, {
+        skipNameColumnFilters: true,
+      }),
+    );
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+  } else {
+    subPath = "single-query-limit-12000";
+    let query: QueryBuilder = supabase
+      .from("contacts")
+      .select(SELECT_LIST)
+      .order("created_at", { ascending: false });
+    query = applyApiContactFilters(query, f, filterResolution, partialLocation, {
+      skipNameColumnFilters: true,
+    });
+    query = query.limit(12_000);
+    const { data, error } = await query;
+    if (error) throw error;
+    rows = (data ?? []) as Record<string, unknown>[];
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+  }
+  if (f.search?.trim()) {
+    rows = afterFilterRows(rows, f.search);
+  }
+  return { rows, subPath };
+}
+
+/** Shared list-query logic for GET /api/contacts and integration tests. */
+export async function queryContactsListTotal(
+  supabase: SupabaseClient,
+  f: ContactListFilters,
+  opts: { partialLocation?: boolean } = {},
+): Promise<ContactsListApiResult> {
+  const partialLocation = opts.partialLocation ?? false;
+  const filterResolution = await resolveContactListFilterIds(supabase, f);
+  const resolvedIds = filterResolution.includeContactIds;
+  const plan = buildContactQueryPlan(f, filterResolution);
+  const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
+
+  if (plan.path === "empty") {
+    return { total: 0, plan };
+  }
+
+  if (plan.path === "group-name-rpc") {
+    const rows = await fetchContactsViaGroupNameSearch(supabase, f, partialLocation);
+    return { total: rows.length, plan, subPath: "group-name-rpc" };
+  }
+
+  if (plan.path === "name-only-rpc") {
+    const rows = await searchContactsByName(supabase, {
+      firstName: f.first_name || null,
+      lastName: f.last_name || null,
+      fatherName: f.father_name || null,
+    });
+    return { total: rows.length, plan, subPath: "name-only-rpc" };
+  }
+
+  if (plan.path === "name-column-rpc") {
+    let rows = await searchContactsByName(supabase, {
+      firstName: f.first_name || null,
+      lastName: f.last_name || null,
+      fatherName: f.father_name || null,
+    });
+    rows = filterContactRowsByListFilters(
+      rows as Parameters<typeof filterContactRowsByListFilters>[0],
+      f,
+      {
+        partialLocation,
+        excludeContactIds: filterResolution.excludeContactIds,
+      },
+    );
+    return { total: rows.length, plan, subPath: "name-column-rpc" };
+  }
+
+  if (plan.path === "group-only-rpc") {
+    const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+    const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+    if (rawInclude.length && !groupIds.length) {
+      return { total: 0, plan };
+    }
+    const { total } = await searchContactsByGroupsPaginated(supabase, {
+      groupIds,
+      offset: 0,
+      limit: 1,
+    });
+    return { total, plan, subPath: "group-only-rpc" };
+  }
+
+  if (plan.path === "group-column-rpc") {
+    const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+    const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+    if (rawInclude.length && !groupIds.length) {
+      return { total: 0, plan };
+    }
+    const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
+    const callStatuses = f.call_statuses.length
+      ? f.call_statuses
+      : f.call_status
+        ? [f.call_status]
+        : [];
+    const { total } = await searchContactsInGroupsFiltered(supabase, {
+      groupIds,
+      matchMode,
+      gender: f.gender || null,
+      municipalities: f.municipalities,
+      callStatus: callStatuses.length === 1 ? callStatuses[0]! : null,
+      callStatuses: callStatuses.length > 1 ? callStatuses : [],
+      politicalStance: f.political_stance || null,
+      toponyms: f.toponyms,
+      partialLocation,
+      offset: 0,
+      limit: 1,
+    });
+    return { total, plan, subPath: "group-column-rpc" };
+  }
+
+  if (plan.path === "nameday") {
+    const now = new Date();
+    const ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
+    if (!ids.length) return { total: 0, plan, subPath: "nameday" };
+    let query: QueryBuilder = supabase
+      .from("contacts")
+      .select(SELECT_LIST)
+      .in("id", ids)
+      .order("created_at", { ascending: false });
+    query = applyApiContactFilters(query, f, filterResolution, partialLocation);
+    query = query.limit(15_000);
+    const { data, error } = await query;
+    if (error) throw error;
+    let rows = (data ?? []) as Record<string, unknown>[];
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+    if (f.search?.trim()) rows = afterFilterRows(rows, f.search);
+    return { total: rows.length, plan, subPath: "nameday" };
+  }
+
+  if (plan.path === "in-memory") {
+    const { rows, subPath } = await fetchContactsInMemoryPipeline(
+      supabase,
+      f,
+      filterResolution,
+      resolvedIds,
+      partialLocation,
+    );
+    return { total: rows.length, plan, subPath };
+  }
+
+  if (f.exclude_group_ids.length > 0) {
+    const { rows, subPath } = await fetchContactsInMemoryPipeline(
+      supabase,
+      f,
+      filterResolution,
+      resolvedIds,
+      partialLocation,
+    );
+    return {
+      total: rows.length,
+      plan: { path: "in-memory", reason: "exclude_group_ids present" },
+      subPath,
+    };
+  }
+
+  let query: QueryBuilder = supabase
+    .from("contacts")
+    .select(SELECT_LIST, { count: "exact", head: true });
+  query = applyApiContactFilters(query, f, sqlGroupResolution, partialLocation);
+  const { count, error } = await query;
+  if (error) throw error;
+  return { total: count ?? 0, plan, subPath: "sql-paginated" };
+}
