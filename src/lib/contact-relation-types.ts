@@ -96,10 +96,8 @@ export function normalizeRelationTypeForStorage(
   chosenLabel: string,
 ): string {
   const label = chosenLabel.trim() || DEFAULT_CONTACT_RELATION_TYPE;
-  const [contactId1, contactId2] =
-    viewerContactId < relatedContactId
-      ? [viewerContactId, relatedContactId]
-      : [relatedContactId, viewerContactId];
+  const contactId1 =
+    viewerContactId < relatedContactId ? viewerContactId : relatedContactId;
 
   if (viewerContactId === contactId1) {
     return label;
