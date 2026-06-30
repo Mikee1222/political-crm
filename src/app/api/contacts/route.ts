@@ -33,6 +33,7 @@ import {
   enrichContactsWithGroupCountsAndNames,
   excludeContactIdsNeedInMemoryFilter,
   fetchContactsByIncludeIdBatches,
+  groupResolutionForSqlBuilder,
   includeContactIdsNeedBatchFetch,
   insertContactGroupMembershipsAfterCreate,
   normalizeGroupIdsInput,
@@ -189,9 +190,11 @@ async function fetchContactsInMemoryPipeline(
   filterResolution: GroupFilterResolution,
   resolvedIds: string[] | null,
   partialLocation: boolean,
-) {
+): Promise<{ rows: Record<string, unknown>[]; subPath: string }> {
   let rows: Record<string, unknown>[];
+  let subPath: string;
   if (includeContactIdsNeedBatchFetch(resolvedIds)) {
+    subPath = "include-batch-fetch";
     rows = (await fetchContactsByResolvedIds(
       supabase,
       resolvedIds!,
@@ -200,6 +203,7 @@ async function fetchContactsInMemoryPipeline(
       partialLocation,
     )) as Record<string, unknown>[];
   } else if (hasNameColumnFilters(f)) {
+    subPath = "name-column-batch-fetch";
     rows = await fetchContactRowsInBatches(supabase, SELECT_LIST, (query) =>
       applyApiContactFilters(query, f, filterResolution, partialLocation, {
         skipNameColumnFilters: true,
@@ -213,6 +217,7 @@ async function fetchContactsInMemoryPipeline(
     !hasGroupIncludeFilter(f) &&
     excludeContactIdsNeedInMemoryFilter(filterResolution.excludeContactIds)
   ) {
+    subPath = "large-exclude-batch-fetch";
     rows = await fetchContactRowsInBatches(supabase, SELECT_LIST, (query) =>
       applyApiContactFilters(query, f, filterResolution, partialLocation, {
         skipNameColumnFilters: true,
@@ -223,6 +228,7 @@ async function fetchContactsInMemoryPipeline(
       unknown
     >[];
   } else {
+    subPath = "single-query-limit-12000";
     let query: QueryBuilder = supabase
       .from("contacts")
       .select(SELECT_LIST)
@@ -242,7 +248,14 @@ async function fetchContactsInMemoryPipeline(
   if (f.search?.trim()) {
     rows = afterFilterRows(rows, f.search) as Record<string, unknown>[];
   }
-  return rows;
+  return { rows, subPath };
+}
+
+function debugExcludeGroupFilter(
+  label: string,
+  payload: Record<string, unknown>,
+) {
+  console.log("[api/contacts exclude-debug]", label, JSON.stringify(payload));
 }
 
 function respondWithContactList(
@@ -253,14 +266,30 @@ function respondWithContactList(
   listLimit: number | null,
   page: number,
   pageSize: number,
+  debugPath?: string,
 ) {
   if (comboboxMode) {
     const slice = rows.slice(0, listLimit!);
+    debugExcludeGroupFilter("response", {
+      path: debugPath ?? "unknown",
+      mode: "combobox",
+      rowCountBeforePaginate: rows.length,
+      returnedCount: slice.length,
+    });
     return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
       NextResponse.json({ contacts: enriched }),
     );
   }
   const { slice, total } = paginateList(rows, page, pageSize);
+  debugExcludeGroupFilter("response", {
+    path: debugPath ?? "unknown",
+    mode: "paginated",
+    rowCountBeforePaginate: rows.length,
+    total,
+    page,
+    pageSize,
+    returnedCount: slice.length,
+  });
   return enrichContactsWithGroupCount(supabase, slice).then((enriched) =>
     NextResponse.json({ contacts: enriched, total, page, pageSize }),
   );
@@ -283,6 +312,16 @@ export async function GET(request: NextRequest) {
 
     const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") || "1", 10) || 1);
     const pageSize = Math.min(200, Math.max(1, parseInt(request.nextUrl.searchParams.get("page_size") || "50", 10) || 50));
+
+    if (f.exclude_group_ids.length) {
+      debugExcludeGroupFilter("request", {
+        queryParams: Object.fromEntries(request.nextUrl.searchParams.entries()),
+        exclude_group_ids_raw: f.exclude_group_ids,
+        comboboxMode,
+        page,
+        pageSize,
+      });
+    }
 
     if (canUseGroupNameSearchFastPath(f)) {
       const rows = await fetchContactsViaGroupNameSearch(supabase, f, partialLocation);
@@ -375,6 +414,30 @@ export async function GET(request: NextRequest) {
 
     const filterResolution = await resolveContactListFilterIds(supabase, f);
     const resolvedIds = filterResolution.includeContactIds;
+    const resolvedExcludeGroupUuids = f.exclude_group_ids.length
+      ? await resolveGroupIdsToUuids(supabase, f.exclude_group_ids)
+      : [];
+    const needsInMemory = needsInMemoryContactListPipeline(
+      f,
+      resolvedIds,
+      filterResolution.excludeContactIds,
+    );
+    const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
+
+    if (f.exclude_group_ids.length) {
+      debugExcludeGroupFilter("resolution", {
+        resolvedExcludeGroupUuids,
+        excludeContactIdsCount: filterResolution.excludeContactIds.length,
+        excludeContactIdsNeedInMemoryFilter: excludeContactIdsNeedInMemoryFilter(
+          filterResolution.excludeContactIds,
+        ),
+        groupResolutionForSqlBuilder_excludeCount: sqlGroupResolution.excludeContactIds.length,
+        groupResolutionForSqlBuilder_includeIsNull: sqlGroupResolution.includeContactIds === null,
+        needsInMemoryContactListPipeline: needsInMemory,
+        includeContactIdsCount: resolvedIds?.length ?? null,
+        hasColumnListFilters: hasColumnListFilters(f),
+      });
+    }
     if (
       hasGroupIncludeFilter(f) &&
       filterResolution.includeContactIds !== null &&
@@ -411,15 +474,30 @@ export async function GET(request: NextRequest) {
       return respondWithContactList(supabase, work, comboboxMode, listLimit, page, pageSize);
     }
 
-    if (needsInMemoryContactListPipeline(f, resolvedIds, filterResolution.excludeContactIds)) {
-      const rows = await fetchContactsInMemoryPipeline(
+    if (needsInMemory) {
+      const { rows, subPath } = await fetchContactsInMemoryPipeline(
         supabase,
         f,
         filterResolution,
         resolvedIds,
         partialLocation,
       );
-      return respondWithContactList(supabase, rows, comboboxMode, listLimit, page, pageSize);
+      if (f.exclude_group_ids.length) {
+        debugExcludeGroupFilter("path", { route: "in-memory", subPath });
+      }
+      return respondWithContactList(
+        supabase,
+        rows,
+        comboboxMode,
+        listLimit,
+        page,
+        pageSize,
+        `in-memory:${subPath}`,
+      );
+    }
+
+    if (f.exclude_group_ids.length) {
+      debugExcludeGroupFilter("path", { route: "sql-paginated" });
     }
 
     let query: QueryBuilder = supabase
@@ -444,6 +522,16 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
+    if (f.exclude_group_ids.length) {
+      debugExcludeGroupFilter("response", {
+        path: "sql-paginated",
+        mode: "paginated",
+        sqlCount: count ?? 0,
+        returnedCount: enriched.length,
+        page,
+        pageSize,
+      });
+    }
     return NextResponse.json({ contacts: enriched, total: count ?? 0, page, pageSize });
   } catch (e) {
     console.error("[api/contacts GET]", e);
