@@ -27,6 +27,8 @@ import {
   hasGroupIncludeFilter,
   hasNameColumnFilters,
   explainInMemoryContactListPipelineDecision,
+  isNameOnlyFilter,
+  nameRequiresInMemoryPipeline,
   needsInMemoryContactListPipeline,
 } from "@/lib/contacts-query";
 import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
@@ -340,6 +342,8 @@ export async function GET(request: NextRequest) {
         father_name: f.father_name,
         exclude_group_ids_raw: f.exclude_group_ids,
         hasColumnListFilters: hasColumnListFilters(f),
+        isNameOnlyFilter: isNameOnlyFilter(f),
+        nameRequiresInMemoryPipeline: nameRequiresInMemoryPipeline(f),
         canUseNameOnlyFuzzySearchPath: canUseNameOnlyFuzzySearchPath(f),
         canUseNameColumnFastPath: canUseNameColumnFastPath(f),
         comboboxMode,
@@ -583,7 +587,12 @@ export async function GET(request: NextRequest) {
       if (isNameExcludeComboFilter(f)) {
         debugNameExcludeCombo("result", {
           route: `in-memory:${subPath}`,
+          resolvedExcludeGroupUuids,
+          needsInMemoryContactListPipeline: needsInMemory,
           pipelineDecisionReason: pipelineDecision.reason,
+          pipelineDecisionChecks: pipelineDecision.checks,
+          hasColumnListFilters: hasColumnListFilters(f),
+          excludeContactIdsCount: filterResolution.excludeContactIds.length,
           rowCountBeforePaginate: rows.length,
         });
       }
