@@ -6,6 +6,7 @@ import {
   applyGroupFiltersToQuery,
   buildGroupNameToIdMap,
   buildIdInOrFilter,
+  excludeContactIdsNeedInMemoryFilter,
   groupIncludeFilterMatchesNone,
   groupNameLookupKey,
   NO_MATCH_CONTACT_ID,
@@ -200,6 +201,35 @@ describe("resolveGroupFilterContactIds", () => {
 
     expect(rpc).toHaveBeenCalledWith("get_contacts_in_groups", {
       group_ids: [groupB],
+      match_mode: "or",
+    });
+    expect(result.includeContactIds).toBeNull();
+    expect(result.excludeContactIds).toEqual([contact2]);
+  });
+
+  it("resolves exclude group names accent-insensitively via RPC", async () => {
+    const invalidGroupId = "981ac496-08f8-4348-8200-ffee32df4651";
+    const rpc = mockRpcData([[{ contact_id: contact2 }]]);
+    const supabase = {
+      from: () => ({
+        select: () =>
+          Promise.resolve({
+            data: [{ id: invalidGroupId, name: "ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ" }],
+            error: null,
+          }),
+      }),
+      rpc,
+    };
+
+    const result = await resolveGroupFilterContactIds(supabase as never, {
+      group_id: "",
+      group_ids: [],
+      exclude_group_ids: ["Μη έγκυρος αριθμός"],
+      group_match: "or",
+    });
+
+    expect(rpc).toHaveBeenCalledWith("get_contacts_in_groups", {
+      group_ids: [invalidGroupId],
       match_mode: "or",
     });
     expect(result.includeContactIds).toBeNull();
@@ -448,6 +478,19 @@ describe("searchContactsInGroupsFiltered", () => {
   });
 });
 
+describe("excludeContactIdsNeedInMemoryFilter", () => {
+  it("returns false for small exclude lists", () => {
+    expect(excludeContactIdsNeedInMemoryFilter(["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"])).toBe(false);
+  });
+
+  it("returns true when exclude list exceeds PostgREST chunk size", () => {
+    const ids = Array.from({ length: 81 }, (_, i) =>
+      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    );
+    expect(excludeContactIdsNeedInMemoryFilter(ids)).toBe(true);
+  });
+});
+
 describe("resolveGroupIdsToUuids", () => {
   const invalidGroupId = "981ac496-08f8-4348-8200-ffee32df4651";
 
@@ -469,5 +512,20 @@ describe("resolveGroupIdsToUuids", () => {
   it("buildGroupNameToIdMap keys align with phone-audit label spelling", () => {
     const map = buildGroupNameToIdMap([{ id: invalidGroupId, name: "ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ" }]);
     expect(map.get(groupNameLookupKey("Μη έγκυρος αριθμός"))).toBe(invalidGroupId);
+  });
+
+  it("matches exclude group names accent-insensitively", async () => {
+    const supabase = {
+      from: () => ({
+        select: () =>
+          Promise.resolve({
+            data: [{ id: invalidGroupId, name: "ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ" }],
+            error: null,
+          }),
+      }),
+    };
+
+    const ids = await resolveGroupIdsToUuids(supabase as never, ["ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ"]);
+    expect(ids).toEqual([invalidGroupId]);
   });
 });

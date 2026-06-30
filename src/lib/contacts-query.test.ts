@@ -249,6 +249,13 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
     expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(true);
     expect(needsInMemoryContactListPipeline(base, manyIds)).toBe(true);
     expect(needsInMemoryContactListPipeline(base, manyIds.slice(0, 80))).toBe(false);
+    const manyExcludeIds = Array.from({ length: 81 }, (_, i) =>
+      `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
+    );
+    expect(needsInMemoryContactListPipeline(base, null, manyExcludeIds)).toBe(true);
+    expect(needsInMemoryContactListPipeline(base, null, manyExcludeIds.slice(0, 80))).toBe(
+      false,
+    );
   });
 });
 

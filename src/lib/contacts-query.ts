@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   applyGroupMembershipFiltersToBuilder,
+  groupResolutionForSqlBuilder,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
 import {
@@ -577,6 +578,7 @@ export async function searchContactsByName(
 export function needsInMemoryContactListPipeline(
   f: ContactListFilters,
   resolvedIds: string[] | null,
+  excludeIds?: string[] | null,
 ): boolean {
   if (canUseGroupNameSearchFastPath(f)) return false;
   if (canUseGroupOnlyFastPath(f, resolvedIds)) return false;
@@ -587,6 +589,7 @@ export function needsInMemoryContactListPipeline(
   if (nameRequiresInMemoryPipeline(f)) return true;
   if (groupRequiresInMemoryPipeline(f)) return true;
   if (resolvedIds !== null && resolvedIds.length > MAX_ID_IN_CLAUSE) return true;
+  if (excludeIds && excludeIds.length > MAX_ID_IN_CLAUSE) return true;
   return false;
 }
 
@@ -724,7 +727,7 @@ export function applyContactListFiltersToBuilder(
     query = query.ilike("volunteer_area", `%${f.volunteer_area}%`);
   }
   if (groupResolution) {
-    query = applyGroupMembershipFiltersToBuilder(query, groupResolution);
+    query = applyGroupMembershipFiltersToBuilder(query, groupResolutionForSqlBuilder(groupResolution));
   }
   return query;
 }

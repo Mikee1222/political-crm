@@ -31,6 +31,7 @@ import {
 import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
 import {
   enrichContactsWithGroupCountsAndNames,
+  excludeContactIdsNeedInMemoryFilter,
   fetchContactsByIncludeIdBatches,
   includeContactIdsNeedBatchFetch,
   insertContactGroupMembershipsAfterCreate,
@@ -199,6 +200,19 @@ async function fetchContactsInMemoryPipeline(
       partialLocation,
     )) as Record<string, unknown>[];
   } else if (hasNameColumnFilters(f)) {
+    rows = await fetchContactRowsInBatches(supabase, SELECT_LIST, (query) =>
+      applyApiContactFilters(query, f, filterResolution, partialLocation, {
+        skipNameColumnFilters: true,
+      }),
+    );
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation) as Record<
+      string,
+      unknown
+    >[];
+  } else if (
+    !hasGroupIncludeFilter(f) &&
+    excludeContactIdsNeedInMemoryFilter(filterResolution.excludeContactIds)
+  ) {
     rows = await fetchContactRowsInBatches(supabase, SELECT_LIST, (query) =>
       applyApiContactFilters(query, f, filterResolution, partialLocation, {
         skipNameColumnFilters: true,
@@ -397,7 +411,7 @@ export async function GET(request: NextRequest) {
       return respondWithContactList(supabase, work, comboboxMode, listLimit, page, pageSize);
     }
 
-    if (needsInMemoryContactListPipeline(f, resolvedIds)) {
+    if (needsInMemoryContactListPipeline(f, resolvedIds, filterResolution.excludeContactIds)) {
       const rows = await fetchContactsInMemoryPipeline(
         supabase,
         f,

@@ -39,6 +39,17 @@ export function includeContactIdsNeedBatchFetch(ids: string[] | null): ids is st
   return ids !== null && uniqueIds(ids).length > MAX_ID_IN_CLAUSE;
 }
 
+/** True when exclude list is too large for PostgREST `not.in` on the contacts query URL. */
+export function excludeContactIdsNeedInMemoryFilter(ids: string[]): boolean {
+  return uniqueIds(ids).length > MAX_ID_IN_CLAUSE;
+}
+
+/** Omit giant exclude id lists from SQL; apply via in-memory Set instead. */
+export function groupResolutionForSqlBuilder(resolution: GroupFilterResolution): GroupFilterResolution {
+  if (!excludeContactIdsNeedInMemoryFilter(resolution.excludeContactIds)) return resolution;
+  return { includeContactIds: resolution.includeContactIds, excludeContactIds: [] };
+}
+
 /** `.in('id', [])` → PostgREST 400 (`in.()`). Use sentinel, chunked `.or()`, or batch fetch. */
 export function applyContactIdIncludeFilter(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
