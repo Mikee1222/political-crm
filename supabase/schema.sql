@@ -217,7 +217,7 @@ create table if not exists public.contact_relations (
   id uuid primary key default gen_random_uuid(),
   contact_id_1 uuid not null references public.contacts(id) on delete cascade,
   contact_id_2 uuid not null references public.contacts(id) on delete cascade,
-  relation_type text not null default 'family',
+  relation_type text,
   created_at timestamptz default now(),
   check (contact_id_1 < contact_id_2),
   unique (contact_id_1, contact_id_2)

@@ -4,6 +4,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { stablePairId } from "@/lib/duplicate-detection";
 import { nextJsonError } from "@/lib/api-resilience";
+import { DEFAULT_CONTACT_RELATION_TYPE } from "@/lib/contact-relation-types";
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
   const { error: e1 } = await supabase.from("contact_relations").insert({
     contact_id_1: small,
     contact_id_2: big,
-    relation_type: "family",
+    relation_type: DEFAULT_CONTACT_RELATION_TYPE,
   });
   if (e1 && e1.code !== "23505") {
     return NextResponse.json({ error: e1.message }, { status: 400 });

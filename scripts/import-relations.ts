@@ -18,7 +18,7 @@ import {
   splitRelatedPersonName,
 } from "../src/lib/import-relations-parse";
 
-const RELATION_TYPE_OTHER = "other";
+const RELATION_TYPE_OTHER = "Γνωστός με τον/την";
 const CONTACT_FETCH_BATCH = 1000;
 const INSERT_BATCH_SIZE = 100;
 const PROGRESS_EVERY_PERSONS = 500;

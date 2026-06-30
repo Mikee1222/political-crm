@@ -8,6 +8,11 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import { HqSelect } from "@/components/ui/hq-select";
+import {
+  CONTACT_RELATION_TYPE_GROUPS,
+  DEFAULT_CONTACT_RELATION_TYPE,
+} from "@/lib/contact-relation-types";
 
 type RelatedContact = {
   id: string;
@@ -25,17 +30,6 @@ type RelationRow = {
   related: RelatedContact | null;
 };
 
-const RELATION_TYPES = [
-  { value: "family", label: "Οικογένεια" },
-  { value: "colleague", label: "Συνάδελφος" },
-  { value: "friend", label: "Φίλος" },
-  { value: "other", label: "Άλλο" },
-] as const;
-
-function relationLabel(t: string | null | undefined) {
-  return RELATION_TYPES.find((x) => x.value === t)?.label ?? t ?? "—";
-}
-
 export function ContactRelatedPersonsSection({
   contactId,
   canManage,
@@ -47,7 +41,7 @@ export function ContactRelatedPersonsSection({
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [relatedId, setRelatedId] = useState("");
-  const [relationType, setRelationType] = useState("family");
+  const [relationType, setRelationType] = useState<string>(DEFAULT_CONTACT_RELATION_TYPE);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -107,7 +101,7 @@ export function ContactRelatedPersonsSection({
       }
       setAddOpen(false);
       setRelatedId("");
-      setRelationType("family");
+      setRelationType(DEFAULT_CONTACT_RELATION_TYPE);
     } finally {
       setSaving(false);
     }
@@ -153,7 +147,7 @@ export function ContactRelatedPersonsSection({
                     {name}
                   </Link>
                   <p className="text-[10px] text-[var(--text-muted)]">
-                    {relationLabel(r.relation_type)}
+                    {r.relation_type ?? "—"}
                     {c.contact_code ? ` · ${c.contact_code}` : ""}
                   </p>
                 </div>
@@ -206,18 +200,22 @@ export function ContactRelatedPersonsSection({
             <label className={lux.label} htmlFor="rel-type">
               Σχέση
             </label>
-            <select
+            <HqSelect
               id="rel-type"
               className={lux.input}
               value={relationType}
               onChange={(e) => setRelationType(e.target.value)}
             >
-              {RELATION_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
+              {CONTACT_RELATION_TYPE_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
-            </select>
+            </HqSelect>
           </div>
           {err && <p className="text-sm text-red-400">{err}</p>}
         </div>

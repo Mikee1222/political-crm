@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+import {
+  DEFAULT_CONTACT_RELATION_TYPE,
+  displayRelationTypeForViewer,
+  isContactRelationType,
+  normalizeRelationTypeForStorage,
+} from "@/lib/contact-relation-types";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +77,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
       const relatedId = row.contact_id_1 === params.id ? row.contact_id_2 : row.contact_id_1;
       return {
         ...row,
+        relation_type: displayRelationTypeForViewer(
+          row.relation_type,
+          params.id,
+          row.contact_id_1,
+          row.contact_id_2,
+        ),
         related: byId.get(relatedId) ?? null,
       };
     });
@@ -100,11 +112,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Άκυρη επαφή" }, { status: 400 });
     }
 
-    const relationType =
+    const rawType =
       body.relation_type != null && String(body.relation_type).trim() !== ""
         ? String(body.relation_type).trim()
-        : "family";
+        : DEFAULT_CONTACT_RELATION_TYPE;
+    if (!isContactRelationType(rawType)) {
+      return NextResponse.json({ error: "Άκυρος τύπος σχέσης" }, { status: 400 });
+    }
     const [contactId1, contactId2] = params.id < relatedId ? [params.id, relatedId] : [relatedId, params.id];
+    const relationType = normalizeRelationTypeForStorage(params.id, relatedId, rawType);
 
     const { data: inserted, error } = await supabase
       .from("contact_relations")
@@ -125,9 +141,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .eq("id", relatedId)
       .single();
 
+    const insertedRow = inserted as {
+      id: string;
+      contact_id_1: string;
+      contact_id_2: string;
+      relation_type: string | null;
+      created_at: string | null;
+    };
+
     return NextResponse.json({
       relation: {
-        ...(inserted as RelatedRow),
+        ...insertedRow,
+        relation_type: displayRelationTypeForViewer(
+          insertedRow.relation_type,
+          params.id,
+          insertedRow.contact_id_1,
+          insertedRow.contact_id_2,
+        ),
         related: (related as RelatedContact | null) ?? null,
       },
     });
