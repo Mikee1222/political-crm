@@ -1,3 +1,5 @@
+import { groupNameLookupKey } from "@/lib/contact-group-members";
+
 /**
  * URL query <-> /api/contacts and /contacts filter state (shared: CRM list + Alexandra).
  */
@@ -319,23 +321,38 @@ export function applySavedFilterJson(
   if (typeof o.tag === "string") base.tag = o.tag;
   if (typeof o.political_stance === "string") base.political_stance = o.political_stance;
   if (typeof o.phone === "string") base.phone = o.phone;
-  if (typeof o.group_id === "string") base.group_id = o.group_id;
-  if (Array.isArray(o.group_ids)) base.group_ids = o.group_ids.map(String);
-  if (Array.isArray(o.groups_include)) base.group_ids = o.groups_include.map(String);
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (Array.isArray(o.groups_exclude)) {
-    const ids: string[] = [];
-    for (const x of o.groups_exclude) {
-      const s = String(x).trim();
-      if (uuidRe.test(s)) ids.push(s);
-      else if (groupsByName) {
-        const id = groupsByName.get(s.toLowerCase());
-        if (id) ids.push(id);
-      }
+  const resolveGroupNameOrId = (raw: unknown): string | null => {
+    const s = String(raw).trim();
+    if (!s) return null;
+    if (uuidRe.test(s)) return s;
+    if (groupsByName) {
+      const id = groupsByName.get(groupNameLookupKey(s));
+      if (id) return id;
     }
-    base.exclude_group_ids = ids;
+    return s;
+  };
+  if (typeof o.group_id === "string") {
+    base.group_id = resolveGroupNameOrId(o.group_id) ?? o.group_id;
+  }
+  if (Array.isArray(o.group_ids)) {
+    base.group_ids = o.group_ids
+      .map((x) => resolveGroupNameOrId(x))
+      .filter((x): x is string => Boolean(x));
+  }
+  if (Array.isArray(o.groups_include)) {
+    base.group_ids = o.groups_include
+      .map((x) => resolveGroupNameOrId(x))
+      .filter((x): x is string => Boolean(x));
+  }
+  if (Array.isArray(o.groups_exclude)) {
+    base.exclude_group_ids = o.groups_exclude
+      .map((x) => resolveGroupNameOrId(x))
+      .filter((x): x is string => Boolean(x));
   } else if (Array.isArray(o.exclude_group_ids)) {
-    base.exclude_group_ids = o.exclude_group_ids.map(String);
+    base.exclude_group_ids = o.exclude_group_ids
+      .map((x) => resolveGroupNameOrId(x))
+      .filter((x): x is string => Boolean(x));
   }
   if (typeof o.not_contacted_days === "string" || typeof o.not_contacted_days === "number") {
     base.not_contacted_days = String(o.not_contacted_days);
@@ -387,16 +404,32 @@ export function applyFindContactsToolInput(
     o.call_status = s("call_status");
     o.call_statuses = [];
   }
-  if (Array.isArray(raw.group_ids)) o.group_ids = uniq(raw.group_ids.map((x) => String(x).trim()).filter(Boolean));
-  if (Array.isArray(raw.exclude_group_ids)) {
-    o.exclude_group_ids = uniq(raw.exclude_group_ids.map((x) => String(x).trim()).filter(Boolean));
+  const resolveGroupRef = (raw: string): string => {
+    const t = raw.trim();
+    if (!t) return "";
+    return groupsByName.get(groupNameLookupKey(t)) ?? t;
+  };
+  if (Array.isArray(raw.group_ids)) {
+    o.group_ids = uniq(raw.group_ids.map((x) => resolveGroupRef(String(x))).filter(Boolean));
   }
-  if (Array.isArray(raw.groups_include)) o.group_ids = uniq(raw.groups_include.map((x) => String(x).trim()).filter(Boolean));
+  if (Array.isArray(raw.exclude_group_ids)) {
+    o.exclude_group_ids = uniq(raw.exclude_group_ids.map((x) => resolveGroupRef(String(x))).filter(Boolean));
+  }
+  if (Array.isArray(raw.groups_include)) {
+    const inc: string[] = [];
+    for (const x of raw.groups_include) {
+      const t = String(x).trim();
+      if (!t) continue;
+      inc.push(groupsByName.get(groupNameLookupKey(t)) ?? t);
+    }
+    o.group_ids = uniq(inc);
+  }
   if (Array.isArray(raw.groups_exclude)) {
     const ex: string[] = [];
     for (const x of raw.groups_exclude) {
       const t = String(x).trim();
-      ex.push(groupsByName.get(t.toLowerCase()) ?? t);
+      if (!t) continue;
+      ex.push(groupsByName.get(groupNameLookupKey(t)) ?? t);
     }
     o.exclude_group_ids = uniq(ex);
   }
@@ -416,7 +449,7 @@ export function applyFindContactsToolInput(
   if (s("volunteer_area")) o.volunteer_area = s("volunteer_area");
   if (raw.nameday_today === true) o.nameday_today = true;
   if (s("gender")) o.gender = s("gender");
-  if (s("group_id") && !o.group_ids.length) o.group_id = s("group_id");
+  if (s("group_id") && !o.group_ids.length) o.group_id = resolveGroupRef(s("group_id"));
   if (nstr("limit")) o.limit = nstr("limit");
   return o;
 }

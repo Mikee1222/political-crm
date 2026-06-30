@@ -4,10 +4,13 @@ import {
   applyContactIdExcludeFilter,
   applyContactIdIncludeFilter,
   applyGroupFiltersToQuery,
+  buildGroupNameToIdMap,
   buildIdInOrFilter,
   groupIncludeFilterMatchesNone,
+  groupNameLookupKey,
   NO_MATCH_CONTACT_ID,
   resolveGroupFilterContactIds,
+  resolveGroupIdsToUuids,
 } from "./contact-group-members";
 
 function mockQuery() {
@@ -442,5 +445,29 @@ describe("searchContactsInGroupsFiltered", () => {
     expect(result.total).toBe(120);
     expect(result.contacts).toHaveLength(1);
     expect(result.contacts[0]).not.toHaveProperty("total");
+  });
+});
+
+describe("resolveGroupIdsToUuids", () => {
+  const invalidGroupId = "981ac496-08f8-4348-8200-ffee32df4651";
+
+  it("matches group names accent-insensitively", async () => {
+    const supabase = {
+      from: () => ({
+        select: () =>
+          Promise.resolve({
+            data: [{ id: invalidGroupId, name: "ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ" }],
+            error: null,
+          }),
+      }),
+    };
+
+    const ids = await resolveGroupIdsToUuids(supabase as never, ["Μη έγκυρος αριθμός"]);
+    expect(ids).toEqual([invalidGroupId]);
+  });
+
+  it("buildGroupNameToIdMap keys align with phone-audit label spelling", () => {
+    const map = buildGroupNameToIdMap([{ id: invalidGroupId, name: "ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ" }]);
+    expect(map.get(groupNameLookupKey("Μη έγκυρος αριθμός"))).toBe(invalidGroupId);
   });
 });

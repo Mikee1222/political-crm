@@ -6,6 +6,7 @@ import { fetchWithTimeout } from "@/lib/client-fetch";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import type { ContactGroupRow } from "@/lib/contact-groups";
+import { buildGroupNameToIdMap } from "@/lib/contact-group-members";
 import { applySavedFilterJson, summarizeContactFilters } from "@/lib/contacts-filters";
 
 type SavedFilterRow = {
@@ -148,7 +149,7 @@ export function SavedFiltersSection({ isAdmin }: { isAdmin: boolean }) {
   for (const g of groups) {
     nameById.set(g.id, g.name);
   }
-  const groupNameLowerToId = new Map(groups.map((g) => [g.name.toLowerCase(), g.id]));
+  const groupNameLowerToId = buildGroupNameToIdMap(groups);
 
   const load = useCallback(async () => {
     setLoading(true);

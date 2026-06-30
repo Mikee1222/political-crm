@@ -2,6 +2,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { ContactListFilters } from "@/lib/contacts-filters";
+import { normalizeGreekNameKey } from "@/lib/greek-fuzzy-name";
 
 export type ContactGroupSummary = Pick<
   ContactGroupRow,
@@ -97,6 +98,19 @@ export async function fetchContactsByIncludeIdBatches<T extends { id: string; cr
   });
 }
 
+/** Accent/case-insensitive key for group name → id lookup (e.g. «Μη έγκυρος αριθμός» ↔ «ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ»). */
+export function groupNameLookupKey(name: string): string {
+  return normalizeGreekNameKey(name.trim());
+}
+
+export function buildGroupNameToIdMap(groups: Array<{ id: string; name: string }>): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const g of groups) {
+    m.set(groupNameLookupKey(g.name), g.id);
+  }
+  return m;
+}
+
 /** Resolve group filter values to contact_groups UUIDs (accepts names or ids). */
 export async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: string[]): Promise<string[]> {
   const uuids = new Set<string>();
@@ -110,11 +124,9 @@ export async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: stri
   if (names.length) {
     const { data, error } = await supabase.from("contact_groups").select("id, name");
     if (error) throw error;
-    const byLower = new Map(
-      (data ?? []).map((g) => [String((g as { name: string }).name).toLowerCase(), String((g as { id: string }).id)]),
-    );
+    const byNameKey = buildGroupNameToIdMap((data ?? []) as Array<{ id: string; name: string }>);
     for (const n of names) {
-      const id = byLower.get(n.toLowerCase());
+      const id = byNameKey.get(groupNameLookupKey(n));
       if (id) uuids.add(id);
     }
   }

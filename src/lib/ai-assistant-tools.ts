@@ -932,9 +932,8 @@ function pickContactId(raw: unknown, ctx: ToolContext): string {
 
 async function buildGroupNameToIdMap(supabase: SupabaseClient) {
   const { data } = await supabase.from("contact_groups").select("id,name");
-  const m = new Map<string, string>();
-  for (const r of data ?? []) m.set(String(r.name).toLowerCase(), r.id);
-  return m;
+  const { buildGroupNameToIdMap: buildMap } = await import("@/lib/contact-group-members");
+  return buildMap((data ?? []) as Array<{ id: string; name: string }>);
 }
 
 /** Resolve saved filter JSON by name (exact, then contains). */
