@@ -12,6 +12,7 @@ import {
 } from "@/lib/contacts-query";
 import { resolveContactListFilterIds } from "@/lib/contact-group-members";
 import { queryContactsListTotal } from "@/lib/contacts-list-api";
+import type { ContactQueryPlanPath } from "@/lib/contacts-query";
 
 function loadLocalEnv(): void {
   const envPath = resolve(process.cwd(), ".env.local");
@@ -196,17 +197,19 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
   const cases: Array<{
     label: string;
     build: (c: TestContext) => ContactListFilters;
+    expectPath?: ContactQueryPlanPath;
     expectInMemory?: boolean;
   }> = [
     { label: "name only", build: () => mergeFilters({ first_name: "Ιωάννης" }) },
     {
       label: "name + small include group",
       build: (c) => mergeFilters({ first_name: "Ιωάννης", group_ids: [c.smallGroupId] }),
+      expectPath: "group-name-rpc",
     },
     {
       label: "name + large include group (ΘΕΤΙΚΟΣ)",
       build: (c) => mergeFilters({ first_name: "Ιωάννης", group_ids: [c.positiveGroupId] }),
-      expectInMemory: true,
+      expectPath: "name-search-then-refine",
     },
     {
       label: "name + large exclude group (ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ)",
@@ -215,13 +218,13 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           first_name: "Ιωάννης",
           exclude_group_ids: [INVALID_NUMBER_GROUP_ID],
         }),
-      expectInMemory: true,
+      expectPath: "name-search-then-refine",
     },
     {
       label: "name + accented exclude group name",
       build: () =>
         mergeFilters({ first_name: "Ιωάννης", exclude_group_ids: ["Μη έγκυρος αριθμός"] }),
-      expectInMemory: true,
+      expectPath: "name-search-then-refine",
     },
     {
       label: "name + multiple groups (include small + exclude large)",
@@ -231,7 +234,7 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           group_ids: [c.smallGroupId],
           exclude_group_ids: [INVALID_NUMBER_GROUP_ID],
         }),
-      expectInMemory: true,
+      expectPath: "group-name-rpc",
     },
     {
       label: "large exclude group only",
@@ -272,7 +275,7 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           gender: c.sampleGender,
           group_ids: [c.positiveGroupId],
         }),
-      expectInMemory: true,
+      expectPath: "name-search-then-refine",
     },
     {
       label: "accented large include group name",
@@ -290,6 +293,9 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
         const api = await queryContactsListTotal(ctx.supabase, f);
         const expected = await baselineContactCount(ctx.supabase, f, false);
         expect(api.total).toBe(expected);
+        if (testCase.expectPath) {
+          expect(api.plan.path).toBe(testCase.expectPath);
+        }
         if (testCase.expectInMemory) {
           expect(api.plan.path).toBe("in-memory");
         }
@@ -306,7 +312,7 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
         exclude_group_ids: [INVALID_NUMBER_GROUP_ID],
       });
       const api = await queryContactsListTotal(ctx.supabase, f);
-      expect(api.plan.path).toBe("in-memory");
+      expect(api.plan.path).toBe("name-search-then-refine");
       expect(api.total).toBeGreaterThan(0);
       const expected = await baselineContactCount(ctx.supabase, f, false);
       expect(api.total).toBe(expected);

@@ -7,18 +7,22 @@ import {
   applyColumnContactFiltersToBuilder,
   applyContactListFiltersToBuilder,
   buildContactQueryPlan,
+  canUseNameSearchThenRefinePath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
   filterContactRowsByListFilters,
   hasColumnListFilters,
   hasGroupIncludeFilter,
   hasNameColumnFilters,
+  hasNonFirstLastNameColumnFilters,
   searchContactsByName,
   type ContactQueryPlan,
 } from "@/lib/contacts-query";
 import {
   excludeContactIdsNeedInMemoryFilter,
   fetchContactsByIncludeIdBatches,
+  filterRowsByDeferredGroupMembership,
+  groupMembershipExceedsInClause,
   groupResolutionForSqlBuilder,
   includeContactIdsNeedBatchFetch,
   resolveContactListFilterIds,
@@ -116,6 +120,30 @@ async function fetchContactsByResolvedIds(
   return refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
 }
 
+/** Name RPC first, then lazy group membership + column refine (avoids fetching full group id lists). */
+export async function fetchContactsNameSearchThenRefine(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  f: ContactListFilters,
+  filterResolution: GroupFilterResolution,
+  partialLocation: boolean,
+): Promise<Record<string, unknown>[]> {
+  let rows = (await searchContactsByName(supabase, {
+    firstName: f.first_name || null,
+    lastName: f.last_name || null,
+    fatherName: f.father_name || null,
+  })) as Record<string, unknown>[];
+
+  rows = await filterRowsByDeferredGroupMembership(supabase, rows, filterResolution);
+
+  if (filterResolution.includeContactIds !== null) {
+    const allow = new Set(filterResolution.includeContactIds);
+    rows = rows.filter((row) => allow.has(String(row.id)));
+  }
+
+  return refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+}
+
 async function fetchContactsViaGroupNameSearch(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -138,6 +166,10 @@ async function fetchContactsViaGroupNameSearch(
     skipGroupInclude: true,
   });
 
+  if (filterResolution.deferredExcludeGroupIds?.length) {
+    rows = await filterRowsByDeferredGroupMembership(supabase, rows, filterResolution);
+  }
+
   if (filterResolution.includeContactIds !== null) {
     const allow = new Set(filterResolution.includeContactIds);
     rows = rows.filter((r) => allow.has(String(r.id)));
@@ -146,12 +178,20 @@ async function fetchContactsViaGroupNameSearch(
   const exclude = filterResolution.excludeContactIds.length
     ? new Set(filterResolution.excludeContactIds)
     : undefined;
-  rows = rows.filter((row) =>
-    contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
-      partialLocation,
-      excludeContactIds: exclude,
-    }),
-  );
+  if (exclude) {
+    rows = rows.filter((row) =>
+      contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
+        partialLocation,
+        excludeContactIds: exclude,
+      }),
+    );
+  } else if (hasColumnListFilters(f)) {
+    rows = rows.filter((row) =>
+      contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
+        partialLocation,
+      }),
+    );
+  }
 
   return rows;
 }
@@ -230,6 +270,34 @@ async function fetchContactsInMemoryPipeline(
   return { rows, subPath };
 }
 
+export async function shouldDeferNameGroupMembership(
+  supabase: SupabaseClient,
+  f: ContactListFilters,
+): Promise<boolean> {
+  if (!canUseNameSearchThenRefinePath(f)) return false;
+
+  if (f.exclude_group_ids.length) {
+    const excludeGroupIds = await resolveGroupIdsToUuids(supabase, f.exclude_group_ids);
+    if (
+      excludeGroupIds.length &&
+      (await groupMembershipExceedsInClause(supabase, excludeGroupIds, "or"))
+    ) {
+      return true;
+    }
+  }
+
+  if (hasGroupIncludeFilter(f)) {
+    if (hasNonFirstLastNameColumnFilters(f) || f.father_name?.trim()) return true;
+    const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+    const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+    if (!groupIds.length) return false;
+    const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
+    if (await groupMembershipExceedsInClause(supabase, groupIds, matchMode)) return true;
+  }
+
+  return false;
+}
+
 /** Shared list-query logic for GET /api/contacts and integration tests. */
 export async function queryContactsListTotal(
   supabase: SupabaseClient,
@@ -237,7 +305,10 @@ export async function queryContactsListTotal(
   opts: { partialLocation?: boolean } = {},
 ): Promise<ContactsListApiResult> {
   const partialLocation = opts.partialLocation ?? false;
-  const filterResolution = await resolveContactListFilterIds(supabase, f);
+  const deferGroupMembership = await shouldDeferNameGroupMembership(supabase, f);
+  const filterResolution = await resolveContactListFilterIds(supabase, f, {
+    deferLargeGroupMembership: deferGroupMembership,
+  });
   const resolvedIds = filterResolution.includeContactIds;
   const plan = buildContactQueryPlan(f, filterResolution);
   const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
@@ -275,6 +346,16 @@ export async function queryContactsListTotal(
       },
     );
     return { total: rows.length, plan, subPath: "name-column-rpc" };
+  }
+
+  if (plan.path === "name-search-then-refine") {
+    const rows = await fetchContactsNameSearchThenRefine(
+      supabase,
+      f,
+      filterResolution,
+      partialLocation,
+    );
+    return { total: rows.length, plan, subPath: "name-search-then-refine" };
   }
 
   if (plan.path === "group-only-rpc") {

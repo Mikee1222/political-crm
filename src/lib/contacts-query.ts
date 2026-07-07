@@ -438,6 +438,41 @@ export function canUseGroupColumnFastPath(
   return true;
 }
 
+/** Column filters other than first_name/last_name (father, gender, location, presence, etc.). */
+export function hasNonFirstLastNameColumnFilters(f: ContactListFilters): boolean {
+  const stripped: ContactListFilters = { ...f, first_name: "", last_name: "" };
+  return hasColumnListFilters(stripped);
+}
+
+/**
+ * Name + group combo eligible for the "search by name first, refine membership after" inversion.
+ * Instead of materializing a whole (large) group's contact ids and fetching every row, we run the
+ * name RPC (small result set) and test group membership + column filters against that small set.
+ * The actual large-vs-small size decision is made asynchronously in shouldDeferNameGroupMembership;
+ * this gate only asserts the filter shape is compatible.
+ */
+export function canUseNameSearchThenRefinePath(f: ContactListFilters): boolean {
+  if (f.search?.trim()) return false;
+  if (f.nameday_today) return false;
+  if (!hasNameColumnFilters(f)) return false;
+  if (!hasGroupIncludeFilter(f) && !f.exclude_group_ids.length) return false;
+  return true;
+}
+
+/** True when the resolution deferred a large group whose membership should be tested lazily. */
+export function resolutionDefersNameGroupMembership(
+  f: ContactListFilters,
+  resolution: GroupFilterResolution,
+): boolean {
+  if (!canUseNameSearchThenRefinePath(f)) return false;
+  if (resolution.deferredIncludeGroupIds?.length) return true;
+  // Deferred exclude with a name filter, but no include group → invert (name RPC first).
+  // When an include group is present it is small (resolved eagerly), so group-name-rpc handles it
+  // and lazily applies the deferred exclude itself — keep that on the group-name-rpc path.
+  if (resolution.deferredExcludeGroupIds?.length && !canUseGroupNameSearchFastPath(f)) return true;
+  return false;
+}
+
 /** Name + column (no group): search_contacts_by_name RPC + in-memory column refine. */
 export function canUseNameColumnFastPath(f: ContactListFilters): boolean {
   if (!hasNameColumnFilters(f)) return false;
@@ -615,6 +650,7 @@ export type ContactQueryPlanPath =
   | "name-only-rpc"
   | "name-column-rpc"
   | "group-name-rpc"
+  | "name-search-then-refine"
   | "group-only-rpc"
   | "group-column-rpc"
   | "nameday"
@@ -638,11 +674,13 @@ export type ContactQueryPlan = {
  * | no     | first/last  | none          | no       | no       | -       | -       | name-only-rpc     |
  * | no     | name+cols   | rpc-supported | no       | no       | -       | sm      | name-column-rpc   |
  * | no     | name+cols   | complex       | *        | *        | *       | *       | in-memory         |
- * | no     | first/last  | *             | yes      | no       | sm      | sm      | group-name-rpc    |
+ * | no     | first/last  | none          | yes(sm)  | no/lg    | sm      | *       | group-name-rpc    | small incl, lazy excl
+ * | no     | name+cols   | *             | yes(lg)  | *        | >80     | *       | name-search-refine| large incl → name RPC first
+ * | no     | name        | *             | no       | yes(lg)  | -       | >80     | name-search-refine| large excl, no incl
  * | no     | none        | none          | yes      | no       | sm      | sm      | group-only-rpc    |
  * | no     | none        | rpc-supported | yes      | no       | sm      | sm      | group-column-rpc  |
- * | no     | *           | *             | *        | *        | >80     | *       | in-memory         | large include
- * | no     | *           | *             | *        | *        | *       | >80     | in-memory         | large exclude
+ * | no     | none        | *             | *        | *        | >80     | *       | in-memory         | large include, no name
+ * | no     | none        | *             | *        | *        | *       | >80     | in-memory         | large exclude, no name
  * | no     | *           | complex+grp   | yes      | *        | sm      | sm      | in-memory         | unsupported RPC cols
  * | no     | none        | columns       | no       | no       | -       | sm      | sql-paginated     |
  * | no     | *           | *             | yes      | *        | 0       | *       | empty             | zero include matches
@@ -676,6 +714,13 @@ export function buildContactQueryPlan(
 
   if (f.search?.trim()) {
     return { path: "in-memory", reason: "free-text search" };
+  }
+
+  if (resolutionDefersNameGroupMembership(f, resolution)) {
+    return {
+      path: "name-search-then-refine",
+      reason: `name RPC first, then lazy group membership (deferred include=${resolution.deferredIncludeGroupIds?.length ?? 0}, exclude=${resolution.deferredExcludeGroupIds?.length ?? 0})`,
+    };
   }
 
   if (canUseGroupNameSearchFastPath(f)) {

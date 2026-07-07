@@ -24,10 +24,12 @@ import {
   hasNameColumnFilters,
 } from "@/lib/contacts-query";
 import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
+import { fetchContactsNameSearchThenRefine, shouldDeferNameGroupMembership } from "@/lib/contacts-list-api";
 import {
   enrichContactsWithGroupCountsAndNames,
   excludeContactIdsNeedInMemoryFilter,
   fetchContactsByIncludeIdBatches,
+  filterRowsByDeferredGroupMembership,
   groupResolutionForSqlBuilder,
   includeContactIdsNeedBatchFetch,
   insertContactGroupMembershipsAfterCreate,
@@ -165,6 +167,10 @@ async function fetchContactsViaGroupNameSearch(
     skipGroupInclude: true,
   });
 
+  if (filterResolution.deferredExcludeGroupIds?.length) {
+    rows = await filterRowsByDeferredGroupMembership(supabase, rows, filterResolution);
+  }
+
   if (filterResolution.includeContactIds !== null) {
     const allow = new Set(filterResolution.includeContactIds);
     rows = rows.filter((r) => allow.has(String(r.id)));
@@ -173,12 +179,20 @@ async function fetchContactsViaGroupNameSearch(
   const exclude = filterResolution.excludeContactIds.length
     ? new Set(filterResolution.excludeContactIds)
     : undefined;
-  rows = rows.filter((row) =>
-    contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
-      partialLocation,
-      excludeContactIds: exclude,
-    }),
-  );
+  if (exclude) {
+    rows = rows.filter((row) =>
+      contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
+        partialLocation,
+        excludeContactIds: exclude,
+      }),
+    );
+  } else if (hasColumnListFilters(f)) {
+    rows = rows.filter((row) =>
+      contactRowMatchesListFilters(row as Parameters<typeof contactRowMatchesListFilters>[0], f, {
+        partialLocation,
+      }),
+    );
+  }
 
   return rows;
 }
@@ -359,7 +373,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const filterResolution = await resolveContactListFilterIds(supabase, f);
+    const filterResolution = await resolveContactListFilterIds(supabase, f, {
+      deferLargeGroupMembership: await shouldDeferNameGroupMembership(supabase, f),
+    });
     const resolvedIds = filterResolution.includeContactIds;
     const plan = buildContactQueryPlan(f, filterResolution);
     const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
@@ -440,6 +456,24 @@ export async function GET(request: NextRequest) {
         page,
         pageSize,
         "name-column-rpc",
+      );
+    }
+
+    if (plan.path === "name-search-then-refine") {
+      const rows = await fetchContactsNameSearchThenRefine(
+        supabase,
+        f,
+        filterResolution,
+        partialLocation,
+      );
+      return respondWithContactList(
+        supabase,
+        rows,
+        comboboxMode,
+        listLimit,
+        page,
+        pageSize,
+        "name-search-then-refine",
       );
     }
 

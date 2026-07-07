@@ -13,6 +13,10 @@ export type GroupFilterResolution = {
   /** null = no include filter; [] = include filter with zero matches */
   includeContactIds: string[] | null;
   excludeContactIds: string[];
+  /** When set, membership is checked lazily against a small contact-id set (name-search path). */
+  deferredIncludeGroupIds?: string[];
+  deferredExcludeGroupIds?: string[];
+  deferredIncludeMatchMode?: "or" | "and";
 };
 
 export const NO_MATCH_CONTACT_ID = "00000000-0000-0000-0000-000000000000";
@@ -174,6 +178,108 @@ async function contactIdsForGroups(
   }
 
   return uniqueIds(allIds);
+}
+
+/** True when a group filter matches more contacts than fit in one PostgREST id clause. */
+export async function groupMembershipExceedsInClause(
+  supabase: SupabaseClient,
+  groupIds: string[],
+  matchMode: "or" | "and" = "or",
+): Promise<boolean> {
+  if (!groupIds.length) return false;
+  const { data, error } = await supabase
+    .rpc("get_contacts_in_groups", {
+      group_ids: groupIds,
+      match_mode: matchMode,
+    })
+    .range(0, MAX_ID_IN_CLAUSE);
+  if (error) throw error;
+  return (data ?? []).length > MAX_ID_IN_CLAUSE;
+}
+
+/** Which of `contactIds` belong to any/all of `groupIds` (junction + contacts.group_id). */
+export async function contactIdsInGroupsAmong(
+  supabase: SupabaseClient,
+  groupIds: string[],
+  contactIds: string[],
+  matchMode: "or" | "and" = "or",
+): Promise<Set<string>> {
+  const groups = uniqueIds(groupIds);
+  const contacts = uniqueIds(contactIds);
+  if (!groups.length || !contacts.length) return new Set();
+
+  const hitsByContact = new Map<string, Set<string>>();
+
+  for (let i = 0; i < contacts.length; i += MAX_ID_IN_CLAUSE) {
+    const chunk = contacts.slice(i, i + MAX_ID_IN_CLAUSE);
+
+    const { data: junctionRows, error: junctionErr } = await supabase
+      .from("contact_group_members")
+      .select("contact_id, group_id")
+      .in("group_id", groups)
+      .in("contact_id", chunk);
+    if (junctionErr) throw junctionErr;
+    for (const row of (junctionRows ?? []) as Array<{ contact_id: string; group_id: string }>) {
+      const cid = String(row.contact_id);
+      const gid = String(row.group_id);
+      if (!hitsByContact.has(cid)) hitsByContact.set(cid, new Set());
+      hitsByContact.get(cid)!.add(gid);
+    }
+
+    const { data: legacyRows, error: legacyErr } = await supabase
+      .from("contacts")
+      .select("id, group_id")
+      .in("id", chunk)
+      .in("group_id", groups);
+    if (legacyErr) throw legacyErr;
+    for (const row of (legacyRows ?? []) as Array<{ id: string; group_id: string | null }>) {
+      const cid = String(row.id);
+      const gid = row.group_id ? String(row.group_id) : "";
+      if (!gid) continue;
+      if (!hitsByContact.has(cid)) hitsByContact.set(cid, new Set());
+      hitsByContact.get(cid)!.add(gid);
+    }
+  }
+
+  const need = matchMode === "and" ? groups.length : 1;
+  const matched = new Set<string>();
+  for (const [cid, groupHits] of hitsByContact) {
+    if (groupHits.size >= need) matched.add(cid);
+  }
+  return matched;
+}
+
+/** Apply deferred include/exclude group filters to an already name-narrowed row set. */
+export async function filterRowsByDeferredGroupMembership(
+  supabase: SupabaseClient,
+  rows: Record<string, unknown>[],
+  resolution: GroupFilterResolution,
+): Promise<Record<string, unknown>[]> {
+  let working = rows;
+  const contactIds = () => working.map((row) => String(row.id));
+
+  if (resolution.deferredExcludeGroupIds?.length) {
+    const inExclude = await contactIdsInGroupsAmong(
+      supabase,
+      resolution.deferredExcludeGroupIds,
+      contactIds(),
+      "or",
+    );
+    working = working.filter((row) => !inExclude.has(String(row.id)));
+  }
+
+  if (resolution.deferredIncludeGroupIds?.length) {
+    const matchMode = resolution.deferredIncludeMatchMode ?? "or";
+    const inInclude = await contactIdsInGroupsAmong(
+      supabase,
+      resolution.deferredIncludeGroupIds,
+      contactIds(),
+      matchMode,
+    );
+    working = working.filter((row) => inInclude.has(String(row.id)));
+  }
+
+  return working;
 }
 
 type GroupFilterInput = Pick<
@@ -341,36 +447,57 @@ export async function searchContactsInGroupsFiltered(
 async function resolveGroupFilterResolution(
   supabase: SupabaseClient,
   f: GroupFilterInput,
+  opts?: { skipInclude?: boolean; deferInclude?: boolean; deferExclude?: boolean },
 ): Promise<GroupFilterResolution> {
   const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
   const includeGroupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
   const excludeGroupIds = await resolveGroupIdsToUuids(supabase, f.exclude_group_ids);
 
   let includeContactIds: string[] | null = null;
-  if (rawInclude.length) {
+  let deferredIncludeGroupIds: string[] | undefined;
+  let deferredExcludeGroupIds: string[] | undefined;
+  let deferredIncludeMatchMode: "or" | "and" | undefined;
+
+  if (!opts?.skipInclude && rawInclude.length) {
     if (!includeGroupIds.length) {
       includeContactIds = [];
     } else {
       const matchMode =
         f.group_match === "and" && includeGroupIds.length > 1 ? "and" : "or";
-      includeContactIds = await contactIdsForGroups(supabase, includeGroupIds, matchMode);
+      if (opts?.deferInclude) {
+        deferredIncludeGroupIds = includeGroupIds;
+        deferredIncludeMatchMode = matchMode;
+      } else {
+        includeContactIds = await contactIdsForGroups(supabase, includeGroupIds, matchMode);
+      }
     }
   }
 
   let excludeContactIds: string[] = [];
   if (excludeGroupIds.length) {
-    excludeContactIds = await contactIdsForGroups(supabase, excludeGroupIds, "or");
+    if (opts?.deferExclude) {
+      deferredExcludeGroupIds = excludeGroupIds;
+    } else {
+      excludeContactIds = await contactIdsForGroups(supabase, excludeGroupIds, "or");
+    }
   }
 
-  return { includeContactIds, excludeContactIds };
+  return {
+    includeContactIds,
+    excludeContactIds,
+    deferredIncludeGroupIds,
+    deferredExcludeGroupIds,
+    deferredIncludeMatchMode,
+  };
 }
 
 /** Heatmap/export: group filter contact IDs via RPC. */
 export async function resolveGroupFilterContactIds(
   supabase: SupabaseClient,
   f: GroupFilterInput,
+  opts?: { skipInclude?: boolean; deferInclude?: boolean; deferExclude?: boolean },
 ): Promise<GroupFilterResolution> {
-  return resolveGroupFilterResolution(supabase, f);
+  return resolveGroupFilterResolution(supabase, f, opts);
 }
 
 /** GET /api/contacts: true when an include-group filter matches zero contacts. */
@@ -421,20 +548,72 @@ async function contactIdsWithRequests(supabase: SupabaseClient): Promise<string[
   return [...new Set((data ?? []).map((r) => String((r as { contact_id: string }).contact_id)).filter(Boolean))];
 }
 
-/** Merges group, source, and request id-based filters into one resolution. */
+/**
+ * Name-search-then-refine resolution: keep the include-group decision size-aware.
+ * A SMALL include group is resolved eagerly so the query routes through group-name-rpc (which
+ * lazily applies any deferred large exclude itself). A LARGE include group is deferred so the
+ * query routes through name-search-then-refine (name RPC first, membership tested on the small set).
+ * The exclude group is always deferred here — this path is only taken when a large group is present.
+ */
+async function resolveDeferredGroupFilterResolution(
+  supabase: SupabaseClient,
+  f: GroupFilterInput,
+): Promise<GroupFilterResolution> {
+  const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+  const includeGroupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+  const excludeGroupIds = await resolveGroupIdsToUuids(supabase, f.exclude_group_ids);
+
+  if (rawInclude.length && !includeGroupIds.length) {
+    return { includeContactIds: [], excludeContactIds: [] };
+  }
+
+  const matchMode =
+    f.group_match === "and" && includeGroupIds.length > 1 ? "and" : "or";
+
+  let includeContactIds: string[] | null = null;
+  let deferredIncludeGroupIds: string[] | undefined;
+  let deferredIncludeMatchMode: "or" | "and" | undefined;
+
+  if (includeGroupIds.length) {
+    if (await groupMembershipExceedsInClause(supabase, includeGroupIds, matchMode)) {
+      // Large include → defer; name RPC narrows first, then membership is checked lazily.
+      deferredIncludeGroupIds = includeGroupIds;
+      deferredIncludeMatchMode = matchMode;
+    } else {
+      // Small include → resolve eagerly so group-name-rpc handles it.
+      includeContactIds = await contactIdsForGroups(supabase, includeGroupIds, matchMode);
+    }
+  }
+
+  return {
+    includeContactIds,
+    excludeContactIds: [],
+    deferredIncludeGroupIds,
+    deferredExcludeGroupIds: excludeGroupIds.length ? excludeGroupIds : undefined,
+    deferredIncludeMatchMode,
+  };
+}
+
 export async function resolveContactListFilterIds(
   supabase: SupabaseClient,
   f: ContactListFilters,
-  opts?: { skipGroupInclude?: boolean },
+  opts?: { skipGroupInclude?: boolean; deferLargeGroupMembership?: boolean },
 ): Promise<GroupFilterResolution> {
-  const groupRes = opts?.skipGroupInclude
-    ? await resolveGroupFilterContactIds(supabase, {
-        group_id: "",
-        group_ids: [],
-        exclude_group_ids: f.exclude_group_ids,
-        group_match: f.group_match,
-      })
-    : await resolveGroupFilterContactIds(supabase, f);
+  const groupRes =
+    opts?.deferLargeGroupMembership && !opts?.skipGroupInclude
+      ? await resolveDeferredGroupFilterResolution(supabase, f)
+      : opts?.skipGroupInclude
+        ? await resolveGroupFilterResolution(
+            supabase,
+            {
+              group_id: "",
+              group_ids: [],
+              exclude_group_ids: f.exclude_group_ids,
+              group_match: f.group_match,
+            },
+            { skipInclude: true, deferExclude: f.exclude_group_ids.length > 0 },
+          )
+        : await resolveGroupFilterContactIds(supabase, f);
   let includeContactIds = groupRes.includeContactIds;
   const excludeSet = new Set(groupRes.excludeContactIds);
 
@@ -466,7 +645,13 @@ export async function resolveContactListFilterIds(
     includeContactIds = intersectInclude(includeContactIds, ids);
   }
 
-  return { includeContactIds, excludeContactIds: [...excludeSet] };
+  return {
+    includeContactIds,
+    excludeContactIds: [...excludeSet],
+    deferredIncludeGroupIds: groupRes.deferredIncludeGroupIds,
+    deferredExcludeGroupIds: groupRes.deferredExcludeGroupIds,
+    deferredIncludeMatchMode: groupRes.deferredIncludeMatchMode,
+  };
 }
 
 export function mergeContactListFilterResolutions(
