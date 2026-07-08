@@ -68,6 +68,7 @@ import {
   setClientTtlCache,
   invalidateClientTtlCache,
 } from "@/lib/ttl-cache";
+import { getMunicipalitiesCached } from "@/lib/geo-lists-cache";
 
 const CONTACTS_LIST_CLIENT_TTL_MS = 30_000;
 const CONTACTS_META_CLIENT_TTL_MS = 60_000;
@@ -1008,17 +1009,11 @@ function ContactsPage() {
 
       void (async () => {
         try {
-          const munCached = getClientTtlCache<string[]>("contacts:municipalities");
-          if (munCached?.length) {
-            setFilterMunicipalities(munCached);
-            return;
-          }
-          const r = await fetchWithTimeout("/api/municipalities");
-          if (!r.ok || cancelled) return;
-          const data = (await r.json()) as string[];
-          const names = Array.isArray(data) ? data : [];
+          const names = await getMunicipalitiesCached();
+          if (cancelled) return;
           if (names.length) {
             setFilterMunicipalities(names);
+            // Keep legacy contacts-page key in sync for any other readers.
             setClientTtlCache("contacts:municipalities", names, CONTACTS_META_CLIENT_TTL_MS);
           }
         } catch {

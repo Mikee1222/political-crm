@@ -28,7 +28,12 @@ import { SearchFilterActions } from "@/components/search/search-filter-actions";
 import { SearchFilterInput } from "@/components/search/search-filter-input";
 import { SegmentedControl } from "@/components/search/segmented-control";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import type { ToponymListRow } from "@/app/api/toponyms/route";
+import {
+  getMunicipalitiesCached,
+  getToponymsCached,
+  peekMunicipalities,
+  peekToponyms,
+} from "@/lib/geo-lists-cache";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import { cn } from "@/lib/utils";
 
@@ -78,8 +83,14 @@ export function ContactSearchFiltersPanel({
   savingFilters?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftFromFilters(filters));
-  const [municipalities, setMunicipalities] = useState<string[]>([]);
-  const [toponyms, setToponyms] = useState<string[]>([]);
+  const cachedMunis = peekMunicipalities();
+  const cachedTops = peekToponyms();
+  const [municipalities, setMunicipalities] = useState<string[]>(cachedMunis ?? []);
+  const [municipalitiesLoading, setMunicipalitiesLoading] = useState(!cachedMunis);
+  const [toponyms, setToponyms] = useState<string[]>(
+    cachedTops ? cachedTops.map((t) => t.name).filter(Boolean) : [],
+  );
+  const [toponymsLoading, setToponymsLoading] = useState(!cachedTops);
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
   const [sources, setSources] = useState<{ id: string; name: string }[]>([]);
 
@@ -88,16 +99,10 @@ export function ContactSearchFiltersPanel({
   }, [filters]);
 
   useEffect(() => {
+    let cancelled = false;
     void Promise.all([
-      fetchWithTimeout("/api/municipalities").then(async (r) => {
-        const d = (await r.json()) as string[] | { municipalities?: string[] };
-        return Array.isArray(d) ? d : (d.municipalities ?? []);
-      }),
-      fetchWithTimeout("/api/toponyms").then(async (r) => {
-        const d = (await r.json()) as ToponymListRow[] | { toponyms?: ToponymListRow[] };
-        const rows = Array.isArray(d) ? d : (d.toponyms ?? []);
-        return rows.map((t) => t.name).filter(Boolean);
-      }),
+      getMunicipalitiesCached(),
+      getToponymsCached(),
       fetchWithTimeout("/api/groups").then(async (r) => {
         const d = (await r.json()) as { groups?: ContactGroupRow[] };
         return d.groups ?? [];
@@ -106,12 +111,18 @@ export function ContactSearchFiltersPanel({
         const d = (await r.json()) as { sources?: { id: string; name: string }[] };
         return d.sources ?? [];
       }),
-    ]).then(([mun, top, gr, src]) => {
+    ]).then(([mun, topRows, gr, src]) => {
+      if (cancelled) return;
       setMunicipalities(mun);
-      setToponyms(top);
+      setMunicipalitiesLoading(false);
+      setToponyms(topRows.map((t) => t.name).filter(Boolean));
+      setToponymsLoading(false);
       setGroups(dedupeContactGroupsById(gr));
       setSources(src);
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const groupOptions = useMemo(
@@ -257,6 +268,9 @@ export function ContactSearchFiltersPanel({
                 })
               }
               placeholder="Επιλέξτε δήμους..."
+              loading={municipalitiesLoading}
+              loadingText="Φόρτωση δήμων..."
+              emptyText="Δεν βρέθηκαν δήμοι"
             />
             <FilterFieldChips
               items={draft.municipalities.map((name) => ({ key: name, label: name }))}
@@ -276,6 +290,9 @@ export function ContactSearchFiltersPanel({
                 })
               }
               placeholder="Επιλέξτε τοπωνύμια..."
+              loading={toponymsLoading}
+              loadingText="Φόρτωση τοπωνυμίων..."
+              emptyText="Δεν βρέθηκαν τοπωνύμια"
             />
             <FilterFieldChips
               items={draft.toponyms.map((name) => ({ key: name, label: name }))}

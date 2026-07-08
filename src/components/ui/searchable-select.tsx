@@ -211,12 +211,12 @@ export function SearchableSelect({
             <span>{placeholder}</span>
           </div>
 
-          {loading && options.length === 0 ? (
+          {loading && grouped.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-8" role="status">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
               <p className="text-sm text-muted-foreground">{loadingText}</p>
             </div>
-          ) : grouped.length === 0 ? (
+          ) : !loading && grouped.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-sm text-muted-foreground">{emptyText}</p>
             </div>

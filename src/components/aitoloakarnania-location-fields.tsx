@@ -143,7 +143,7 @@ function SearchableSelect({
             />
           </div>
           <ul className="m-0 max-h-44 list-none overflow-y-auto p-0.5">
-            {loading && options.length === 0 ? (
+            {loading && filtered.length === 0 ? (
               <li className="flex items-center justify-center gap-2 px-2 py-3 text-xs text-[var(--text-muted)]" role="status">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 {loadingMessage}
@@ -438,10 +438,11 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   }, [filteredToponymRows, allToponymNames, top]);
 
   const inTopList = Boolean(top && settlementNames.includes(top));
-  const settlementList = useMemo(
-    () => [...settlementNames, OTHER_SETTLEMENT_LABEL],
-    [settlementNames],
-  );
+  const settlementList = useMemo(() => {
+    // Avoid showing only "+ Άλλο" while the shared toponym list is still loading.
+    if (toponymsLoading && settlementNames.length === 0) return [];
+    return [...settlementNames, OTHER_SETTLEMENT_LABEL];
+  }, [settlementNames, toponymsLoading]);
 
   const [otherPicked, setOtherPicked] = useState(false);
   useEffect(() => {
