@@ -56,7 +56,7 @@ const PAGE_SIZE = 50;
 const FILTERS_WIDTH = 320;
 const STORAGE_FILTERS_OPEN = "crm-contact-search-filters-open";
 const PRINT_FETCH_TIMEOUT_MS = 60_000;
-const PRINT_HEADERS = ["Επώνυμο", "Όνομα", "Πατρώνυμο", "Τηλέφωνο", "Δήμος που ψηφίζει", "Ομάδες", "Πολιτική στάση"] as const;
+const PRINT_HEADERS = ["Επώνυμο", "Όνομα", "Πατρώνυμο", "Τηλέφωνο", "Δήμος", "Ομάδες", "Πολιτική στάση"] as const;
 
 type PrintableContactRow = {
   id: string;
@@ -553,6 +553,44 @@ function ContactSearchPageInner() {
   const handlePrint = useCallback(async () => {
     const params = buildExportParams();
     if (!params) return;
+
+    // Open immediately (same user gesture) so the browser does not block the print popup.
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      showToast("Το παράθυρο εκτύπωσης μπλοκαρίστηκε από τον browser.", "error");
+      return;
+    }
+
+    const writePrintDocument = (html: string) => {
+      try {
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+      } catch {
+        showToast("Αποτυχία εκτύπωσης.", "error");
+        try {
+          printWindow.close();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    writePrintDocument(`<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8" />
+  <title>Εκτύπωση</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 40px 24px; color: #111827; background: #fff; text-align: center; }
+    p { font-size: 16px; }
+  </style>
+</head>
+<body>
+  <p>Φόρτωση αποτελεσμάτων για εκτύπωση...</p>
+</body>
+</html>`);
+
     setPrinting(true);
     try {
       params.set("format", "json");
@@ -561,7 +599,15 @@ function ContactSearchPageInner() {
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
-        showToast(err.error ?? "Αποτυχία εκτύπωσης.", "error");
+        const message = err.error ?? "Αποτυχία εκτύπωσης.";
+        showToast(message, "error");
+        writePrintDocument(`<!doctype html>
+<html lang="el">
+<head><meta charset="utf-8" /><title>Σφάλμα εκτύπωσης</title></head>
+<body style="font-family:Arial,sans-serif;padding:40px 24px;">
+  <p>${escapeHtml(message)}</p>
+</body>
+</html>`);
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { contacts?: PrintableContactRow[] };
@@ -569,6 +615,7 @@ function ContactSearchPageInner() {
       const printDate = new Intl.DateTimeFormat("el-GR", {
         dateStyle: "short",
       }).format(new Date());
+      const title = `Αποτελέσματα Αναζήτησης Επαφών — ${printDate}`;
       const filterSummary = chips.length > 0 ? chips.map((chip) => chip.label).join(" | ") : "Χωρίς φίλτρα";
       const tableRows = printRows
         .map((row) => {
@@ -585,38 +632,33 @@ function ContactSearchPageInner() {
         })
         .join("");
 
-      const printWindow = window.open("", "_blank", "noopener,noreferrer");
-      if (!printWindow) {
-        showToast("Το παράθυρο εκτύπωσης μπλοκαρίστηκε από τον browser.", "error");
-        return;
-      }
       const html = `<!doctype html>
 <html lang="el">
 <head>
   <meta charset="utf-8" />
-  <title>Αποτελέσματα Αναζήτησης Επαφών</title>
+  <title>${escapeHtml(title)}</title>
   <style>
     :root { color-scheme: light; }
-    body { font-family: Inter, Arial, sans-serif; margin: 0; color: #111827; background: #fff; }
+    body { font-family: Arial, sans-serif; margin: 0; color: #111827; background: #fff; }
     .print-root { padding: 20px 24px; }
     h1 { margin: 0 0 8px; font-size: 20px; }
     .print-meta { margin: 0 0 12px; font-size: 12px; color: #374151; }
     .print-count { margin: 0 0 12px; font-size: 12px; color: #374151; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; word-break: break-word; }
+    thead { display: table-header-group; }
     thead th { background: #f3f4f6; font-weight: 700; }
+    tr { page-break-inside: avoid; }
     @media print {
       html, body { margin: 0; padding: 0; }
-      body * { visibility: hidden; }
-      .print-root, .print-root * { visibility: visible; }
-      .print-root { position: absolute; inset: 0; padding: 16mm 12mm; }
+      .print-root { padding: 0; }
       @page { size: A4 landscape; margin: 10mm; }
     }
   </style>
 </head>
 <body>
   <div class="print-root">
-    <h1>${escapeHtml(`Αποτελέσματα Αναζήτησης Επαφών — ${printDate}`)}</h1>
+    <h1>${escapeHtml(title)}</h1>
     <p class="print-meta">${escapeHtml(filterSummary)}</p>
     <p class="print-count">${escapeHtml(`Σύνολο αποτελεσμάτων: ${printRows.length.toLocaleString("el-GR")}`)}</p>
     <table>
@@ -629,20 +671,26 @@ function ContactSearchPageInner() {
     </table>
   </div>
   <script>
-    window.addEventListener("load", () => {
+    window.onload = function () {
       window.print();
-    });
-    window.addEventListener("afterprint", () => {
+    };
+    window.addEventListener("afterprint", function () {
       window.close();
     });
   </script>
 </body>
 </html>`;
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
+      writePrintDocument(html);
     } catch {
-      showToast("Αποτυχία εκτύπωσης.", "error");
+      const message = "Αποτυχία εκτύπωσης.";
+      showToast(message, "error");
+      writePrintDocument(`<!doctype html>
+<html lang="el">
+<head><meta charset="utf-8" /><title>Σφάλμα εκτύπωσης</title></head>
+<body style="font-family:Arial,sans-serif;padding:40px 24px;">
+  <p>${escapeHtml(message)}</p>
+</body>
+</html>`);
     } finally {
       setPrinting(false);
     }
