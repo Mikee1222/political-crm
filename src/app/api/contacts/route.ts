@@ -664,9 +664,10 @@ export async function GET(request: NextRequest) {
     if (comboboxMode) {
       query = query.limit(listLimit!);
       const first = await timing.time("list", async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result: any = await query;
-        return result as { data: any[] | null; error: any };
+        return (await query) as {
+          data: Array<Record<string, unknown>> | null;
+          error: { message: string } | null;
+        };
       });
       const { data, error } = first;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -683,9 +684,11 @@ export async function GET(request: NextRequest) {
     const to = from + pageSize - 1;
     query = query.range(from, to);
     const pageResult = await timing.time("list", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result: any = await query;
-      return result as { data: any[] | null; error: any; count: number | null };
+      return (await query) as {
+        data: Array<Record<string, unknown>> | null;
+        error: { message: string } | null;
+        count: number | null;
+      };
     });
     const { data, error, count } = pageResult;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
