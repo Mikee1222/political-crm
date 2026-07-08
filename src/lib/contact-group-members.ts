@@ -3,6 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import { normalizeGreekNameKey } from "@/lib/greek-fuzzy-name";
+import { getClientTtlCache, setClientTtlCache } from "@/lib/ttl-cache";
+
+/** Group membership sizes change rarely — cache counts for the contacts list API. */
+const GROUP_MEMBER_COUNT_CACHE_TTL_MS = 60_000;
 
 export type ContactGroupSummary = Pick<
   ContactGroupRow,
@@ -440,6 +444,55 @@ export type SearchContactsAdvancedParams = {
   limit: number;
 };
 
+function normalizeGroupMatchMode(mode: SearchContactsAdvancedParams["groupMatchMode"]): "AND" | "OR" {
+  return mode === "and" || mode === "AND" ? "AND" : "OR";
+}
+
+/** True when only include-group membership filters are set (fast membership count + TTL cache). */
+export function isAdvancedSearchGroupOnly(opts: SearchContactsAdvancedParams): boolean {
+  const includeGroupIds = opts.includeGroupIds ?? [];
+  if (!includeGroupIds.length) return false;
+  if ((opts.excludeGroupIds ?? []).length) return false;
+  if (opts.firstName?.trim()) return false;
+  if (opts.lastName?.trim()) return false;
+  if (opts.fatherName?.trim()) return false;
+  if (opts.gender?.trim()) return false;
+  if ((opts.municipalities ?? []).length) return false;
+  if ((opts.toponyms ?? []).length) return false;
+  if (opts.callStatus?.trim()) return false;
+  if (opts.politicalStance?.trim()) return false;
+  if (opts.hasPhone != null) return false;
+  if (opts.hasEmail != null) return false;
+  return true;
+}
+
+function groupMemberCountCacheKey(groupIds: string[], matchMode: "AND" | "OR"): string {
+  return `contacts:group-member-count:${matchMode}:${[...groupIds].sort().join(",")}`;
+}
+
+/** Index-friendly unique membership count (junction ∪ contacts.group_id), cached 60s. */
+export async function countContactsInGroupsFast(
+  supabase: SupabaseClient,
+  groupIds: string[],
+  matchMode: "AND" | "OR" | "and" | "or" = "OR",
+): Promise<number> {
+  const unique = uniqueIds(groupIds);
+  if (!unique.length) return 0;
+  const mode = normalizeGroupMatchMode(matchMode);
+  const cacheKey = groupMemberCountCacheKey(unique, mode);
+  const cached = getClientTtlCache<number>(cacheKey);
+  if (cached != null) return cached;
+
+  const { data, error } = await supabase.rpc("count_contacts_in_groups_fast", {
+    p_group_ids: unique,
+    p_match_mode: mode,
+  });
+  if (error) throw error;
+  const total = Number(data ?? 0);
+  setClientTtlCache(cacheKey, total, GROUP_MEMBER_COUNT_CACHE_TTL_MS);
+  return total;
+}
+
 /** Unified name + group + column search via search_contacts_advanced RPC (paginated). */
 export async function searchContactsAdvanced(
   supabase: SupabaseClient,
@@ -463,14 +516,16 @@ export async function searchContactsAdvanced(
     limit,
   } = opts;
 
-  const { data, error } = await supabase.rpc("search_contacts_advanced", {
+  const matchMode = normalizeGroupMatchMode(groupMatchMode);
+  const groupOnly = isAdvancedSearchGroupOnly(opts);
+  const rpcArgs = {
     p_first_name: firstName?.trim() || null,
     p_last_name: lastName?.trim() || null,
     p_father_name: fatherName?.trim() || null,
     p_gender: gender?.trim() || null,
     p_include_group_ids: includeGroupIds.length ? includeGroupIds : null,
     p_exclude_group_ids: excludeGroupIds.length ? excludeGroupIds : null,
-    p_group_match_mode: groupMatchMode === "and" || groupMatchMode === "AND" ? "AND" : "OR",
+    p_group_match_mode: matchMode,
     p_municipalities: municipalities.length ? municipalities : null,
     p_toponyms: toponyms.length ? toponyms : null,
     p_call_status: callStatus?.trim() || null,
@@ -479,7 +534,22 @@ export async function searchContactsAdvanced(
     p_has_email: hasEmail,
     p_offset: offset,
     p_limit: limit,
-  });
+    // Group-only totals use the membership index + 60s cache in parallel.
+    p_compute_total: !groupOnly,
+  };
+
+  if (groupOnly) {
+    const [pageResult, total] = await Promise.all([
+      supabase.rpc("search_contacts_advanced", rpcArgs),
+      countContactsInGroupsFast(supabase, includeGroupIds, matchMode),
+    ]);
+    if (pageResult.error) throw pageResult.error;
+    const rows = (pageResult.data ?? []) as SearchContactsAdvancedRow[];
+    const contacts = rows.map(({ total_count: _total, birth_year: _by, ...contact }) => contact);
+    return { contacts, total };
+  }
+
+  const { data, error } = await supabase.rpc("search_contacts_advanced", rpcArgs);
   if (error) throw error;
 
   const rows = (data ?? []) as SearchContactsAdvancedRow[];

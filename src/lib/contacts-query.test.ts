@@ -405,10 +405,53 @@ describe("searchContactsAdvanced", () => {
       p_has_email: null,
       p_offset: 0,
       p_limit: 50,
+      p_compute_total: true,
     });
     expect(total).toBe(2);
     expect(contacts).toHaveLength(2);
     expect(contacts[0]).not.toHaveProperty("total_count");
+  });
+
+  it("group-only uses parallel fast count and skips RPC total", async () => {
+    const rpc = vi.fn().mockImplementation((name: string) => {
+      if (name === "count_contacts_in_groups_fast") {
+        return Promise.resolve({ data: 23935, error: null });
+      }
+      return Promise.resolve({
+        data: [
+          {
+            id: "1",
+            first_name: "Α",
+            last_name: "Β",
+            total_count: 0,
+          },
+        ],
+        error: null,
+      });
+    });
+    const supabase = { rpc };
+
+    const { contacts, total } = await searchContactsAdvanced(supabase as never, {
+      includeGroupIds: ["aa5ef6f7-e4ba-473a-8c16-e7eb81c93bdc"],
+      offset: 0,
+      limit: 50,
+    });
+
+    expect(rpc).toHaveBeenCalledWith("count_contacts_in_groups_fast", {
+      p_group_ids: ["aa5ef6f7-e4ba-473a-8c16-e7eb81c93bdc"],
+      p_match_mode: "OR",
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      "search_contacts_advanced",
+      expect.objectContaining({
+        p_include_group_ids: ["aa5ef6f7-e4ba-473a-8c16-e7eb81c93bdc"],
+        p_compute_total: false,
+        p_offset: 0,
+        p_limit: 50,
+      }),
+    );
+    expect(total).toBe(23935);
+    expect(contacts).toHaveLength(1);
   });
 });
 
