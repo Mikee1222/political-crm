@@ -11,6 +11,7 @@ export function SearchResultsHeader({
   hasSearched,
   idleTitle,
   exportButton,
+  trailingActions,
   leadingActions,
   className,
 }: {
@@ -19,6 +20,7 @@ export function SearchResultsHeader({
   hasSearched: boolean;
   idleTitle: string;
   exportButton?: { onClick: () => void; disabled?: boolean; label?: string };
+  trailingActions?: ReactNode;
   leadingActions?: ReactNode;
   className?: string;
 }) {
@@ -37,16 +39,21 @@ export function SearchResultsHeader({
             )}
           </h2>
         </div>
-        {exportButton ? (
-          <button
-            type="button"
-            className={cn(lux.btnSecondary, "!h-9 !min-h-9 !rounded-lg !px-3 !py-0 text-xs")}
-            onClick={exportButton.onClick}
-            disabled={exportButton.disabled}
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            {exportButton.label ?? "Εξαγωγή"}
-          </button>
+        {exportButton || trailingActions ? (
+          <div className="flex items-center gap-2">
+            {trailingActions}
+            {exportButton ? (
+              <button
+                type="button"
+                className={cn(lux.btnSecondary, "!h-9 !min-h-9 !rounded-lg !px-3 !py-0 text-xs")}
+                onClick={exportButton.onClick}
+                disabled={exportButton.disabled}
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                {exportButton.label ?? "Εξαγωγή"}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <div className="mt-3 h-px bg-[var(--border)]" aria-hidden />

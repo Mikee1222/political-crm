@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, Maximize2, Search, SlidersHorizontal, X } from "lucide-react";
+import { Filter, Maximize2, Printer, Search, SlidersHorizontal, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
@@ -40,6 +40,28 @@ import { cn } from "@/lib/utils";
 const PAGE_SIZE = 50;
 const FILTERS_WIDTH = 320;
 const STORAGE_FILTERS_OPEN = "crm-contact-search-filters-open";
+const PRINT_FETCH_TIMEOUT_MS = 60_000;
+const PRINT_HEADERS = ["Επώνυμο", "Όνομα", "Πατρώνυμο", "Τηλέφωνο", "Δήμος", "Ομάδες", "Πολιτική στάση"] as const;
+
+type PrintableContactRow = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  father_name: string | null;
+  phone: string | null;
+  municipality: string | null;
+  groups: string[];
+  political_stance: string | null;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
 function ContactSearchPageInner() {
   const router = useRouter();
@@ -63,6 +85,7 @@ function ContactSearchPageInner() {
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [savingFilters, setSavingFilters] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const loadSeqRef = useRef(0);
 
@@ -286,6 +309,104 @@ function ContactSearchPageInner() {
     window.open(`/api/contacts/export?${p.toString()}`, "_blank", "noopener,noreferrer");
   };
 
+  const handlePrint = useCallback(async () => {
+    if (!appliedFilters) return;
+    setPrinting(true);
+    try {
+      const params = contactFiltersToExportParams(appliedFilters);
+      params.set("format", "json");
+      const res = await fetchWithTimeout(`/api/contacts/export?${params.toString()}`, {
+        timeoutMs: PRINT_FETCH_TIMEOUT_MS,
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        showToast(err.error ?? "Αποτυχία εκτύπωσης.", "error");
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { contacts?: PrintableContactRow[] };
+      const printRows = data.contacts ?? [];
+      const printDate = new Intl.DateTimeFormat("el-GR", {
+        dateStyle: "short",
+      }).format(new Date());
+      const filterSummary = chips.length > 0 ? chips.map((chip) => chip.label).join(" | ") : "Χωρίς φίλτρα";
+      const tableRows = printRows
+        .map((row) => {
+          const cells = [
+            row.last_name || "",
+            row.first_name || "",
+            row.father_name || "",
+            row.phone || "",
+            row.municipality || "",
+            row.groups.join(", "),
+            row.political_stance || "",
+          ];
+          return `<tr>${cells.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`;
+        })
+        .join("");
+
+      const printWindow = window.open("", "_blank", "noopener,noreferrer");
+      if (!printWindow) {
+        showToast("Το παράθυρο εκτύπωσης μπλοκαρίστηκε από τον browser.", "error");
+        return;
+      }
+      const html = `<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8" />
+  <title>Αποτελέσματα Αναζήτησης Επαφών</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: Inter, Arial, sans-serif; margin: 0; color: #111827; background: #fff; }
+    .print-root { padding: 20px 24px; }
+    h1 { margin: 0 0 8px; font-size: 20px; }
+    .print-meta { margin: 0 0 12px; font-size: 12px; color: #374151; }
+    .print-count { margin: 0 0 12px; font-size: 12px; color: #374151; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; word-break: break-word; }
+    thead th { background: #f3f4f6; font-weight: 700; }
+    @media print {
+      html, body { margin: 0; padding: 0; }
+      body * { visibility: hidden; }
+      .print-root, .print-root * { visibility: visible; }
+      .print-root { position: absolute; inset: 0; padding: 16mm 12mm; }
+      @page { size: A4 landscape; margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-root">
+    <h1>${escapeHtml(`Αποτελέσματα Αναζήτησης Επαφών — ${printDate}`)}</h1>
+    <p class="print-meta">${escapeHtml(filterSummary)}</p>
+    <p class="print-count">${escapeHtml(`Σύνολο αποτελεσμάτων: ${printRows.length.toLocaleString("el-GR")}`)}</p>
+    <table>
+      <thead>
+        <tr>${PRINT_HEADERS.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+      </thead>
+      <tbody>
+        ${tableRows || '<tr><td colspan="7">Δεν βρέθηκαν επαφές.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+  <script>
+    window.addEventListener("load", () => {
+      window.print();
+    });
+    window.addEventListener("afterprint", () => {
+      window.close();
+    });
+  </script>
+</body>
+</html>`;
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+    } catch {
+      showToast("Αποτυχία εκτύπωσης.", "error");
+    } finally {
+      setPrinting(false);
+    }
+  }, [appliedFilters, chips, showToast]);
+
   const [filtersToSave, setFiltersToSave] = useState<ContactListFilters | null>(null);
 
   const handleSaveFilters = (f: ContactListFilters) => {
@@ -440,6 +561,19 @@ function ContactSearchPageInner() {
               hasSearched && hasMinRole(profile?.role, "manager")
                 ? { onClick: handleExport, disabled: !total }
                 : undefined
+            }
+            trailingActions={
+              hasSearched && hasMinRole(profile?.role, "manager") ? (
+                <button
+                  type="button"
+                  className={cn(lux.btnSecondary, "inline-flex !h-9 !min-h-9 !rounded-lg !px-3 !py-0 text-xs")}
+                  onClick={() => void handlePrint()}
+                  disabled={!total || printing}
+                >
+                  <Printer className="h-3.5 w-3.5" aria-hidden />
+                  Εκτύπωση
+                </button>
+              ) : undefined
             }
           />
 

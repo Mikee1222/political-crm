@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
 
     const sp = request.nextUrl.searchParams;
     const idsParam = sp.get("ids");
+    const format = sp.get("format");
     const filtered = sp.get("filters") === "1" || sp.get("filtered") === "1";
     const f = searchParamsToFilters(sp, getDefaultContactFilters());
 
@@ -162,6 +163,21 @@ export async function GET(request: NextRequest) {
     ];
 
     const athensYmd = todayYmdAthens();
+
+    if (format === "json") {
+      return NextResponse.json({
+        contacts: rawRows.map((r) => ({
+          id: r.id,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          father_name: r.father_name,
+          phone: r.phone,
+          municipality: r.municipality,
+          groups: groupNamesByContact.get(r.id) ?? [],
+          political_stance: r.political_stance,
+        })),
+      });
+    }
 
     const lines = [
       header.map(escapeCsvCell).join(","),
