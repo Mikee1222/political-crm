@@ -10,7 +10,7 @@ import { computeSlaStatus } from "@/lib/request-sla";
 import { fieldDiff } from "@/lib/field-diff";
 import { notifyRequestStatusToCitizen } from "@/lib/request-notifications";
 import { resolveProfileNames } from "@/lib/profile-names";
-import { normalizeRequestStatus } from "@/lib/request-statuses";
+import { normalizeRequestStatus, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { resolveRequestId } from "@/lib/resolve-entity-id";
 export const dynamic = "force-dynamic";
 
@@ -287,6 +287,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   });
   const oldS = String((beforeRow as { status?: string }).status ?? "");
   const newS = String((afterRow as { status?: string }).status ?? "");
+  let statusNote: {
+    id: string;
+    user_id: string | null;
+    content: string;
+    created_at: string;
+    author_name: string | null;
+    author_full_name: string;
+  } | null = null;
   if (oldS !== newS) {
     const code = String((data as { request_code?: string }).request_code ?? "");
     const contactId = String((data as { contact_id: string }).contact_id ?? "");
@@ -298,12 +306,41 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         newStatus: newS,
       });
     }
+    const actorFullName = profile?.full_name?.trim() || "—";
+    const normalizedOld = normalizeRequestStatus(oldS || REQUEST_STATUS_OPEN);
+    const normalizedNew = normalizeRequestStatus(newS || REQUEST_STATUS_OPEN);
+    const statusNoteContent = `Κατάσταση: ${normalizedOld} → ${normalizedNew}`;
+    const { data: insertedNote, error: noteError } = await supabase
+      .from("request_notes")
+      .insert({
+        request_id: requestId,
+        user_id: user.id,
+        content: statusNoteContent,
+        author_name: actorFullName,
+      })
+      .select("id, user_id, content, created_at, author_name")
+      .single();
+    if (noteError) {
+      console.warn("[api/requests/id PUT] failed to write status note", noteError.message);
+    } else if (insertedNote) {
+      statusNote = {
+        ...(insertedNote as {
+          id: string;
+          user_id: string | null;
+          content: string;
+          created_at: string;
+          author_name: string | null;
+        }),
+        author_full_name: actorFullName,
+      };
+    }
   }
   return NextResponse.json({
     request: {
       ...(data as Record<string, unknown>),
       status: normalizeRequestStatus((data as { status?: string | null }).status ?? null),
     },
+    status_note: statusNote,
   });
   } catch (e) {
     console.error("[api/requests/id PUT]", e);

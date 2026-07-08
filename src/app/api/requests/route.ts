@@ -29,6 +29,14 @@ export const maxDuration = 60;
 const BASE_SELECT = buildRequestListSelect(true, false);
 const SEARCH_SELECT = buildRequestListSelect(true, true);
 const FALLBACK_SELECT = buildRequestListSelect(false);
+const REQUEST_COUNTS_CACHE_TTL_MS = 30_000;
+
+type RequestCountsCachePayload = {
+  statusCounts: Array<{ status: string; count: number }>;
+  totalCount: number;
+};
+
+let requestCountsCache: { expiresAt: number; payload: RequestCountsCachePayload } | null = null;
 
 function mapRequestRows(data: unknown[]) {
   return (data ?? []).map((row) => {
@@ -105,6 +113,30 @@ async function fetchRequestsPage(
   return { data, error, count };
 }
 
+async function fetchCachedRequestCounts(supabase: SupabaseClient): Promise<RequestCountsCachePayload> {
+  const now = Date.now();
+  if (requestCountsCache && now < requestCountsCache.expiresAt) {
+    return requestCountsCache.payload;
+  }
+
+  const [statusCounts, totalAllR] = await Promise.all([
+    Promise.all(
+      REQUEST_STATUSES.map(async (s) => {
+        const { count: c } = await supabase
+          .from("requests")
+          .select("*", { count: "exact", head: true })
+          .in("status", getRequestStatusQueryValues(s));
+        return { status: s, count: c ?? 0 };
+      }),
+    ),
+    supabase.from("requests").select("*", { count: "exact", head: true }),
+  ]);
+
+  const payload = { statusCounts, totalCount: totalAllR.count ?? 0 };
+  requestCountsCache = { payload, expiresAt: now + REQUEST_COUNTS_CACHE_TTL_MS };
+  return payload;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
@@ -126,18 +158,9 @@ export async function GET(request: NextRequest) {
       Math.max(1, parseInt(sp.get("page_size") || "50", 10) || 50),
     );
 
-    const [{ data, error, count }, statusCounts, totalAllR] = await Promise.all([
+    const [{ data, error, count }, countsPayload] = await Promise.all([
       fetchRequestsPage(supabase, f, page, pageSize),
-      Promise.all(
-        REQUEST_STATUSES.map(async (s) => {
-          const { count: c } = await supabase
-            .from("requests")
-            .select("*", { count: "exact", head: true })
-            .in("status", getRequestStatusQueryValues(s));
-          return { status: s, count: c ?? 0 };
-        }),
-      ),
-      supabase.from("requests").select("*", { count: "exact", head: true }),
+      fetchCachedRequestCounts(supabase),
     ]);
 
     if (error) {
@@ -162,8 +185,8 @@ export async function GET(request: NextRequest) {
       page,
       page_size: pageSize,
       total_pages,
-      statusCounts,
-      totalCount: totalAllR.count ?? 0,
+      statusCounts: countsPayload.statusCounts,
+      totalCount: countsPayload.totalCount,
       requests: mapRequestRows((data ?? []) as unknown[]),
     });
   } catch (e) {

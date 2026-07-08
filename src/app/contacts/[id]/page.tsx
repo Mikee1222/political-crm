@@ -470,6 +470,41 @@ function ContactDetailPage() {
         });
       };
       try {
+        const summaryRes = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/summary`, {
+          signal,
+        });
+        if (dead()) return;
+        const summaryData = (await summaryRes.json().catch(() => ({}))) as {
+          error?: string;
+          contact?: Contact | null;
+          recent_notes?: ContactNoteItem[];
+        };
+        if (!dead() && !summaryData.error) {
+          const summaryContact = (summaryData.contact ?? null) as Contact | null;
+          const summaryNotes = (summaryData.recent_notes ?? []) as ContactNoteItem[];
+          apply(() => {
+            if (summaryContact) {
+              const g = summaryContact.contact_groups;
+              const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
+              const all_groups =
+                summaryContact.all_groups?.length
+                  ? summaryContact.all_groups
+                  : contact_groups
+                    ? [contact_groups]
+                    : [];
+              setContact({
+                ...summaryContact,
+                contact_groups,
+                all_groups,
+                group_id: summaryContact.group_id ?? null,
+                phone2: summaryContact.phone2 ?? null,
+                landline: summaryContact.landline ?? null,
+              });
+            }
+            setContactNotes(summaryNotes);
+          });
+        }
+
         const [res, notesRes, logsRes] = await Promise.all([
           fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}`, { signal }),
           fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/notes`, { signal }),

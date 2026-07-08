@@ -390,7 +390,7 @@ function ContactSearchPageInner() {
             {!focusMode ? (
         <aside
           className={cn(
-            "relative hidden shrink-0 flex-col border-r border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--bg-primary))] transition-[width] duration-300 ease-in-out lg:flex",
+            "relative hidden h-screen shrink-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,var(--bg-primary))] transition-[width] duration-300 ease-in-out lg:flex",
             filtersOpen ? "w-[320px]" : "w-0 overflow-hidden border-r-0",
           )}
           style={{ width: filtersOpen ? FILTERS_WIDTH : 0 }}

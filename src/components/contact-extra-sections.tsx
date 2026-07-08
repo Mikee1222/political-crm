@@ -38,6 +38,8 @@ export function ContactExtraSections({
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [appts, setAppts] = useState<ApptRow[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -78,15 +80,37 @@ export function ContactExtraSections({
   const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    setUploadError(null);
+    setUploadSuccess(null);
     setUploading(true);
     const fd = new FormData();
     fd.set("file", f);
     fd.set("contact_id", contactId);
-    const res = await fetchWithTimeout("/api/documents/upload", { method: "POST", body: fd });
-    setUploading(false);
-    e.target.value = "";
-    if (res.ok) {
-      void load();
+    try {
+      const res = await fetchWithTimeout("/api/documents/upload", {
+        method: "POST",
+        body: fd,
+        timeoutMs: 120_000,
+      });
+      if (!res.ok) {
+        let errorMessage = "Η μεταφόρτωση απέτυχε.";
+        try {
+          const payload = (await res.json()) as { error?: string };
+          if (payload?.error) errorMessage = payload.error;
+        } catch {
+          // keep fallback message
+        }
+        setUploadError(errorMessage);
+        return;
+      }
+      setUploadSuccess(`Το αρχείο "${f.name}" ανέβηκε επιτυχώς.`);
+      await load();
+    } catch (err) {
+      const isAbortError = err instanceof DOMException && err.name === "AbortError";
+      setUploadError(isAbortError ? "Η μεταφόρτωση έληξε λόγω χρονικού ορίου. Δοκιμάστε ξανά." : "Η μεταφόρτωση απέτυχε.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
     }
   };
 
@@ -140,17 +164,22 @@ export function ContactExtraSections({
               {uploading ? "Μεταφόρτωση…" : "Ανέβασμα εγγράφου"}
             </span>
           </label>
+          {uploadSuccess ? <p className="mt-2 text-xs text-emerald-400">{uploadSuccess}</p> : null}
+          {uploadError ? <p className="mt-2 text-xs text-red-400">{uploadError}</p> : null}
         </div>
         <ul className="space-y-2">
           {docs.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="flex min-w-0 items-center gap-1.5 text-[var(--text-primary)]">
-                <FileText className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 truncate">{d.name}</span>
-                {d.file_size != null ? (
-                  <span className="text-xs text-[var(--text-muted)]">({Math.round(d.file_size / 1024)} KB)</span>
-                ) : null}
-              </span>
+              <div className="flex min-w-0 flex-col">
+                <span className="flex min-w-0 items-center gap-1.5 text-[var(--text-primary)]">
+                  <FileText className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 truncate">{d.name}</span>
+                  {d.file_size != null ? (
+                    <span className="text-xs text-[var(--text-muted)]">({Math.round(d.file_size / 1024)} KB)</span>
+                  ) : null}
+                </span>
+                <span className="pl-5 text-xs text-[var(--text-muted)]">{formatDateTimeAthens(d.created_at)}</span>
+              </div>
               <div className="flex gap-1">
                 {d.signed_url ? (
                   <a

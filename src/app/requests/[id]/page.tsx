@@ -10,9 +10,15 @@ import { formatCalendarDateOnly, formatDateTimeEnGb } from "@/lib/date-format";
 import { useProfile } from "@/contexts/profile-context";
 import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 import { can } from "@/lib/can";
+import { useFormToast } from "@/contexts/form-toast-context";
 import { RequestDocumentsSection } from "@/components/request-documents-section";
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
-import { normalizeRequestStatus, OPEN_REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+import {
+  normalizeRequestStatus,
+  OPEN_REQUEST_STATUSES,
+  REQUEST_STATUSES,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 import { AISummaryCard } from "@/components/ai-summary-card";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
@@ -154,6 +160,7 @@ export default function RequestDetailPage() {
   const id = typeof params?.id === "string" ? params.id : "";
   const canEdit = can(profile, "requests_edit");
   const canViewAiSummary = can(profile, "ai_summary_view");
+  const { showToast } = useFormToast();
 
   const [data, setData] = useState<RequestDetail | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -162,6 +169,7 @@ export default function RequestDetailPage() {
   const [sending, setSending] = useState(false);
   const [portalMsg, setPortalMsg] = useState("");
   const [savingMsg, setSavingMsg] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
   const alexPage = useOptionalAlexandraPageContext();
 
@@ -208,6 +216,65 @@ export default function RequestDetailPage() {
     void load();
   }, [load]);
 
+  const handleStatusChange = useCallback(
+    async (rawNextStatus: string) => {
+      if (!requestApiId || !data) return;
+      const previousStatus = data.status ?? REQUEST_STATUS_OPEN;
+      const nextStatus = normalizeRequestStatus(rawNextStatus);
+      if (normalizeRequestStatus(previousStatus) === nextStatus) return;
+
+      const previousUpdatedAt = data.updated_at;
+      const optimisticUpdatedAt = new Date().toISOString();
+
+      setStatusSaving(true);
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: nextStatus,
+              updated_at: optimisticUpdatedAt,
+            }
+          : prev,
+      );
+
+      try {
+        const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestApiId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: nextStatus }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          request?: RequestDetail;
+          status_note?: Note;
+        };
+        if (!res.ok || !body.request) {
+          throw new Error(body.error ?? "Αποτυχία ενημέρωσης κατάστασης");
+        }
+        setData((prev) => (prev ? { ...prev, ...body.request } : body.request ?? prev));
+        if (body.status_note) {
+          setNotes((prev) => [body.status_note as Note, ...prev]);
+        }
+        showToast("Η κατάσταση ενημερώθηκε.", "success");
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Αποτυχία ενημέρωσης κατάστασης";
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: previousStatus,
+                updated_at: previousUpdatedAt,
+              }
+            : prev,
+        );
+        showToast(message, "error");
+      } finally {
+        setStatusSaving(false);
+      }
+    },
+    [data, requestApiId, showToast],
+  );
+
   if (err && !data) {
     return (
       <div className="space-y-4 p-4 sm:p-6">
@@ -250,9 +317,39 @@ export default function RequestDetailPage() {
             </h1>
             {data.category && <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <RequestStatusBadge status={data.status ?? REQUEST_STATUS_OPEN} />
-            <PriorityBadge p={data.priority} />
+          <div className="flex min-w-[240px] flex-col items-start gap-2 sm:items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              <RequestStatusBadge status={data.status ?? REQUEST_STATUS_OPEN} size="md" bold />
+              <PriorityBadge p={data.priority} />
+            </div>
+            {canEdit ? (
+              <div className="flex items-center gap-2">
+                <label htmlFor="request-inline-status" className="text-xs font-medium text-[var(--text-secondary)]">
+                  Κατάσταση
+                </label>
+                <select
+                  id="request-inline-status"
+                  className={lux.select + " min-w-[220px] !py-1.5 text-xs sm:min-w-[260px]"}
+                  value={normalizeRequestStatus(data.status ?? REQUEST_STATUS_OPEN)}
+                  disabled={statusSaving}
+                  onChange={(e) => void handleStatusChange(e.target.value)}
+                  aria-label="Αλλαγή κατάστασης αιτήματος"
+                >
+                  {REQUEST_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <p className="text-xs text-[var(--text-muted)]">
+              {statusSaving
+                ? "Ενημέρωση κατάστασης…"
+                : data.updated_at
+                  ? `Ενημερώθηκε ${formatCalendarDateOnly(data.updated_at)}`
+                  : "Ενημερώθηκε —"}
+            </p>
           </div>
         </div>
         {canViewAiSummary && requestApiId ? (
