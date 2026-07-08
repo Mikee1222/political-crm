@@ -14,6 +14,7 @@ import {
   type ContactSearchResult,
 } from "@/components/contacts/search/contact-search-result-card";
 import { CenteredModal } from "@/components/ui/centered-modal";
+import { ActiveFilterSummaryChip } from "@/components/search/active-filter-summary-chip";
 import { FilterSidebarToggle } from "@/components/search/filter-sidebar-toggle";
 import { RestoredSearchBanner } from "@/components/search/restored-search-banner";
 import { SearchPagination } from "@/components/search/search-pagination";
@@ -39,6 +40,7 @@ import {
 import { dedupeContactGroupsById } from "@/lib/contact-groups";
 import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
+import { buildActiveFilterSummaryLabel } from "@/lib/search-filter-summary";
 import {
   clearSearchSessionState,
   CONTACTS_SEARCH_FRESH_KEY,
@@ -448,6 +450,14 @@ function ContactSearchPageInner() {
     [appliedFilters, groupNames, sourceNames],
   );
 
+  const filterSummaryLabel = useMemo(
+    () =>
+      buildActiveFilterSummaryLabel(chips, {
+        contactFilters: appliedFilters ?? undefined,
+      }),
+    [chips, appliedFilters],
+  );
+
   const dismissChip = (key: string) => {
     if (!appliedFilters) return;
     const f = cloneContactListFilters(appliedFilters);
@@ -807,6 +817,10 @@ function ContactSearchPageInner() {
               ) : undefined
             }
           />
+
+          {filterSummaryLabel ? (
+            <ActiveFilterSummaryChip label={filterSummaryLabel} onClear={clearFilters} />
+          ) : null}
 
           {chips.length > 0 ? (
             <ContactSearchFilterChips chips={chips} onDismiss={dismissChip} onClearAll={clearFilters} />

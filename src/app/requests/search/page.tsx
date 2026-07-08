@@ -13,6 +13,7 @@ import {
   RequestSearchResultCard,
   type RequestSearchResult,
 } from "@/components/requests/search/request-search-result-card";
+import { ActiveFilterSummaryChip } from "@/components/search/active-filter-summary-chip";
 import { FilterSidebarToggle } from "@/components/search/filter-sidebar-toggle";
 import { RestoredSearchBanner } from "@/components/search/restored-search-banner";
 import { SearchPagination } from "@/components/search/search-pagination";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/requests-filters";
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { lux } from "@/lib/luxury-styles";
+import { buildActiveFilterSummaryLabel } from "@/lib/search-filter-summary";
 import {
   clearSearchSessionState,
   consumeSearchFreshIntent,
@@ -356,6 +358,14 @@ function RequestSearchPageInner() {
     [appliedFilters, categoryNames, handlerNames],
   );
 
+  const filterSummaryLabel = useMemo(
+    () =>
+      buildActiveFilterSummaryLabel(chips, {
+        requestFilters: appliedFilters ?? undefined,
+      }),
+    [chips, appliedFilters],
+  );
+
   const dismissChip = (key: string) => {
     if (!appliedFilters) return;
     const f = { ...appliedFilters };
@@ -435,6 +445,10 @@ function RequestSearchPageInner() {
               </button>
             }
           />
+
+          {filterSummaryLabel ? (
+            <ActiveFilterSummaryChip label={filterSummaryLabel} onClear={clearFilters} />
+          ) : null}
 
           {chips.length > 0 ? (
             <RequestSearchFilterChips chips={chips} onDismiss={dismissChip} onClearAll={clearFilters} />
