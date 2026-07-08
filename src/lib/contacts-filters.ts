@@ -273,7 +273,31 @@ const DEFAULT_FILTERS: ContactListFilters = {
 };
 
 export function getDefaultContactFilters(): ContactListFilters {
-  return { ...DEFAULT_FILTERS };
+  // Deep-clone arrays so callers cannot mutate the shared DEFAULT_FILTERS singleton.
+  return {
+    ...DEFAULT_FILTERS,
+    call_statuses: [],
+    municipalities: [],
+    toponyms: [],
+    group_ids: [],
+    exclude_group_ids: [],
+    source_ids: [],
+    exclude_source_ids: [],
+  };
+}
+
+/** Clone filter state so nested arrays are independent of the source object. */
+export function cloneContactListFilters(f: ContactListFilters): ContactListFilters {
+  return {
+    ...f,
+    call_statuses: [...(f.call_statuses ?? [])],
+    municipalities: [...(f.municipalities ?? [])],
+    toponyms: [...(f.toponyms ?? [])],
+    group_ids: [...(f.group_ids ?? [])],
+    exclude_group_ids: [...(f.exclude_group_ids ?? [])],
+    source_ids: [...(f.source_ids ?? [])],
+    exclude_source_ids: [...(f.exclude_source_ids ?? [])],
+  };
 }
 
 /**
@@ -488,8 +512,35 @@ export function summarizeContactFilters(f: ContactListFilters, groupNames: Map<s
   return parts.length ? parts.join(" · ") : "—";
 }
 
+/**
+ * Build GET `/api/contacts/export` query params.
+ *
+ * Uses the same individual filter keys as `/api/contacts` (`group_ids`,
+ * `municipalities`, …). `filters=1` is an apply-active-filters flag (not a
+ * saved-filter id). Also mirrors advanced-search list semantics with
+ * `partial_location=1`.
+ */
 export function contactFiltersToExportParams(f: ContactListFilters): URLSearchParams {
-  const p = contactFiltersToSearchParams(f);
+  const p = contactFiltersToSearchParams(cloneContactListFilters(f));
+  // Pagination belongs to list views only — export returns the full matching set.
+  p.delete("page");
+  p.delete("limit");
   p.set("filters", "1");
+  p.set("partial_location", "1");
+  return p;
+}
+
+/**
+ * Rebuild export params from a previous `/api/contacts` query string so export
+ * matches the exact filter set that produced the current result count.
+ */
+export function listSearchParamsToExportParams(listParams: URLSearchParams): URLSearchParams {
+  const p = new URLSearchParams(listParams.toString());
+  p.delete("page");
+  p.delete("page_size");
+  p.delete("limit");
+  p.delete("format");
+  p.set("filters", "1");
+  if (!p.has("partial_location")) p.set("partial_location", "1");
   return p;
 }

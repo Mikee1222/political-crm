@@ -26,9 +26,11 @@ import { useProfile } from "@/contexts/profile-context";
 import { CONTACT_LIST_FETCH_TIMEOUT_MS, fetchWithTimeout } from "@/lib/client-fetch";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import {
+  cloneContactListFilters,
   contactFiltersToExportParams,
   contactFiltersToSearchParams,
   getDefaultContactFilters,
+  listSearchParamsToExportParams,
   searchParamsToFilters,
   type ContactListFilters,
 } from "@/lib/contacts-filters";
@@ -89,6 +91,8 @@ function ContactSearchPageInner() {
   const [exporting, setExporting] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const loadSeqRef = useRef(0);
+  /** Exact `/api/contacts` query used for the last successful results (export/print must match). */
+  const lastListParamsRef = useRef<URLSearchParams | null>(null);
 
   const applyFocusModeDom = useCallback((val: boolean) => {
     if (val) document.body.classList.add("focus-mode");
@@ -139,7 +143,7 @@ function ContactSearchPageInner() {
   const syncFromUrl = useCallback(() => {
     const sp = new URLSearchParams(searchParams.toString());
     const ran = sp.get("ran") === "1";
-    const f = searchParamsToFilters(sp, getDefaultContactFilters());
+    const f = cloneContactListFilters(searchParamsToFilters(sp, getDefaultContactFilters()));
     setDraftFilters(f);
     if (ran) {
       setAppliedFilters(f);
@@ -175,7 +179,7 @@ function ContactSearchPageInner() {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const params = contactFiltersToSearchParams({ ...f, page: String(pageNum) });
+      const params = contactFiltersToSearchParams({ ...cloneContactListFilters(f), page: String(pageNum) });
       params.set("page_size", String(PAGE_SIZE));
       params.set("partial_location", "1");
       const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`, {
@@ -191,6 +195,7 @@ function ContactSearchPageInner() {
         setTotal(0);
         return;
       }
+      lastListParamsRef.current = new URLSearchParams(params.toString());
       const list = (data.contacts ?? []).map((c) => {
         const g = c.contact_groups;
         const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
@@ -214,7 +219,7 @@ function ContactSearchPageInner() {
 
   const runSearch = useCallback(
     (f: ContactListFilters) => {
-      const next = { ...f, page: "1" };
+      const next = { ...cloneContactListFilters(f), page: "1" };
       setDraftFilters(next);
       setAppliedFilters(next);
       setHasSearched(true);
@@ -243,12 +248,21 @@ function ContactSearchPageInner() {
     const d = getDefaultContactFilters();
     setDraftFilters(d);
     setAppliedFilters(null);
+    lastListParamsRef.current = null;
     setHasSearched(false);
     setContacts([]);
     setTotal(0);
     setPage(1);
     router.replace("/contacts/search", { scroll: false });
   };
+
+  const buildExportParams = useCallback(() => {
+    if (lastListParamsRef.current) {
+      return listSearchParamsToExportParams(lastListParamsRef.current);
+    }
+    if (!appliedFilters) return null;
+    return contactFiltersToExportParams(appliedFilters);
+  }, [appliedFilters]);
 
   const chips = useMemo(
     () => (appliedFilters ? buildContactSearchFilterChips(appliedFilters, groupNames, sourceNames) : []),
@@ -257,7 +271,7 @@ function ContactSearchPageInner() {
 
   const dismissChip = (key: string) => {
     if (!appliedFilters) return;
-    const f = { ...appliedFilters };
+    const f = cloneContactListFilters(appliedFilters);
     if (key === "first_name") f.first_name = "";
     else if (key === "last_name") f.last_name = "";
     else if (key === "father_name") f.father_name = "";
@@ -305,10 +319,10 @@ function ContactSearchPageInner() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const handleExport = useCallback(async () => {
-    if (!appliedFilters) return;
+    const params = buildExportParams();
+    if (!params) return;
     setExporting(true);
     try {
-      const params = contactFiltersToExportParams(appliedFilters);
       const res = await fetchWithTimeout(`/api/contacts/export?${params.toString()}`, {
         timeoutMs: PRINT_FETCH_TIMEOUT_MS,
       });
@@ -335,13 +349,13 @@ function ContactSearchPageInner() {
     } finally {
       setExporting(false);
     }
-  }, [appliedFilters, showToast]);
+  }, [buildExportParams, showToast]);
 
   const handlePrint = useCallback(async () => {
-    if (!appliedFilters) return;
+    const params = buildExportParams();
+    if (!params) return;
     setPrinting(true);
     try {
-      const params = contactFiltersToExportParams(appliedFilters);
       params.set("format", "json");
       const res = await fetchWithTimeout(`/api/contacts/export?${params.toString()}`, {
         timeoutMs: PRINT_FETCH_TIMEOUT_MS,
@@ -433,7 +447,7 @@ function ContactSearchPageInner() {
     } finally {
       setPrinting(false);
     }
-  }, [appliedFilters, chips, showToast]);
+  }, [buildExportParams, chips, showToast]);
 
   const [filtersToSave, setFiltersToSave] = useState<ContactListFilters | null>(null);
 

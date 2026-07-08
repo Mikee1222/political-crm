@@ -67,6 +67,9 @@ function normalizeExportSearchParams(sp: URLSearchParams): URLSearchParams {
   ]);
   mergeCsv("source_ids", ["source_ids", "source_ids[]"]);
   mergeCsv("exclude_source_ids", ["exclude_source_ids", "exclude_source_ids[]"]);
+  mergeCsv("municipalities", ["municipalities", "municipalities[]", "municipality"]);
+  mergeCsv("toponyms", ["toponyms", "toponyms[]", "toponym"]);
+  mergeCsv("call_statuses", ["call_statuses", "call_statuses[]", "call_status_in"]);
 
   return normalized;
 }
