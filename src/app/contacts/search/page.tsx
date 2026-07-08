@@ -494,13 +494,16 @@ function ContactSearchPageInner() {
     runSearch(f);
   };
 
-  const contactHref = (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`);
+  const contactHref = useCallback(
+    (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`),
+    [focusMode],
+  );
   const navigateToContact = useCallback(
     (id: string) => {
       persistSearchState();
       router.push(contactHref(id));
     },
-    [persistSearchState, router, focusMode],
+    [persistSearchState, router, contactHref],
   );
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
