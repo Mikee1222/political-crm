@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { contactCelebratesNameday } from "@/lib/namedays";
+import { contactCelebratesNameday, resolveNamedayNamesForDay } from "@/lib/namedays";
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
@@ -28,7 +28,11 @@ export async function GET() {
         .like("birthday", `%-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`),
     ]);
 
-    const names = (namedays ?? []).flatMap((x) => x.names ?? []);
+    const names = resolveNamedayNamesForDay(
+      (namedays ?? []).flatMap((x) => x.names ?? []),
+      month,
+      day,
+    );
 
     const celebratingByName = (contacts ?? []).filter((c) =>
       contactCelebratesNameday(c.first_name, c.nickname, names),

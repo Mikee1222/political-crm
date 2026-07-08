@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { API_RACE_MS, runWithTimeCap } from "@/lib/api-resilience";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { contactCelebratesNameday } from "@/lib/namedays";
+import { contactCelebratesNameday, resolveNamedayNamesForDay } from "@/lib/namedays";
 export const dynamic = 'force-dynamic';
 
 function monthDay(date: Date) {
@@ -51,9 +51,21 @@ export async function GET() {
       .like("birthday", `%-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`),
   ]);
 
-  const todayNames = (todayRows.data ?? []).flatMap((r) => r.names ?? []);
-  const tomorrowNames = (tomorrowRows.data ?? []).flatMap((r) => r.names ?? []);
-  const dayAfterNames = (dayAfterRows.data ?? []).flatMap((r) => r.names ?? []);
+  const todayNames = resolveNamedayNamesForDay(
+    (todayRows.data ?? []).flatMap((r) => r.names ?? []),
+    t.month,
+    t.day,
+  );
+  const tomorrowNames = resolveNamedayNamesForDay(
+    (tomorrowRows.data ?? []).flatMap((r) => r.names ?? []),
+    n1.month,
+    n1.day,
+  );
+  const dayAfterNames = resolveNamedayNamesForDay(
+    (dayAfterRows.data ?? []).flatMap((r) => r.names ?? []),
+    n2.month,
+    n2.day,
+  );
 
   const contacts = (contactsRows.data ?? []).filter((c) =>
     contactCelebratesNameday(c.first_name, c.nickname, todayNames),

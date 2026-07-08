@@ -3,6 +3,7 @@ import type { Role } from "@/lib/roles";
 import { hasMinRole } from "@/lib/roles";
 import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { formatDateAthens } from "@/lib/date-format";
+import { contactCelebratesNameday, resolveNamedayNamesForDay } from "@/lib/namedays";
 
 function normGreek(s: string) {
   return s
@@ -54,8 +55,11 @@ async function todayNamedayContext(supabase: SupabaseClient): Promise<Record<str
       .like("birthday", `%-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`),
   ]);
 
-  const names = (namedayRows as { names?: string[] } | null)?.names ?? [];
-  const namesSet = new Set((names as string[]).map((n) => normGreek(n)));
+  const names = resolveNamedayNamesForDay(
+    (namedayRows as { names?: string[] } | null)?.names ?? [],
+    month,
+    day,
+  );
 
   const contacts = (allContacts ?? []) as Array<{
     id: string;
@@ -65,11 +69,9 @@ async function todayNamedayContext(supabase: SupabaseClient): Promise<Record<str
     phone: string | null;
     call_status: string | null;
   }>;
-  const celebrating = contacts.filter((c) => {
-    const f = normGreek(c.first_name ?? "");
-    const n = c.nickname ? normGreek(c.nickname) : "";
-    return namesSet.has(f) || (n && namesSet.has(n));
-  });
+  const celebrating = contacts.filter((c) =>
+    contactCelebratesNameday(c.first_name, c.nickname, names),
+  );
 
   return {
     date: { month, day },
@@ -99,7 +101,11 @@ async function weekNamedayContext(supabase: SupabaseClient): Promise<Record<stri
     const month = d.getMonth() + 1;
     const day = d.getDate();
     const { data: nd } = await supabase.from("name_days").select("names").eq("month", month).eq("day", day).maybeSingle();
-    const names = ((nd as { names?: string[] } | null)?.names ?? []) as string[];
+    const names = resolveNamedayNamesForDay(
+      ((nd as { names?: string[] } | null)?.names ?? []) as string[],
+      month,
+      day,
+    );
     let approxHits = 0;
     if (names.length) {
       const n1 = names[0]!.replace(/"/g, "");

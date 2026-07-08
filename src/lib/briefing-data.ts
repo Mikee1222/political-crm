@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { athensDayRange, pad2 } from "@/lib/athens-ranges";
 import { listAllCalendarsEventsHttp } from "@/lib/google-calendar";
 import { tallyOutcomes } from "@/lib/campaign-stats";
-import { contactCelebratesNameday } from "@/lib/namedays";
+import { contactCelebratesNameday, resolveNamedayNamesForDay } from "@/lib/namedays";
 import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 
 function monthDay(d: Date) {
@@ -177,7 +177,11 @@ export async function fetchBriefingTodayData(
     .lt("sla_due_date", todayStr);
   const overdueRequestCount = !overdueErr ? overdueCount ?? 0 : 0;
 
-  const todayNames: string[] = (nameDayRes.data?.names as string[] | undefined) ?? [];
+  const todayNames = resolveNamedayNamesForDay(
+    (nameDayRes.data?.names as string[] | undefined) ?? [],
+    month,
+    day,
+  );
   const contacts = (allContacts.data ?? []).filter((c) =>
     contactCelebratesNameday(
       (c as { first_name?: string }).first_name,

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pad2, todayYmdAthens } from "@/lib/athens-ranges";
 import { formatGreekContactName } from "@/lib/contact-display-name";
+import { resolveNamedayNamesForDay } from "@/lib/namedays";
 
 export type DashboardContactRow = {
   id: string;
@@ -90,11 +91,11 @@ async function fetchNamedaysForYmd(
   const month = p[1] ?? 1;
   const day = p[2] ?? 1;
   const { data } = await supabase.from("name_days").select("names").eq("month", month).eq("day", day);
-  const names = new Set<string>();
+  const dbNames: string[] = [];
   for (const row of data ?? []) {
     for (const n of (row as { names?: string[] }).names ?? []) {
       const t = String(n).trim();
-      if (t) names.add(t);
+      if (t) dbNames.push(t);
     }
   }
   return {
@@ -102,7 +103,7 @@ async function fetchNamedaysForYmd(
     dateLabel: formatNamedayDateLabel(ymd),
     month,
     day,
-    names: [...names].sort((a, b) => a.localeCompare(b, "el")),
+    names: resolveNamedayNamesForDay(dbNames, month, day),
   };
 }
 

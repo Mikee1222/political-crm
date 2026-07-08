@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { contactCelebratesNameday, normalizeGreekName } from "@/lib/namedays";
+import {
+  contactCelebratesNameday,
+  normalizeGreekName,
+  resolveNamedayNamesForDay,
+} from "@/lib/namedays";
 
 /** @deprecated Use `normalizeGreekName` from `@/lib/namedays`. */
 export const normalizeGreek = normalizeGreekName;
@@ -21,7 +25,8 @@ export async function getContactIdsForNameDay(
     console.error("[nameday] name_days", ne.message);
     return [];
   }
-  const todayNames = (namedayRows ?? []).flatMap((r) => (r as { names?: string[] }).names ?? []);
+  const dbNames = (namedayRows ?? []).flatMap((r) => (r as { names?: string[] }).names ?? []);
+  const todayNames = resolveNamedayNamesForDay(dbNames, month, day);
   if (todayNames.length === 0) return [];
 
   const { data: contacts, error: ce } = await supabase.from("contacts").select("id, first_name, nickname");

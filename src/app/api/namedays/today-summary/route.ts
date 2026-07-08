@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { nextJsonError } from "@/lib/api-resilience";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { formatDateAthens } from "@/lib/date-format";
+import { resolveNamedayNamesForDay } from "@/lib/namedays";
 export const dynamic = 'force-dynamic';
 
 function dateLabelGreek(d: Date) {
@@ -32,7 +33,11 @@ export async function GET() {
     if (ne) {
       return NextResponse.json({ error: ne.message }, { status: 500 });
     }
-    const calendarNames = (namedayRows ?? []).flatMap((r) => (r as { names?: string[] }).names ?? []);
+    const calendarNames = resolveNamedayNamesForDay(
+      (namedayRows ?? []).flatMap((r) => (r as { names?: string[] }).names ?? []),
+      month,
+      day,
+    );
 
     const contactIds = await getContactIdsForNameDay(supabase, month, day);
 

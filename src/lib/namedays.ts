@@ -245,6 +245,33 @@ function expandVariantNames(names: Set<string>) {
   }
 }
 
+/** Expand nickname / diminutive variant groups onto a name list (stable sorted). */
+export function expandNamedayVariantNames(names: readonly string[]): string[] {
+  const set = new Set<string>();
+  for (const n of names) {
+    const t = String(n).trim();
+    if (t) set.add(t);
+  }
+  expandVariantNames(set);
+  return [...set].sort((a, b) => a.localeCompare(b, "el"));
+}
+
+/**
+ * Names for calendar matching: prefer `name_days` DB rows; if empty, fall back to
+ * the bundled εορτολόγιο (JSON + feast supplements + variants).
+ */
+export function resolveNamedayNamesForDay(
+  dbNames: readonly string[] | null | undefined,
+  month: number,
+  day: number,
+): string[] {
+  const fromDb = (dbNames ?? [])
+    .map((n) => String(n).trim())
+    .filter(Boolean);
+  if (fromDb.length > 0) return expandNamedayVariantNames(fromDb);
+  return getNamesForDate(month, day);
+}
+
 function daysInMonth(month: number) {
   return new Date(2024, month, 0).getDate();
 }
@@ -327,7 +354,10 @@ export function getSaintsForDate(month: number, day: number): string[] {
   return row?.saints ?? [];
 }
 
-/** Contact first name / nickname matches any celebrating name (accent- and case-insensitive). */
+/**
+ * Contact first name / nickname matches any celebrating name (accent- and case-insensitive).
+ * Also matches the first whitespace-separated token of multi-part given names.
+ */
 export function contactCelebratesNameday(
   firstName: string | null | undefined,
   nickname: string | null | undefined,
@@ -335,11 +365,18 @@ export function contactCelebratesNameday(
 ): boolean {
   const contactFirst = normalizeGreekName(firstName ?? "");
   const contactNick = normalizeGreekName(nickname ?? "");
+  const firstToken = normalizeGreekName((firstName ?? "").trim().split(/\s+/)[0] ?? "");
   if (!contactFirst && !contactNick) return false;
-  return nameDayNames.some((n) => {
-    const norm = normalizeGreekName(n);
-    return norm.length > 0 && (norm === contactFirst || (contactNick.length > 0 && norm === contactNick));
-  });
+  const celebrating = nameDayNames
+    .map((n) => normalizeGreekName(n))
+    .filter((n) => n.length > 0);
+  if (celebrating.length === 0) return false;
+  return celebrating.some(
+    (norm) =>
+      norm === contactFirst ||
+      (firstToken.length > 0 && norm === firstToken) ||
+      (contactNick.length > 0 && norm === contactNick),
+  );
 }
 
 let nameLookupCache: Map<string, NamedayMonthDay> | null = null;
