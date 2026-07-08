@@ -43,7 +43,7 @@ const PAGE_SIZE = 50;
 const FILTERS_WIDTH = 320;
 const STORAGE_FILTERS_OPEN = "crm-contact-search-filters-open";
 const PRINT_FETCH_TIMEOUT_MS = 60_000;
-const PRINT_HEADERS = ["Επώνυμο", "Όνομα", "Πατρώνυμο", "Τηλέφωνο", "Δήμος", "Ομάδες", "Πολιτική στάση"] as const;
+const PRINT_HEADERS = ["Επώνυμο", "Όνομα", "Πατρώνυμο", "Τηλέφωνο", "Δήμος που μένει", "Ομάδες", "Πολιτική στάση"] as const;
 
 type PrintableContactRow = {
   id: string;

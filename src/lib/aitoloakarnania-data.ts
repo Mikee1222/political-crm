@@ -235,3 +235,14 @@ export function getAllSettlementsForMuni(muniName: string | null | undefined) {
   }
   return [...seen].sort((a, b) => a.localeCompare(b, "el"));
 }
+
+/** Every known settlement across all municipalities (toponym without municipality filter). */
+export function getAllSettlements() {
+  const seen = new Set<string>();
+  for (const m of MUNICIPALITIES) {
+    for (const d of m.districts) {
+      for (const s of d.settlements) seen.add(s);
+    }
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b, "el"));
+}

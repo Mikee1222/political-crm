@@ -18,8 +18,9 @@ export type PortalDropdownPosition = { top: number; left: number; width: number 
 /** Above CenteredModal overlay (9998). */
 const PANEL_Z_INDEX = 10000;
 
+/** Outer shell only — consumers own max-height + scroll so overflow-hidden does not clip lists. */
 export const PORTAL_DROPDOWN_PANEL_CLASS =
-  "max-h-64 overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-background py-1 shadow-lg";
+  "overflow-x-hidden rounded-xl border border-border bg-background py-1 shadow-lg";
 
 type UsePortalDropdownOptions = {
   minWidth?: number;

@@ -1958,7 +1958,7 @@ function ContactDetailPage() {
                 {!(canEdit && editing === "electoral" && w)
                   ? (["municipality", "electoral_district", "toponym"] as const).map((k) => {
                       const labels: Record<typeof k, string> = {
-                        municipality: "Δήμος",
+                        municipality: "Δήμος που μένει",
                         electoral_district: "Εκλογικό διαμέρισμα",
                         toponym: "Τοπωνύμιο/χωριό",
                       };

@@ -211,7 +211,7 @@ export function ContactSearchCombobox({
             pos={pos}
             panelRef={panelRef}
             onMouseDown={(e) => e.preventDefault()}
-            className="max-h-52 border border-border bg-background py-1 text-sm shadow-xl"
+            className="max-h-52 overflow-y-auto border border-border bg-background py-1 text-sm shadow-xl"
           >
             <ul id={listId + "list"} className="m-0 list-none p-0">
               {loading && (

@@ -669,7 +669,7 @@ export default function CampaignsPage() {
                   </HqSelect>
                 </div>
                 <div>
-                  <label className={lux.label} htmlFor="c-mun">Δήμος (περίπου)</label>
+                  <label className={lux.label} htmlFor="c-mun">Δήμος που μένει (περίπου)</label>
                   <HqSelect
                     id="c-mun"
                     className="!min-h-11 !text-base"

@@ -8,6 +8,34 @@ export const dynamic = "force-dynamic";
 
 export type MunicipalityWithCountRow = MunicipalityRow & { contact_count: number };
 
+async function loadAllMunicipalityNames(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+): Promise<{ names: string[]; countByName: Map<string, number> }> {
+  const [{ data: registry }, { data: counts }] = await Promise.all([
+    supabase.from("municipalities").select("name").order("name", { ascending: true }),
+    supabase.rpc("get_contact_municipality_counts"),
+  ]);
+
+  const countByName = new Map<string, number>();
+  for (const row of (counts as { name?: string; contact_count?: number | string }[] | null) ?? []) {
+    const n = String(row.name ?? "").trim();
+    if (n) countByName.set(n, Number(row.contact_count ?? 0));
+  }
+
+  const names = new Set<string>();
+  for (const row of (registry as { name?: string }[] | null) ?? []) {
+    const n = String(row.name ?? "").trim();
+    if (n) names.add(n);
+  }
+  for (const n of countByName.keys()) names.add(n);
+
+  return {
+    names: [...names].sort((a, b) => a.localeCompare(b, "el")),
+    countByName,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const withCounts = request.nextUrl.searchParams.get("with_counts") === "1";
 
@@ -17,23 +45,14 @@ export async function GET(request: NextRequest) {
       if (!crm.allowed) return crm.response;
       const { supabase } = crm;
 
-      const { data: counts, error } = await supabase.rpc("get_contact_municipality_counts");
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-
-      const municipalities: MunicipalityWithCountRow[] = (
-        (counts as { name?: string; contact_count?: number | string }[] | null) ?? []
-      ).map((row) => {
-        const name = String(row.name ?? "").trim();
-        return {
-          id: name,
-          name,
-          regional_unit: null,
-          created_at: "",
-          contact_count: Number(row.contact_count ?? 0),
-        };
-      });
+      const { names, countByName } = await loadAllMunicipalityNames(supabase);
+      const municipalities: MunicipalityWithCountRow[] = names.map((name) => ({
+        id: name,
+        name,
+        regional_unit: null,
+        created_at: "",
+        contact_count: countByName.get(name) ?? 0,
+      }));
 
       return NextResponse.json({ municipalities });
     } catch (e) {
@@ -42,19 +61,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const supabase = await createClient();
-
-  const { data, error } = await supabase.rpc("get_contact_municipality_counts");
-
-  if (error) {
+  try {
+    const supabase = await createClient();
+    const { names } = await loadAllMunicipalityNames(supabase);
+    return NextResponse.json(names);
+  } catch (e) {
+    console.error("[api/municipalities GET]", e);
     return NextResponse.json([]);
   }
-
-  const municipalities = (
-    (data as { name?: string }[] | null) ?? []
-  )
-    .map((r) => String(r.name ?? "").trim())
-    .filter(Boolean);
-
-  return NextResponse.json(municipalities);
 }

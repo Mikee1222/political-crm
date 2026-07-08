@@ -132,7 +132,7 @@ export function ContactElectoralLocationEdit({
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <span className={labelClassName}>Δήμος</span>
+        <span className={labelClassName}>Δήμος που μένει</span>
         <SearchableSelect
           className={inputClassName + " !pr-9"}
           value={muni}
@@ -140,7 +140,6 @@ export function ContactElectoralLocationEdit({
             patch({
               municipality: v || null,
               electoral_district: null,
-              toponym: null,
             })
           }
           options={municipalityOptions.map((name) => ({ value: name, label: name }))}
@@ -159,7 +158,6 @@ export function ContactElectoralLocationEdit({
             onChange={(e) =>
               patch({
                 electoral_district: e.target.value || null,
-                toponym: null,
               })
             }
           >
@@ -180,7 +178,6 @@ export function ContactElectoralLocationEdit({
             onChange={(e) =>
               patch({
                 electoral_district: e.target.value || null,
-                toponym: null,
               })
             }
           />
@@ -192,16 +189,15 @@ export function ContactElectoralLocationEdit({
         <SearchableSelect
           className={inputClassName + " !pr-9"}
           value={top}
-          disabled={!muni}
           onChange={(v) => patch({ toponym: v || null })}
           options={toponymOptions.map((name) => ({ value: name, label: name }))}
-          placeholder={muni ? "Επιλέξτε τοπωνύμιο" : "Πρώτα επιλέξτε δήμο"}
+          placeholder="Επιλέξτε τοπωνύμιο"
           searchPlaceholder="Αναζήτηση τοπωνυμίου..."
           emptyText="Δεν βρέθηκαν τοπωνύμια"
         />
         {toponymNames.length > 0 && top && !toponymNames.includes(top.trim()) ? (
           <p className="text-[11px] text-[var(--text-muted)]">
-            Τρέχουσα τιμή εκτός λίστας - επιλέξτε από τη λίστα ή αλλάξτε δήμο.
+            Τρέχουσα τιμή εκτός λίστας — μπορείτε να επιλέξετε άλλο τοπωνύμιο από τη λίστα.
           </p>
         ) : null}
       </div>

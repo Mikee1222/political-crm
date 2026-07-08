@@ -152,7 +152,7 @@ export function SearchableSelect({
         panelRef={panelRef}
         role="listbox"
         onMouseDown={(e) => e.stopPropagation()}
-        className="overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+        className="rounded-2xl border border-border bg-background shadow-2xl"
       >
         <div className="border-b border-border/60 p-3">
           <div className="relative">

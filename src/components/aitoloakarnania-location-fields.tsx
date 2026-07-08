@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { ChevronDown, Search } from "lucide-react";
 import {
   MUNICIPALITIES,
+  getAllSettlements,
   getAllSettlementsForMuni,
   getDistrictsForMuni,
-  getMuniByName,
   getSettlements,
 } from "@/lib/aitoloakarnania-data";
 import { lux } from "@/lib/luxury-styles";
@@ -111,7 +111,7 @@ function SearchableSelect({
           pos={pos}
           panelRef={panelRef}
           role="listbox"
-          className="overflow-hidden rounded-lg border-2 border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-background p-0 shadow-[var(--card-shadow)]"
+          className="rounded-lg border-2 border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-background p-0 shadow-[var(--card-shadow)]"
         >
           <div className="flex items-center gap-2 border-b border-[var(--border)] px-2 py-1.5">
             <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
@@ -180,7 +180,6 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
     MUNICIPALITIES.map((x) => x.name),
     muni,
   ), [muni]);
-  const muniData = getMuniByName(muni);
 
   const distList = useMemo(() => {
     return withLegacyOption(
@@ -189,25 +188,33 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
     );
   }, [muni, dist]);
 
-  const settlements = useMemo(
-    () => (dist ? getSettlements(muni, dist) : getAllSettlementsForMuni(muni)),
-    [muni, dist],
-  );
+  const preferredSettlements = useMemo(() => {
+    if (dist) return getSettlements(muni, dist);
+    if (muni) return getAllSettlementsForMuni(muni);
+    return [] as string[];
+  }, [muni, dist]);
+  const allSettlements = useMemo(() => getAllSettlements(), []);
+  const settlements = useMemo(() => {
+    if (preferredSettlements.length === 0) return allSettlements;
+    const preferredSet = new Set(preferredSettlements);
+    const rest = allSettlements.filter((s) => !preferredSet.has(s));
+    return [...preferredSettlements, ...rest];
+  }, [preferredSettlements, allSettlements]);
   const inSettlementList = Boolean(top && settlements.includes(top));
   const settlementList = useMemo(
-    () => (settlements.length > 0 ? [...settlements, OTHER_SETTLEMENT_LABEL] : []),
+    () => [...settlements, OTHER_SETTLEMENT_LABEL],
     [settlements],
   );
 
   const [otherPicked, setOtherPicked] = useState(false);
   useEffect(() => {
-    if (muniData && top && !settlements.includes(top)) {
+    if (top && !settlements.includes(top)) {
       setOtherPicked(true);
     }
     if (inSettlementList) {
       setOtherPicked(false);
     }
-  }, [muniData, dist, top, settlements, inSettlementList]);
+  }, [dist, top, settlements, inSettlementList]);
 
   const handleSettlementPick = useCallback(
     (picked: string) => {
@@ -223,25 +230,24 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
   );
 
   const toponymSelectValue = useMemo(() => {
-    if (!muniData) return "";
     if (inSettlementList) return top;
     if (otherPicked && !top) return OTHER_SETTLEMENT_LABEL;
     if (top && !inSettlementList) return top;
     if (otherPicked) return OTHER_SETTLEMENT_LABEL;
     return "";
-  }, [muniData, top, inSettlementList, otherPicked]);
+  }, [top, inSettlementList, otherPicked]);
 
   const showToponymCustomInput = Boolean(
-    muniData && settlementList.length > 0 && (otherPicked || (top.length > 0 && !inSettlementList)),
+    otherPicked || (top.length > 0 && !inSettlementList),
   );
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <SearchableSelect
         id="ait-muni"
-        label="Δήμος"
+        label="Δήμος που μένει"
         value={muni}
-        onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: null })}
+        onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: values.toponym })}
         options={muniList}
         error={errorMunicipality}
         placeholder="Επιλέξτε δήμο"
@@ -252,40 +258,22 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
         id="ait-dist"
         label="Εκλογικό διαμέρισμα"
         value={dist}
-        onChange={(v) => onChange({ ...values, electoral_district: v, toponym: null })}
+        onChange={(v) => onChange({ ...values, electoral_district: v })}
         options={distList}
         disabled={!muni}
         placeholder={muni ? "Επιλέξτε ενότητα" : "Πρώτα δήμος"}
         emptyMessage="Καμία ενότητα"
       />
 
-      {muniData && settlements.length > 0 && (
-        <SearchableSelect
-          id="ait-top"
-          label="Τοπωνύμιο / χωριό"
-          value={toponymSelectValue}
-          onChange={handleSettlementPick}
-          options={settlementList}
-          disabled={!muni}
-          placeholder="Επιλέξτε οικισμό"
-          emptyMessage="Δοκιμάστε φίλτρο"
-        />
-      )}
-
-      {muniData && settlements.length === 0 && (
-        <div>
-          <label htmlFor="ait-top-fallback" className={lux.label}>
-            Τοπωνύμιο / χωριό
-          </label>
-          <input
-            id="ait-top-fallback"
-            className={lux.input}
-            value={top}
-            onChange={(e) => onChange({ ...values, toponym: e.target.value || null })}
-            placeholder="Χειροκίνητα (ασυνήθιστο εκλ. διαμέρισμα)"
-          />
-        </div>
-      )}
+      <SearchableSelect
+        id="ait-top"
+        label="Τοπωνύμιο / χωριό"
+        value={toponymSelectValue}
+        onChange={handleSettlementPick}
+        options={settlementList}
+        placeholder="Επιλέξτε οικισμό"
+        emptyMessage="Δοκιμάστε φίλτρο"
+      />
 
       {showToponymCustomInput && (
         <div>
@@ -313,7 +301,8 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   const [municipalityNames, setMunicipalityNames] = useState<string[]>([]);
   const [geoMunicipalities, setGeoMunicipalities] = useState<MunicipalityRow[]>([]);
   const [districts, setDistricts] = useState<ElectoralDistrictRow[]>([]);
-  const [toponymRows, setToponymRows] = useState<ToponymRow[]>([]);
+  const [allToponymNames, setAllToponymNames] = useState<string[]>([]);
+  const [filteredToponymRows, setFilteredToponymRows] = useState<ToponymRow[]>([]);
 
   const muniId = useMemo(() => geoMunicipalities.find((x) => x.name === muni)?.id ?? null, [geoMunicipalities, muni]);
   const distId = useMemo(() => districts.find((x) => x.name === dist)?.id ?? null, [districts, dist]);
@@ -347,6 +336,25 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   }, []);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetchWithTimeout("/api/toponyms");
+        if (!r.ok) {
+          setAllToponymNames([]);
+          return;
+        }
+        const d = (await r.json()) as { id: string; name: string }[];
+        const names = Array.isArray(d)
+          ? d.map((t) => t.name.trim()).filter((n) => n.length > 2)
+          : [];
+        setAllToponymNames([...new Set(names)].sort((a, b) => a.localeCompare(b, "el")));
+      } catch {
+        setAllToponymNames([]);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     if (!muniId) {
       setDistricts([]);
       return;
@@ -364,7 +372,7 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
 
   useEffect(() => {
     if (!muniId) {
-      setToponymRows([]);
+      setFilteredToponymRows([]);
       return;
     }
     void (async () => {
@@ -373,9 +381,9 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
       const r = await fetchWithTimeout(`/api/geo/toponyms?${q.toString()}`);
       if (r.ok) {
         const d = (await r.json()) as { toponyms?: ToponymRow[] };
-        setToponymRows(d.toponyms ?? []);
+        setFilteredToponymRows(d.toponyms ?? []);
       } else {
-        setToponymRows([]);
+        setFilteredToponymRows([]);
       }
     })();
   }, [muniId, distId]);
@@ -388,20 +396,27 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
 
   const distNameList = useMemo(() => withLegacyOption(districts.map((d) => d.name), dist), [districts, dist]);
 
-  const settlementNames = useMemo(() => toponymRows.map((t) => t.name), [toponymRows]);
+  const settlementNames = useMemo(() => {
+    const preferred = filteredToponymRows.map((t) => t.name);
+    if (preferred.length === 0) return withLegacyOption(allToponymNames, top);
+    const preferredSet = new Set(preferred);
+    const rest = allToponymNames.filter((n) => !preferredSet.has(n));
+    return withLegacyOption([...preferred, ...rest], top);
+  }, [filteredToponymRows, allToponymNames, top]);
+
   const inTopList = Boolean(top && settlementNames.includes(top));
   const settlementList = useMemo(
-    () => (muniInDb && settlementNames.length > 0 ? [...settlementNames, OTHER_SETTLEMENT_LABEL] : []),
-    [muniInDb, settlementNames],
+    () => [...settlementNames, OTHER_SETTLEMENT_LABEL],
+    [settlementNames],
   );
 
   const [otherPicked, setOtherPicked] = useState(false);
   useEffect(() => {
-    if (muniInDb && dist && top && !settlementNames.includes(top)) {
+    if (top && !settlementNames.includes(top)) {
       setOtherPicked(true);
     }
     if (inTopList) setOtherPicked(false);
-  }, [muniInDb, dist, top, settlementNames, inTopList]);
+  }, [dist, top, settlementNames, inTopList]);
 
   const handleTopPick = useCallback(
     (picked: string) => {
@@ -417,27 +432,23 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   );
 
   const toponymSelectValue = useMemo(() => {
-    if (!muniInDb) return "";
     if (inTopList) return top;
     if (otherPicked && !top) return OTHER_SETTLEMENT_LABEL;
     if (top && !inTopList) return top;
     if (otherPicked) return OTHER_SETTLEMENT_LABEL;
     return "";
-  }, [muniInDb, top, inTopList, otherPicked]);
+  }, [top, inTopList, otherPicked]);
 
-  const showToponymCustom = Boolean(
-    muniInDb && settlementList.length > 0 && (otherPicked || (top.length > 0 && !inTopList)),
-  );
+  const showToponymCustom = Boolean(otherPicked || (top.length > 0 && !inTopList));
   const showDistFree = muniInDb && districts.length === 0;
-  const showTopFree = muniInDb && toponymRows.length === 0;
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <SearchableSelect
         id="ait-muni-api"
-        label="Δήμος"
+        label="Δήμος που μένει"
         value={muni}
-        onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: null })}
+        onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: values.toponym })}
         options={muniList}
         error={errorMunicipality}
         placeholder="Επιλέξτε δήμο"
@@ -453,7 +464,7 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
             id="ait-dist-free"
             className={lux.input}
             value={dist}
-            onChange={(e) => onChange({ ...values, electoral_district: e.target.value || null, toponym: null })}
+            onChange={(e) => onChange({ ...values, electoral_district: e.target.value || null })}
             disabled={!muni}
             placeholder="Χειροκίνητα (χωρίς εγγεγραμμένα τμήματα)"
           />
@@ -463,7 +474,7 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
           id="ait-dist-api"
           label="Εκλογικό διαμέρισμα"
           value={dist}
-          onChange={(v) => onChange({ ...values, electoral_district: v, toponym: null })}
+          onChange={(v) => onChange({ ...values, electoral_district: v })}
           options={distNameList}
           disabled={!muni}
           placeholder={muni ? "Επιλέξτε τμήμα" : "Πρώτα δήμος"}
@@ -471,35 +482,17 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
         />
       )}
 
-      {muniInDb && settlementList.length > 0 && (
-        <SearchableSelect
-          id="ait-top-api"
-          label="Τοπωνύμιο / χωριό"
-          value={toponymSelectValue}
-          onChange={handleTopPick}
-          options={settlementList}
-          disabled={!muni}
-          placeholder="Επιλέξτε οικισμό"
-          emptyMessage="Δοκιμάστε φίλτρο"
-        />
-      )}
+      <SearchableSelect
+        id="ait-top-api"
+        label="Τοπωνύμιο / χωριό"
+        value={toponymSelectValue}
+        onChange={handleTopPick}
+        options={settlementList}
+        placeholder="Επιλέξτε οικισμό"
+        emptyMessage="Δοκιμάστε φίλτρο"
+      />
 
-      {muniInDb && showTopFree && !showDistFree && (
-        <div>
-          <label htmlFor="ait-top-api-f" className={lux.label}>
-            Τοπωνύμιο / χωριό
-          </label>
-          <input
-            id="ait-top-api-f"
-            className={lux.input}
-            value={top}
-            onChange={(e) => onChange({ ...values, toponym: e.target.value || null })}
-            placeholder="Χειροκίνητα (αδιάθετα τοπωνύμια στη βάση)"
-          />
-        </div>
-      )}
-
-      {showToponymCustom && !showTopFree && (
+      {showToponymCustom && (
         <div>
           <label htmlFor="ait-top-free-api" className={lux.label}>
             {otherPicked ? "Χειροκίνητη εισαγωγή" : "Τοπωνύμιο (εκτός λίστας)"}

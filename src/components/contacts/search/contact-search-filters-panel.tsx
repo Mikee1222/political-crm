@@ -243,9 +243,9 @@ export function ContactSearchFiltersPanel({
           </label>
         </FilterSection>
 
-        <FilterSection title="Τοπωνύμιο & Δήμος" icon={MapPin}>
+        <FilterSection title="Τοπωνύμιο & Δήμος που μένει" icon={MapPin}>
           <div>
-            <label className={filterLabelClass}>Δήμος</label>
+            <label className={filterLabelClass}>Δήμος που μένει</label>
             <SearchableMultiSelect
               options={municipalities.map((name) => ({ value: name, label: name }))}
               values={draft.municipalities}

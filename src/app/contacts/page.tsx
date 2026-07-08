@@ -1263,7 +1263,7 @@ function ContactsPage() {
           </div>
           <div className="min-w-0 w-full sm:w-auto sm:min-w-[10rem]">
             <label className={lux.label} htmlFor="f-muni">
-              Δήμος
+              Δήμος που μένει
             </label>
             <HqSelect
               id="f-muni"

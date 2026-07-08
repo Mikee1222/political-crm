@@ -39,7 +39,7 @@ export function buildContactSearchFilterChips(
   if (ageKey) push("age", `Ηλικία: ${CONTACT_SEARCH_AGE_GROUPS[ageKey]!.label}`);
   if (f.birthday_today) push("birthday_today", "Γενέθλια σήμερα");
   if (f.nameday_today) push("nameday_today", "Ονομαστική σήμερα");
-  f.municipalities.forEach((name) => push(`muni:${name}`, `Δήμος: ${name}`));
+  f.municipalities.forEach((name) => push(`muni:${name}`, `Δήμος που μένει: ${name}`));
   f.toponyms.forEach((name) => push(`top:${name}`, `Τοπωνύμιο: ${name}`));
   if (f.phone) push("phone", `Τηλ.: ${f.phone}`);
   if (f.mobile_presence) push("mobile_presence", `Κινητό: ${labelFor(PRESENCE_OPTIONS, f.mobile_presence)}`);

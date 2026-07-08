@@ -492,7 +492,7 @@ export function summarizeContactFilters(f: ContactListFilters, groupNames: Map<s
   } else if (f.call_status) {
     parts.push(STATUS_LABEL[f.call_status] ?? f.call_status);
   }
-  if (f.municipalities.length) parts.push(`Δήμοι: ${f.municipalities.join(", ")}`);
+  if (f.municipalities.length) parts.push(`Δήμος που μένει: ${f.municipalities.join(", ")}`);
   if (f.toponyms.length) parts.push(`Τοπωνύμια: ${f.toponyms.join(", ")}`);
   f.group_ids.forEach((id) => parts.push(`Ομάδα: ${groupNames.get(id) ?? id}`));
   f.exclude_group_ids.forEach((id) => parts.push(`Χωρίς: ${groupNames.get(id) ?? id}`));

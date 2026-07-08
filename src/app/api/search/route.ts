@@ -175,7 +175,7 @@ function contactFieldReasons(
     }
   }
   if (hasQ(row.municipality as string | null, raw)) {
-    reasons.push(`Δήμος: «${String(row.municipality)}»`);
+    reasons.push(`Δήμος που μένει: «${String(row.municipality)}»`);
   }
   if (hasQ(row.area as string | null, raw)) {
     reasons.push(`Περιοχή: «${String(row.area)}»`);
