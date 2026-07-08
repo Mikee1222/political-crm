@@ -43,35 +43,32 @@ function jsonUtf8Error(error: string, status: number): Response {
   });
 }
 
-function normalizeExportSearchParams(sp: URLSearchParams): URLSearchParams {
-  const normalized = new URLSearchParams(sp.toString());
-  const mergeCsv = (key: string, aliases: string[]) => {
-    const values: string[] = [];
-    for (const alias of aliases) {
-      for (const raw of sp.getAll(alias)) {
+/** Normalize a query list param that may arrive as repeated keys or a CSV string. */
+function getListParam(sp: URLSearchParams, key: string, aliases: string[] = []): string[] {
+  const keys = [key, `${key}[]`, ...aliases];
+  const collected: string[] = [];
+  for (const k of keys) {
+    const all = sp.getAll(k);
+    if (all.length > 0) {
+      for (const raw of all) {
         if (!raw?.trim()) continue;
-        values.push(...raw.split(",").map((x) => x.trim()).filter(Boolean));
+        collected.push(...raw.split(",").map((x) => x.trim()).filter(Boolean));
       }
+      continue;
     }
-    if (values.length) {
-      normalized.set(key, [...new Set(values)].join(","));
+    const single = sp.get(k);
+    if (single?.trim()) {
+      collected.push(...single.split(",").map((x) => x.trim()).filter(Boolean));
     }
-  };
+  }
+  return [...new Set(collected)];
+}
 
-  mergeCsv("group_ids", ["group_ids", "group_ids[]", "groups_include", "groups_include[]"]);
-  mergeCsv("exclude_group_ids", [
-    "exclude_group_ids",
-    "exclude_group_ids[]",
-    "groups_exclude",
-    "groups_exclude[]",
-  ]);
-  mergeCsv("source_ids", ["source_ids", "source_ids[]"]);
-  mergeCsv("exclude_source_ids", ["exclude_source_ids", "exclude_source_ids[]"]);
-  mergeCsv("municipalities", ["municipalities", "municipalities[]", "municipality"]);
-  mergeCsv("toponyms", ["toponyms", "toponyms[]", "toponym"]);
-  mergeCsv("call_statuses", ["call_statuses", "call_statuses[]", "call_status_in"]);
-
-  return normalized;
+/** Write normalized arrays back onto URLSearchParams so downstream parsers always see arrays/CSV cleanly. */
+function setListParam(sp: URLSearchParams, key: string, values: string[]) {
+  sp.delete(key);
+  sp.delete(`${key}[]`);
+  for (const v of values) sp.append(key, v);
 }
 
 const SELECT_EXPORT =
@@ -79,6 +76,48 @@ const SELECT_EXPORT =
 
 export async function GET(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams;
+
+    // Normalize ALL list params to arrays BEFORE any other logic (string vs array mismatch).
+    const municipalities = getListParam(searchParams, "municipalities", ["municipality"]);
+    const toponyms = getListParam(searchParams, "toponyms", ["toponym"]);
+    const call_statuses = getListParam(searchParams, "call_statuses", ["call_status_in"]);
+    const source_ids = getListParam(searchParams, "source_ids");
+    const exclude_source_ids = getListParam(searchParams, "exclude_source_ids");
+    const group_ids = getListParam(searchParams, "group_ids", ["groups_include"]);
+    const exclude_group_ids = getListParam(searchParams, "exclude_group_ids", ["groups_exclude"]);
+    const tags = getListParam(searchParams, "tags", ["tag"]);
+    const political_stances = getListParam(searchParams, "political_stances", ["political_stance"]);
+
+    console.log("[api/contacts/export parsed]", {
+      municipalities,
+      toponyms,
+      call_statuses,
+      source_ids,
+      exclude_source_ids,
+      group_ids,
+      exclude_group_ids,
+      tags,
+      political_stances,
+    });
+
+    const sp = new URLSearchParams(searchParams.toString());
+    setListParam(sp, "municipalities", municipalities);
+    setListParam(sp, "toponyms", toponyms);
+    setListParam(sp, "call_statuses", call_statuses);
+    setListParam(sp, "source_ids", source_ids);
+    setListParam(sp, "exclude_source_ids", exclude_source_ids);
+    setListParam(sp, "group_ids", group_ids);
+    setListParam(sp, "exclude_group_ids", exclude_group_ids);
+    if (tags.length) {
+      sp.delete("tag");
+      sp.set("tag", tags[0]!);
+    }
+    if (political_stances.length) {
+      sp.delete("political_stance");
+      sp.set("political_stance", political_stances[0]!);
+    }
+
     const crm = await checkCRMAccess();
     if (!crm.allowed) {
       return jsonUtf8Error("Μη εξουσιοδοτημένη πρόσβαση.", crm.response.status);
@@ -88,7 +127,6 @@ export async function GET(request: NextRequest) {
       return jsonUtf8Error("Δεν έχετε δικαίωμα εξαγωγής επαφών.", 403);
     }
 
-    const sp = normalizeExportSearchParams(request.nextUrl.searchParams);
     const idsParam = sp.get("ids");
     const format = sp.get("format");
     const filtered = sp.get("filters") === "1" || sp.get("filtered") === "1";
@@ -97,18 +135,24 @@ export async function GET(request: NextRequest) {
       searchParamsToFilters(sp, getDefaultContactFilters()),
     );
 
-    const fullParams: Record<string, string | string[]> = {};
-    for (const key of [...new Set([...sp.keys()])]) {
-      const values = sp.getAll(key);
-      fullParams[key] = values.length > 1 ? values : (values[0] ?? "");
-    }
+    // Ensure filter object uses the normalized arrays (never raw string params).
+    f.municipalities = municipalities;
+    f.toponyms = toponyms;
+    if (call_statuses.length) f.call_statuses = call_statuses;
+    f.source_ids = source_ids;
+    f.exclude_source_ids = exclude_source_ids;
+    f.group_ids = group_ids;
+    f.exclude_group_ids = exclude_group_ids;
+    if (tags.length && !f.tag) f.tag = tags[0]!;
+    if (political_stances.length && !f.political_stance) f.political_stance = political_stances[0]!;
+
     console.info(
       "[api/contacts/export request]",
       JSON.stringify({
         format: format ?? "xlsx",
         filtered,
         has_ids: Boolean(idsParam?.trim()),
-        incoming_params: fullParams,
+        municipalities_count: f.municipalities.length,
         group_ids_count: f.group_ids.length,
         exclude_group_ids_count: f.exclude_group_ids.length,
         source_ids_count: f.source_ids.length,
