@@ -10,7 +10,8 @@
     "start:retell-llm-ws": "NODE_ENV=production tsx server.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.mts",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "prepare": "husky"
   },
   "dependencies": {

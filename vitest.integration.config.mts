@@ -7,8 +7,9 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
-    exclude: ["src/**/*.integration.test.ts", "src/lib/contacts-filter-combinations.test.ts"],
+    include: ["src/**/*.integration.test.ts", "src/lib/contacts-filter-combinations.test.ts"],
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   resolve: { alias: { "@": path.resolve(dir, "src") } },
 });

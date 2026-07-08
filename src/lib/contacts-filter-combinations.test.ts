@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it, beforeAll } from "vitest";
+import { describe, expect, it, beforeAll, vi } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getDefaultContactFilters, type ContactListFilters } from "@/lib/contacts-filters";
 import { contactMatchesFuzzyGreekSearch } from "@/lib/greek-fuzzy-name";
@@ -28,6 +28,8 @@ function loadLocalEnv(): void {
 }
 
 loadLocalEnv();
+
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -192,7 +194,7 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
       sampleMunicipality: String(sampleContact.municipality),
       sampleGender: String(sampleContact.gender),
     };
-  }, 120_000);
+  });
 
   const cases: Array<{
     label: string;
@@ -300,7 +302,6 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           expect(api.plan.path).toBe("in-memory");
         }
       },
-      180_000,
     );
   }
 
@@ -317,6 +318,5 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
       const expected = await baselineContactCount(ctx.supabase, f, false);
       expect(api.total).toBe(expected);
     },
-    180_000,
   );
 });
