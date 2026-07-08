@@ -47,6 +47,10 @@ import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-d
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 import { getClientTtlCache, setClientTtlCache } from "@/lib/ttl-cache";
+import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
+
+const SEARCH_DEBOUNCE_MS = 300;
+const SLOW_SEARCH_MS = 500;
 
 const REQUESTS_LIST_CLIENT_TTL_MS = 30_000;
 const REQUESTS_COUNTS_CLIENT_TTL_MS = 30_000;
@@ -149,6 +153,7 @@ export default function RequestsPage() {
   const [f, setF] = useState<RequestFilters>(DEFAULT_FILTERS);
   const [rows, setRows] = useState<RequestRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
+  const [slowSearch, setSlowSearch] = useState(false);
   const [listTotal, setListTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [statusCounts, setStatusCounts] = useState<Array<{ status: string; count: number }>>([]);
@@ -207,9 +212,18 @@ export default function RequestsPage() {
     const t = window.setTimeout(() => {
       if (searchQ === f.search) return;
       patch({ search: searchQ });
-    }, 400);
+    }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [searchQ, f.search, patch]);
+
+  useEffect(() => {
+    if (!listLoading) {
+      setSlowSearch(false);
+      return;
+    }
+    const t = window.setTimeout(() => setSlowSearch(true), SLOW_SEARCH_MS);
+    return () => window.clearTimeout(t);
+  }, [listLoading]);
 
   const currentPage = Math.max(1, parseInt(f.page || "1", 10) || 1);
   const hiddenFilterCount = useMemo(() => countActiveHiddenRequestFilters(f), [f]);
@@ -513,7 +527,7 @@ export default function RequestsPage() {
         </div>
       </div>
 
-      {listLoading ? (
+      {listLoading && rows.length === 0 ? (
         <RequestsMobileSkeleton />
       ) : rows.length === 0 ? (
         <EmptyState
@@ -529,25 +543,27 @@ export default function RequestsPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {rows.map((r, i) => (
-            <div
-              key={r.id}
-              className="hq-stagger-item"
-              style={{ ["--stagger" as string]: String(i) }}
-            >
-              <RequestCard
-                r={r}
-                statusColors={statusColors}
-                canQuickComplete={canComplete}
-                canEdit={canEdit}
-                onOpen={() => router.push(`/requests/${r.id}`)}
-                onEdit={() => setSelected(r)}
-                onQuickComplete={handleQuickComplete}
-              />
-            </div>
-          ))}
-        </div>
+        <SearchResultsOverlay active={listLoading} slow={slowSearch}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            {rows.map((r, i) => (
+              <div
+                key={r.id}
+                className="hq-stagger-item"
+                style={{ ["--stagger" as string]: String(i) }}
+              >
+                <RequestCard
+                  r={r}
+                  statusColors={statusColors}
+                  canQuickComplete={canComplete}
+                  canEdit={canEdit}
+                  onOpen={() => router.push(`/requests/${r.id}`)}
+                  onEdit={() => setSelected(r)}
+                  onQuickComplete={handleQuickComplete}
+                />
+              </div>
+            ))}
+          </div>
+        </SearchResultsOverlay>
       )}
 
       {!listLoading && rows.length > 0 && totalPages > 1 ? (

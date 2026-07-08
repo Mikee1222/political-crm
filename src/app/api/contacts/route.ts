@@ -42,6 +42,7 @@ import {
   searchContactsInGroupsFiltered,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
+import { createServerTiming, withServerTimingHeaders } from "@/lib/server-timing";
 export const dynamic = "force-dynamic";
 
 const SELECT_LIST =
@@ -335,6 +336,7 @@ function respondWithContactList(
 }
 
 export async function GET(request: NextRequest) {
+  const timing = createServerTiming();
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
@@ -649,8 +651,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Default list order uses idx_contacts_last_name_first_name (EXPLAIN ANALYZE ~30ms
-    // vs ~1.2s for ORDER BY created_at DESC which forces a seq scan / gather merge).
+    // Default list order uses idx_contacts_last_name_first_name (EXPLAIN ANALYZE ~1ms
+    // Index Scan; RLS is_crm_user() does not force seq scan on this path).
+    // ORDER BY created_at DESC previously forced a seq scan / gather merge (~1.2s).
     let query: QueryBuilder = supabase
       .from("contacts")
       .select(SELECT_LIST, { count: "exact" })
@@ -660,20 +663,35 @@ export async function GET(request: NextRequest) {
 
     if (comboboxMode) {
       query = query.limit(listLimit!);
-      const { data, error } = await query;
+      const first = await timing.time("list", async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result: any = await query;
+        return result as { data: any[] | null; error: any };
+      });
+      const { data, error } = first;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       let rows = data ?? [];
       rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
-      const enriched = await enrichContactsWithGroupCount(supabase, rows);
-      return NextResponse.json({ contacts: enriched.slice(0, listLimit!) });
+      const enriched = await timing.time("enrich", () => enrichContactsWithGroupCount(supabase, rows));
+      return withServerTimingHeaders(
+        NextResponse.json({ contacts: enriched.slice(0, listLimit!) }),
+        timing,
+      );
     }
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     query = query.range(from, to);
-    const { data, error, count } = await query;
+    const pageResult = await timing.time("list", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result: any = await query;
+      return result as { data: any[] | null; error: any; count: number | null };
+    });
+    const { data, error, count } = pageResult;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    const enriched = await enrichContactsWithGroupCount(supabase, data ?? []);
+    const enriched = await timing.time("enrich", () =>
+      enrichContactsWithGroupCount(supabase, data ?? []),
+    );
     if (f.exclude_group_ids.length) {
       debugExcludeGroupFilter("response", {
         path: "sql-paginated",
@@ -684,7 +702,10 @@ export async function GET(request: NextRequest) {
         pageSize,
       });
     }
-    return NextResponse.json({ contacts: enriched, total: count ?? 0, page, pageSize });
+    return withServerTimingHeaders(
+      NextResponse.json({ contacts: enriched, total: count ?? 0, page, pageSize }),
+      timing,
+    );
   } catch (e) {
     console.error("[api/contacts GET]", e);
     return nextJsonError();

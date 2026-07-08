@@ -17,6 +17,7 @@ import { CenteredModal } from "@/components/ui/centered-modal";
 import { FilterSidebarToggle } from "@/components/search/filter-sidebar-toggle";
 import { SearchPagination } from "@/components/search/search-pagination";
 import { SearchResultsHeader } from "@/components/search/search-results-header";
+import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MobileFilterFab } from "@/components/mobile/mobile-filter-fab";
 import { PageHeader } from "@/components/ui/page-header";
@@ -80,6 +81,7 @@ function ContactSearchPageInner() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [slowSearch, setSlowSearch] = useState(false);
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
   const [sources, setSources] = useState<{ id: string; name: string }[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -211,6 +213,15 @@ function ContactSearchPageInner() {
       if (seq === loadSeqRef.current) setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setSlowSearch(false);
+      return;
+    }
+    const t = window.setTimeout(() => setSlowSearch(true), 500);
+    return () => window.clearTimeout(t);
+  }, [loading]);
 
   useEffect(() => {
     if (!hasSearched || !appliedFilters) return;
@@ -631,26 +642,28 @@ function ContactSearchPageInner() {
                 subtitle="Ρυθμίστε τα κριτήρια στα αριστερά και πατήστε «Αναζήτηση»."
                 className="border border-dashed border-[var(--border)] bg-transparent"
               />
-            ) : loading ? (
+            ) : loading && contacts.length === 0 ? (
               <p className="py-12 text-center text-sm text-[var(--text-muted)]">Φόρτωση...</p>
             ) : contacts.length === 0 ? (
               <EmptyState title="Δεν βρέθηκαν επαφές" subtitle="Δοκιμάστε πιο ευρύ φίλτρο." />
             ) : (
-              <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)]">
-                <ul>
-                  {contacts.map((c) => (
-                    <li key={c.id}>
-                      <ContactSearchResultCard
-                        contact={c}
-                        onNavigate={() => router.push(contactHref(c.id))}
-                        onOpenInTab={() =>
-                          openTab(c.id, `${c.first_name} ${c.last_name}`.trim())
-                        }
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <SearchResultsOverlay active={loading} slow={slowSearch}>
+                <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)]">
+                  <ul>
+                    {contacts.map((c) => (
+                      <li key={c.id}>
+                        <ContactSearchResultCard
+                          contact={c}
+                          onNavigate={() => router.push(contactHref(c.id))}
+                          onOpenInTab={() =>
+                            openTab(c.id, `${c.first_name} ${c.last_name}`.trim())
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </SearchResultsOverlay>
             )}
           </div>
 

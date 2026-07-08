@@ -69,9 +69,12 @@ import {
   invalidateClientTtlCache,
 } from "@/lib/ttl-cache";
 import { getMunicipalitiesCached } from "@/lib/geo-lists-cache";
+import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
 
 const CONTACTS_LIST_CLIENT_TTL_MS = 30_000;
 const CONTACTS_META_CLIENT_TTL_MS = 60_000;
+const SEARCH_DEBOUNCE_MS = 300;
+const SLOW_SEARCH_MS = 500;
 
 type Contact = {
   id: string;
@@ -801,9 +804,11 @@ function ContactsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [f, setF] = useState<ContactListFilters>(getDefaultContactFilters);
+  const [searchInput, setSearchInput] = useState(() => getDefaultContactFilters().search);
   const [ageGroup, setAgeGroup] = useState<string>("");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [listLoading, setListLoading] = useState(true);
+  const [slowSearch, setSlowSearch] = useState(false);
   const [listTotal, setListTotal] = useState(0);
   const pageSize = 50;
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
@@ -894,7 +899,9 @@ function ContactsPage() {
   useLayoutEffect(() => {
     if (filtersUrlKeyRef.current === searchKey) return;
     filtersUrlKeyRef.current = searchKey;
-    setF(searchParamsToFilters(new URLSearchParams(searchKey), getDefaultContactFilters()));
+    const next = searchParamsToFilters(new URLSearchParams(searchKey), getDefaultContactFilters());
+    setF(next);
+    setSearchInput(next.search);
   }, [searchKey]);
 
   useEffect(() => {
@@ -904,6 +911,24 @@ function ContactsPage() {
       )?.[0] ?? "";
     setAgeGroup(nextAgeGroup);
   }, [f.age_min, f.age_max]);
+
+  // Debounce name/free-text search so we do not refetch on every keystroke.
+  useEffect(() => {
+    if (searchInput === f.search) return;
+    const t = window.setTimeout(() => {
+      patch({ search: searchInput });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [searchInput, f.search, patch]);
+
+  useEffect(() => {
+    if (!listLoading) {
+      setSlowSearch(false);
+      return;
+    }
+    const t = window.setTimeout(() => setSlowSearch(true), SLOW_SEARCH_MS);
+    return () => window.clearTimeout(t);
+  }, [listLoading]);
 
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
@@ -941,6 +966,7 @@ function ContactsPage() {
       return;
     }
     const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+    // Optimistic: keep previous rows visible; only blank on hard error.
     setListLoading(true);
     try {
       const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`, {
@@ -1324,8 +1350,8 @@ function ContactsPage() {
                   (activeFilterPillCount > 0 ? "pr-28 sm:pr-32" : "pr-4")
                 }
                 placeholder="Αναζήτηση επαφής, αριθμού, δήμου..."
-                value={f.search}
-                onChange={(e) => patch({ search: e.target.value })}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 autoComplete="off"
               />
               {activeFilterPillCount > 0 ? (
@@ -1428,10 +1454,11 @@ function ContactsPage() {
         </div>
       </div>
 
-      {listLoading ? (
+      {listLoading && contacts.length === 0 ? (
         <ContactsMobileSkeleton />
       ) : contacts.length > 0 ? (
-        <div className="md:hidden">
+        <SearchResultsOverlay active={listLoading} slow={slowSearch} className="md:hidden">
+          <div>
           {mobileSelectMode ? (
             <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2">
               <p className="text-xs font-medium text-[var(--text-secondary)]">Επιλογή επαφών</p>
@@ -1473,7 +1500,8 @@ function ContactsPage() {
               </li>
             ))}
           </ul>
-        </div>
+          </div>
+        </SearchResultsOverlay>
       ) : (
         <div className="md:hidden">
           <EmptyState
@@ -1492,9 +1520,16 @@ function ContactsPage() {
         </div>
       )}
 
+      <SearchResultsOverlay
+        active={listLoading && contacts.length > 0}
+        slow={slowSearch}
+        className={cn(
+          "hidden min-h-0 w-full min-w-0 max-w-full md:block",
+        )}
+      >
       <div
         className={cn(
-          "relative hidden min-h-0 w-full min-w-0 max-w-full overflow-y-auto rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-secondary)_55%,var(--bg-card))] p-3 md:block",
+          "relative min-h-0 w-full min-w-0 max-w-full overflow-y-auto rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-secondary)_55%,var(--bg-card))] p-3",
           focusMode ? "max-h-none flex-1" : "max-h-[min(70vh,900px)]",
         )}
       >
@@ -1543,10 +1578,14 @@ function ContactsPage() {
             />
           ))}
         </div>
+        {contacts.length === 0 && listLoading ? (
+          <p className="p-8 text-center text-sm text-[var(--text-muted)]">Φόρτωση...</p>
+        ) : null}
         {contacts.length === 0 && !listLoading ? (
           <p className="p-8 text-center text-sm text-[var(--text-muted)]">Δεν βρέθηκαν επαφές</p>
         ) : null}
       </div>
+      </SearchResultsOverlay>
 
       {listTotal > 0 && (
         <div className="flex w-full min-w-0 max-w-full flex-col items-stretch justify-between gap-3 border-t border-[var(--border)]/60 pt-4 sm:flex-row sm:items-center">

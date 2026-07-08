@@ -2,7 +2,7 @@
 
 import { Filter, SlidersHorizontal, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import {
   buildRequestSearchFilterChips,
@@ -16,6 +16,7 @@ import {
 import { FilterSidebarToggle } from "@/components/search/filter-sidebar-toggle";
 import { SearchPagination } from "@/components/search/search-pagination";
 import { SearchResultsHeader } from "@/components/search/search-results-header";
+import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
 import { MobileFilterFab } from "@/components/mobile/mobile-filter-fab";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils";
 const PAGE_SIZE = 50;
 const FILTERS_WIDTH = 320;
 const STORAGE_FILTERS_OPEN = "crm-request-search-filters-open";
+const SLOW_SEARCH_MS = 500;
 
 function RequestSearchPageInner() {
   const router = useRouter();
@@ -48,11 +50,13 @@ function RequestSearchPageInner() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [slowSearch, setSlowSearch] = useState(false);
   const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
   const [assignees, setAssignees] = useState<{ id: string; full_name: string | null }[]>([]);
   const [unlinkedHandlers, setUnlinkedHandlers] = useState<UnlinkedLegacyName[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -112,16 +116,20 @@ function RequestSearchPageInner() {
   }, [syncFromUrl]);
 
   const loadResults = useCallback(async (f: RequestListFilters, pageNum: number) => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const params = requestFiltersToSearchParams({ ...f, page: String(pageNum) });
       params.set("page_size", String(PAGE_SIZE));
+      // Skip redundant status-count fan-out on advanced search; list already has count.
+      params.set("skip_counts", "1");
       const res = await fetchWithTimeout(`/api/requests?${params.toString()}`);
       const data = (await res.json().catch(() => ({}))) as {
         data?: RequestSearchResult[];
         requests?: RequestSearchResult[];
         count?: number;
       };
+      if (seq !== loadSeqRef.current) return;
       if (!res.ok) {
         setRequests([]);
         setTotal(0);
@@ -131,12 +139,22 @@ function RequestSearchPageInner() {
       setRequests(list);
       setTotal(typeof data.count === "number" ? data.count : list.length);
     } catch {
+      if (seq !== loadSeqRef.current) return;
       setRequests([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setSlowSearch(false);
+      return;
+    }
+    const t = window.setTimeout(() => setSlowSearch(true), SLOW_SEARCH_MS);
+    return () => window.clearTimeout(t);
+  }, [loading]);
 
   useEffect(() => {
     if (!hasSearched || !appliedFilters) return;
@@ -278,24 +296,26 @@ function RequestSearchPageInner() {
                 subtitle="Ρυθμίστε τα κριτήρια στα αριστερά και πατήστε «Αναζήτηση»."
                 className="border border-dashed border-[var(--border)] bg-transparent"
               />
-            ) : loading ? (
+            ) : loading && requests.length === 0 ? (
               <p className="py-12 text-center text-sm text-[var(--text-muted)]">Φόρτωση...</p>
             ) : requests.length === 0 ? (
               <EmptyState title="Δεν βρέθηκαν αιτήματα" subtitle="Δοκιμάστε πιο ευρύ φίλτρο." />
             ) : (
-              <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)]">
-                <ul>
-                  {requests.map((r) => (
-                    <li key={r.id}>
-                      <RequestSearchResultCard
-                        request={r}
-                        statusColors={statusColors}
-                        onNavigate={() => router.push(`/requests/${r.id}`)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <SearchResultsOverlay active={loading} slow={slowSearch}>
+                <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)]">
+                  <ul>
+                    {requests.map((r) => (
+                      <li key={r.id}>
+                        <RequestSearchResultCard
+                          request={r}
+                          statusColors={statusColors}
+                          onNavigate={() => router.push(`/requests/${r.id}`)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </SearchResultsOverlay>
             )}
           </div>
 

@@ -10,10 +10,11 @@ import { addDaysYmd, computeSlaStatus } from "@/lib/request-sla";
 import { inferRequestCategoryFromDescription } from "@/lib/request-auto-category";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  getRequestStatusQueryValues,
+  getCanonicalRequestStatus,
   normalizeRequestStatus,
   REQUEST_STATUSES,
   REQUEST_STATUS_OPEN,
+  type RequestStatus,
 } from "@/lib/request-statuses";
 import { searchParamsToRequestFilters } from "@/lib/requests-filters";
 import {
@@ -23,6 +24,8 @@ import {
   resolveRequestListFilters,
 } from "@/lib/requests-query";
 import type { RequestListFilters } from "@/lib/requests-filters";
+import { createTtlCache } from "@/lib/ttl-cache";
+import { createServerTiming, withServerTimingHeaders } from "@/lib/server-timing";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -36,7 +39,7 @@ type RequestCountsCachePayload = {
   totalCount: number;
 };
 
-let requestCountsCache: { expiresAt: number; payload: RequestCountsCachePayload } | null = null;
+const requestCountsCache = createTtlCache<RequestCountsCachePayload>(REQUEST_COUNTS_CACHE_TTL_MS);
 
 function mapRequestRows(data: unknown[]) {
   return (data ?? []).map((row) => {
@@ -113,38 +116,56 @@ async function fetchRequestsPage(
   return { data, error, count };
 }
 
+async function fetchStatusCountsOnce(supabase: SupabaseClient): Promise<RequestCountsCachePayload> {
+  const tallies = Object.fromEntries(REQUEST_STATUSES.map((s) => [s, 0])) as Record<
+    RequestStatus,
+    number
+  >;
+
+  // Single-pass GROUP BY via RPC (fallback: one select of status column).
+  const rpc = await supabase.rpc("get_request_status_counts");
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    for (const row of rpc.data as Array<{ status?: string | null; cnt?: number | string | null }>) {
+      const canonical = getCanonicalRequestStatus(row.status);
+      const n = Number(row.cnt ?? 0);
+      if (Number.isFinite(n)) tallies[canonical] += n;
+    }
+  } else {
+    if (rpc.error) {
+      console.warn("[api/requests] get_request_status_counts RPC failed, falling back:", rpc.error.message);
+    }
+    const { data, error } = await supabase.from("requests").select("status");
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const canonical = getCanonicalRequestStatus((row as { status?: string | null }).status);
+      tallies[canonical] += 1;
+    }
+  }
+
+  const statusCounts = REQUEST_STATUSES.map((status) => ({ status, count: tallies[status] }));
+  const totalCount = statusCounts.reduce((sum, row) => sum + row.count, 0);
+  return { statusCounts, totalCount };
+}
+
 async function fetchCachedRequestCounts(
   supabase: SupabaseClient,
 ): Promise<RequestCountsCachePayload & { cache: "HIT" | "MISS" }> {
-  const now = Date.now();
-  if (requestCountsCache && now < requestCountsCache.expiresAt) {
-    const ageMs = REQUEST_COUNTS_CACHE_TTL_MS - (requestCountsCache.expiresAt - now);
-    console.log(`[api/requests] status counts cache HIT age=${ageMs}ms`);
-    return { ...requestCountsCache.payload, cache: "HIT" };
+  const hit = requestCountsCache.get();
+  if (hit.hit) {
+    console.log(`[api/requests] status counts cache HIT age=${hit.ageMs}ms`);
+    return { ...hit.value, cache: "HIT" };
   }
 
   console.log("[api/requests] status counts cache MISS — fetching");
   const t0 = Date.now();
-  const [statusCounts, totalAllR] = await Promise.all([
-    Promise.all(
-      REQUEST_STATUSES.map(async (s) => {
-        const { count: c } = await supabase
-          .from("requests")
-          .select("*", { count: "exact", head: true })
-          .in("status", getRequestStatusQueryValues(s));
-        return { status: s, count: c ?? 0 };
-      }),
-    ),
-    supabase.from("requests").select("*", { count: "exact", head: true }),
-  ]);
-
-  const payload = { statusCounts, totalCount: totalAllR.count ?? 0 };
-  requestCountsCache = { payload, expiresAt: now + REQUEST_COUNTS_CACHE_TTL_MS };
+  const payload = await fetchStatusCountsOnce(supabase);
+  requestCountsCache.set(payload);
   console.log(`[api/requests] status counts cache STORE took=${Date.now() - t0}ms ttl=30s`);
   return { ...payload, cache: "MISS" };
 }
 
 export async function GET(request: NextRequest) {
+  const timing = createServerTiming();
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
@@ -166,10 +187,10 @@ export async function GET(request: NextRequest) {
       Math.max(1, parseInt(sp.get("page_size") || "50", 10) || 50),
     );
 
-    const pagePromise = fetchRequestsPage(supabase, f, page, pageSize);
+    const pagePromise = timing.time("page", () => fetchRequestsPage(supabase, f, page, pageSize));
     const countsPromise = skipCounts
       ? Promise.resolve(null)
-      : fetchCachedRequestCounts(supabase);
+      : timing.time("counts", () => fetchCachedRequestCounts(supabase));
 
     const [{ data, error, count }, countsPayload] = await Promise.all([
       pagePromise,
@@ -178,36 +199,42 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error("[api/requests GET]", error);
-      return NextResponse.json({
-        data: [],
-        count: 0,
-        page,
-        page_size: pageSize,
-        total_pages: 0,
-        statusCounts: REQUEST_STATUSES.map((s) => ({ status: s, count: 0 })),
-        totalCount: 0,
-      });
+      return withServerTimingHeaders(
+        NextResponse.json({
+          data: [],
+          count: 0,
+          page,
+          page_size: pageSize,
+          total_pages: 0,
+          statusCounts: REQUEST_STATUSES.map((s) => ({ status: s, count: 0 })),
+          totalCount: 0,
+        }),
+        timing,
+      );
     }
 
     const total = count ?? 0;
     const total_pages = total === 0 ? 0 : Math.ceil(total / pageSize);
     const mapped = mapRequestRows((data ?? []) as unknown[]);
 
-    return NextResponse.json({
-      data: mapped,
-      count: total,
-      page,
-      page_size: pageSize,
-      total_pages,
-      ...(countsPayload
-        ? {
-            statusCounts: countsPayload.statusCounts,
-            totalCount: countsPayload.totalCount,
-            countsCache: countsPayload.cache,
-          }
-        : { countsOmitted: true }),
-      requests: mapped,
-    });
+    return withServerTimingHeaders(
+      NextResponse.json({
+        data: mapped,
+        count: total,
+        page,
+        page_size: pageSize,
+        total_pages,
+        ...(countsPayload
+          ? {
+              statusCounts: countsPayload.statusCounts,
+              totalCount: countsPayload.totalCount,
+              countsCache: countsPayload.cache,
+            }
+          : { countsOmitted: true }),
+        requests: mapped,
+      }),
+      timing,
+    );
   } catch (e) {
     console.error("[api/requests GET]", e);
     return nextJsonError();
