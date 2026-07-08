@@ -2,25 +2,50 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { hasMinRole } from "@/lib/roles";
 import { todayYmdAthens } from "@/lib/date-format";
-import {
-  applyContactListFiltersToBuilder,
-  contactMatchesLocalSearch,
-} from "@/lib/contacts-query";
 import { getDefaultContactFilters, searchParamsToFilters } from "@/lib/contacts-filters";
-import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { callStatusLabel } from "@/lib/luxury-styles";
 import {
-  fetchGroupNamesByContactId,
-  type GroupFilterResolution,
-  groupResolutionForSqlBuilder,
-  includeContactIdsNeedBatchFetch,
-  excludeContactIdsNeedInMemoryFilter,
-  resolveContactListFilterIds,
+  CONTACTS_EXPORT_LIMIT,
+  queryContactsListRows,
+} from "@/lib/contacts-list-api";
+import {
+  enrichContactsWithGroupCountsAndNames,
+  fetchContactsByIncludeIdBatches,
+  MAX_ID_IN_CLAUSE,
 } from "@/lib/contact-group-members";
 import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
 import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
+
+const SELECT_EXPORT =
+  "id, contact_code, first_name, last_name, nickname, father_name, mother_name, phone, phone2, landline, email, municipality, area, toponym, electoral_district, political_stance, call_status, priority, group_id, tags, notes, created_at";
+
+type ExportContactRow = {
+  id: string;
+  contact_code?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  nickname?: string | null;
+  father_name?: string | null;
+  mother_name?: string | null;
+  phone?: string | null;
+  phone2?: string | null;
+  landline?: string | null;
+  email?: string | null;
+  municipality?: string | null;
+  area?: string | null;
+  toponym?: string | null;
+  electoral_district?: string | null;
+  political_stance?: string | null;
+  call_status?: string | null;
+  priority?: string | null;
+  group_id?: string | null;
+  tags?: string[] | null;
+  notes?: string | null;
+  created_at?: string | null;
+  group_names?: string[];
+};
 
 function priorityGr(p: string | null | undefined): string {
   if (p === "High") return "Υψηλή";
@@ -89,8 +114,46 @@ function setListParam(sp: URLSearchParams, key: string, values: string[]) {
   for (const v of values) sp.append(key, v);
 }
 
-const SELECT_EXPORT =
-  "id, contact_code, first_name, last_name, nickname, father_name, mother_name, phone, phone2, landline, email, municipality, area, toponym, electoral_district, political_stance, call_status, priority, group_id, tags, notes, created_at";
+/**
+ * List RPC rows omit mother_name / notes. Hydrate those columns (chunked) when missing,
+ * preserving order of `rows`.
+ */
+async function hydrateExportColumns(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  rows: ExportContactRow[],
+): Promise<ExportContactRow[]> {
+  if (!rows.length) return rows;
+  const needsHydrate = rows.some(
+    (r) => r.mother_name === undefined || r.notes === undefined,
+  );
+  if (!needsHydrate) return rows;
+
+  const ids = rows.map((r) => r.id);
+  const byId = new Map<string, { mother_name: string | null; notes: string | null }>();
+  for (let i = 0; i < ids.length; i += MAX_ID_IN_CLAUSE) {
+    const chunk = ids.slice(i, i + MAX_ID_IN_CLAUSE);
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("id, mother_name, notes")
+      .in("id", chunk);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const r = row as { id: string; mother_name: string | null; notes: string | null };
+      byId.set(r.id, { mother_name: r.mother_name, notes: r.notes });
+    }
+  }
+
+  return rows.map((r) => {
+    const extra = byId.get(r.id);
+    if (!extra) return r;
+    return {
+      ...r,
+      mother_name: r.mother_name ?? extra.mother_name,
+      notes: r.notes ?? extra.notes,
+    };
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -145,14 +208,13 @@ export async function GET(request: NextRequest) {
       return jsonUtf8Error("Δεν έχετε δικαίωμα εξαγωγής επαφών.", 403);
     }
 
-    // Match /api/contacts: cookie session client (anon key + user JWT). Not service role.
     console.info("[api/contacts/export client]", {
       mode: "authenticated_session",
       has_user_id: Boolean(user?.id),
       user_id: user?.id ? `${String(user.id).slice(0, 8)}…` : null,
       role: profile?.role ?? null,
-      uses_buildContactQueryPlan: false,
-      note: "export builds filters via applyContactListFiltersToBuilder; list uses buildContactQueryPlan",
+      uses_buildContactQueryPlan: true,
+      note: "export uses queryContactsListRows (same buildContactQueryPlan + execute pipeline as /api/contacts)",
     });
 
     const idsParam = sp.get("ids");
@@ -190,11 +252,9 @@ export async function GET(request: NextRequest) {
       }),
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let query: any = supabase.from("contacts").select(SELECT_EXPORT);
-    let mergedFilterResolution: GroupFilterResolution | null = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let data: any[] | null = null;
+    let rawRows: ExportContactRow[] = [];
+    let planPath: string | undefined;
+    let planReason: string | undefined;
 
     try {
       if (idsParam?.trim()) {
@@ -202,83 +262,35 @@ export async function GET(request: NextRequest) {
           .split(",")
           .map((x) => x.trim())
           .filter(Boolean);
-        if (ids.length) query = query.in("id", ids);
-      } else if (filtered && f.nameday_today) {
-        try {
-          mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
-        } catch (err) {
-          logSupabaseError(err, "resolveContactListFilterIds(nameday)");
-          const msg =
-            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
-              ? (err as { message: string }).message
-              : "Σφάλμα επίλυσης φίλτρων ομάδων";
-          return jsonUtf8Error(msg, 400);
-        }
-        const now = new Date();
-        let ids: string[];
-        try {
-          ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
-        } catch (err) {
-          logSupabaseError(err, "getContactIdsForNameDay");
-          const msg =
-            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
-              ? (err as { message: string }).message
-              : "Σφάλμα εορτολογίου";
-          return jsonUtf8Error(msg, 400);
-        }
-        if (ids.length === 0) {
-          query = supabase.from("contacts").select(SELECT_EXPORT).limit(0);
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
-          const includeNeedMemory =
-            mergedFilterResolution.includeContactIds !== null &&
-            includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
-          const sqlGroupResolution = groupResolutionForSqlBuilder({
-            includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
-            excludeContactIds: mergedFilterResolution.excludeContactIds,
-          });
-          qn = applyContactListFiltersToBuilder(qn, f, sqlGroupResolution, { partialLocation });
-          query = qn;
+        if (ids.length) {
+          rawRows = (await fetchContactsByIncludeIdBatches(
+            supabase,
+            ids,
+            SELECT_EXPORT,
+            (q) => q,
+          )) as ExportContactRow[];
+          planPath = "selected-ids";
         }
       } else if (filtered) {
-        try {
-          mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
-        } catch (err) {
-          logSupabaseError(err, "resolveContactListFilterIds");
-          const msg =
-            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
-              ? (err as { message: string }).message
-              : "Σφάλμα επίλυσης φίλτρων ομάδων";
-          return jsonUtf8Error(msg, 400);
-        }
-        const includeNeedMemory =
-          mergedFilterResolution.includeContactIds !== null &&
-          includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
-        const sqlGroupResolution = groupResolutionForSqlBuilder({
-          includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
-          excludeContactIds: mergedFilterResolution.excludeContactIds,
+        const result = await queryContactsListRows(supabase, f, {
+          partialLocation,
+          limit: CONTACTS_EXPORT_LIMIT,
         });
-        query = applyContactListFiltersToBuilder(
-          supabase.from("contacts").select(SELECT_EXPORT),
-          f,
-          sqlGroupResolution,
-          { partialLocation },
-        );
+        planPath = result.subPath ?? result.plan.path;
+        planReason = result.plan.reason;
+        rawRows = result.contacts as ExportContactRow[];
+        console.info("[api/contacts/export plan]", {
+          path: result.plan.path,
+          subPath: result.subPath,
+          reason: result.plan.reason,
+          total: result.total,
+          returned: rawRows.length,
+        });
       } else {
         return jsonUtf8Error("Η εξαγωγή απαιτεί ενεργά φίλτρα ή επιλεγμένες επαφές.", 403);
       }
-
-      query = query.order("created_at", { ascending: false });
-
-      const result = await query;
-      if (result.error) {
-        logSupabaseError(result.error, "contacts.select");
-        return jsonUtf8Error(result.error.message ?? "Bad Request", 400);
-      }
-      data = result.data;
     } catch (err) {
-      logSupabaseError(err, "query_execution");
+      logSupabaseError(err, `queryContactsListRows:${planPath ?? "unknown"}`);
       const msg =
         err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
           ? (err as { message: string }).message
@@ -286,66 +298,37 @@ export async function GET(request: NextRequest) {
       return jsonUtf8Error(msg, 400);
     }
 
-    let rawRows = (data ?? []) as Array<{
-      id: string;
-      contact_code: string | null;
-      first_name: string;
-      last_name: string;
-      nickname: string | null;
-      father_name: string | null;
-      mother_name: string | null;
-      phone: string | null;
-      phone2: string | null;
-      landline: string | null;
-      email: string | null;
-      municipality: string | null;
-      area: string | null;
-      toponym: string | null;
-      electoral_district: string | null;
-      political_stance: string | null;
-      call_status: string | null;
-      priority: string | null;
-      group_id: string | null;
-      tags: string[] | null;
-      notes: string | null;
-      created_at: string | null;
-    }>;
-
-    if (filtered && mergedFilterResolution) {
-      const includeNeedMemory =
-        mergedFilterResolution.includeContactIds !== null &&
-        includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
-      const includeSet = includeNeedMemory && mergedFilterResolution.includeContactIds
-        ? new Set(mergedFilterResolution.includeContactIds)
-        : null;
-      if (includeSet) {
-        rawRows = rawRows.filter((row) => includeSet.has(row.id));
-      }
-
-      if (excludeContactIdsNeedInMemoryFilter(mergedFilterResolution.excludeContactIds)) {
-        const excludeSet = new Set(mergedFilterResolution.excludeContactIds);
-        rawRows = rawRows.filter((row) => !excludeSet.has(row.id));
-      }
-    }
-
-    if (filtered && f.search?.trim()) {
-      rawRows = rawRows.filter((c) => contactMatchesLocalSearch(c, f.search));
-    }
-
-    let groupNamesByContact: Map<string, string[]>;
     try {
-      groupNamesByContact = await fetchGroupNamesByContactId(
-        supabase,
-        rawRows.map((r) => r.id),
-      );
+      rawRows = await hydrateExportColumns(supabase, rawRows);
     } catch (err) {
-      logSupabaseError(err, "fetchGroupNamesByContactId");
+      logSupabaseError(err, "hydrateExportColumns");
+      const msg =
+        err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "Σφάλμα συμπλήρωσης στηλών εξαγωγής";
+      return jsonUtf8Error(msg, 400);
+    }
+
+    let enriched: ExportContactRow[];
+    try {
+      enriched = (await enrichContactsWithGroupCountsAndNames(
+        supabase,
+        rawRows,
+      )) as ExportContactRow[];
+    } catch (err) {
+      logSupabaseError(err, "enrichContactsWithGroupCountsAndNames");
       const msg =
         err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
           ? (err as { message: string }).message
           : "Σφάλμα ονομάτων ομάδων";
       return jsonUtf8Error(msg, 400);
     }
+
+    console.info("[api/contacts/export done]", {
+      planPath,
+      planReason,
+      rowCount: enriched.length,
+    });
 
     const header = [
       "Κωδικός επαφής",
@@ -375,14 +358,14 @@ export async function GET(request: NextRequest) {
     if (format === "json") {
       return new Response(
         JSON.stringify({
-          contacts: rawRows.map((r) => ({
+          contacts: enriched.map((r) => ({
             id: r.id,
             first_name: r.first_name,
             last_name: r.last_name,
             father_name: r.father_name,
             phone: r.phone,
             municipality: r.municipality,
-            groups: groupNamesByContact.get(r.id) ?? [],
+            groups: r.group_names ?? [],
             political_stance: r.political_stance,
           })),
         }),
@@ -395,7 +378,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const rows = rawRows.map((r) =>
+    const rows = enriched.map((r) =>
       [
         r.contact_code ?? "",
         r.first_name ?? "",
@@ -413,7 +396,7 @@ export async function GET(request: NextRequest) {
         r.political_stance ?? "",
         callStatusLabel(r.call_status),
         priorityGr(r.priority),
-        groupNamesByContact.get(r.id)?.join("; ") ?? "",
+        (r.group_names ?? []).join("; "),
         tagsCell(r.tags),
         r.notes ?? "",
         r.created_at ? new Date(r.created_at).toISOString() : "",

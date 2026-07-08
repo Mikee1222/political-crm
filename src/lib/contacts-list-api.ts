@@ -54,6 +54,16 @@ export type ContactsListApiResult = {
   subPath?: string;
 };
 
+export type ContactsListRowsResult = {
+  contacts: Record<string, unknown>[];
+  total: number;
+  plan: ContactQueryPlan;
+  subPath?: string;
+};
+
+/** Cap for full-filter export / print retrieval (no page-size-50 pagination). */
+export const CONTACTS_EXPORT_LIMIT = 10_000;
+
 function applyApiContactFilters(
   query: QueryBuilder,
   f: ContactListFilters,
@@ -527,4 +537,247 @@ export async function queryContactsListTotal(
   const { count, error } = await query;
   if (error) throw error;
   return { total: count ?? 0, plan, subPath: "sql-paginated" };
+}
+
+/**
+ * Same plan + execute pipeline as GET /api/contacts, returning full contact rows
+ * (up to `limit`, default CONTACTS_EXPORT_LIMIT) instead of a page or head-count.
+ * Used by export / print so filter execution never diverges from the list API.
+ */
+export async function queryContactsListRows(
+  supabase: SupabaseClient,
+  f: ContactListFilters,
+  opts: { partialLocation?: boolean; limit?: number } = {},
+): Promise<ContactsListRowsResult> {
+  const partialLocation = opts.partialLocation ?? false;
+  const limit = Math.min(
+    CONTACTS_EXPORT_LIMIT,
+    Math.max(1, opts.limit ?? CONTACTS_EXPORT_LIMIT),
+  );
+
+  if (canUseAdvancedSearchRpc(f, { partialLocation })) {
+    const plan = buildContactQueryPlan(
+      f,
+      { includeContactIds: null, excludeContactIds: [] },
+      { partialLocation },
+    );
+    const { contacts, total, emptyInclude } = await fetchContactsViaAdvancedRpc(supabase, f, {
+      offset: 0,
+      limit,
+    });
+    if (emptyInclude) {
+      return {
+        contacts: [],
+        total: 0,
+        plan: { path: "empty", reason: "include group matches zero contacts" },
+        subPath: "advanced-rpc",
+      };
+    }
+    return { contacts, total, plan, subPath: "advanced-rpc" };
+  }
+
+  const deferGroupMembership = await shouldDeferNameGroupMembership(supabase, f);
+  const filterResolution = await resolveContactListFilterIds(supabase, f, {
+    deferLargeGroupMembership: deferGroupMembership,
+  });
+  const resolvedIds = filterResolution.includeContactIds;
+  const plan = buildContactQueryPlan(f, filterResolution, { partialLocation });
+  const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
+
+  if (plan.path === "empty") {
+    return { contacts: [], total: 0, plan };
+  }
+
+  if (plan.path === "group-name-rpc") {
+    const rows = await fetchContactsViaGroupNameSearch(supabase, f, partialLocation);
+    const contacts = rows.slice(0, limit);
+    return { contacts, total: rows.length, plan, subPath: "group-name-rpc" };
+  }
+
+  if (plan.path === "name-only-rpc") {
+    const rows = await searchContactsByName(supabase, {
+      firstName: f.first_name || null,
+      lastName: f.last_name || null,
+      fatherName: f.father_name || null,
+    });
+    const contacts = rows.slice(0, limit);
+    return {
+      contacts: contacts as Record<string, unknown>[],
+      total: rows.length,
+      plan,
+      subPath: "name-only-rpc",
+    };
+  }
+
+  if (plan.path === "name-column-rpc") {
+    let rows = await searchContactsByName(supabase, {
+      firstName: f.first_name || null,
+      lastName: f.last_name || null,
+      fatherName: f.father_name || null,
+    });
+    rows = filterContactRowsByListFilters(
+      rows as Parameters<typeof filterContactRowsByListFilters>[0],
+      f,
+      {
+        partialLocation,
+        excludeContactIds: filterResolution.excludeContactIds,
+      },
+    );
+    const contacts = rows.slice(0, limit);
+    return {
+      contacts: contacts as Record<string, unknown>[],
+      total: rows.length,
+      plan,
+      subPath: "name-column-rpc",
+    };
+  }
+
+  if (plan.path === "name-search-then-refine") {
+    const rows = await fetchContactsNameSearchThenRefine(
+      supabase,
+      f,
+      filterResolution,
+      partialLocation,
+    );
+    const contacts = rows.slice(0, limit);
+    return { contacts, total: rows.length, plan, subPath: "name-search-then-refine" };
+  }
+
+  if (plan.path === "group-only-rpc") {
+    const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+    const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+    if (rawInclude.length && !groupIds.length) {
+      return { contacts: [], total: 0, plan };
+    }
+    const { contacts, total } = await searchContactsByGroupsPaginated(supabase, {
+      groupIds,
+      offset: 0,
+      limit,
+    });
+    return {
+      contacts: contacts as Record<string, unknown>[],
+      total,
+      plan,
+      subPath: "group-only-rpc",
+    };
+  }
+
+  if (plan.path === "free-text-rpc") {
+    const { contacts, total } = await searchContactsByFreeTextPaginated(supabase, {
+      search: f.search,
+      offset: 0,
+      limit,
+    });
+    return {
+      contacts: contacts as Record<string, unknown>[],
+      total,
+      plan,
+      subPath: "free-text-rpc",
+    };
+  }
+
+  if (plan.path === "group-column-rpc") {
+    const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+    const groupIds = await resolveGroupIdsToUuids(supabase, rawInclude);
+    if (rawInclude.length && !groupIds.length) {
+      return { contacts: [], total: 0, plan };
+    }
+    const matchMode = f.group_match === "and" && groupIds.length > 1 ? "and" : "or";
+    const callStatuses = f.call_statuses.length
+      ? f.call_statuses
+      : f.call_status
+        ? [f.call_status]
+        : [];
+    const { contacts, total } = await searchContactsInGroupsFiltered(supabase, {
+      groupIds,
+      matchMode,
+      gender: f.gender || null,
+      municipalities: f.municipalities,
+      callStatus: callStatuses.length === 1 ? callStatuses[0]! : null,
+      callStatuses: callStatuses.length > 1 ? callStatuses : [],
+      politicalStance: f.political_stance || null,
+      toponyms: f.toponyms,
+      partialLocation,
+      offset: 0,
+      limit,
+    });
+    return {
+      contacts: contacts as Record<string, unknown>[],
+      total,
+      plan,
+      subPath: "group-column-rpc",
+    };
+  }
+
+  if (plan.path === "nameday") {
+    const now = new Date();
+    const ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
+    if (!ids.length) return { contacts: [], total: 0, plan, subPath: "nameday" };
+    let query: QueryBuilder = supabase
+      .from("contacts")
+      .select(SELECT_LIST)
+      .in("id", ids)
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true });
+    query = applyApiContactFilters(query, f, filterResolution, partialLocation);
+    query = query.limit(15_000);
+    const { data, error } = await query;
+    if (error) throw error;
+    let rows = (data ?? []) as Record<string, unknown>[];
+    rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+    if (f.search?.trim()) rows = afterFilterRows(rows, f.search);
+    const contacts = rows.slice(0, limit);
+    return { contacts, total: rows.length, plan, subPath: "nameday" };
+  }
+
+  if (plan.path === "in-memory") {
+    const { rows, subPath } = await fetchContactsInMemoryPipeline(
+      supabase,
+      f,
+      filterResolution,
+      resolvedIds,
+      partialLocation,
+    );
+    const contacts = rows.slice(0, limit);
+    return { contacts, total: rows.length, plan, subPath };
+  }
+
+  if (
+    f.exclude_group_ids.length > 0 &&
+    excludeContactIdsNeedInMemoryFilter(filterResolution.excludeContactIds)
+  ) {
+    const { rows, subPath } = await fetchContactsInMemoryPipeline(
+      supabase,
+      f,
+      filterResolution,
+      resolvedIds,
+      partialLocation,
+    );
+    const contacts = rows.slice(0, limit);
+    return {
+      contacts,
+      total: rows.length,
+      plan: { path: "in-memory", reason: "exclude_group_ids present" },
+      subPath,
+    };
+  }
+
+  // Default SQL path — fetch up to export limit (same filters as list, no page-size-50).
+  let query: QueryBuilder = supabase
+    .from("contacts")
+    .select(SELECT_LIST, { count: "exact" })
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true })
+    .limit(limit);
+  query = applyApiContactFilters(query, f, sqlGroupResolution, partialLocation);
+  const { data, error, count } = await query;
+  if (error) throw error;
+  let rows = (data ?? []) as Record<string, unknown>[];
+  rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+  return {
+    contacts: rows,
+    total: count ?? rows.length,
+    plan,
+    subPath: "sql-paginated",
+  };
 }

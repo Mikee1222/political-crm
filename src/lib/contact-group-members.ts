@@ -876,17 +876,21 @@ export async function fetchGroupMemberCounts(
   contactIds: string[],
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  if (!contactIds.length) return counts;
+  const unique = uniqueIds(contactIds);
+  if (!unique.length) return counts;
 
-  const { data, error } = await supabase
-    .from("contact_group_members")
-    .select("contact_id")
-    .in("contact_id", contactIds);
-  if (error) throw error;
+  for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
+    const chunk = unique.slice(i, i + MAX_ID_IN_CLAUSE);
+    const { data, error } = await supabase
+      .from("contact_group_members")
+      .select("contact_id")
+      .in("contact_id", chunk);
+    if (error) throw error;
 
-  for (const row of data ?? []) {
-    const id = String((row as { contact_id: string }).contact_id);
-    counts.set(id, (counts.get(id) ?? 0) + 1);
+    for (const row of data ?? []) {
+      const id = String((row as { contact_id: string }).contact_id);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
   }
   return counts;
 }
@@ -935,25 +939,30 @@ export async function fetchGroupNamesByContactId(
   contactIds: string[],
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
-  if (!contactIds.length) return out;
+  const unique = uniqueIds(contactIds);
+  if (!unique.length) return out;
 
-  const { data, error } = await supabase
-    .from("contact_group_members")
-    .select("contact_id, contact_groups!contact_group_members_group_id_fkey ( name )")
-    .in("contact_id", contactIds);
-  if (error) throw error;
+  // Chunk IDs — PostgREST URL length fails on large unbatched `.in()` lists (export).
+  for (let i = 0; i < unique.length; i += MAX_ID_IN_CLAUSE) {
+    const chunk = unique.slice(i, i + MAX_ID_IN_CLAUSE);
+    const { data, error } = await supabase
+      .from("contact_group_members")
+      .select("contact_id, contact_groups!contact_group_members_group_id_fkey ( name )")
+      .in("contact_id", chunk);
+    if (error) throw error;
 
-  for (const row of data ?? []) {
-    const r = row as {
-      contact_id: string;
-      contact_groups?: { name: string } | { name: string }[] | null;
-    };
-    const g = Array.isArray(r.contact_groups) ? r.contact_groups[0] : r.contact_groups;
-    const name = g?.name?.trim();
-    if (!name) continue;
-    const list = out.get(r.contact_id) ?? [];
-    list.push(name);
-    out.set(r.contact_id, list);
+    for (const row of data ?? []) {
+      const r = row as {
+        contact_id: string;
+        contact_groups?: { name: string } | { name: string }[] | null;
+      };
+      const g = Array.isArray(r.contact_groups) ? r.contact_groups[0] : r.contact_groups;
+      const name = g?.name?.trim();
+      if (!name) continue;
+      const list = out.get(r.contact_id) ?? [];
+      list.push(name);
+      out.set(r.contact_id, list);
+    }
   }
 
   for (const [id, names] of out) {
