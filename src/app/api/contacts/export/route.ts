@@ -14,10 +14,15 @@ import { callStatusLabel } from "@/lib/luxury-styles";
 import { nextJsonError } from "@/lib/api-resilience";
 import {
   fetchGroupNamesByContactId,
+  type GroupFilterResolution,
+  groupResolutionForSqlBuilder,
+  includeContactIdsNeedBatchFetch,
+  excludeContactIdsNeedInMemoryFilter,
   mergeContactListFilterResolutions,
   resolveContactListFilterIds,
   resolveGroupFilterContactIds,
 } from "@/lib/contact-group-members";
+import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
 
 export const dynamic = "force-dynamic";
 
@@ -55,12 +60,30 @@ export async function GET(request: NextRequest) {
     const idsParam = sp.get("ids");
     const format = sp.get("format");
     const filtered = sp.get("filters") === "1" || sp.get("filtered") === "1";
-    const f = searchParamsToFilters(sp, getDefaultContactFilters());
+    const f = normalizeContactListFiltersForNameRpc(
+      searchParamsToFilters(sp, getDefaultContactFilters()),
+    );
+
+    console.info(
+      "[api/contacts/export request]",
+      JSON.stringify({
+        format: format ?? "csv",
+        filtered,
+        has_ids: Boolean(idsParam?.trim()),
+        param_keys: [...new Set([...sp.keys()])],
+        group_ids_count: f.group_ids.length,
+        exclude_group_ids_count: f.exclude_group_ids.length,
+        source_ids_count: f.source_ids.length,
+        exclude_source_ids_count: f.exclude_source_ids.length,
+        has_search: Boolean(f.search?.trim()),
+      }),
+    );
 
     const isManager = hasMinRole(profile?.role, "manager");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query: any = supabase.from("contacts").select(SELECT_EXPORT);
+    let mergedFilterResolution: GroupFilterResolution | null = null;
 
     if (idsParam?.trim()) {
       const ids = idsParam
@@ -69,6 +92,10 @@ export async function GET(request: NextRequest) {
         .filter(Boolean);
       if (ids.length) query = query.in("id", ids);
     } else if (filtered && f.nameday_today) {
+      mergedFilterResolution = mergeContactListFilterResolutions(
+        await resolveGroupFilterContactIds(supabase, f),
+        await resolveContactListFilterIds(supabase, f),
+      );
       const now = new Date();
       const ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
       if (ids.length === 0) {
@@ -76,23 +103,29 @@ export async function GET(request: NextRequest) {
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
-        const filterResolution = mergeContactListFilterResolutions(
-          await resolveGroupFilterContactIds(supabase, f),
-          await resolveContactListFilterIds(supabase, f),
-        );
-        qn = applyContactListFiltersToBuilder(qn, f, filterResolution);
+        const includeNeedMemory =
+          mergedFilterResolution.includeContactIds !== null &&
+          includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
+        const sqlGroupResolution = groupResolutionForSqlBuilder({
+          includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
+          excludeContactIds: mergedFilterResolution.excludeContactIds,
+        });
+        qn = applyContactListFiltersToBuilder(qn, f, sqlGroupResolution);
         query = qn;
       }
     } else if (filtered) {
-      const filterResolution = mergeContactListFilterResolutions(
+      mergedFilterResolution = mergeContactListFilterResolutions(
         await resolveGroupFilterContactIds(supabase, f),
         await resolveContactListFilterIds(supabase, f),
       );
-      query = applyContactListFiltersToBuilder(
-        supabase.from("contacts").select(SELECT_EXPORT),
-        f,
-        filterResolution,
-      );
+      const includeNeedMemory =
+        mergedFilterResolution.includeContactIds !== null &&
+        includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
+      const sqlGroupResolution = groupResolutionForSqlBuilder({
+        includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
+        excludeContactIds: mergedFilterResolution.excludeContactIds,
+      });
+      query = applyContactListFiltersToBuilder(supabase.from("contacts").select(SELECT_EXPORT), f, sqlGroupResolution);
     } else {
       const canFullExport = await hasPermissionFlexible(user.id, "contacts_export", isManager);
       if (!canFullExport) {
@@ -129,6 +162,23 @@ export async function GET(request: NextRequest) {
       notes: string | null;
       created_at: string | null;
     }>;
+
+    if (filtered && mergedFilterResolution) {
+      const includeNeedMemory =
+        mergedFilterResolution.includeContactIds !== null &&
+        includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
+      const includeSet = includeNeedMemory && mergedFilterResolution.includeContactIds
+        ? new Set(mergedFilterResolution.includeContactIds)
+        : null;
+      if (includeSet) {
+        rawRows = rawRows.filter((row) => includeSet.has(row.id));
+      }
+
+      if (excludeContactIdsNeedInMemoryFilter(mergedFilterResolution.excludeContactIds)) {
+        const excludeSet = new Set(mergedFilterResolution.excludeContactIds);
+        rawRows = rawRows.filter((row) => !excludeSet.has(row.id));
+      }
+    }
 
     if (filtered && f.search?.trim()) {
       rawRows = rawRows.filter((c) => contactMatchesLocalSearch(c, f.search));

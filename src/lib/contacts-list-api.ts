@@ -27,6 +27,7 @@ import {
   includeContactIdsNeedBatchFetch,
   resolveContactListFilterIds,
   resolveGroupIdsToUuids,
+  searchContactsByFreeTextPaginated,
   searchContactsByGroupsPaginated,
   searchContactsInGroups,
   searchContactsInGroupsFiltered,
@@ -370,6 +371,15 @@ export async function queryContactsListTotal(
       limit: 1,
     });
     return { total, plan, subPath: "group-only-rpc" };
+  }
+
+  if (plan.path === "free-text-rpc") {
+    const { total } = await searchContactsByFreeTextPaginated(supabase, {
+      search: f.search,
+      offset: 0,
+      limit: 1,
+    });
+    return { total, plan, subPath: "free-text-rpc" };
   }
 
   if (plan.path === "group-column-rpc") {

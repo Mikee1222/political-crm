@@ -14,6 +14,9 @@ const csp = [
 ].join("; ");
 
 const nextConfig = {
+  experimental: {
+    optimizePackageImports: ["lucide-react", "recharts", "date-fns"],
+  },
   typescript: {
     ignoreBuildErrors: false,
   },

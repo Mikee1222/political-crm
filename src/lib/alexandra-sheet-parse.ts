@@ -1,5 +1,3 @@
-import * as XLSX from "xlsx";
-
 export type ParsedSheet = {
   columns: string[];
   /** Full grid as objects keyed by column header (trimmed). */
@@ -52,7 +50,8 @@ function pickHeaderRowIndex(matrix: unknown[][], maxScan = 12): number {
  * Client-side import: first worksheet, αυτόματη σειρά κεφαλίδων (από αναζήτηση).
  * Normalizes values to string | number for JSON transport.
  */
-export function parseSpreadsheetToRows(buf: ArrayBuffer): ParsedSheet {
+export async function parseSpreadsheetToRows(buf: ArrayBuffer): Promise<ParsedSheet> {
+  const XLSX = await import("xlsx");
   const wb = XLSX.read(buf, { type: "array", cellDates: false, raw: true });
   const name = wb.SheetNames[0] ?? "Sheet1";
   const sheet = wb.Sheets[name];

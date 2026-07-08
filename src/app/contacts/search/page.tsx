@@ -86,6 +86,7 @@ function ContactSearchPageInner() {
   const [saveName, setSaveName] = useState("");
   const [savingFilters, setSavingFilters] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const loadSeqRef = useRef(0);
 
@@ -303,11 +304,38 @@ function ContactSearchPageInner() {
   const contactHref = (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const handleExport = () => {
+  const handleExport = useCallback(async () => {
     if (!appliedFilters) return;
-    const p = contactFiltersToExportParams(appliedFilters);
-    window.open(`/api/contacts/export?${p.toString()}`, "_blank", "noopener,noreferrer");
-  };
+    setExporting(true);
+    try {
+      const params = contactFiltersToExportParams(appliedFilters);
+      const res = await fetchWithTimeout(`/api/contacts/export?${params.toString()}`, {
+        timeoutMs: PRINT_FETCH_TIMEOUT_MS,
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        showToast(err.error ?? "Αποτυχία εξαγωγής CSV.", "error");
+        return;
+      }
+
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const contentDisposition = res.headers.get("content-disposition") ?? "";
+      const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+      const fileName = fileNameMatch?.[1] ?? "contacts-export.csv";
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      showToast("Αποτυχία εξαγωγής CSV.", "error");
+    } finally {
+      setExporting(false);
+    }
+  }, [appliedFilters, showToast]);
 
   const handlePrint = useCallback(async () => {
     if (!appliedFilters) return;
@@ -559,7 +587,7 @@ function ContactSearchPageInner() {
             }
             exportButton={
               hasSearched && hasMinRole(profile?.role, "manager")
-                ? { onClick: handleExport, disabled: !total }
+                ? { onClick: () => void handleExport(), disabled: !total || exporting || printing }
                 : undefined
             }
             trailingActions={
@@ -568,7 +596,7 @@ function ContactSearchPageInner() {
                   type="button"
                   className={cn(lux.btnSecondary, "inline-flex !h-9 !min-h-9 !rounded-lg !px-3 !py-0 text-xs")}
                   onClick={() => void handlePrint()}
-                  disabled={!total || printing}
+                  disabled={!total || printing || exporting}
                 >
                   <Printer className="h-3.5 w-3.5" aria-hidden />
                   Εκτύπωση

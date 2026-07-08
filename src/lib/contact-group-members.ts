@@ -362,6 +362,7 @@ export async function searchContactsInGroups(
 }
 
 export type SearchContactsByGroupsPaginatedRow = SearchContactsInGroupsRow & { total: number };
+export type SearchContactsFreeTextPaginatedRow = SearchContactsByGroupsPaginatedRow;
 
 /** One page of contacts in groups via get_contacts_by_groups_paginated RPC. */
 export async function searchContactsByGroupsPaginated(
@@ -383,6 +384,32 @@ export async function searchContactsByGroupsPaginated(
   if (error) throw error;
 
   const rows = (data ?? []) as SearchContactsByGroupsPaginatedRow[];
+  const total = rows.length > 0 ? Number(rows[0]!.total) : 0;
+  const contacts = rows.map(({ total: _total, ...contact }) => contact);
+  return { contacts, total };
+}
+
+/** One page of free-text contacts via search_contacts_free_text_paginated RPC. */
+export async function searchContactsByFreeTextPaginated(
+  supabase: SupabaseClient,
+  opts: {
+    search: string;
+    offset: number;
+    limit: number;
+  },
+): Promise<{ contacts: SearchContactsInGroupsRow[]; total: number }> {
+  const { search, offset, limit } = opts;
+  const searchTerm = search.trim();
+  if (!searchTerm) return { contacts: [], total: 0 };
+
+  const { data, error } = await supabase.rpc("search_contacts_free_text_paginated", {
+    p_search: searchTerm,
+    p_offset: offset,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  const rows = (data ?? []) as SearchContactsFreeTextPaginatedRow[];
   const total = rows.length > 0 ? Number(rows[0]!.total) : 0;
   const contacts = rows.map(({ total: _total, ...contact }) => contact);
   return { contacts, total };

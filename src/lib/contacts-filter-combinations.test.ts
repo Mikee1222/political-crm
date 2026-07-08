@@ -284,7 +284,11 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
       build: () => mergeFilters({ group_ids: ["θετικος"] }),
       expectInMemory: true,
     },
-    { label: "pure free-text search", build: () => mergeFilters({ search: "Ιωάννης" }) },
+    {
+      label: "pure free-text search",
+      build: () => mergeFilters({ search: "Ιωάννης" }),
+      expectPath: "free-text-rpc",
+    },
   ];
 
   for (const testCase of cases) {

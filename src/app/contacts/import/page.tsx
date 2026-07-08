@@ -2,10 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
-import { ContactsImportWizard } from "@/components/contacts-import-wizard";
+import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/ui/page-header";
 import { useProfile } from "@/contexts/profile-context";
 import { hasMinRole } from "@/lib/roles";
+
+const ContactsImportWizard = dynamic(
+  () => import("@/components/contacts-import-wizard").then((mod) => mod.ContactsImportWizard),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-muted)]">
+        Φόρτωση οδηγού εισαγωγής...
+      </div>
+    ),
+  },
+);
 
 export default function ContactsImportPage() {
   const router = useRouter();

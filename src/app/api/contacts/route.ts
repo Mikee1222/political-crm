@@ -37,6 +37,7 @@ import {
   resolveContactListFilterIds,
   resolveGroupIdsToUuids,
   searchContactsByGroupsPaginated,
+  searchContactsByFreeTextPaginated,
   searchContactsInGroups,
   searchContactsInGroupsFiltered,
   type GroupFilterResolution,
@@ -487,6 +488,24 @@ export async function GET(request: NextRequest) {
       const rpcOffset = comboboxMode ? 0 : (page - 1) * pageSize;
       const { contacts, total } = await searchContactsByGroupsPaginated(supabase, {
         groupIds,
+        offset: rpcOffset,
+        limit: rpcLimit,
+      });
+      const enriched = await enrichContactsWithGroupCount(
+        supabase,
+        contacts as Record<string, unknown>[],
+      );
+      if (comboboxMode) {
+        return NextResponse.json({ contacts: enriched });
+      }
+      return NextResponse.json({ contacts: enriched, total, page, pageSize });
+    }
+
+    if (plan.path === "free-text-rpc") {
+      const rpcLimit = comboboxMode ? listLimit! : pageSize;
+      const rpcOffset = comboboxMode ? 0 : (page - 1) * pageSize;
+      const { contacts, total } = await searchContactsByFreeTextPaginated(supabase, {
+        search: f.search,
         offset: rpcOffset,
         limit: rpcLimit,
       });

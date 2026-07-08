@@ -265,7 +265,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
       if (!file || !canImportSpreadsheet) return;
       try {
         const buf = await file.arrayBuffer();
-        const p = parseSpreadsheetToRows(buf);
+        const p = await parseSpreadsheetToRows(buf);
         if (p.columns.length === 0 || p.rows.length === 0) {
           const msg = "Κενό αρχείο· δεν βρέθηκαν γραμμές";
           setError(msg);
@@ -315,7 +315,7 @@ export function AlexandraChatView({ mode }: { mode: "page" | "mini" }) {
       }
       try {
         const buf = await file.arrayBuffer();
-        const p = parseSpreadsheetToRows(buf);
+        const p = await parseSpreadsheetToRows(buf);
         if (p.columns.length === 0 || p.rows.length === 0) {
           const msg = "Κενό αρχείο";
           setError(msg);

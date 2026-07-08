@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
@@ -44,12 +45,8 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { CrmSessionBootScreen } from "@/components/crm-session-boot-screen";
-import { CRMTour } from "@/components/crm-tour";
 import { useAlexandraChat } from "@/components/alexandra/alexandra-chat-provider";
-import { GlobalSearchOverlay } from "@/components/global-search-overlay";
 import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
-import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
-import { AlexaMiniWindow } from "@/components/alexandra/alexa-mini-window";
 import { FloatingActions } from "@/components/floating-actions";
 import { LogoutButton } from "@/components/logout-button";
 import { ContactTabsBar } from "@/components/contact-tabs-bar";
@@ -69,6 +66,23 @@ import type { PermissionKey } from "@/lib/permissions";
 import { hasMinRole, ROLE_BADGE, type Role } from "@/lib/roles";
 import type { LucideIcon } from "lucide-react";
 import { normalizeRequestStatus, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+
+const GlobalSearchOverlay = dynamic(
+  () => import("@/components/global-search-overlay").then((mod) => mod.GlobalSearchOverlay),
+  { ssr: false },
+);
+const KeyboardShortcutsModal = dynamic(
+  () => import("@/components/keyboard-shortcuts-modal").then((mod) => mod.KeyboardShortcutsModal),
+  { ssr: false },
+);
+const AlexaMiniWindow = dynamic(
+  () => import("@/components/alexandra/alexa-mini-window").then((mod) => mod.AlexaMiniWindow),
+  { ssr: false },
+);
+const CRMTour = dynamic(
+  () => import("@/components/crm-tour").then((mod) => mod.CRMTour),
+  { ssr: false },
+);
 
 function MobilePullToRefreshBridge({ enabled }: { enabled: boolean }) {
   const ctx = useMobileRefresh();

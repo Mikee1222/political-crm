@@ -286,8 +286,14 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
     expect(canUseGroupNameSearchFastPath(combo)).toBe(true);
   });
 
-  it("requires in-memory for search and large include lists", () => {
-    expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(true);
+  it("uses free-text RPC for plain search and in-memory for large include lists", () => {
+    expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(false);
+    expect(
+      buildContactQueryPlan(
+        { ...base, search: "μαρια" },
+        { includeContactIds: null, excludeContactIds: [] },
+      ).path,
+    ).toBe("free-text-rpc");
     expect(needsInMemoryContactListPipeline(base, manyIds)).toBe(true);
     expect(needsInMemoryContactListPipeline(base, manyIds.slice(0, 80))).toBe(false);
     const manyExcludeIds = Array.from({ length: 81 }, (_, i) =>

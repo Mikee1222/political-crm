@@ -647,6 +647,7 @@ export function largeGroupMembershipForcesInMemory(resolution: GroupFilterResolu
 
 export type ContactQueryPlanPath =
   | "empty"
+  | "free-text-rpc"
   | "name-only-rpc"
   | "name-column-rpc"
   | "group-name-rpc"
@@ -713,7 +714,45 @@ export function buildContactQueryPlan(
   }
 
   if (f.search?.trim()) {
-    return { path: "in-memory", reason: "free-text search" };
+    const defaults = getDefaultContactFilters();
+    const freeTextOnly =
+      !f.nameday_today &&
+      !f.birthday_today &&
+      !hasNameColumnFilters(f) &&
+      !hasGroupIncludeFilter(f) &&
+      f.exclude_group_ids.length === 0 &&
+      f.source_ids.length === 0 &&
+      f.exclude_source_ids.length === 0 &&
+      f.call_statuses.length === 0 &&
+      !f.call_status &&
+      !f.area &&
+      f.municipalities.length === 0 &&
+      f.toponyms.length === 0 &&
+      !f.priority &&
+      !f.tag &&
+      !f.political_stance &&
+      !f.phone &&
+      !f.mobile_presence &&
+      !f.landline_presence &&
+      !f.email_presence &&
+      !f.not_contacted_days &&
+      !f.score_tier &&
+      !f.is_volunteer &&
+      !f.age_min &&
+      !f.age_max &&
+      !f.birth_year_from &&
+      !f.birth_year_to &&
+      !f.volunteer_area &&
+      !f.gender &&
+      !f.ekl_ar &&
+      !f.electoral_district &&
+      !f.has_request &&
+      !f.request_status &&
+      f.group_match === defaults.group_match;
+    if (freeTextOnly) {
+      return { path: "free-text-rpc", reason: "free-text paginated RPC" };
+    }
+    return { path: "in-memory", reason: "free-text + extra filters" };
   }
 
   if (resolutionDefersNameGroupMembership(f, resolution)) {
