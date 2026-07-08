@@ -34,7 +34,7 @@ const LABELS: Record<CrmFieldId, string> = {
   landline: "Σταθερό",
   email: "Email",
   area: "Περιοχή",
-  municipality: "Δήμος που μένει",
+  municipality: "Δήμος που ψηφίζει",
   electoral_district: "Εκλογικό Διαμέρισμα",
   toponym: "Τοπωνύμιο",
   political_stance: "Πολιτική Τοποθέτηση",

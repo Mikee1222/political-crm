@@ -132,7 +132,7 @@ export function ContactElectoralLocationEdit({
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <span className={labelClassName}>Δήμος που μένει</span>
+        <span className={labelClassName}>Δήμος που ψηφίζει</span>
         <SearchableSelect
           className={inputClassName + " !pr-9"}
           value={muni}

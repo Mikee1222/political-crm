@@ -245,7 +245,7 @@ function StaticAitLocationFields({ values, onChange, errorMunicipality }: AitLoc
     <div className="flex w-full min-w-0 flex-col gap-4">
       <SearchableSelect
         id="ait-muni"
-        label="Δήμος που μένει"
+        label="Δήμος που ψηφίζει"
         value={muni}
         onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: values.toponym })}
         options={muniList}
@@ -446,7 +446,7 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
     <div className="flex w-full min-w-0 flex-col gap-4">
       <SearchableSelect
         id="ait-muni-api"
-        label="Δήμος που μένει"
+        label="Δήμος που ψηφίζει"
         value={muni}
         onChange={(v) => onChange({ municipality: v, electoral_district: null, toponym: values.toponym })}
         options={muniList}
