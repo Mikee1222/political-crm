@@ -3,12 +3,19 @@
 import clsx from "clsx";
 import { useCallback, useEffect, useId, useState } from "react";
 import { lux } from "@/lib/luxury-styles";
-import { buildContactComboboxSearchParams } from "@/lib/alexandra-contact-search";
+import { buildContactComboboxSearchParamSets } from "@/lib/alexandra-contact-search";
+import { formatGreekContactName, formatGreekContactNameWithPhone } from "@/lib/contact-display-name";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { isUuid } from "@/lib/resolve-entity-id";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 
-type ContactRow = { id: string; first_name: string; last_name: string; phone: string | null };
+type ContactRow = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  father_name?: string | null;
+  phone: string | null;
+};
 
 type Props = {
   label: string;
@@ -23,14 +30,29 @@ type Props = {
   disabled?: boolean;
 };
 
-const DEBOUNCE_MS = 280;
+const DEBOUNCE_MS = 300;
+const MIN_QUERY_LEN = 2;
 
-function displayName(c: ContactRow) {
-  return `${c.first_name} ${c.last_name}`.trim() || "—";
+function displayLabel(c: ContactRow) {
+  return formatGreekContactName(c.last_name, c.first_name, c.father_name);
 }
 
-function phoneOf(c: ContactRow) {
-  return c.phone?.trim() || null;
+function resultLabel(c: ContactRow) {
+  return formatGreekContactNameWithPhone(c.last_name, c.first_name, c.father_name, c.phone);
+}
+
+function mergeContactRows(lists: ContactRow[][]): ContactRow[] {
+  const seen = new Set<string>();
+  const out: ContactRow[] = [];
+  for (const list of lists) {
+    for (const c of list) {
+      const id = String(c.id ?? "").trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(c);
+    }
+  }
+  return out;
 }
 
 export function ContactSearchCombobox({
@@ -58,16 +80,22 @@ export function ContactSearchCombobox({
   }, [q]);
 
   const load = useCallback(async (search: string) => {
-    if (!search.trim() || search.trim().length < 1) {
+    const trimmed = search.trim();
+    if (trimmed.length < MIN_QUERY_LEN) {
       setList([]);
       return;
     }
     setLoading(true);
     try {
-      const u = buildContactComboboxSearchParams(search);
-      const res = await fetchWithTimeout(`/api/contacts?${u.toString()}`);
-      const j = (await res.json()) as { contacts?: ContactRow[] };
-      setList(j.contacts ?? []);
+      const paramSets = buildContactComboboxSearchParamSets(trimmed);
+      const results = await Promise.all(
+        paramSets.map(async (u) => {
+          const res = await fetchWithTimeout(`/api/contacts?${u.toString()}`);
+          const j = (await res.json()) as { contacts?: ContactRow[] };
+          return j.contacts ?? [];
+        }),
+      );
+      setList(mergeContactRows(results));
     } catch {
       setList([]);
     } finally {
@@ -87,7 +115,7 @@ export function ContactSearchCombobox({
         if (!res.ok) return;
         const j = (await res.json()) as { contact?: ContactRow };
         if (j.contact && !gone) {
-          setSelectedLabel(displayName(j.contact));
+          setSelectedLabel(displayLabel(j.contact));
         }
       } catch {
         /* keep label empty */
@@ -100,7 +128,7 @@ export function ContactSearchCombobox({
 
   useEffect(() => {
     if (!open) return;
-    if (debounced.trim().length < 1) {
+    if (debounced.trim().length < MIN_QUERY_LEN) {
       setList([]);
       return;
     }
@@ -117,7 +145,7 @@ export function ContactSearchCombobox({
       console.warn("[ContactSearchCombobox] ignored non-UUID contact id:", c.id);
       return;
     }
-    const name = displayName(c);
+    const name = displayLabel(c);
     onChange(contactUuid, name);
     onSelect?.(contactUuid, name);
     setSelectedLabel(name);
@@ -125,6 +153,8 @@ export function ContactSearchCombobox({
     setQ("");
     setList([]);
   };
+
+  const queryTooShort = debounced.trim().length > 0 && debounced.trim().length < MIN_QUERY_LEN;
 
   return (
     <div className="relative">
@@ -190,27 +220,26 @@ export function ContactSearchCombobox({
               {!loading && debounced.trim().length < 1 && (
                 <li className="px-3 py-2.5 text-xs text-[var(--text-muted)]">Πληκτρολογήστε για αναζήτηση</li>
               )}
-              {!loading && debounced.trim().length >= 1 && list.length === 0 && (
+              {!loading && queryTooShort && (
+                <li className="px-3 py-2.5 text-xs text-[var(--text-muted)]">Τουλάχιστον 2 χαρακτήρες</li>
+              )}
+              {!loading && debounced.trim().length >= MIN_QUERY_LEN && list.length === 0 && (
                 <li className="px-3 py-2.5 text-xs text-[var(--text-muted)]">Καμία επαφή</li>
               )}
-              {list.map((c) => {
-                const ph = phoneOf(c);
-                return (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-accent"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        pickContact(c);
-                      }}
-                    >
-                      <span className="font-medium">{displayName(c)}</span>
-                      {ph && <span className="ml-2 text-xs text-[var(--text-muted)]">{ph}</span>}
-                    </button>
-                  </li>
-                );
-              })}
+              {list.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer px-3 py-2.5 text-left text-[var(--text-primary)] transition-colors hover:bg-accent"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      pickContact(c);
+                    }}
+                  >
+                    <span className="font-medium">{resultLabel(c)}</span>
+                  </button>
+                </li>
+              ))}
             </ul>
           </PortalDropdownPanel>
         </>

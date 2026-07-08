@@ -12,3 +12,16 @@ export function formatGreekContactName(
   if (p) return `${core} [του ${p}]`;
   return core;
 }
+
+/** ΕΠΩΝΥΜΟ ΟΝΟΜΑ [του ΠΑΤΡΩΝΥΜΟ] — τηλ. XXXXXXXXXX */
+export function formatGreekContactNameWithPhone(
+  lastName: string | null | undefined,
+  firstName: string | null | undefined,
+  fatherName?: string | null,
+  phone?: string | null,
+): string {
+  const name = formatGreekContactName(lastName, firstName, fatherName);
+  const ph = (phone ?? "").trim();
+  if (!ph) return name;
+  return `${name} — τηλ. ${ph}`;
+}

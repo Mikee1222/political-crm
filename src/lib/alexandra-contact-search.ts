@@ -9,9 +9,72 @@ export const ALEXANDRA_CONTACT_SEARCH_MAX_LIMIT = 100;
 /** Person-picker comboboxes (requests, related persons, tasks). */
 export const CONTACT_COMBOBOX_SEARCH_LIMIT = 50;
 
+/** Strip common phone punctuation; leftover must be all digits for phone-only input. */
+function phoneStrippedDigits(s: string): string {
+  return s.replace(/[\s+()./-]/g, "");
+}
+
 function looksLikePhoneQuery(s: string): boolean {
-  const digits = s.replace(/[\s+()./-]/g, "");
-  return /^\d{6,}$/.test(digits);
+  const digits = phoneStrippedDigits(s);
+  return digits.length > 0 && /^\d+$/.test(digits);
+}
+
+const LETTER_RE = /[A-Za-z\u0370-\u03ff\u1f00-\u1fff]/;
+
+function hasLetters(s: string): boolean {
+  return LETTER_RE.test(s);
+}
+
+export type ContactComboboxQueryKind = "phone" | "name" | "both";
+
+export type ClassifiedContactComboboxQuery = {
+  kind: ContactComboboxQueryKind;
+  phone: string | null;
+  /** Free-text name portion for parseNameSearchTokens / first+last RPC params. */
+  name: string | null;
+};
+
+/**
+ * Auto-detect combobox input: digits → phone, letters → name, mixed → both.
+ * Phone digits are extracted with \D stripped; name text keeps letter tokens only.
+ */
+export function classifyContactComboboxQuery(query: string): ClassifiedContactComboboxQuery {
+  const trimmed = query.trim();
+  if (!trimmed) return { kind: "name", phone: null, name: null };
+
+  const letters = hasLetters(trimmed);
+  const allDigits = looksLikePhoneQuery(trimmed);
+  const digitRun = trimmed.replace(/\D/g, "");
+
+  if (allDigits) {
+    return { kind: "phone", phone: phoneStrippedDigits(trimmed), name: null };
+  }
+  if (letters && digitRun.length === 0) {
+    return { kind: "name", phone: null, name: trimmed };
+  }
+  if (letters && digitRun.length > 0) {
+    const namePart = trimmed
+      .replace(/[\d+()./-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return {
+      kind: "both",
+      phone: digitRun,
+      name: namePart || null,
+    };
+  }
+  if (digitRun.length > 0) {
+    return { kind: "phone", phone: digitRun, name: null };
+  }
+  return { kind: "name", phone: null, name: trimmed };
+}
+
+function appendNameParams(u: URLSearchParams, nameQuery: string) {
+  const { firstName, lastName, fatherName } = parseNameSearchTokens(nameQuery);
+  if (firstName) u.set("first_name", firstName);
+  if (lastName) u.set("last_name", lastName);
+  if (fatherName) u.set("father_name", fatherName);
+  if (!firstName && !lastName) u.set("search", nameQuery);
 }
 
 const CONTACT_SEARCH_SELECT =
@@ -108,33 +171,55 @@ export function normalizeContactListFiltersForNameRpc(f: ContactListFilters): Co
   return out;
 }
 
-/** Build GET /api/contacts query for person-picker comboboxes (RPC-friendly params). */
+/**
+ * Build GET /api/contacts query set for person-picker comboboxes.
+ * Mixed letter+digit input yields two requests (name RPC + phone) so results are unioned.
+ */
+export function buildContactComboboxSearchParamSets(
+  query: string,
+  limit: number = CONTACT_COMBOBOX_SEARCH_LIMIT,
+): URLSearchParams[] {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    const u = new URLSearchParams();
+    u.set("limit", String(limit));
+    return [u];
+  }
+
+  const classified = classifyContactComboboxQuery(trimmed);
+  const sets: URLSearchParams[] = [];
+
+  if (classified.kind === "phone" || classified.kind === "both") {
+    if (classified.phone) {
+      const u = new URLSearchParams();
+      u.set("limit", String(limit));
+      u.set("phone", classified.phone);
+      sets.push(u);
+    }
+  }
+  if (classified.kind === "name" || classified.kind === "both") {
+    if (classified.name) {
+      const u = new URLSearchParams();
+      u.set("limit", String(limit));
+      appendNameParams(u, classified.name);
+      sets.push(u);
+    }
+  }
+  if (!sets.length) {
+    const u = new URLSearchParams();
+    u.set("limit", String(limit));
+    u.set("search", trimmed);
+    sets.push(u);
+  }
+  return sets;
+}
+
+/** Build a single GET /api/contacts query (phone-only or name-only; mixed uses first set). */
 export function buildContactComboboxSearchParams(
   query: string,
   limit: number = CONTACT_COMBOBOX_SEARCH_LIMIT,
 ): URLSearchParams {
-  const u = new URLSearchParams();
-  u.set("limit", String(limit));
-  const trimmed = query.trim();
-  if (!trimmed) return u;
-
-  const norm = normalizeContactSearchFilters({ search: trimmed });
-  if (norm.phone) {
-    u.set("phone", String(norm.phone));
-    return u;
-  }
-  if (norm.first_name) {
-    u.set("first_name", String(norm.first_name));
-    if (norm.last_name) u.set("last_name", String(norm.last_name));
-    if (norm.father_name) u.set("father_name", String(norm.father_name));
-    return u;
-  }
-  if (typeof norm.search === "string" && norm.search.trim()) {
-    u.set("search", norm.search.trim());
-    return u;
-  }
-  u.set("search", trimmed);
-  return u;
+  return buildContactComboboxSearchParamSets(query, limit)[0]!;
 }
 
 export function resolveAlexandraNameSearch(f: ContactListFilters): AlexandraNameSearchOpts | null {

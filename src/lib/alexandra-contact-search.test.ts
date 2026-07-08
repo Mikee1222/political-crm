@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   alexandraContactSearchLimit,
   buildContactComboboxSearchParams,
+  buildContactComboboxSearchParamSets,
+  classifyContactComboboxQuery,
   countAlexandraContacts,
   filtersAllowAlexandraNameRpc,
   normalizeContactListFiltersForNameRpc,
@@ -50,6 +52,35 @@ describe("normalizeContactSearchFilters", () => {
       phone: "6912345678",
     });
   });
+
+  it("maps short digit-only query to phone", () => {
+    expect(normalizeContactSearchFilters({ search: "69" })).toEqual({
+      phone: "69",
+    });
+  });
+});
+
+describe("classifyContactComboboxQuery", () => {
+  it("classifies digits as phone and letters as name", () => {
+    expect(classifyContactComboboxQuery("6912345678")).toEqual({
+      kind: "phone",
+      phone: "6912345678",
+      name: null,
+    });
+    expect(classifyContactComboboxQuery("Μαρία")).toEqual({
+      kind: "name",
+      phone: null,
+      name: "Μαρία",
+    });
+  });
+
+  it("classifies mixed letter+digit as both", () => {
+    expect(classifyContactComboboxQuery("Μαρία 6912")).toEqual({
+      kind: "both",
+      phone: "6912",
+      name: "Μαρία",
+    });
+  });
 });
 
 describe("buildContactComboboxSearchParams", () => {
@@ -64,6 +95,13 @@ describe("buildContactComboboxSearchParams", () => {
     const p = buildContactComboboxSearchParams("6912345678");
     expect(p.get("phone")).toBe("6912345678");
     expect(p.get("first_name")).toBeNull();
+  });
+
+  it("splits mixed input into phone and name param sets", () => {
+    const sets = buildContactComboboxSearchParamSets("Παπα 6912");
+    expect(sets).toHaveLength(2);
+    expect(sets[0]!.get("phone")).toBe("6912");
+    expect(sets[1]!.get("first_name")).toBe("Παπα");
   });
 });
 
