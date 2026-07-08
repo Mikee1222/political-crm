@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Loader2, Search } from "lucide-react";
 import {
   MUNICIPALITIES,
   getAllSettlements,
@@ -11,6 +11,12 @@ import {
 } from "@/lib/aitoloakarnania-data";
 import { lux } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import {
+  getMunicipalitiesCached,
+  getToponymsCached,
+  peekMunicipalities,
+  peekToponyms,
+} from "@/lib/geo-lists-cache";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
 import type { ElectoralDistrictRow } from "@/app/api/geo/electoral-districts/route";
@@ -42,6 +48,8 @@ type SearchableSelectProps = {
   placeholder?: string;
   required?: boolean;
   emptyMessage?: string;
+  loading?: boolean;
+  loadingMessage?: string;
 };
 
 function SearchableSelect({
@@ -55,6 +63,8 @@ function SearchableSelect({
   placeholder = "Επιλέξτε…",
   required,
   emptyMessage = "Δεν βρέθηκαν",
+  loading = false,
+  loadingMessage = "Φόρτωση...",
 }: SearchableSelectProps) {
   const [q, setQ] = useState("");
   const { triggerRef, panelRef, open, setOpen, pos, toggle } = usePortalDropdown();
@@ -133,7 +143,15 @@ function SearchableSelect({
             />
           </div>
           <ul className="m-0 max-h-44 list-none overflow-y-auto p-0.5">
-            {filtered.length === 0 && <li className="px-2 py-2.5 text-xs text-[var(--text-muted)]">{emptyMessage}</li>}
+            {loading && options.length === 0 ? (
+              <li className="flex items-center justify-center gap-2 px-2 py-3 text-xs text-[var(--text-muted)]" role="status">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                {loadingMessage}
+              </li>
+            ) : null}
+            {!loading && filtered.length === 0 ? (
+              <li className="px-2 py-2.5 text-xs text-[var(--text-muted)]">{emptyMessage}</li>
+            ) : null}
             {filtered.map((opt) => (
               <li key={opt}>
                 <button
@@ -298,29 +316,41 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   const dist = values.electoral_district?.trim() ?? "";
   const top = values.toponym?.trim() ?? "";
 
-  const [municipalityNames, setMunicipalityNames] = useState<string[]>([]);
+  const cachedMunis = peekMunicipalities();
+  const cachedTops = peekToponyms();
+
+  const [municipalityNames, setMunicipalityNames] = useState<string[]>(cachedMunis ?? []);
+  const [municipalitiesLoading, setMunicipalitiesLoading] = useState(!cachedMunis);
   const [geoMunicipalities, setGeoMunicipalities] = useState<MunicipalityRow[]>([]);
   const [districts, setDistricts] = useState<ElectoralDistrictRow[]>([]);
-  const [allToponymNames, setAllToponymNames] = useState<string[]>([]);
+  const [allToponymNames, setAllToponymNames] = useState<string[]>(() =>
+    cachedTops ? [...new Set(cachedTops.map((t) => t.name))].sort((a, b) => a.localeCompare(b, "el")) : [],
+  );
+  const [toponymsLoading, setToponymsLoading] = useState(!cachedTops);
   const [filteredToponymRows, setFilteredToponymRows] = useState<ToponymRow[]>([]);
 
   const muniId = useMemo(() => geoMunicipalities.find((x) => x.name === muni)?.id ?? null, [geoMunicipalities, muni]);
   const distId = useMemo(() => districts.find((x) => x.name === dist)?.id ?? null, [districts, dist]);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/municipalities");
-        if (!r.ok) {
-          setMunicipalityNames([]);
-          return;
+        const data = await getMunicipalitiesCached();
+        if (!cancelled) {
+          setMunicipalityNames(data);
+          setMunicipalitiesLoading(false);
         }
-        const data = (await r.json()) as string[];
-        setMunicipalityNames(Array.isArray(data) ? data : []);
       } catch {
-        setMunicipalityNames([]);
+        if (!cancelled) {
+          setMunicipalityNames([]);
+          setMunicipalitiesLoading(false);
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -336,22 +366,25 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/toponyms");
-        if (!r.ok) {
-          setAllToponymNames([]);
-          return;
+        const rows = await getToponymsCached();
+        const names = [...new Set(rows.map((t) => t.name))].sort((a, b) => a.localeCompare(b, "el"));
+        if (!cancelled) {
+          setAllToponymNames(names);
+          setToponymsLoading(false);
         }
-        const d = (await r.json()) as { id: string; name: string }[];
-        const names = Array.isArray(d)
-          ? d.map((t) => t.name.trim()).filter((n) => n.length > 2)
-          : [];
-        setAllToponymNames([...new Set(names)].sort((a, b) => a.localeCompare(b, "el")));
       } catch {
-        setAllToponymNames([]);
+        if (!cancelled) {
+          setAllToponymNames([]);
+          setToponymsLoading(false);
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -452,6 +485,8 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
         options={muniList}
         error={errorMunicipality}
         placeholder="Επιλέξτε δήμο"
+        loading={municipalitiesLoading}
+        loadingMessage="Φόρτωση δήμων…"
         emptyMessage="Προσθέστε δεδομένα στις ρυθμίσεις ή αλλάξτε αναζήτηση"
       />
 
@@ -489,6 +524,8 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
         onChange={handleTopPick}
         options={settlementList}
         placeholder="Επιλέξτε οικισμό"
+        loading={toponymsLoading}
+        loadingMessage="Φόρτωση τοπωνυμίων…"
         emptyMessage="Δοκιμάστε φίλτρο"
       />
 
@@ -511,25 +548,26 @@ function ApiAitLocationFields({ values, onChange, errorMunicipality }: AitLocati
 }
 
 export function AitoloakarnaniaLocationFields({ values, onChange, errorMunicipality }: AitLocationFieldsProps) {
-  const [mode, setMode] = useState<"loading" | "static" | "api">("loading");
+  const cached = peekMunicipalities();
+  const [mode, setMode] = useState<"loading" | "static" | "api">(() =>
+    cached == null ? "loading" : cached.length > 0 ? "api" : "static",
+  );
 
   useEffect(() => {
+    if (mode !== "loading") return;
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/municipalities");
-        if (r.ok) {
-          const data = (await r.json()) as string[];
-          if (Array.isArray(data) && data.length > 0) {
-            setMode("api");
-            return;
-          }
+        const data = await getMunicipalitiesCached();
+        if (data.length > 0) {
+          setMode("api");
+          return;
         }
       } catch {
         /* fallback */
       }
       setMode("static");
     })();
-  }, []);
+  }, [mode]);
 
   if (mode === "loading") {
     return (

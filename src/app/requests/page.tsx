@@ -46,6 +46,10 @@ import { can } from "@/lib/can";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
+import { getClientTtlCache, setClientTtlCache } from "@/lib/ttl-cache";
+
+const REQUESTS_LIST_CLIENT_TTL_MS = 30_000;
+const REQUESTS_COUNTS_CLIENT_TTL_MS = 30_000;
 
 type RequestRow = {
   id: string;
@@ -156,7 +160,21 @@ export default function RequestsPage() {
     () => searchParams.get("q") ?? searchParams.get("search") ?? "",
   );
   const filtersUrlKeyRef = useRef<string | null>(null);
+  /** When we already have status counts in client memory, ask API to skip recount. */
+  const hasCountsRef = useRef(false);
   const pageSize = 50;
+
+  // Instant chip paint from 30s client counts cache (navigate-back).
+  useEffect(() => {
+    const countsCached = getClientTtlCache<{
+      statusCounts: Array<{ status: string; count: number }>;
+      totalCount: number;
+    }>("requests:counts");
+    if (!countsCached) return;
+    setStatusCounts(countsCached.statusCounts);
+    setTotalCount(countsCached.totalCount);
+    hasCountsRef.current = true;
+  }, []);
 
   const searchKey = useMemo(() => searchParams.toString(), [searchParams]);
 
@@ -196,7 +214,7 @@ export default function RequestsPage() {
   const currentPage = Math.max(1, parseInt(f.page || "1", 10) || 1);
   const hiddenFilterCount = useMemo(() => countActiveHiddenRequestFilters(f), [f]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { forceCounts?: boolean }) => {
     const q = new URLSearchParams();
     if (f.status) q.set("status", f.status);
     if (f.category) q.set("category", f.category);
@@ -207,6 +225,37 @@ export default function RequestsPage() {
     q.set("page", String(currentPage));
     q.set("page_size", String(pageSize));
 
+    const cacheKey = `requests:list:${q.toString()}`;
+    const cached = getClientTtlCache<{
+      rows: RequestRow[];
+      listTotal: number;
+      totalPages: number;
+    }>(cacheKey);
+    if (cached) {
+      setRows(cached.rows);
+      setListTotal(cached.listTotal);
+      setTotalPages(cached.totalPages);
+      setListLoading(false);
+      console.log(`[requests] client list cache HIT`);
+      // Still refresh counts once if empty (e.g. after soft nav).
+      if (!hasCountsRef.current) {
+        const countsCached = getClientTtlCache<{
+          statusCounts: Array<{ status: string; count: number }>;
+          totalCount: number;
+        }>("requests:counts");
+        if (countsCached) {
+          setStatusCounts(countsCached.statusCounts);
+          setTotalCount(countsCached.totalCount);
+          hasCountsRef.current = true;
+        }
+      }
+      return;
+    }
+
+    const skipCounts = !opts?.forceCounts && hasCountsRef.current;
+    if (skipCounts) q.set("skip_counts", "1");
+
+    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     setListLoading(true);
     try {
       const res = await fetchWithTimeout(`/api/requests?${q.toString()}`);
@@ -217,13 +266,38 @@ export default function RequestsPage() {
         total_pages?: number;
         statusCounts?: Array<{ status: string; count: number }>;
         totalCount?: number;
+        countsOmitted?: boolean;
+        countsCache?: "HIT" | "MISS";
       };
       const list = data.data ?? data.requests ?? [];
       setRows(list);
-      setListTotal(typeof data.count === "number" ? data.count : list.length);
-      setTotalPages(Math.max(1, data.total_pages ?? 1));
-      setStatusCounts(Array.isArray(data.statusCounts) ? data.statusCounts : []);
-      setTotalCount(typeof data.totalCount === "number" ? data.totalCount : 0);
+      const listTotal = typeof data.count === "number" ? data.count : list.length;
+      const pages = Math.max(1, data.total_pages ?? 1);
+      setListTotal(listTotal);
+      setTotalPages(pages);
+      setClientTtlCache(
+        cacheKey,
+        { rows: list, listTotal, totalPages: pages },
+        REQUESTS_LIST_CLIENT_TTL_MS,
+      );
+
+      if (!data.countsOmitted && Array.isArray(data.statusCounts)) {
+        setStatusCounts(data.statusCounts);
+        const tc = typeof data.totalCount === "number" ? data.totalCount : 0;
+        setTotalCount(tc);
+        hasCountsRef.current = true;
+        setClientTtlCache(
+          "requests:counts",
+          { statusCounts: data.statusCounts, totalCount: tc },
+          REQUESTS_COUNTS_CLIENT_TTL_MS,
+        );
+        console.log(`[requests] counts from API cache=${data.countsCache ?? "n/a"}`);
+      }
+      console.log(
+        `[requests] list fetch ${Math.round(
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
+        )}ms rows=${list.length} skipCounts=${skipCounts}`,
+      );
     } finally {
       setListLoading(false);
     }
@@ -233,7 +307,7 @@ export default function RequestsPage() {
     void load();
   }, [load]);
 
-  useRegisterMobileRefresh(load);
+  useRegisterMobileRefresh(() => load({ forceCounts: true }));
 
   const setPageContext = alexPage?.setPageContext;
   useEffect(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Search, Check, ChevronDown, X } from "lucide-react";
+import { Search, Check, ChevronDown, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 
@@ -20,6 +20,9 @@ export type SearchableSelectProps = {
   searchPlaceholder?: string;
   className?: string;
   emptyText?: string;
+  /** When true, show a spinner instead of the empty message (options still loading). */
+  loading?: boolean;
+  loadingText?: string;
   id?: string;
   disabled?: boolean;
   "aria-label"?: string;
@@ -40,6 +43,8 @@ export function SearchableSelect({
   searchPlaceholder = "Αναζήτηση...",
   className,
   emptyText = "Δεν βρέθηκαν αποτελέσματα",
+  loading = false,
+  loadingText = "Φόρτωση...",
   id,
   disabled,
   "aria-label": ariaLabel,
@@ -206,7 +211,12 @@ export function SearchableSelect({
             <span>{placeholder}</span>
           </div>
 
-          {grouped.length === 0 ? (
+          {loading && options.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8" role="status">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+              <p className="text-sm text-muted-foreground">{loadingText}</p>
+            </div>
+          ) : grouped.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-sm text-muted-foreground">{emptyText}</p>
             </div>

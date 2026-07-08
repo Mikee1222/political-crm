@@ -40,6 +40,10 @@ import {
   EMPTY_WIDGETS,
 } from "@/components/dashboard/dashboard-widgets";
 import type { DashboardWidgetsData } from "@/lib/dashboard-widgets-data";
+import { DashboardPageSkeleton } from "@/components/dashboard/dashboard-page-skeleton";
+import { getClientTtlCache, setClientTtlCache } from "@/lib/ttl-cache";
+
+const DASH_CLIENT_TTL_MS = 60_000;
 
 type DashboardData = {
   totalContacts: number;
@@ -323,18 +327,58 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [d, b, a, w] = await Promise.all([
-        fetchJsonWithTimeout<unknown>("/api/dashboard", {}, CLIENT_FETCH_TIMEOUT_MS),
+      const t0 =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+
+      type DashBundle = {
+        d: unknown;
+        b: unknown;
+        a: unknown;
+        w: unknown;
+      };
+
+      const cached = getClientTtlCache<DashBundle>("dashboard:bundle");
+      if (cached) {
+        if (cancelled) return;
+        setData(parseDashboard(cached.d));
+        setBriefing(parseBriefing(cached.b));
+        setActs(parseActs(cached.a));
+        setWidgets(parseWidgets(cached.w));
+        setReady(true);
+        console.log(
+          `[dashboard] client cache HIT first paint ${Math.round(
+            (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
+          )}ms`,
+        );
+        return;
+      }
+
+      // Critical path: metrics first for meaningful first paint, then secondary panels.
+      const d = await fetchJsonWithTimeout<unknown>("/api/dashboard", {}, CLIENT_FETCH_TIMEOUT_MS);
+      if (cancelled) return;
+      setData(parseDashboard(d));
+      setReady(true);
+      console.log(
+        `[dashboard] metrics first paint ${Math.round(
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
+        )}ms`,
+      );
+
+      const [b, a, w] = await Promise.all([
         fetchJsonWithTimeout<unknown>("/api/briefing/today", {}, CLIENT_FETCH_TIMEOUT_MS),
         fetchJsonWithTimeout<unknown>("/api/activity/recent", {}, CLIENT_FETCH_TIMEOUT_MS),
         fetchJsonWithTimeout<unknown>("/api/dashboard/widgets", {}, CLIENT_FETCH_TIMEOUT_MS),
       ]);
       if (cancelled) return;
-      setData(parseDashboard(d));
       setBriefing(parseBriefing(b));
       setActs(parseActs(a));
       setWidgets(parseWidgets(w));
-      setReady(true);
+      setClientTtlCache("dashboard:bundle", { d, b, a, w }, DASH_CLIENT_TTL_MS);
+      console.log(
+        `[dashboard] full load ${Math.round(
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
+        )}ms`,
+      );
     })();
     return () => {
       cancelled = true;
@@ -342,11 +386,7 @@ export default function DashboardPage() {
   }, []);
 
   if (!ready) {
-    return (
-      <div className="flex min-h-[30vh] items-center justify-center">
-        <p className="text-sm text-[var(--text-subtitle)]">Φόρτωση…</p>
-      </div>
-    );
+    return <DashboardPageSkeleton />;
   }
 
   const safeTotalContacts = typeof data.totalContacts === "number" ? data.totalContacts : 0;

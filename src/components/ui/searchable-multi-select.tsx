@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalDropdownPanel, usePortalDropdown } from "@/components/ui/portal-dropdown";
 import type { SearchableSelectOption } from "@/components/ui/searchable-select";
@@ -14,6 +14,9 @@ export type SearchableMultiSelectProps = {
   searchPlaceholder?: string;
   className?: string;
   emptyText?: string;
+  /** When true, show a spinner instead of the empty message (options still loading). */
+  loading?: boolean;
+  loadingText?: string;
   id?: string;
   disabled?: boolean;
   /** When true and more than one option is selected, show a count summary on the trigger. */
@@ -37,6 +40,8 @@ export function SearchableMultiSelect({
   searchPlaceholder = "Αναζήτηση...",
   className,
   emptyText = "Δεν βρέθηκαν αποτελέσματα",
+  loading = false,
+  loadingText = "Φόρτωση...",
   id,
   disabled,
   countSummaryWhenMultiple = false,
@@ -175,7 +180,12 @@ export function SearchableMultiSelect({
         </div>
 
         <div className="max-h-72 overflow-y-auto py-1.5">
-          {grouped.length === 0 ? (
+          {loading && options.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8" role="status">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+              <p className="text-sm text-muted-foreground">{loadingText}</p>
+            </div>
+          ) : grouped.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-sm text-muted-foreground">{emptyText}</p>
             </div>

@@ -63,6 +63,14 @@ import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday
 import { cn } from "@/lib/utils";
 import { getGroupChipStyle, GROUP_CHIP_CLASS } from "@/lib/color-utils";
 import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
+import {
+  getClientTtlCache,
+  setClientTtlCache,
+  invalidateClientTtlCache,
+} from "@/lib/ttl-cache";
+
+const CONTACTS_LIST_CLIENT_TTL_MS = 30_000;
+const CONTACTS_META_CLIENT_TTL_MS = 60_000;
 
 type Contact = {
   id: string;
@@ -921,6 +929,17 @@ function ContactsPage() {
     }
     params.set("page", q.page || "1");
     params.set("page_size", String(pageSize));
+    const cacheKey = `contacts:list:${params.toString()}`;
+    const cached = getClientTtlCache<{ contacts: Contact[]; total: number }>(cacheKey);
+    if (cached) {
+      if (seq !== loadSeqRef.current) return;
+      setContacts(cached.contacts);
+      setListTotal(cached.total);
+      setListLoading(false);
+      console.log(`[contacts] client cache HIT key=${cacheKey.slice(0, 80)}`);
+      return;
+    }
+    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     setListLoading(true);
     try {
       const res = await fetchWithTimeout(`/api/contacts?${params.toString()}`, {
@@ -939,7 +958,14 @@ function ContactsPage() {
         return { ...c, contact_groups } as Contact;
       });
       setContacts(list);
-      setListTotal(typeof data.total === "number" ? data.total : list.length);
+      const total = typeof data.total === "number" ? data.total : list.length;
+      setListTotal(total);
+      setClientTtlCache(cacheKey, { contacts: list, total }, CONTACTS_LIST_CLIENT_TTL_MS);
+      console.log(
+        `[contacts] list fetch ${Math.round(
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
+        )}ms rows=${list.length}`,
+      );
     } catch {
       if (seq !== loadSeqRef.current) return;
       setContacts([]);
@@ -949,32 +975,92 @@ function ContactsPage() {
     }
   }, [f, ageGroup, pageSize]);
 
+  // Defer non-critical metadata off the contacts first-paint path.
   useEffect(() => {
-    fetchWithTimeout("/api/groups")
-      .then((r) => r.json())
-      .then((d: { groups?: ContactGroupRow[] }) => setGroups(d.groups ?? []))
-      .catch(() => setGroups([]));
-  }, []);
+    let cancelled = false;
+    const idle =
+      typeof window !== "undefined" && "requestIdleCallback" in window
+        ? window.requestIdleCallback.bind(window)
+        : (cb: () => void) => window.setTimeout(cb, 150);
+    const cancelIdle =
+      typeof window !== "undefined" && "cancelIdleCallback" in window
+        ? window.cancelIdleCallback.bind(window)
+        : (id: number) => window.clearTimeout(id);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const r = await fetchWithTimeout("/api/municipalities");
-        if (!r.ok) return;
-        const data = (await r.json()) as string[];
-        const names = Array.isArray(data) ? data : [];
-        if (names.length) setFilterMunicipalities(names);
-      } catch {
-        /* keep static fallback */
+    const id = idle(() => {
+      if (cancelled) return;
+      const groupsCached = getClientTtlCache<{ groups: ContactGroupRow[] }>("contacts:groups");
+      if (groupsCached) {
+        setGroups(groupsCached.groups);
+      } else {
+        void fetchWithTimeout("/api/groups")
+          .then((r) => r.json())
+          .then((d: { groups?: ContactGroupRow[] }) => {
+            if (cancelled) return;
+            const groups = d.groups ?? [];
+            setGroups(groups);
+            setClientTtlCache("contacts:groups", { groups }, CONTACTS_META_CLIENT_TTL_MS);
+          })
+          .catch(() => {
+            if (!cancelled) setGroups([]);
+          });
       }
-    })();
+
+      void (async () => {
+        try {
+          const munCached = getClientTtlCache<string[]>("contacts:municipalities");
+          if (munCached?.length) {
+            setFilterMunicipalities(munCached);
+            return;
+          }
+          const r = await fetchWithTimeout("/api/municipalities");
+          if (!r.ok || cancelled) return;
+          const data = (await r.json()) as string[];
+          const names = Array.isArray(data) ? data : [];
+          if (names.length) {
+            setFilterMunicipalities(names);
+            setClientTtlCache("contacts:municipalities", names, CONTACTS_META_CLIENT_TTL_MS);
+          }
+        } catch {
+          /* keep static fallback */
+        }
+      })();
+
+      void fetchWithTimeout("/api/contacts/summary-stats")
+        .then(async (r) => {
+          const d = (await r.json().catch(() => ({}))) as {
+            total?: number;
+            positive?: number;
+            pending?: number;
+            this_month?: number;
+          };
+          if (!r.ok || cancelled) return;
+          setWarStats({
+            total: typeof d.total === "number" ? d.total : 0,
+            positive: typeof d.positive === "number" ? d.positive : 0,
+            pending: typeof d.pending === "number" ? d.pending : 0,
+            this_month: typeof d.this_month === "number" ? d.this_month : 0,
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setWarStats(null);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelIdle(id as number);
+    };
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  useRegisterMobileRefresh(load);
+  useRegisterMobileRefresh(() => {
+    invalidateClientTtlCache("contacts:list:");
+    return load();
+  });
 
   useEffect(() => {
     if (selected.size === 0) setMobileSelectMode(false);
@@ -996,39 +1082,31 @@ function ContactsPage() {
   }, [contacts, f]);
 
   useEffect(() => {
+    if (!canBulk) return;
     let cancelled = false;
-    fetchWithTimeout("/api/contacts/summary-stats")
-      .then(async (r) => {
-        const d = (await r.json().catch(() => ({}))) as {
-          total?: number;
-          positive?: number;
-          pending?: number;
-          this_month?: number;
-        };
-        if (!r.ok || cancelled) return;
-        setWarStats({
-          total: typeof d.total === "number" ? d.total : 0,
-          positive: typeof d.positive === "number" ? d.positive : 0,
-          pending: typeof d.pending === "number" ? d.pending : 0,
-          this_month: typeof d.this_month === "number" ? d.this_month : 0,
+    const idle =
+      typeof window !== "undefined" && "requestIdleCallback" in window
+        ? window.requestIdleCallback.bind(window)
+        : (cb: () => void) => window.setTimeout(cb, 200);
+    const cancelIdle =
+      typeof window !== "undefined" && "cancelIdleCallback" in window
+        ? window.cancelIdleCallback.bind(window)
+        : (id: number) => window.clearTimeout(id);
+    const id = idle(() => {
+      if (cancelled) return;
+      void fetchWithTimeout("/api/campaigns")
+        .then((r) => r.json())
+        .then((d) => {
+          if (!cancelled) setCampaigns((d.campaigns as Camp[] | undefined) ?? []);
+        })
+        .catch(() => {
+          if (!cancelled) setCampaigns([]);
         });
-      })
-      .catch(() => {
-        if (!cancelled) setWarStats(null);
-      });
+    });
     return () => {
       cancelled = true;
+      cancelIdle(id as number);
     };
-  }, []);
-
-  useEffect(() => {
-    if (!canBulk) return;
-    fetchWithTimeout("/api/campaigns")
-      .then((r) => r.json())
-      .then((d) => {
-        setCampaigns((d.campaigns as Camp[] | undefined) ?? []);
-      })
-      .catch(() => setCampaigns([]));
   }, [canBulk]);
 
   useEffect(() => {
@@ -1077,6 +1155,7 @@ function ContactsPage() {
     if (!selectedIds.length) return;
     setBulkErr(null);
     setSaving(true);
+    invalidateClientTtlCache("contacts:list:");
     try {
       const res = await fetchWithTimeout("/api/contacts/bulk-action", {
         method: "POST",
@@ -1391,7 +1470,10 @@ function ContactsPage() {
                   }
                   onEnterSelectMode={() => setMobileSelectMode(true)}
                   onNavigateDetail={() => router.push(contactDetailHref(c.id))}
-                  onDeleted={() => void load()}
+                  onDeleted={() => {
+                    invalidateClientTtlCache("contacts:list:");
+                    void load();
+                  }}
                 />
               </li>
             ))}
@@ -1675,7 +1757,16 @@ function ContactsPage() {
         </CenteredModal>
       )}
 
-      {openCreate && <CreateContactModal groups={groups} onClose={() => setOpenCreate(false)} onSaved={load} />}
+      {openCreate && (
+        <CreateContactModal
+          groups={groups}
+          onClose={() => setOpenCreate(false)}
+          onSaved={async () => {
+            invalidateClientTtlCache("contacts:list:");
+            await load();
+          }}
+        />
+      )}
         </div>
       </div>
     </div>

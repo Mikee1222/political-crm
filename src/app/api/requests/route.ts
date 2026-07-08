@@ -113,12 +113,18 @@ async function fetchRequestsPage(
   return { data, error, count };
 }
 
-async function fetchCachedRequestCounts(supabase: SupabaseClient): Promise<RequestCountsCachePayload> {
+async function fetchCachedRequestCounts(
+  supabase: SupabaseClient,
+): Promise<RequestCountsCachePayload & { cache: "HIT" | "MISS" }> {
   const now = Date.now();
   if (requestCountsCache && now < requestCountsCache.expiresAt) {
-    return requestCountsCache.payload;
+    const ageMs = REQUEST_COUNTS_CACHE_TTL_MS - (requestCountsCache.expiresAt - now);
+    console.log(`[api/requests] status counts cache HIT age=${ageMs}ms`);
+    return { ...requestCountsCache.payload, cache: "HIT" };
   }
 
+  console.log("[api/requests] status counts cache MISS — fetching");
+  const t0 = Date.now();
   const [statusCounts, totalAllR] = await Promise.all([
     Promise.all(
       REQUEST_STATUSES.map(async (s) => {
@@ -134,7 +140,8 @@ async function fetchCachedRequestCounts(supabase: SupabaseClient): Promise<Reque
 
   const payload = { statusCounts, totalCount: totalAllR.count ?? 0 };
   requestCountsCache = { payload, expiresAt: now + REQUEST_COUNTS_CACHE_TTL_MS };
-  return payload;
+  console.log(`[api/requests] status counts cache STORE took=${Date.now() - t0}ms ttl=30s`);
+  return { ...payload, cache: "MISS" };
 }
 
 export async function GET(request: NextRequest) {
@@ -151,6 +158,7 @@ export async function GET(request: NextRequest) {
 
     const sp = request.nextUrl.searchParams;
     const f = searchParamsToRequestFilters(sp);
+    const skipCounts = sp.get("skip_counts") === "1";
 
     const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
     const pageSize = Math.min(
@@ -158,9 +166,14 @@ export async function GET(request: NextRequest) {
       Math.max(1, parseInt(sp.get("page_size") || "50", 10) || 50),
     );
 
+    const pagePromise = fetchRequestsPage(supabase, f, page, pageSize);
+    const countsPromise = skipCounts
+      ? Promise.resolve(null)
+      : fetchCachedRequestCounts(supabase);
+
     const [{ data, error, count }, countsPayload] = await Promise.all([
-      fetchRequestsPage(supabase, f, page, pageSize),
-      fetchCachedRequestCounts(supabase),
+      pagePromise,
+      countsPromise,
     ]);
 
     if (error) {
@@ -178,16 +191,22 @@ export async function GET(request: NextRequest) {
 
     const total = count ?? 0;
     const total_pages = total === 0 ? 0 : Math.ceil(total / pageSize);
+    const mapped = mapRequestRows((data ?? []) as unknown[]);
 
     return NextResponse.json({
-      data: mapRequestRows((data ?? []) as unknown[]),
+      data: mapped,
       count: total,
       page,
       page_size: pageSize,
       total_pages,
-      statusCounts: countsPayload.statusCounts,
-      totalCount: countsPayload.totalCount,
-      requests: mapRequestRows((data ?? []) as unknown[]),
+      ...(countsPayload
+        ? {
+            statusCounts: countsPayload.statusCounts,
+            totalCount: countsPayload.totalCount,
+            countsCache: countsPayload.cache,
+          }
+        : { countsOmitted: true }),
+      requests: mapped,
     });
   } catch (e) {
     console.error("[api/requests GET]", e);

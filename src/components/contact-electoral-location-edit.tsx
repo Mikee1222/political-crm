@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDistrictsForMuni } from "@/lib/aitoloakarnania-data";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import {
+  getMunicipalitiesCached,
+  getToponymsCached,
+  peekMunicipalities,
+  peekToponyms,
+} from "@/lib/geo-lists-cache";
 import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { MunicipalityRow } from "@/app/api/geo/municipalities/route";
@@ -38,25 +44,35 @@ export function ContactElectoralLocationEdit({
   const dist = values.electoral_district?.trim() ?? "";
   const top = values.toponym ?? "";
 
-  const [municipalities, setMunicipalities] = useState<string[]>([]);
+  const cachedMunis = peekMunicipalities();
+  const cachedTops = peekToponyms();
+
+  const [municipalities, setMunicipalities] = useState<string[]>(cachedMunis ?? []);
+  const [municipalitiesLoading, setMunicipalitiesLoading] = useState(!cachedMunis);
   const [geoMunicipalities, setGeoMunicipalities] = useState<MunicipalityRow[]>([]);
   const [districts, setDistricts] = useState<ElectoralDistrictRow[]>([]);
-  const [toponyms, setToponyms] = useState<ToponymListRow[]>([]);
+  const [toponyms, setToponyms] = useState<ToponymListRow[]>(cachedTops ?? []);
+  const [toponymsLoading, setToponymsLoading] = useState(!cachedTops);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/municipalities");
-        if (!r.ok) {
-          setMunicipalities([]);
-          return;
+        const data = await getMunicipalitiesCached();
+        if (!cancelled) {
+          setMunicipalities(data);
+          setMunicipalitiesLoading(false);
         }
-        const data = (await r.json()) as string[];
-        setMunicipalities(Array.isArray(data) ? data : []);
       } catch {
-        setMunicipalities([]);
+        if (!cancelled) {
+          setMunicipalities([]);
+          setMunicipalitiesLoading(false);
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -93,24 +109,24 @@ export function ContactElectoralLocationEdit({
   }, [muniId]);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       try {
-        const r = await fetchWithTimeout("/api/toponyms");
-        if (!r.ok) {
-          setToponyms([]);
-          return;
+        const clean = await getToponymsCached();
+        if (!cancelled) {
+          setToponyms(clean);
+          setToponymsLoading(false);
         }
-        const d = (await r.json()) as ToponymListRow[];
-        const clean = Array.isArray(d)
-          ? d
-              .filter((t) => t.name && t.name.trim().length > 2)
-              .map((t) => ({ ...t, name: t.name.trim() }))
-          : [];
-        setToponyms(clean);
       } catch {
-        setToponyms([]);
+        if (!cancelled) {
+          setToponyms([]);
+          setToponymsLoading(false);
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const municipalityOptions = useMemo(() => {
@@ -145,6 +161,9 @@ export function ContactElectoralLocationEdit({
           options={municipalityOptions.map((name) => ({ value: name, label: name }))}
           placeholder="Επιλέξτε δήμο"
           searchPlaceholder="Αναζήτηση δήμου..."
+          loading={municipalitiesLoading}
+          loadingText="Φόρτωση δήμων..."
+          emptyText="Δεν βρέθηκαν δήμοι"
         />
       </div>
 
@@ -193,6 +212,8 @@ export function ContactElectoralLocationEdit({
           options={toponymOptions.map((name) => ({ value: name, label: name }))}
           placeholder="Επιλέξτε τοπωνύμιο"
           searchPlaceholder="Αναζήτηση τοπωνυμίου..."
+          loading={toponymsLoading}
+          loadingText="Φόρτωση τοπωνυμίων..."
           emptyText="Δεν βρέθηκαν τοπωνύμια"
         />
         {toponymNames.length > 0 && top && !toponymNames.includes(top.trim()) ? (

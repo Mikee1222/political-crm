@@ -262,7 +262,8 @@ async function fetchContactsInMemoryPipeline(
     let query: QueryBuilder = supabase
       .from("contacts")
       .select(SELECT_LIST)
-      .order("created_at", { ascending: false });
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true });
     query = applyApiContactFilters(query, f, filterResolution, partialLocation, {
       skipNameColumnFilters: true,
     });
@@ -566,7 +567,8 @@ export async function GET(request: NextRequest) {
         .from("contacts")
         .select(SELECT_LIST)
         .in("id", ids)
-        .order("created_at", { ascending: false });
+        .order("last_name", { ascending: true })
+        .order("first_name", { ascending: true });
       query = applyApiContactFilters(query, f, filterResolution, partialLocation);
       if (comboboxMode) {
         query = query.limit(listLimit!);
@@ -647,10 +649,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Default list order uses idx_contacts_last_name_first_name (EXPLAIN ANALYZE ~30ms
+    // vs ~1.2s for ORDER BY created_at DESC which forces a seq scan / gather merge).
     let query: QueryBuilder = supabase
       .from("contacts")
       .select(SELECT_LIST, { count: "exact" })
-      .order("created_at", { ascending: false });
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true });
     query = applyApiContactFilters(query, f, sqlGroupResolution, partialLocation);
 
     if (comboboxMode) {
