@@ -15,6 +15,7 @@ import {
 } from "@/components/contacts/search/contact-search-result-card";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FilterSidebarToggle } from "@/components/search/filter-sidebar-toggle";
+import { RestoredSearchBanner } from "@/components/search/restored-search-banner";
 import { SearchPagination } from "@/components/search/search-pagination";
 import { SearchResultsHeader } from "@/components/search/search-results-header";
 import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
@@ -38,6 +39,15 @@ import {
 import { dedupeContactGroupsById } from "@/lib/contact-groups";
 import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
+import {
+  clearSearchSessionState,
+  CONTACTS_SEARCH_FRESH_KEY,
+  CONTACTS_SEARCH_STATE_KEY,
+  consumeSearchFreshIntent,
+  loadSearchSessionState,
+  saveSearchSessionState,
+  SEARCH_FRESH_EVENT,
+} from "@/lib/search-session-state";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -92,9 +102,29 @@ function ContactSearchPageInner() {
   const [printing, setPrinting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [restoredFromCache, setRestoredFromCache] = useState(false);
   const loadSeqRef = useRef(0);
   /** Exact `/api/contacts` query used for the last successful results (export/print must match). */
   const lastListParamsRef = useRef<URLSearchParams | null>(null);
+  const sessionInitRef = useRef(false);
+  const skipUrlSyncOnceRef = useRef(false);
+  /** When set, matching filters+page skip network fetch (session restore). */
+  const restoredFingerprintRef = useRef<string | null>(null);
+  const resultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const stateSnapshotRef = useRef({
+    hasSearched: false,
+    appliedFilters: null as ContactListFilters | null,
+    page: 1,
+    contacts: [] as ContactSearchResult[],
+    total: 0,
+  });
+
+  const contactSearchFingerprint = useCallback((f: ContactListFilters, pageNum: number) => {
+    return contactFiltersToSearchParams({
+      ...cloneContactListFilters(f),
+      page: String(pageNum),
+    }).toString();
+  }, []);
 
   const applyFocusModeDom = useCallback((val: boolean) => {
     if (val) document.body.classList.add("focus-mode");
@@ -142,6 +172,126 @@ function ContactSearchPageInner() {
 
   const groupNames = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
   const sourceNames = useMemo(() => new Map(sources.map((s) => [s.id, s.name])), [sources]);
+
+  stateSnapshotRef.current = {
+    hasSearched,
+    appliedFilters,
+    page,
+    contacts,
+    total,
+  };
+
+  const persistSearchState = useCallback((scrollY?: number) => {
+    const snap = stateSnapshotRef.current;
+    if (!snap.hasSearched || !snap.appliedFilters) return;
+    const urlQuery =
+      typeof window !== "undefined" ? window.location.search.replace(/^\?/, "") : undefined;
+    saveSearchSessionState(CONTACTS_SEARCH_STATE_KEY, {
+      filters: cloneContactListFilters(snap.appliedFilters),
+      page: snap.page,
+      results: snap.contacts,
+      total: snap.total,
+      scrollY:
+        typeof scrollY === "number"
+          ? scrollY
+          : (resultsScrollRef.current?.scrollTop ?? 0),
+      urlQuery,
+    });
+  }, []);
+
+  const applyCachedResults = useCallback((cached: {
+    results: ContactSearchResult[];
+    total: number;
+    scrollY: number;
+    filters: ContactListFilters;
+    page: number;
+  }) => {
+    restoredFingerprintRef.current = contactSearchFingerprint(cached.filters, cached.page);
+    setContacts(cached.results);
+    setTotal(cached.total);
+    setRestoredFromCache(true);
+    const params = contactFiltersToSearchParams({
+      ...cloneContactListFilters(cached.filters),
+      page: String(cached.page),
+    });
+    params.set("page_size", String(PAGE_SIZE));
+    params.set("partial_location", "1");
+    lastListParamsRef.current = params;
+    const scrollTarget = cached.scrollY;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resultsScrollRef.current?.scrollTo({ top: scrollTarget });
+      });
+    });
+  }, [contactSearchFingerprint]);
+
+  // One-shot restore from sessionStorage (or fresh-nav clear) before URL sync.
+  useEffect(() => {
+    if (sessionInitRef.current) return;
+    sessionInitRef.current = true;
+
+    if (consumeSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY)) {
+      clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+      return;
+    }
+
+    const cached = loadSearchSessionState<ContactListFilters, ContactSearchResult>(
+      CONTACTS_SEARCH_STATE_KEY,
+    );
+    if (!cached?.filters) return;
+
+    const urlRan = searchParams.get("ran") === "1";
+    const f = cloneContactListFilters(cached.filters);
+    const pageNum = Math.max(1, cached.page || 1);
+
+    skipUrlSyncOnceRef.current = !urlRan;
+    setDraftFilters(f);
+    setAppliedFilters(f);
+    setHasSearched(true);
+    setPage(pageNum);
+    applyCachedResults({
+      results: cached.results,
+      total: cached.total,
+      scrollY: cached.scrollY,
+      filters: f,
+      page: pageNum,
+    });
+
+    if (!urlRan) {
+      const params =
+        cached.urlQuery != null && cached.urlQuery.length > 0
+          ? new URLSearchParams(cached.urlQuery)
+          : contactFiltersToSearchParams({ ...f, page: String(pageNum) });
+      if (!params.get("ran")) params.set("ran", "1");
+      if (searchParams.get("focus") === "1") params.set("focus", "1");
+      router.replace(`/contacts/search?${params.toString()}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
+  }, []);
+
+  // Same-page nav click: clear without remount.
+  useEffect(() => {
+    const onFresh = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ freshKey?: string }>).detail;
+      if (detail?.freshKey !== CONTACTS_SEARCH_FRESH_KEY) return;
+      consumeSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY);
+      clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+      restoredFingerprintRef.current = null;
+      setRestoredFromCache(false);
+      const d = getDefaultContactFilters();
+      setDraftFilters(d);
+      setAppliedFilters(null);
+      lastListParamsRef.current = null;
+      setHasSearched(false);
+      setContacts([]);
+      setTotal(0);
+      setPage(1);
+      router.replace("/contacts/search", { scroll: false });
+    };
+    window.addEventListener(SEARCH_FRESH_EVENT, onFresh);
+    return () => window.removeEventListener(SEARCH_FRESH_EVENT, onFresh);
+  }, [router]);
+
   const syncFromUrl = useCallback(() => {
     const sp = new URLSearchParams(searchParams.toString());
     const ran = sp.get("ran") === "1";
@@ -155,6 +305,10 @@ function ContactSearchPageInner() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (skipUrlSyncOnceRef.current) {
+      skipUrlSyncOnceRef.current = false;
+      return;
+    }
     syncFromUrl();
   }, [syncFromUrl]);
 
@@ -205,6 +359,7 @@ function ContactSearchPageInner() {
       });
       setContacts(list);
       setTotal(typeof data.total === "number" ? data.total : list.length);
+      setRestoredFromCache(false);
     } catch {
       if (seq !== loadSeqRef.current) return;
       setContacts([]);
@@ -225,11 +380,21 @@ function ContactSearchPageInner() {
 
   useEffect(() => {
     if (!hasSearched || !appliedFilters) return;
+    if (
+      restoredFingerprintRef.current != null &&
+      restoredFingerprintRef.current === contactSearchFingerprint(appliedFilters, page)
+    ) {
+      return;
+    }
+    restoredFingerprintRef.current = null;
     void loadResults(appliedFilters, page);
-  }, [hasSearched, appliedFilters, page, loadResults]);
+  }, [hasSearched, appliedFilters, page, loadResults, contactSearchFingerprint]);
 
   const runSearch = useCallback(
     (f: ContactListFilters) => {
+      clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+      restoredFingerprintRef.current = null;
+      setRestoredFromCache(false);
       const next = { ...cloneContactListFilters(f), page: "1" };
       setDraftFilters(next);
       setAppliedFilters(next);
@@ -256,6 +421,9 @@ function ContactSearchPageInner() {
   };
 
   const clearFilters = () => {
+    clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+    restoredFingerprintRef.current = null;
+    setRestoredFromCache(false);
     const d = getDefaultContactFilters();
     setDraftFilters(d);
     setAppliedFilters(null);
@@ -327,6 +495,13 @@ function ContactSearchPageInner() {
   };
 
   const contactHref = (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`);
+  const navigateToContact = useCallback(
+    (id: string) => {
+      persistSearchState();
+      router.push(contactHref(id));
+    },
+    [persistSearchState, router, focusMode],
+  );
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const handleExport = useCallback(async () => {
@@ -634,7 +809,11 @@ function ContactSearchPageInner() {
             <ContactSearchFilterChips chips={chips} onDismiss={dismissChip} onClearAll={clearFilters} />
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          {restoredFromCache && hasSearched ? (
+            <RestoredSearchBanner onDismiss={clearFilters} />
+          ) : null}
+
+          <div ref={resultsScrollRef} className="min-h-0 flex-1 overflow-y-auto">
             {!hasSearched ? (
               <EmptyState
                 icon={<SlidersHorizontal className="h-12 w-12 text-[var(--text-muted)]" aria-hidden />}
@@ -654,7 +833,7 @@ function ContactSearchPageInner() {
                       <li key={c.id}>
                         <ContactSearchResultCard
                           contact={c}
-                          onNavigate={() => router.push(contactHref(c.id))}
+                          onNavigate={() => navigateToContact(c.id)}
                           onOpenInTab={() =>
                             openTab(c.id, `${c.first_name} ${c.last_name}`.trim())
                           }
@@ -674,6 +853,8 @@ function ContactSearchPageInner() {
               disabled={loading}
               className="mt-4"
               onPageChange={(next) => {
+                restoredFingerprintRef.current = null;
+                setRestoredFromCache(false);
                 setPage(next);
                 if (appliedFilters) {
                   const params = contactFiltersToSearchParams({ ...appliedFilters, page: String(next) });

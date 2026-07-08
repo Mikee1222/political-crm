@@ -48,6 +48,7 @@ import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-conte
 import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
 import { getClientTtlCache, setClientTtlCache } from "@/lib/ttl-cache";
 import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
+import { markSearchFreshIntent, REQUESTS_SEARCH_FRESH_KEY } from "@/lib/search-session-state";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const SLOW_SEARCH_MS = 500;
@@ -518,6 +519,7 @@ export default function RequestsPage() {
         <div className="mt-3 flex w-full justify-end">
           <Link
             href="/requests/search"
+            onClick={() => markSearchFreshIntent(REQUESTS_SEARCH_FRESH_KEY)}
             className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:text-[var(--text-primary)] hover:underline"
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden />

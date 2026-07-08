@@ -14,6 +14,7 @@ import {
   type RequestSearchResult,
 } from "@/components/requests/search/request-search-result-card";
 import { FilterSidebarToggle } from "@/components/search/filter-sidebar-toggle";
+import { RestoredSearchBanner } from "@/components/search/restored-search-banner";
 import { SearchPagination } from "@/components/search/search-pagination";
 import { SearchResultsHeader } from "@/components/search/search-results-header";
 import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
@@ -30,6 +31,15 @@ import {
 } from "@/lib/requests-filters";
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { lux } from "@/lib/luxury-styles";
+import {
+  clearSearchSessionState,
+  consumeSearchFreshIntent,
+  loadSearchSessionState,
+  REQUESTS_SEARCH_FRESH_KEY,
+  REQUESTS_SEARCH_STATE_KEY,
+  saveSearchSessionState,
+  SEARCH_FRESH_EVENT,
+} from "@/lib/search-session-state";
 import type { UnlinkedLegacyName } from "@/lib/staff-aliases";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +66,23 @@ function RequestSearchPageInner() {
   const [unlinkedHandlers, setUnlinkedHandlers] = useState<UnlinkedLegacyName[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [restoredFromCache, setRestoredFromCache] = useState(false);
   const loadSeqRef = useRef(0);
+  const sessionInitRef = useRef(false);
+  const skipUrlSyncOnceRef = useRef(false);
+  const restoredFingerprintRef = useRef<string | null>(null);
+  const resultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const stateSnapshotRef = useRef({
+    hasSearched: false,
+    appliedFilters: null as RequestListFilters | null,
+    page: 1,
+    requests: [] as RequestSearchResult[],
+    total: 0,
+  });
+
+  const requestSearchFingerprint = useCallback((f: RequestListFilters, pageNum: number) => {
+    return requestFiltersToSearchParams({ ...f, page: String(pageNum) }).toString();
+  }, []);
 
   useEffect(() => {
     try {
@@ -99,6 +125,114 @@ function RequestSearchPageInner() {
     return map;
   }, [assignees, unlinkedHandlers]);
 
+  stateSnapshotRef.current = {
+    hasSearched,
+    appliedFilters,
+    page,
+    requests,
+    total,
+  };
+
+  const persistSearchState = useCallback(() => {
+    const snap = stateSnapshotRef.current;
+    if (!snap.hasSearched || !snap.appliedFilters) return;
+    const urlQuery =
+      typeof window !== "undefined" ? window.location.search.replace(/^\?/, "") : undefined;
+    saveSearchSessionState(REQUESTS_SEARCH_STATE_KEY, {
+      filters: { ...snap.appliedFilters },
+      page: snap.page,
+      results: snap.requests,
+      total: snap.total,
+      scrollY: resultsScrollRef.current?.scrollTop ?? 0,
+      urlQuery,
+    });
+  }, []);
+
+  const applyCachedResults = useCallback(
+    (cached: {
+      results: RequestSearchResult[];
+      total: number;
+      scrollY: number;
+      filters: RequestListFilters;
+      page: number;
+    }) => {
+      restoredFingerprintRef.current = requestSearchFingerprint(cached.filters, cached.page);
+      setRequests(cached.results);
+      setTotal(cached.total);
+      setRestoredFromCache(true);
+      const scrollTarget = cached.scrollY;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          resultsScrollRef.current?.scrollTo({ top: scrollTarget });
+        });
+      });
+    },
+    [requestSearchFingerprint],
+  );
+
+  useEffect(() => {
+    if (sessionInitRef.current) return;
+    sessionInitRef.current = true;
+
+    if (consumeSearchFreshIntent(REQUESTS_SEARCH_FRESH_KEY)) {
+      clearSearchSessionState(REQUESTS_SEARCH_STATE_KEY);
+      return;
+    }
+
+    const cached = loadSearchSessionState<RequestListFilters, RequestSearchResult>(
+      REQUESTS_SEARCH_STATE_KEY,
+    );
+    if (!cached?.filters) return;
+
+    const urlRan = searchParams.get("ran") === "1";
+    const f = { ...cached.filters };
+    const pageNum = Math.max(1, cached.page || 1);
+
+    skipUrlSyncOnceRef.current = !urlRan;
+    setDraftFilters(f);
+    setAppliedFilters(f);
+    setHasSearched(true);
+    setPage(pageNum);
+    applyCachedResults({
+      results: cached.results,
+      total: cached.total,
+      scrollY: cached.scrollY,
+      filters: f,
+      page: pageNum,
+    });
+
+    if (!urlRan) {
+      const params =
+        cached.urlQuery != null && cached.urlQuery.length > 0
+          ? new URLSearchParams(cached.urlQuery)
+          : requestFiltersToSearchParams({ ...f, page: String(pageNum) });
+      if (!params.get("ran")) params.set("ran", "1");
+      router.replace(`/requests/search?${params.toString()}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
+  }, []);
+
+  useEffect(() => {
+    const onFresh = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ freshKey?: string }>).detail;
+      if (detail?.freshKey !== REQUESTS_SEARCH_FRESH_KEY) return;
+      consumeSearchFreshIntent(REQUESTS_SEARCH_FRESH_KEY);
+      clearSearchSessionState(REQUESTS_SEARCH_STATE_KEY);
+      restoredFingerprintRef.current = null;
+      setRestoredFromCache(false);
+      const d = getDefaultRequestFilters();
+      setDraftFilters(d);
+      setAppliedFilters(null);
+      setHasSearched(false);
+      setRequests([]);
+      setTotal(0);
+      setPage(1);
+      router.replace("/requests/search", { scroll: false });
+    };
+    window.addEventListener(SEARCH_FRESH_EVENT, onFresh);
+    return () => window.removeEventListener(SEARCH_FRESH_EVENT, onFresh);
+  }, [router]);
+
   const syncFromUrl = useCallback(() => {
     const sp = new URLSearchParams(searchParams.toString());
     const ran = sp.get("ran") === "1";
@@ -112,6 +246,10 @@ function RequestSearchPageInner() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (skipUrlSyncOnceRef.current) {
+      skipUrlSyncOnceRef.current = false;
+      return;
+    }
     syncFromUrl();
   }, [syncFromUrl]);
 
@@ -138,6 +276,7 @@ function RequestSearchPageInner() {
       const list = data.data ?? data.requests ?? [];
       setRequests(list);
       setTotal(typeof data.count === "number" ? data.count : list.length);
+      setRestoredFromCache(false);
     } catch {
       if (seq !== loadSeqRef.current) return;
       setRequests([]);
@@ -158,11 +297,21 @@ function RequestSearchPageInner() {
 
   useEffect(() => {
     if (!hasSearched || !appliedFilters) return;
+    if (
+      restoredFingerprintRef.current != null &&
+      restoredFingerprintRef.current === requestSearchFingerprint(appliedFilters, page)
+    ) {
+      return;
+    }
+    restoredFingerprintRef.current = null;
     void loadResults(appliedFilters, page);
-  }, [hasSearched, appliedFilters, page, loadResults]);
+  }, [hasSearched, appliedFilters, page, loadResults, requestSearchFingerprint]);
 
   const runSearch = useCallback(
     (f: RequestListFilters) => {
+      clearSearchSessionState(REQUESTS_SEARCH_STATE_KEY);
+      restoredFingerprintRef.current = null;
+      setRestoredFromCache(false);
       const next = { ...f, page: "1" };
       setDraftFilters(next);
       setAppliedFilters(next);
@@ -188,6 +337,9 @@ function RequestSearchPageInner() {
   };
 
   const clearFilters = () => {
+    clearSearchSessionState(REQUESTS_SEARCH_STATE_KEY);
+    restoredFingerprintRef.current = null;
+    setRestoredFromCache(false);
     const d = getDefaultRequestFilters();
     setDraftFilters(d);
     setAppliedFilters(null);
@@ -288,7 +440,11 @@ function RequestSearchPageInner() {
             <RequestSearchFilterChips chips={chips} onDismiss={dismissChip} onClearAll={clearFilters} />
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          {restoredFromCache && hasSearched ? (
+            <RestoredSearchBanner onDismiss={clearFilters} />
+          ) : null}
+
+          <div ref={resultsScrollRef} className="min-h-0 flex-1 overflow-y-auto">
             {!hasSearched ? (
               <EmptyState
                 icon={<SlidersHorizontal className="h-12 w-12 text-[var(--text-muted)]" aria-hidden />}
@@ -309,7 +465,10 @@ function RequestSearchPageInner() {
                         <RequestSearchResultCard
                           request={r}
                           statusColors={statusColors}
-                          onNavigate={() => router.push(`/requests/${r.id}`)}
+                          onNavigate={() => {
+                            persistSearchState();
+                            router.push(`/requests/${r.id}`);
+                          }}
                         />
                       </li>
                     ))}
@@ -326,6 +485,8 @@ function RequestSearchPageInner() {
               disabled={loading}
               className="mt-4"
               onPageChange={(next) => {
+                restoredFingerprintRef.current = null;
+                setRestoredFromCache(false);
                 setPage(next);
                 if (appliedFilters) {
                   const params = requestFiltersToSearchParams({ ...appliedFilters, page: String(next) });

@@ -51,6 +51,11 @@ import { FloatingActions } from "@/components/floating-actions";
 import { LogoutButton } from "@/components/logout-button";
 import { ContactTabsBar } from "@/components/contact-tabs-bar";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
+import {
+  CONTACTS_SEARCH_FRESH_KEY,
+  markSearchFreshIntent,
+  REQUESTS_SEARCH_FRESH_KEY,
+} from "@/lib/search-session-state";
 import { MobileGlassHeader } from "@/components/mobile/mobile-glass-header";
 import { MobilePullToRefresh } from "@/components/mobile/mobile-pull-to-refresh";
 import { MobileMoreSheet, type MoreNavItem } from "@/components/mobile-more-sheet";
@@ -291,7 +296,11 @@ function NavItemRow({
   return (
     <Link
       href={item.href}
-      onClick={onNavigate}
+      onClick={() => {
+        if (item.href === "/contacts/search") markSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY);
+        if (item.href === "/requests/search") markSearchFreshIntent(REQUESTS_SEARCH_FRESH_KEY);
+        onNavigate?.();
+      }}
       data-tour={dataTour}
       className={[
         navItemBase,

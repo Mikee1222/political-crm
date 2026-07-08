@@ -7,6 +7,11 @@ import { useRouter } from "next/navigation";
 import { fetchWithTimeout, CLIENT_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { formatCalendarDateOnly } from "@/lib/date-format";
 import { hasMinRole } from "@/lib/roles";
+import {
+  CONTACTS_SEARCH_FRESH_KEY,
+  markSearchFreshIntent,
+  REQUESTS_SEARCH_FRESH_KEY,
+} from "@/lib/search-session-state";
 
 type SContact = {
   id: string;
@@ -351,10 +356,24 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
               <p className="text-sm text-[var(--text-secondary)]">Δεν βρέθηκαν αποτελέσματα για «{deb}».</p>
               <p className="mt-2 text-xs text-[var(--text-muted)]">Δοκιμάστε μικρότερη ή πιο συγκεκριμένη αναζήτηση.</p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-sm">
-                <Link href="/contacts/search" onClick={onClose} className="text-[#C9A84C] underline underline-offset-2">
+                <Link
+                  href="/contacts/search"
+                  onClick={() => {
+                    markSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY);
+                    onClose();
+                  }}
+                  className="text-[#C9A84C] underline underline-offset-2"
+                >
                   Αναζήτηση επαφών
                 </Link>
-                <Link href="/requests/search" onClick={onClose} className="text-[#C9A84C] underline underline-offset-2">
+                <Link
+                  href="/requests/search"
+                  onClick={() => {
+                    markSearchFreshIntent(REQUESTS_SEARCH_FRESH_KEY);
+                    onClose();
+                  }}
+                  className="text-[#C9A84C] underline underline-offset-2"
+                >
                   Αναζήτηση αιτημάτων
                 </Link>
               </div>

@@ -70,6 +70,7 @@ import {
 } from "@/lib/ttl-cache";
 import { getMunicipalitiesCached } from "@/lib/geo-lists-cache";
 import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
+import { CONTACTS_SEARCH_FRESH_KEY, markSearchFreshIntent } from "@/lib/search-session-state";
 
 const CONTACTS_LIST_CLIENT_TTL_MS = 30_000;
 const CONTACTS_META_CLIENT_TTL_MS = 60_000;
@@ -1445,6 +1446,7 @@ function ContactsPage() {
           <Link
             href="/contacts/search"
             data-tour="advanced-search-link"
+            onClick={() => markSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY)}
             className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--accent-gold)] transition-colors hover:text-[var(--text-primary)] hover:underline"
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden />
