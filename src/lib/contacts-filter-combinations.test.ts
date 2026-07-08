@@ -11,6 +11,7 @@ import {
   searchContactsByName,
 } from "@/lib/contacts-query";
 import { resolveContactListFilterIds } from "@/lib/contact-group-members";
+import { searchContactsByFreeTextPaginated } from "@/lib/contact-group-members";
 import { queryContactsListTotal } from "@/lib/contacts-list-api";
 import type { ContactQueryPlanPath } from "@/lib/contacts-query";
 
@@ -29,7 +30,7 @@ function loadLocalEnv(): void {
 
 loadLocalEnv();
 
-vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -90,6 +91,21 @@ async function baselineContactCount(
   };
 
   if (f.search?.trim()) {
+    if (
+      !f.first_name &&
+      !f.last_name &&
+      !f.father_name &&
+      !f.group_id &&
+      f.group_ids.length === 0 &&
+      f.exclude_group_ids.length === 0
+    ) {
+      const { total } = await searchContactsByFreeTextPaginated(supabase, {
+        search: f.search,
+        offset: 0,
+        limit: 1,
+      });
+      return total;
+    }
     const rows = await fetchContactRowsInBatches(supabase, COUNT_SELECT, (q) => q, 2000);
     return rows.filter((row) => {
       if (

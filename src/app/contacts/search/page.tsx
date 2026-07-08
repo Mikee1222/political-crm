@@ -314,7 +314,7 @@ function ContactSearchPageInner() {
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
-        showToast(err.error ?? "Αποτυχία εξαγωγής CSV.", "error");
+        showToast(err.error ?? "Αποτυχία εξαγωγής Excel.", "error");
         return;
       }
 
@@ -322,7 +322,7 @@ function ContactSearchPageInner() {
       const objectUrl = URL.createObjectURL(blob);
       const contentDisposition = res.headers.get("content-disposition") ?? "";
       const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-      const fileName = fileNameMatch?.[1] ?? "contacts-export.csv";
+      const fileName = fileNameMatch?.[1] ?? "contacts-export.xlsx";
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = fileName;
@@ -331,7 +331,7 @@ function ContactSearchPageInner() {
       link.remove();
       URL.revokeObjectURL(objectUrl);
     } catch {
-      showToast("Αποτυχία εξαγωγής CSV.", "error");
+      showToast("Αποτυχία εξαγωγής Excel.", "error");
     } finally {
       setExporting(false);
     }

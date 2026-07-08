@@ -1,8 +1,6 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { hasPermissionFlexible } from "@/lib/permission-check";
 import { todayYmdAthens } from "@/lib/date-format";
 import {
   applyContactListFiltersToBuilder,
@@ -11,26 +9,18 @@ import {
 import { getDefaultContactFilters, searchParamsToFilters } from "@/lib/contacts-filters";
 import { getContactIdsForNameDay } from "@/lib/nameday-celebrating";
 import { callStatusLabel } from "@/lib/luxury-styles";
-import { nextJsonError } from "@/lib/api-resilience";
 import {
   fetchGroupNamesByContactId,
   type GroupFilterResolution,
   groupResolutionForSqlBuilder,
   includeContactIdsNeedBatchFetch,
   excludeContactIdsNeedInMemoryFilter,
-  mergeContactListFilterResolutions,
   resolveContactListFilterIds,
-  resolveGroupFilterContactIds,
 } from "@/lib/contact-group-members";
 import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
+import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
-
-function escapeCsvCell(v: string | number | null | undefined): string {
-  const s = v == null ? "" : String(v);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
 
 function priorityGr(p: string | null | undefined): string {
   if (p === "High") return "Υψηλή";
@@ -44,33 +34,78 @@ function tagsCell(tags: string[] | null | undefined): string {
   return tags.filter(Boolean).join("; ");
 }
 
+function jsonUtf8Error(error: string, status: number): Response {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+    },
+  });
+}
+
+function normalizeExportSearchParams(sp: URLSearchParams): URLSearchParams {
+  const normalized = new URLSearchParams(sp.toString());
+  const mergeCsv = (key: string, aliases: string[]) => {
+    const values: string[] = [];
+    for (const alias of aliases) {
+      for (const raw of sp.getAll(alias)) {
+        if (!raw?.trim()) continue;
+        values.push(...raw.split(",").map((x) => x.trim()).filter(Boolean));
+      }
+    }
+    if (values.length) {
+      normalized.set(key, [...new Set(values)].join(","));
+    }
+  };
+
+  mergeCsv("group_ids", ["group_ids", "group_ids[]", "groups_include", "groups_include[]"]);
+  mergeCsv("exclude_group_ids", [
+    "exclude_group_ids",
+    "exclude_group_ids[]",
+    "groups_exclude",
+    "groups_exclude[]",
+  ]);
+  mergeCsv("source_ids", ["source_ids", "source_ids[]"]);
+  mergeCsv("exclude_source_ids", ["exclude_source_ids", "exclude_source_ids[]"]);
+
+  return normalized;
+}
+
 const SELECT_EXPORT =
   "id, contact_code, first_name, last_name, nickname, father_name, mother_name, phone, phone2, landline, email, municipality, area, toponym, electoral_district, political_stance, call_status, priority, group_id, tags, notes, created_at";
 
 export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
-    if (!crm.allowed) return crm.response;
-    const { user, profile, supabase } = crm;
+    if (!crm.allowed) {
+      return jsonUtf8Error("Μη εξουσιοδοτημένη πρόσβαση.", crm.response.status);
+    }
+    const { profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "caller")) {
-      return forbidden();
+      return jsonUtf8Error("Δεν έχετε δικαίωμα εξαγωγής επαφών.", 403);
     }
 
-    const sp = request.nextUrl.searchParams;
+    const sp = normalizeExportSearchParams(request.nextUrl.searchParams);
     const idsParam = sp.get("ids");
     const format = sp.get("format");
     const filtered = sp.get("filters") === "1" || sp.get("filtered") === "1";
+    const partialLocation = sp.get("partial_location") === "1";
     const f = normalizeContactListFiltersForNameRpc(
       searchParamsToFilters(sp, getDefaultContactFilters()),
     );
 
+    const fullParams: Record<string, string | string[]> = {};
+    for (const key of [...new Set([...sp.keys()])]) {
+      const values = sp.getAll(key);
+      fullParams[key] = values.length > 1 ? values : (values[0] ?? "");
+    }
     console.info(
       "[api/contacts/export request]",
       JSON.stringify({
-        format: format ?? "csv",
+        format: format ?? "xlsx",
         filtered,
         has_ids: Boolean(idsParam?.trim()),
-        param_keys: [...new Set([...sp.keys()])],
+        incoming_params: fullParams,
         group_ids_count: f.group_ids.length,
         exclude_group_ids_count: f.exclude_group_ids.length,
         source_ids_count: f.source_ids.length,
@@ -78,8 +113,6 @@ export async function GET(request: NextRequest) {
         has_search: Boolean(f.search?.trim()),
       }),
     );
-
-    const isManager = hasMinRole(profile?.role, "manager");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query: any = supabase.from("contacts").select(SELECT_EXPORT);
@@ -92,10 +125,7 @@ export async function GET(request: NextRequest) {
         .filter(Boolean);
       if (ids.length) query = query.in("id", ids);
     } else if (filtered && f.nameday_today) {
-      mergedFilterResolution = mergeContactListFilterResolutions(
-        await resolveGroupFilterContactIds(supabase, f),
-        await resolveContactListFilterIds(supabase, f),
-      );
+      mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
       const now = new Date();
       const ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
       if (ids.length === 0) {
@@ -110,14 +140,11 @@ export async function GET(request: NextRequest) {
           includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
           excludeContactIds: mergedFilterResolution.excludeContactIds,
         });
-        qn = applyContactListFiltersToBuilder(qn, f, sqlGroupResolution);
+        qn = applyContactListFiltersToBuilder(qn, f, sqlGroupResolution, { partialLocation });
         query = qn;
       }
     } else if (filtered) {
-      mergedFilterResolution = mergeContactListFilterResolutions(
-        await resolveGroupFilterContactIds(supabase, f),
-        await resolveContactListFilterIds(supabase, f),
-      );
+      mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
       const includeNeedMemory =
         mergedFilterResolution.includeContactIds !== null &&
         includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
@@ -125,18 +152,20 @@ export async function GET(request: NextRequest) {
         includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
         excludeContactIds: mergedFilterResolution.excludeContactIds,
       });
-      query = applyContactListFiltersToBuilder(supabase.from("contacts").select(SELECT_EXPORT), f, sqlGroupResolution);
+      query = applyContactListFiltersToBuilder(
+        supabase.from("contacts").select(SELECT_EXPORT),
+        f,
+        sqlGroupResolution,
+        { partialLocation },
+      );
     } else {
-      const canFullExport = await hasPermissionFlexible(user.id, "contacts_export", isManager);
-      if (!canFullExport) {
-        return NextResponse.json({ error: "Η εξαγωγή όλων απαιτεί δικαιώματα υπευθύνου" }, { status: 403 });
-      }
+      return jsonUtf8Error("Η εξαγωγή απαιτεί ενεργά φίλτρα ή επιλεγμένες επαφές.", 403);
     }
 
     query = query.order("created_at", { ascending: false });
 
     const { data, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return jsonUtf8Error(error.message, 400);
 
     let rawRows = (data ?? []) as Array<{
       id: string;
@@ -215,59 +244,66 @@ export async function GET(request: NextRequest) {
     const athensYmd = todayYmdAthens();
 
     if (format === "json") {
-      return NextResponse.json({
-        contacts: rawRows.map((r) => ({
-          id: r.id,
-          first_name: r.first_name,
-          last_name: r.last_name,
-          father_name: r.father_name,
-          phone: r.phone,
-          municipality: r.municipality,
-          groups: groupNamesByContact.get(r.id) ?? [],
-          political_stance: r.political_stance,
-        })),
-      });
+      return new Response(
+        JSON.stringify({
+          contacts: rawRows.map((r) => ({
+            id: r.id,
+            first_name: r.first_name,
+            last_name: r.last_name,
+            father_name: r.father_name,
+            phone: r.phone,
+            municipality: r.municipality,
+            groups: groupNamesByContact.get(r.id) ?? [],
+            political_stance: r.political_stance,
+          })),
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+          },
+        },
+      );
     }
 
-    const lines = [
-      header.map(escapeCsvCell).join(","),
-      ...rawRows.map((r) =>
-        [
-          r.contact_code,
-          r.first_name,
-          r.last_name,
-          r.father_name,
-          r.mother_name,
-          r.phone,
-          r.phone2,
-          r.landline,
-          r.email,
-          r.municipality,
-          r.area,
-          r.toponym,
-          r.electoral_district,
-          r.political_stance,
-          callStatusLabel(r.call_status),
-          priorityGr(r.priority),
-          groupNamesByContact.get(r.id)?.join("; ") ?? "",
-          tagsCell(r.tags),
-          r.notes,
-          r.created_at ? new Date(r.created_at).toISOString() : "",
-        ]
-          .map(escapeCsvCell)
-          .join(","),
-      ),
-    ];
-    const csv = "\uFEFF" + lines.join("\r\n");
-    return new NextResponse(csv, {
+    const rows = rawRows.map((r) =>
+      [
+        r.contact_code ?? "",
+        r.first_name ?? "",
+        r.last_name ?? "",
+        r.father_name ?? "",
+        r.mother_name ?? "",
+        r.phone ?? "",
+        r.phone2 ?? "",
+        r.landline ?? "",
+        r.email ?? "",
+        r.municipality ?? "",
+        r.area ?? "",
+        r.toponym ?? "",
+        r.electoral_district ?? "",
+        r.political_stance ?? "",
+        callStatusLabel(r.call_status),
+        priorityGr(r.priority),
+        groupNamesByContact.get(r.id)?.join("; ") ?? "",
+        tagsCell(r.tags),
+        r.notes ?? "",
+        r.created_at ? new Date(r.created_at).toISOString() : "",
+      ],
+    );
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, "Επαφές");
+    const xlsxBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    return new NextResponse(new Uint8Array(xlsxBuffer), {
       status: 200,
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="epafes-${athensYmd}.csv"`,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="epafes-${athensYmd}.xlsx"`,
       },
     });
   } catch (e) {
+    const message = e instanceof Error ? e.message : "Άγνωστο σφάλμα εξαγωγής";
     console.error("[api/contacts/export]", e);
-    return nextJsonError();
+    return jsonUtf8Error(message, 500);
   }
 }
