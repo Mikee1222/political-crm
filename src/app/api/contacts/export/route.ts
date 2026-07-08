@@ -43,6 +43,24 @@ function jsonUtf8Error(error: string, status: number): Response {
   });
 }
 
+/** Log PostgREST / Supabase errors with full fields (no secrets). */
+function logSupabaseError(err: unknown, phase: string) {
+  const e = err as {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  } | null;
+  console.error("[api/contacts/export supabase error]", {
+    phase,
+    message: e?.message,
+    code: e?.code,
+    details: e?.details,
+    hint: e?.hint,
+    raw: err,
+  });
+}
+
 /** Normalize a query list param that may arrive as repeated keys or a CSV string. */
 function getListParam(sp: URLSearchParams, key: string, aliases: string[] = []): string[] {
   const keys = [key, `${key}[]`, ...aliases];
@@ -122,10 +140,20 @@ export async function GET(request: NextRequest) {
     if (!crm.allowed) {
       return jsonUtf8Error("Μη εξουσιοδοτημένη πρόσβαση.", crm.response.status);
     }
-    const { profile, supabase } = crm;
+    const { user, profile, supabase } = crm;
     if (!hasMinRole(profile?.role, "caller")) {
       return jsonUtf8Error("Δεν έχετε δικαίωμα εξαγωγής επαφών.", 403);
     }
+
+    // Match /api/contacts: cookie session client (anon key + user JWT). Not service role.
+    console.info("[api/contacts/export client]", {
+      mode: "authenticated_session",
+      has_user_id: Boolean(user?.id),
+      user_id: user?.id ? `${String(user.id).slice(0, 8)}…` : null,
+      role: profile?.role ?? null,
+      uses_buildContactQueryPlan: false,
+      note: "export builds filters via applyContactListFiltersToBuilder; list uses buildContactQueryPlan",
+    });
 
     const idsParam = sp.get("ids");
     const format = sp.get("format");
@@ -153,6 +181,7 @@ export async function GET(request: NextRequest) {
         filtered,
         has_ids: Boolean(idsParam?.trim()),
         municipalities_count: f.municipalities.length,
+        municipalities: f.municipalities,
         group_ids_count: f.group_ids.length,
         exclude_group_ids_count: f.exclude_group_ids.length,
         source_ids_count: f.source_ids.length,
@@ -164,22 +193,65 @@ export async function GET(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query: any = supabase.from("contacts").select(SELECT_EXPORT);
     let mergedFilterResolution: GroupFilterResolution | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let data: any[] | null = null;
 
-    if (idsParam?.trim()) {
-      const ids = idsParam
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean);
-      if (ids.length) query = query.in("id", ids);
-    } else if (filtered && f.nameday_today) {
-      mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
-      const now = new Date();
-      const ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
-      if (ids.length === 0) {
-        query = supabase.from("contacts").select(SELECT_EXPORT).limit(0);
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
+    try {
+      if (idsParam?.trim()) {
+        const ids = idsParam
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean);
+        if (ids.length) query = query.in("id", ids);
+      } else if (filtered && f.nameday_today) {
+        try {
+          mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
+        } catch (err) {
+          logSupabaseError(err, "resolveContactListFilterIds(nameday)");
+          const msg =
+            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+              ? (err as { message: string }).message
+              : "Σφάλμα επίλυσης φίλτρων ομάδων";
+          return jsonUtf8Error(msg, 400);
+        }
+        const now = new Date();
+        let ids: string[];
+        try {
+          ids = await getContactIdsForNameDay(supabase, now.getMonth() + 1, now.getDate());
+        } catch (err) {
+          logSupabaseError(err, "getContactIdsForNameDay");
+          const msg =
+            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+              ? (err as { message: string }).message
+              : "Σφάλμα εορτολογίου";
+          return jsonUtf8Error(msg, 400);
+        }
+        if (ids.length === 0) {
+          query = supabase.from("contacts").select(SELECT_EXPORT).limit(0);
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let qn: any = supabase.from("contacts").select(SELECT_EXPORT).in("id", ids);
+          const includeNeedMemory =
+            mergedFilterResolution.includeContactIds !== null &&
+            includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
+          const sqlGroupResolution = groupResolutionForSqlBuilder({
+            includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
+            excludeContactIds: mergedFilterResolution.excludeContactIds,
+          });
+          qn = applyContactListFiltersToBuilder(qn, f, sqlGroupResolution, { partialLocation });
+          query = qn;
+        }
+      } else if (filtered) {
+        try {
+          mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
+        } catch (err) {
+          logSupabaseError(err, "resolveContactListFilterIds");
+          const msg =
+            err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+              ? (err as { message: string }).message
+              : "Σφάλμα επίλυσης φίλτρων ομάδων";
+          return jsonUtf8Error(msg, 400);
+        }
         const includeNeedMemory =
           mergedFilterResolution.includeContactIds !== null &&
           includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
@@ -187,32 +259,32 @@ export async function GET(request: NextRequest) {
           includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
           excludeContactIds: mergedFilterResolution.excludeContactIds,
         });
-        qn = applyContactListFiltersToBuilder(qn, f, sqlGroupResolution, { partialLocation });
-        query = qn;
+        query = applyContactListFiltersToBuilder(
+          supabase.from("contacts").select(SELECT_EXPORT),
+          f,
+          sqlGroupResolution,
+          { partialLocation },
+        );
+      } else {
+        return jsonUtf8Error("Η εξαγωγή απαιτεί ενεργά φίλτρα ή επιλεγμένες επαφές.", 403);
       }
-    } else if (filtered) {
-      mergedFilterResolution = await resolveContactListFilterIds(supabase, f);
-      const includeNeedMemory =
-        mergedFilterResolution.includeContactIds !== null &&
-        includeContactIdsNeedBatchFetch(mergedFilterResolution.includeContactIds);
-      const sqlGroupResolution = groupResolutionForSqlBuilder({
-        includeContactIds: includeNeedMemory ? null : mergedFilterResolution.includeContactIds,
-        excludeContactIds: mergedFilterResolution.excludeContactIds,
-      });
-      query = applyContactListFiltersToBuilder(
-        supabase.from("contacts").select(SELECT_EXPORT),
-        f,
-        sqlGroupResolution,
-        { partialLocation },
-      );
-    } else {
-      return jsonUtf8Error("Η εξαγωγή απαιτεί ενεργά φίλτρα ή επιλεγμένες επαφές.", 403);
+
+      query = query.order("created_at", { ascending: false });
+
+      const result = await query;
+      if (result.error) {
+        logSupabaseError(result.error, "contacts.select");
+        return jsonUtf8Error(result.error.message ?? "Bad Request", 400);
+      }
+      data = result.data;
+    } catch (err) {
+      logSupabaseError(err, "query_execution");
+      const msg =
+        err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "Σφάλμα ερωτήματος Supabase";
+      return jsonUtf8Error(msg, 400);
     }
-
-    query = query.order("created_at", { ascending: false });
-
-    const { data, error } = await query;
-    if (error) return jsonUtf8Error(error.message, 400);
 
     let rawRows = (data ?? []) as Array<{
       id: string;
@@ -260,10 +332,20 @@ export async function GET(request: NextRequest) {
       rawRows = rawRows.filter((c) => contactMatchesLocalSearch(c, f.search));
     }
 
-    const groupNamesByContact = await fetchGroupNamesByContactId(
-      supabase,
-      rawRows.map((r) => r.id),
-    );
+    let groupNamesByContact: Map<string, string[]>;
+    try {
+      groupNamesByContact = await fetchGroupNamesByContactId(
+        supabase,
+        rawRows.map((r) => r.id),
+      );
+    } catch (err) {
+      logSupabaseError(err, "fetchGroupNamesByContactId");
+      const msg =
+        err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "Σφάλμα ονομάτων ομάδων";
+      return jsonUtf8Error(msg, 400);
+    }
 
     const header = [
       "Κωδικός επαφής",
