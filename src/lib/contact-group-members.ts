@@ -417,6 +417,77 @@ export async function searchContactsByFreeTextPaginated(
 
 export type SearchContactsInGroupsFilteredRow = SearchContactsByGroupsPaginatedRow;
 
+export type SearchContactsAdvancedRow = SearchContactsInGroupsRow & {
+  birth_year?: number | null;
+  total_count: number;
+};
+
+export type SearchContactsAdvancedParams = {
+  firstName?: string | null;
+  lastName?: string | null;
+  fatherName?: string | null;
+  gender?: string | null;
+  includeGroupIds?: string[];
+  excludeGroupIds?: string[];
+  groupMatchMode?: "or" | "and" | "OR" | "AND";
+  municipalities?: string[];
+  toponyms?: string[];
+  callStatus?: string | null;
+  politicalStance?: string | null;
+  hasPhone?: boolean | null;
+  hasEmail?: boolean | null;
+  offset: number;
+  limit: number;
+};
+
+/** Unified name + group + column search via search_contacts_advanced RPC (paginated). */
+export async function searchContactsAdvanced(
+  supabase: SupabaseClient,
+  opts: SearchContactsAdvancedParams,
+): Promise<{ contacts: SearchContactsInGroupsRow[]; total: number }> {
+  const {
+    firstName,
+    lastName,
+    fatherName,
+    gender,
+    includeGroupIds = [],
+    excludeGroupIds = [],
+    groupMatchMode = "OR",
+    municipalities = [],
+    toponyms = [],
+    callStatus,
+    politicalStance,
+    hasPhone = null,
+    hasEmail = null,
+    offset,
+    limit,
+  } = opts;
+
+  const { data, error } = await supabase.rpc("search_contacts_advanced", {
+    p_first_name: firstName?.trim() || null,
+    p_last_name: lastName?.trim() || null,
+    p_father_name: fatherName?.trim() || null,
+    p_gender: gender?.trim() || null,
+    p_include_group_ids: includeGroupIds.length ? includeGroupIds : null,
+    p_exclude_group_ids: excludeGroupIds.length ? excludeGroupIds : null,
+    p_group_match_mode: groupMatchMode === "and" || groupMatchMode === "AND" ? "AND" : "OR",
+    p_municipalities: municipalities.length ? municipalities : null,
+    p_toponyms: toponyms.length ? toponyms : null,
+    p_call_status: callStatus?.trim() || null,
+    p_political_stance: politicalStance?.trim() || null,
+    p_has_phone: hasPhone,
+    p_has_email: hasEmail,
+    p_offset: offset,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  const rows = (data ?? []) as SearchContactsAdvancedRow[];
+  const total = rows.length > 0 ? Number(rows[0]!.total_count) : 0;
+  const contacts = rows.map(({ total_count: _total, birth_year: _by, ...contact }) => contact);
+  return { contacts, total };
+}
+
 /** Group + column filters via search_contacts_in_groups_filtered RPC (paginated). */
 export async function searchContactsInGroupsFiltered(
   supabase: SupabaseClient,

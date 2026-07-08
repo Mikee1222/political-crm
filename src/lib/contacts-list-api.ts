@@ -7,6 +7,7 @@ import {
   applyColumnContactFiltersToBuilder,
   applyContactListFiltersToBuilder,
   buildContactQueryPlan,
+  canUseAdvancedSearchRpc,
   canUseNameSearchThenRefinePath,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
@@ -27,6 +28,7 @@ import {
   includeContactIdsNeedBatchFetch,
   resolveContactListFilterIds,
   resolveGroupIdsToUuids,
+  searchContactsAdvanced,
   searchContactsByFreeTextPaginated,
   searchContactsByGroupsPaginated,
   searchContactsInGroups,
@@ -299,6 +301,54 @@ export async function shouldDeferNameGroupMembership(
   return false;
 }
 
+/** Shared helper: resolve group UUIDs and call search_contacts_advanced (no id lists). */
+export async function fetchContactsViaAdvancedRpc(
+  supabase: SupabaseClient,
+  f: ContactListFilters,
+  opts: { offset: number; limit: number },
+): Promise<{ contacts: Record<string, unknown>[]; total: number; emptyInclude: boolean }> {
+  const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+  const includeGroupIds = rawInclude.length
+    ? await resolveGroupIdsToUuids(supabase, rawInclude)
+    : [];
+  if (rawInclude.length && !includeGroupIds.length) {
+    return { contacts: [], total: 0, emptyInclude: true };
+  }
+  const excludeGroupIds = f.exclude_group_ids.length
+    ? await resolveGroupIdsToUuids(supabase, f.exclude_group_ids)
+    : [];
+
+  const callStatuses = f.call_statuses.length
+    ? f.call_statuses
+    : f.call_status
+      ? [f.call_status]
+      : [];
+  const hasPhone =
+    f.mobile_presence === "has" ? true : f.mobile_presence === "not" ? false : null;
+  const hasEmail =
+    f.email_presence === "has" ? true : f.email_presence === "not" ? false : null;
+
+  const { contacts, total } = await searchContactsAdvanced(supabase, {
+    firstName: f.first_name || null,
+    lastName: f.last_name || null,
+    fatherName: f.father_name || null,
+    gender: f.gender || null,
+    includeGroupIds,
+    excludeGroupIds,
+    groupMatchMode: f.group_match === "and" && includeGroupIds.length > 1 ? "AND" : "OR",
+    municipalities: f.municipalities,
+    toponyms: f.toponyms,
+    callStatus: callStatuses.length === 1 ? callStatuses[0]! : null,
+    politicalStance: f.political_stance || null,
+    hasPhone,
+    hasEmail,
+    offset: opts.offset,
+    limit: opts.limit,
+  });
+
+  return { contacts: contacts as Record<string, unknown>[], total, emptyInclude: false };
+}
+
 /** Shared list-query logic for GET /api/contacts and integration tests. */
 export async function queryContactsListTotal(
   supabase: SupabaseClient,
@@ -306,12 +356,27 @@ export async function queryContactsListTotal(
   opts: { partialLocation?: boolean } = {},
 ): Promise<ContactsListApiResult> {
   const partialLocation = opts.partialLocation ?? false;
+
+  if (canUseAdvancedSearchRpc(f, { partialLocation })) {
+    const plan = buildContactQueryPlan(
+      f,
+      { includeContactIds: null, excludeContactIds: [] },
+      { partialLocation },
+    );
+    const { total, emptyInclude } = await fetchContactsViaAdvancedRpc(supabase, f, {
+      offset: 0,
+      limit: 1,
+    });
+    if (emptyInclude) return { total: 0, plan: { path: "empty", reason: "include group matches zero contacts" } };
+    return { total, plan, subPath: "advanced-rpc" };
+  }
+
   const deferGroupMembership = await shouldDeferNameGroupMembership(supabase, f);
   const filterResolution = await resolveContactListFilterIds(supabase, f, {
     deferLargeGroupMembership: deferGroupMembership,
   });
   const resolvedIds = filterResolution.includeContactIds;
-  const plan = buildContactQueryPlan(f, filterResolution);
+  const plan = buildContactQueryPlan(f, filterResolution, { partialLocation });
   const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
 
   if (plan.path === "empty") {

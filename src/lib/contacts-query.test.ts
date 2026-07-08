@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
 import {
   applyColumnContactFiltersToBuilder,
+  canUseAdvancedSearchRpc,
   canUseGroupColumnFastPath,
   canUseGroupNameSearchFastPath,
   canUseGroupOnlyFastPath,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/contacts-query";
 import {
   fetchContactsByIncludeIdBatches,
+  searchContactsAdvanced,
   searchContactsByGroupsPaginated,
   searchContactsInGroups,
   searchContactsInGroupsFiltered,
@@ -196,38 +198,41 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
     `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
   );
 
-  it("name only → dedicated fuzzy path (not in-memory pipeline)", () => {
+  it("name only → advanced RPC (not in-memory pipeline)", () => {
     expect(needsInMemoryContactListPipeline({ ...base, first_name: "ΜΑΡΙΑ" }, null)).toBe(false);
-    expect(canUseNameOnlyFuzzySearchPath({ ...base, first_name: "ΜΑΡΙΑ" })).toBe(true);
+    expect(canUseAdvancedSearchRpc({ ...base, first_name: "ΜΑΡΙΑ" })).toBe(true);
+    expect(
+      buildContactQueryPlan(
+        { ...base, first_name: "ΜΑΡΙΑ" },
+        { includeContactIds: null, excludeContactIds: [] },
+      ).path,
+    ).toBe("advanced-rpc");
   });
 
-  it("group only → paginated RPC fast path (not in-memory pipeline)", () => {
+  it("group only → advanced RPC (not in-memory pipeline)", () => {
     expect(needsInMemoryContactListPipeline({ ...base, group_ids: ["g1"] }, smallGroupIds)).toBe(
       false,
     );
-    expect(groupRequiresInMemoryPipeline({ ...base, group_ids: ["g1"] })).toBe(false);
-    expect(isGroupOnlyFilter({ ...base, group_ids: ["g1"] })).toBe(true);
-    expect(canUseGroupOnlyFastPath({ ...base, group_ids: ["g1"] })).toBe(true);
-    expect(canUseGroupOnlyFastPath({ ...base, group_ids: ["g1"] }, smallGroupIds)).toBe(true);
-    expect(canUseGroupOnlyFastPath({ ...base, group_ids: ["g1"] }, null)).toBe(false);
+    expect(canUseAdvancedSearchRpc({ ...base, group_ids: ["g1"] })).toBe(true);
     expect(
-      isGroupOnlyFilter({ ...base, group_ids: ["g1"], gender: "Άντρας" }),
-    ).toBe(false);
+      buildContactQueryPlan(
+        { ...base, group_ids: ["g1"] },
+        { includeContactIds: smallGroupIds, excludeContactIds: [] },
+      ).path,
+    ).toBe("advanced-rpc");
   });
 
-  it("name + group → fast path RPC (not in-memory)", () => {
+  it("name + group → advanced RPC (not in-memory)", () => {
     expect(
       needsInMemoryContactListPipeline(
         { ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" },
         null,
       ),
     ).toBe(false);
-    expect(canUseGroupNameSearchFastPath({ ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" })).toBe(
-      true,
-    );
+    expect(canUseAdvancedSearchRpc({ ...base, group_ids: ["g1"], first_name: "ΜΑΡΙΑ" })).toBe(true);
   });
 
-  it("gender only, municipality only, toponym, call_status, political_stance → default DB", () => {
+  it("gender only, municipality only, toponym, call_status, political_stance → advanced RPC", () => {
     expect(needsInMemoryContactListPipeline({ ...base, gender: "Άντρας" }, null)).toBe(false);
     expect(needsInMemoryContactListPipeline({ ...base, municipalities: ["Αθήνα"] }, null)).toBe(
       false,
@@ -245,36 +250,40 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
         null,
       ),
     ).toBe(false);
+    expect(
+      buildContactQueryPlan(
+        { ...base, gender: "Άντρας" },
+        { includeContactIds: null, excludeContactIds: [] },
+      ).path,
+    ).toBe("advanced-rpc");
   });
 
-  it("name + gender and name + municipality → name RPC + memory (not in-memory pipeline)", () => {
+  it("name + gender and name + municipality → advanced RPC", () => {
     const nameGender = { ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" };
     const nameMuni = { ...base, first_name: "ΜΑΡΙΑ", municipalities: ["Αθήνα"] };
     expect(needsInMemoryContactListPipeline(nameGender, null)).toBe(false);
     expect(needsInMemoryContactListPipeline(nameMuni, null)).toBe(false);
-    expect(canUseNameColumnFastPath(nameGender)).toBe(true);
-    expect(canUseNameColumnFastPath(nameMuni)).toBe(true);
-    expect(nameRequiresInMemoryPipeline(nameGender)).toBe(false);
+    expect(canUseAdvancedSearchRpc(nameGender)).toBe(true);
+    expect(canUseAdvancedSearchRpc(nameMuni)).toBe(true);
   });
 
-  it("group + gender and group + municipality → filtered group RPC (not in-memory)", () => {
+  it("group + gender and group + municipality → advanced RPC", () => {
     const groupGender = { ...base, group_ids: ["g1"], gender: "Άντρας" };
     const groupMuni = { ...base, group_ids: ["g1"], municipalities: ["Αθήνα"] };
     expect(needsInMemoryContactListPipeline(groupGender, smallGroupIds)).toBe(false);
     expect(needsInMemoryContactListPipeline(groupMuni, smallGroupIds)).toBe(false);
-    expect(canUseGroupColumnFastPath(groupGender)).toBe(true);
-    expect(canUseGroupColumnFastPath(groupMuni)).toBe(true);
-    expect(isGroupColumnOnlyFilter(groupGender)).toBe(true);
-    expect(groupRequiresInMemoryPipeline(groupGender)).toBe(false);
+    expect(canUseAdvancedSearchRpc(groupGender)).toBe(true);
+    expect(canUseAdvancedSearchRpc(groupMuni)).toBe(true);
   });
 
   it("group + gender + priority → in-memory (unsupported RPC column)", () => {
     const combo = { ...base, group_ids: ["g1"], gender: "Άντρας", priority: "High" };
+    expect(canUseAdvancedSearchRpc(combo)).toBe(false);
     expect(canUseGroupColumnFastPath(combo)).toBe(false);
     expect(needsInMemoryContactListPipeline(combo, smallGroupIds)).toBe(true);
   });
 
-  it("group + name + gender + municipality → fast RPC (not in-memory)", () => {
+  it("group + name + gender + municipality → advanced RPC", () => {
     const combo = {
       ...base,
       group_ids: ["g1"],
@@ -283,10 +292,10 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
       municipalities: ["Αθήνα"],
     };
     expect(needsInMemoryContactListPipeline(combo, null)).toBe(false);
-    expect(canUseGroupNameSearchFastPath(combo)).toBe(true);
+    expect(canUseAdvancedSearchRpc(combo)).toBe(true);
   });
 
-  it("uses free-text RPC for plain search and in-memory for large include lists", () => {
+  it("uses free-text RPC for plain search and advanced for large include lists", () => {
     expect(needsInMemoryContactListPipeline({ ...base, search: "μαρια" }, null)).toBe(false);
     expect(
       buildContactQueryPlan(
@@ -294,18 +303,33 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
         { includeContactIds: null, excludeContactIds: [] },
       ).path,
     ).toBe("free-text-rpc");
-    expect(needsInMemoryContactListPipeline(base, manyIds)).toBe(true);
-    expect(needsInMemoryContactListPipeline(base, manyIds.slice(0, 80))).toBe(false);
+    // Large include alone still goes advanced-rpc (EXISTS in Postgres).
+    expect(
+      buildContactQueryPlan(
+        { ...base, group_ids: ["g1"] },
+        { includeContactIds: manyIds, excludeContactIds: [] },
+      ).path,
+    ).toBe("advanced-rpc");
+    expect(needsInMemoryContactListPipeline({ ...base, group_ids: ["g1"] }, manyIds)).toBe(false);
     const manyExcludeIds = Array.from({ length: 81 }, (_, i) =>
       `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
     );
-    expect(needsInMemoryContactListPipeline(base, null, manyExcludeIds)).toBe(true);
-    expect(needsInMemoryContactListPipeline(base, null, manyExcludeIds.slice(0, 80))).toBe(
-      false,
-    );
+    expect(
+      buildContactQueryPlan(
+        { ...base, exclude_group_ids: ["g-excl"] },
+        { includeContactIds: null, excludeContactIds: manyExcludeIds },
+      ).path,
+    ).toBe("advanced-rpc");
+    // Unsupported column + large include still forces in-memory
+    expect(
+      needsInMemoryContactListPipeline(
+        { ...base, group_ids: ["g1"], priority: "High" },
+        manyIds,
+      ),
+    ).toBe(true);
   });
 
-  it("name + large exclude group → in-memory (not name-column RPC fast path)", () => {
+  it("name + large exclude group → advanced RPC (not in-memory)", () => {
     const manyExcludeIds = Array.from({ length: 81 }, (_, i) =>
       `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`,
     );
@@ -318,20 +342,73 @@ describe("needsInMemoryContactListPipeline routing matrix", () => {
       includeContactIds: null,
       excludeContactIds: manyExcludeIds,
     });
-    expect(plan.path).toBe("in-memory");
-    expect(canUseNameColumnFastPath(f)).toBe(false);
-    expect(needsInMemoryContactListPipeline(f, null, manyExcludeIds)).toBe(true);
+    expect(plan.path).toBe("advanced-rpc");
+    expect(canUseAdvancedSearchRpc(f)).toBe(true);
+    expect(needsInMemoryContactListPipeline(f, null, manyExcludeIds)).toBe(false);
   });
 
-  it("name + gender still uses name-column RPC when no exclude groups", () => {
+  it("name + gender uses advanced RPC when no exclude groups", () => {
     const nameGender = { ...base, first_name: "ΜΑΡΙΑ", gender: "Γυναίκα" };
-    expect(canUseNameColumnFastPath(nameGender)).toBe(true);
+    expect(canUseAdvancedSearchRpc(nameGender)).toBe(true);
     expect(needsInMemoryContactListPipeline(nameGender, null)).toBe(false);
     const plan = buildContactQueryPlan(nameGender, {
       includeContactIds: null,
       excludeContactIds: [],
     });
-    expect(plan.path).toBe("name-column-rpc");
+    expect(plan.path).toBe("advanced-rpc");
+  });
+});
+
+describe("searchContactsAdvanced", () => {
+  it("calls search_contacts_advanced RPC with pagination params", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "1",
+          first_name: "Μαρία",
+          last_name: "Α",
+          total_count: 2,
+        },
+        {
+          id: "2",
+          first_name: "Μαρία",
+          last_name: "Β",
+          total_count: 2,
+        },
+      ],
+      error: null,
+    });
+    const supabase = { rpc };
+
+    const { contacts, total } = await searchContactsAdvanced(supabase as never, {
+      firstName: "ΜΑΡΙΑ",
+      includeGroupIds: ["11111111-1111-4111-8111-111111111111"],
+      excludeGroupIds: ["22222222-2222-4222-8222-222222222222"],
+      municipalities: ["Αθήνα"],
+      offset: 0,
+      limit: 50,
+    });
+
+    expect(rpc).toHaveBeenCalledWith("search_contacts_advanced", {
+      p_first_name: "ΜΑΡΙΑ",
+      p_last_name: null,
+      p_father_name: null,
+      p_gender: null,
+      p_include_group_ids: ["11111111-1111-4111-8111-111111111111"],
+      p_exclude_group_ids: ["22222222-2222-4222-8222-222222222222"],
+      p_group_match_mode: "OR",
+      p_municipalities: ["Αθήνα"],
+      p_toponyms: null,
+      p_call_status: null,
+      p_political_stance: null,
+      p_has_phone: null,
+      p_has_email: null,
+      p_offset: 0,
+      p_limit: 50,
+    });
+    expect(total).toBe(2);
+    expect(contacts).toHaveLength(2);
+    expect(contacts[0]).not.toHaveProperty("total_count");
   });
 });
 

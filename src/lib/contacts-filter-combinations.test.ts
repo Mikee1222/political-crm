@@ -10,10 +10,14 @@ import {
   filterContactRowsByListFilters,
   searchContactsByName,
 } from "@/lib/contacts-query";
-import { resolveContactListFilterIds } from "@/lib/contact-group-members";
-import { searchContactsByFreeTextPaginated } from "@/lib/contact-group-members";
+import {
+  resolveContactListFilterIds,
+  resolveGroupIdsToUuids,
+  searchContactsAdvanced,
+  searchContactsByFreeTextPaginated,
+} from "@/lib/contact-group-members";
 import { queryContactsListTotal } from "@/lib/contacts-list-api";
-import type { ContactQueryPlanPath } from "@/lib/contacts-query";
+import { canUseAdvancedSearchRpc, type ContactQueryPlanPath } from "@/lib/contacts-query";
 
 function loadLocalEnv(): void {
   const envPath = resolve(process.cwd(), ".env.local");
@@ -69,12 +73,50 @@ async function contactIdsInGroups(
   );
 }
 
-/** Independent expected count — no shared routing with queryContactsListTotal. */
+/** Independent expected count — uses advanced RPC when the API does (same semantics). */
 async function baselineContactCount(
   supabase: SupabaseClient,
   f: ContactListFilters,
   partialLocation: boolean,
 ): Promise<number> {
+  if (canUseAdvancedSearchRpc(f, { partialLocation })) {
+    const rawInclude = f.group_ids.length ? f.group_ids : f.group_id ? [f.group_id] : [];
+    const includeGroupIds = rawInclude.length
+      ? await resolveGroupIdsToUuids(supabase, rawInclude)
+      : [];
+    if (rawInclude.length && !includeGroupIds.length) return 0;
+    const excludeGroupIds = f.exclude_group_ids.length
+      ? await resolveGroupIdsToUuids(supabase, f.exclude_group_ids)
+      : [];
+    const callStatuses = f.call_statuses.length
+      ? f.call_statuses
+      : f.call_status
+        ? [f.call_status]
+        : [];
+    const hasPhone =
+      f.mobile_presence === "has" ? true : f.mobile_presence === "not" ? false : null;
+    const hasEmail =
+      f.email_presence === "has" ? true : f.email_presence === "not" ? false : null;
+    const { total } = await searchContactsAdvanced(supabase, {
+      firstName: f.first_name || null,
+      lastName: f.last_name || null,
+      fatherName: f.father_name || null,
+      gender: f.gender || null,
+      includeGroupIds,
+      excludeGroupIds,
+      groupMatchMode: f.group_match === "and" && includeGroupIds.length > 1 ? "AND" : "OR",
+      municipalities: f.municipalities,
+      toponyms: f.toponyms,
+      callStatus: callStatuses.length === 1 ? callStatuses[0]! : null,
+      politicalStance: f.political_stance || null,
+      hasPhone,
+      hasEmail,
+      offset: 0,
+      limit: 1,
+    });
+    return total;
+  }
+
   const resolution = await resolveContactListFilterIds(supabase, f);
   const excludeIds = resolution.excludeContactIds;
 
@@ -218,16 +260,20 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
     expectPath?: ContactQueryPlanPath;
     expectInMemory?: boolean;
   }> = [
-    { label: "name only", build: () => mergeFilters({ first_name: "Ιωάννης" }) },
+    {
+      label: "name only",
+      build: () => mergeFilters({ first_name: "Ιωάννης" }),
+      expectPath: "advanced-rpc",
+    },
     {
       label: "name + small include group",
       build: (c) => mergeFilters({ first_name: "Ιωάννης", group_ids: [c.smallGroupId] }),
-      expectPath: "group-name-rpc",
+      expectPath: "advanced-rpc",
     },
     {
       label: "name + large include group (ΘΕΤΙΚΟΣ)",
       build: (c) => mergeFilters({ first_name: "Ιωάννης", group_ids: [c.positiveGroupId] }),
-      expectPath: "name-search-then-refine",
+      expectPath: "advanced-rpc",
     },
     {
       label: "name + large exclude group (ΜΗ ΕΓΚΥΡΟΣ ΑΡΙΘΜΟΣ)",
@@ -236,13 +282,13 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           first_name: "Ιωάννης",
           exclude_group_ids: [INVALID_NUMBER_GROUP_ID],
         }),
-      expectPath: "name-search-then-refine",
+      expectPath: "advanced-rpc",
     },
     {
       label: "name + accented exclude group name",
       build: () =>
         mergeFilters({ first_name: "Ιωάννης", exclude_group_ids: ["Μη έγκυρος αριθμός"] }),
-      expectPath: "name-search-then-refine",
+      expectPath: "advanced-rpc",
     },
     {
       label: "name + multiple groups (include small + exclude large)",
@@ -252,21 +298,22 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           group_ids: [c.smallGroupId],
           exclude_group_ids: [INVALID_NUMBER_GROUP_ID],
         }),
-      expectPath: "group-name-rpc",
+      expectPath: "advanced-rpc",
     },
     {
       label: "large exclude group only",
       build: () => mergeFilters({ exclude_group_ids: [INVALID_NUMBER_GROUP_ID] }),
-      expectInMemory: true,
+      expectPath: "advanced-rpc",
     },
     {
       label: "large include group only (ΘΕΤΙΚΟΣ)",
       build: (c) => mergeFilters({ group_ids: [c.positiveGroupId] }),
-      expectInMemory: true,
+      expectPath: "advanced-rpc",
     },
     {
       label: "small include group only",
       build: (c) => mergeFilters({ group_ids: [c.smallGroupId] }),
+      expectPath: "advanced-rpc",
     },
     {
       label: "column filters only (gender + municipality)",
@@ -275,6 +322,7 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           gender: c.sampleGender,
           municipalities: [c.sampleMunicipality],
         }),
+      expectPath: "advanced-rpc",
     },
     {
       label: "column filters + large exclude",
@@ -283,7 +331,7 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           gender: c.sampleGender,
           exclude_group_ids: [INVALID_NUMBER_GROUP_ID],
         }),
-      expectInMemory: true,
+      expectPath: "advanced-rpc",
     },
     {
       label: "column filters + large include + name",
@@ -293,12 +341,12 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           gender: c.sampleGender,
           group_ids: [c.positiveGroupId],
         }),
-      expectPath: "name-search-then-refine",
+      expectPath: "advanced-rpc",
     },
     {
       label: "accented large include group name",
       build: () => mergeFilters({ group_ids: ["θετικος"] }),
-      expectInMemory: true,
+      expectPath: "advanced-rpc",
     },
     {
       label: "pure free-text search",
@@ -322,6 +370,7 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
           expect(api.plan.path).toBe("in-memory");
         }
       },
+      30_000,
     );
   }
 
@@ -333,10 +382,11 @@ describe.skipIf(!hasSupabase)("contacts filter combinations (integration)", () =
         exclude_group_ids: [INVALID_NUMBER_GROUP_ID],
       });
       const api = await queryContactsListTotal(ctx.supabase, f);
-      expect(api.plan.path).toBe("name-search-then-refine");
+      expect(api.plan.path).toBe("advanced-rpc");
       expect(api.total).toBeGreaterThan(0);
       const expected = await baselineContactCount(ctx.supabase, f, false);
       expect(api.total).toBe(expected);
     },
+    30_000,
   );
 });

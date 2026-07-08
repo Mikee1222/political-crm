@@ -15,6 +15,7 @@ import {
   applyColumnContactFiltersToBuilder,
   applyContactListFiltersToBuilder,
   buildContactQueryPlan,
+  canUseAdvancedSearchRpc,
   contactRowMatchesListFilters,
   fetchContactRowsInBatches,
   searchContactsByName,
@@ -24,7 +25,11 @@ import {
   hasNameColumnFilters,
 } from "@/lib/contacts-query";
 import { normalizeContactListFiltersForNameRpc } from "@/lib/alexandra-contact-search";
-import { fetchContactsNameSearchThenRefine, shouldDeferNameGroupMembership } from "@/lib/contacts-list-api";
+import {
+  fetchContactsNameSearchThenRefine,
+  fetchContactsViaAdvancedRpc,
+  shouldDeferNameGroupMembership,
+} from "@/lib/contacts-list-api";
 import {
   enrichContactsWithGroupCountsAndNames,
   excludeContactIdsNeedInMemoryFilter,
@@ -377,11 +382,59 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    if (canUseAdvancedSearchRpc(f, { partialLocation })) {
+      const plan = buildContactQueryPlan(
+        f,
+        { includeContactIds: null, excludeContactIds: [] },
+        { partialLocation },
+      );
+      const rpcLimit = comboboxMode ? listLimit! : pageSize;
+      const rpcOffset = comboboxMode ? 0 : (page - 1) * pageSize;
+      const { contacts, total, emptyInclude } = await timing.time("list", () =>
+        fetchContactsViaAdvancedRpc(supabase, f, {
+          offset: rpcOffset,
+          limit: rpcLimit,
+        }),
+      );
+      if (emptyInclude) {
+        return emptyContactsResponse(comboboxMode, page, pageSize);
+      }
+      const enriched = await timing.time("enrich", () =>
+        enrichContactsWithGroupCount(supabase, contacts),
+      );
+      if (f.exclude_group_ids.length) {
+        debugExcludeGroupFilter("path", {
+          route: "advanced-rpc",
+          queryPlanReason: plan.reason,
+          total,
+          rowCount: enriched.length,
+        });
+      }
+      if (isNameExcludeComboFilter(f)) {
+        debugNameExcludeCombo("result", {
+          route: "advanced-rpc",
+          queryPlanReason: plan.reason,
+          total,
+          rowCount: enriched.length,
+        });
+      }
+      if (comboboxMode) {
+        return withServerTimingHeaders(
+          NextResponse.json({ contacts: enriched }),
+          timing,
+        );
+      }
+      return withServerTimingHeaders(
+        NextResponse.json({ contacts: enriched, total, page, pageSize }),
+        timing,
+      );
+    }
+
     const filterResolution = await resolveContactListFilterIds(supabase, f, {
       deferLargeGroupMembership: await shouldDeferNameGroupMembership(supabase, f),
     });
     const resolvedIds = filterResolution.includeContactIds;
-    const plan = buildContactQueryPlan(f, filterResolution);
+    const plan = buildContactQueryPlan(f, filterResolution, { partialLocation });
     const sqlGroupResolution = groupResolutionForSqlBuilder(filterResolution);
     const resolvedExcludeGroupUuids = f.exclude_group_ids.length
       ? await resolveGroupIdsToUuids(supabase, f.exclude_group_ids)

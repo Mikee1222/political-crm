@@ -648,6 +648,7 @@ export function largeGroupMembershipForcesInMemory(resolution: GroupFilterResolu
 export type ContactQueryPlanPath =
   | "empty"
   | "free-text-rpc"
+  | "advanced-rpc"
   | "name-only-rpc"
   | "name-column-rpc"
   | "group-name-rpc"
@@ -664,49 +665,90 @@ export type ContactQueryPlan = {
 };
 
 /**
+ * Filters supported by search_contacts_advanced (exact municipalities/toponyms).
+ * Everything else falls back to legacy / in-memory paths.
+ */
+export function canUseAdvancedSearchRpc(
+  f: ContactListFilters,
+  opts?: { partialLocation?: boolean },
+): boolean {
+  if (f.search?.trim()) return false;
+  if (f.nameday_today || f.birthday_today) return false;
+  if (f.source_ids.length || f.exclude_source_ids.length) return false;
+  if (f.call_statuses.length > 1) return false;
+  if (opts?.partialLocation && (f.municipalities.length > 0 || f.toponyms.length > 0)) {
+    return false;
+  }
+
+  const d = getDefaultContactFilters();
+  const unsupportedKeys: (keyof ContactListFilters)[] = [
+    "area",
+    "priority",
+    "tag",
+    "phone",
+    "landline_presence",
+    "not_contacted_days",
+    "score_tier",
+    "volunteer_area",
+    "ekl_ar",
+    "electoral_district",
+    "has_request",
+    "request_status",
+    "age_min",
+    "age_max",
+    "birth_year_from",
+    "birth_year_to",
+  ];
+  for (const k of unsupportedKeys) {
+    if (f[k] !== d[k]) return false;
+  }
+  if (f.is_volunteer) return false;
+
+  const hasName = hasNameColumnFilters(f);
+  const hasGroups = hasGroupIncludeFilter(f) || f.exclude_group_ids.length > 0;
+  const hasCols = Boolean(
+    f.gender ||
+      f.municipalities.length ||
+      f.toponyms.length ||
+      f.call_status ||
+      f.call_statuses.length ||
+      f.political_stance ||
+      f.mobile_presence ||
+      f.email_presence,
+  );
+  return hasName || hasGroups || hasCols;
+}
+
+/**
  * WARNING: any filter combination must route through buildContactQueryPlan() — do not add ad-hoc branches.
  * If you're tempted to special-case a combination, add a test case to contacts-filter-combinations.test.ts first.
  *
  * DECISION MATRIX (path = ContactQueryPlanPath; sm = ≤ MAX_ID_IN_CLAUSE / 80 members)
  * ─────────────────────────────────────────────────────────────────────────────────────────────────────
- * | search | name cols   | column filt   | incl grp | excl grp | incl sz | excl sz | PATH              |
+ * | search | advanced-supported filters | PATH              |
  * ─────────────────────────────────────────────────────────────────────────────────────────────────────
- * | yes    | *           | *             | *        | *        | *       | *       | in-memory         | fuzzy search
- * | no     | first/last  | none          | no       | no       | -       | -       | name-only-rpc     |
- * | no     | name+cols   | rpc-supported | no       | no       | -       | sm      | name-column-rpc   |
- * | no     | name+cols   | complex       | *        | *        | *       | *       | in-memory         |
- * | no     | first/last  | none          | yes(sm)  | no/lg    | sm      | *       | group-name-rpc    | small incl, lazy excl
- * | no     | name+cols   | *             | yes(lg)  | *        | >80     | *       | name-search-refine| large incl → name RPC first
- * | no     | name        | *             | no       | yes(lg)  | -       | >80     | name-search-refine| large excl, no incl
- * | no     | none        | none          | yes      | no       | sm      | sm      | group-only-rpc    |
- * | no     | none        | rpc-supported | yes      | no       | sm      | sm      | group-column-rpc  |
- * | no     | none        | *             | *        | *        | >80     | *       | in-memory         | large include, no name
- * | no     | none        | *             | *        | *        | *       | >80     | in-memory         | large exclude, no name
- * | no     | *           | complex+grp   | yes      | *        | sm      | sm      | in-memory         | unsupported RPC cols
- * | no     | none        | columns       | no       | no       | -       | sm      | sql-paginated     |
- * | no     | *           | *             | yes      | *        | 0       | *       | empty             | zero include matches
- * | *      | *           | *             | *        | *        | *       | *       | nameday           | when nameday_today set
+ * | yes    | free-text only               | free-text-rpc     |
+ * | yes    | + other filters              | in-memory         |
+ * | no     | name/groups/gender/muni/…    | advanced-rpc      | unified Postgres RPC (any group size)
+ * | no     | unsupported columns          | legacy / in-memory|
+ * | *      | nameday_today                | nameday           |
+ * | no     | include group → 0 ids        | empty             |
  * ─────────────────────────────────────────────────────────────────────────────────────────────────────
- * Large group membership is checked BEFORE any RPC fast path — name/group fast paths never bypass it.
- * When in doubt, prefer in-memory.
+ * advanced-rpc handles large include/exclude groups via EXISTS — do not materialize member ids in Node.
+ * When in doubt for unsupported columns, prefer in-memory.
  */
 export function buildContactQueryPlan(
   f: ContactListFilters,
   resolution: GroupFilterResolution,
+  opts?: { partialLocation?: boolean },
 ): ContactQueryPlan {
   if (
     hasGroupIncludeFilter(f) &&
     resolution.includeContactIds !== null &&
-    resolution.includeContactIds.length === 0
+    resolution.includeContactIds.length === 0 &&
+    !resolution.deferredIncludeGroupIds?.length
   ) {
     return { path: "empty", reason: "include group matches zero contacts" };
-  }
-
-  if (largeGroupMembershipForcesInMemory(resolution)) {
-    return {
-      path: "in-memory",
-      reason: `large group membership (include=${resolution.includeContactIds?.length ?? "none"}, exclude=${resolution.excludeContactIds.length})`,
-    };
   }
 
   if (f.nameday_today) {
@@ -753,6 +795,20 @@ export function buildContactQueryPlan(
       return { path: "free-text-rpc", reason: "free-text paginated RPC" };
     }
     return { path: "in-memory", reason: "free-text + extra filters" };
+  }
+
+  if (canUseAdvancedSearchRpc(f, opts)) {
+    return {
+      path: "advanced-rpc",
+      reason: "search_contacts_advanced (name/groups/common columns)",
+    };
+  }
+
+  if (largeGroupMembershipForcesInMemory(resolution)) {
+    return {
+      path: "in-memory",
+      reason: `large group membership (include=${resolution.includeContactIds?.length ?? "none"}, exclude=${resolution.excludeContactIds.length})`,
+    };
   }
 
   if (resolutionDefersNameGroupMembership(f, resolution)) {
@@ -805,6 +861,7 @@ export function explainInMemoryContactListPipelineDecision(
   };
   const plan = buildContactQueryPlan(f, resolution);
   const checks: Record<string, boolean> = {
+    canUseAdvancedSearchRpc: canUseAdvancedSearchRpc(f),
     largeExcludeIds: excludeContactIdsNeedInMemoryFilter(resolution.excludeContactIds),
     largeIncludeIds: includeContactIdsNeedBatchFetch(resolution.includeContactIds),
     hasSearch: Boolean(f.search?.trim()),
