@@ -11,6 +11,12 @@ export const REQUESTS_SEARCH_STATE_KEY = "requests-search-state-v1";
 export const CONTACTS_SEARCH_FRESH_KEY = "contacts-search:fresh";
 export const REQUESTS_SEARCH_FRESH_KEY = "requests-search:fresh";
 
+/** Ordered contact IDs from /contacts/search for detail prev/next. */
+export const CONTACTS_SEARCH_NAV_KEY = "contacts-search-nav-v1";
+
+/** Legacy key read by contact detail (also written by /contacts list). */
+export const CONTACTS_NAV_KEY = "contacts_nav";
+
 export const SEARCH_FRESH_EVENT = "crm-search-fresh-intent";
 
 export type SearchSessionState<TFilters, TResult> = {
@@ -22,6 +28,18 @@ export type SearchSessionState<TFilters, TResult> = {
   scrollY: number;
   /** Query string that was on the search page (for URL restore). */
   urlQuery?: string;
+};
+
+export type ContactsSearchNavState = {
+  savedAt: number;
+  /** Ordered result IDs (current page / navigable set). */
+  ids: string[];
+  /** Display names keyed by contact id (optional, for list chip). */
+  labels?: Record<string, string>;
+  /** Origin — only show prev/next when opened from search. */
+  source: "search";
+  /** Total matches reported by search (may exceed ids.length when paginated). */
+  total?: number;
 };
 
 function canUseSessionStorage(): boolean {
@@ -83,6 +101,89 @@ export function clearSearchSessionState(key: string): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Persist ordered search-result IDs for contact detail prev/next. */
+export function saveContactsSearchNav(
+  ids: string[],
+  opts?: { labels?: Record<string, string>; total?: number },
+): void {
+  if (!canUseSessionStorage()) return;
+  if (!ids.length) {
+    clearContactsSearchNav();
+    return;
+  }
+  try {
+    const payload: ContactsSearchNavState = {
+      savedAt: Date.now(),
+      ids: [...ids],
+      labels: opts?.labels,
+      source: "search",
+      total: opts?.total,
+    };
+    sessionStorage.setItem(CONTACTS_SEARCH_NAV_KEY, JSON.stringify(payload));
+    // Keep legacy key in sync so contact detail prev/next works.
+    sessionStorage.setItem(
+      CONTACTS_NAV_KEY,
+      JSON.stringify({ ids: payload.ids, source: "search", total: payload.total }),
+    );
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+export function loadContactsSearchNav(
+  ttlMs: number = SEARCH_STATE_TTL_MS,
+): ContactsSearchNavState | null {
+  if (!canUseSessionStorage()) return null;
+  try {
+    const raw = sessionStorage.getItem(CONTACTS_SEARCH_NAV_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ContactsSearchNavState;
+    if (!parsed || parsed.source !== "search" || typeof parsed.savedAt !== "number") {
+      sessionStorage.removeItem(CONTACTS_SEARCH_NAV_KEY);
+      return null;
+    }
+    if (Date.now() - parsed.savedAt > ttlMs) {
+      sessionStorage.removeItem(CONTACTS_SEARCH_NAV_KEY);
+      return null;
+    }
+    if (!Array.isArray(parsed.ids) || parsed.ids.length === 0) {
+      sessionStorage.removeItem(CONTACTS_SEARCH_NAV_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    try {
+      sessionStorage.removeItem(CONTACTS_SEARCH_NAV_KEY);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+export function clearContactsSearchNav(): void {
+  if (!canUseSessionStorage()) return;
+  try {
+    sessionStorage.removeItem(CONTACTS_SEARCH_NAV_KEY);
+    const legacy = sessionStorage.getItem(CONTACTS_NAV_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as { source?: string };
+      if (parsed?.source === "search") {
+        sessionStorage.removeItem(CONTACTS_NAV_KEY);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** True when contact detail was opened from /contacts/search results. */
+export function isContactsSearchNavActive(contactId: string): boolean {
+  const nav = loadContactsSearchNav();
+  if (!nav) return false;
+  return nav.ids.includes(contactId);
 }
 
 /** Mark next visit to the search page as intentional "start fresh" (nav link). */

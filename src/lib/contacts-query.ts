@@ -13,6 +13,11 @@ import {
 } from "@/lib/greek-fuzzy-name";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import { getDefaultContactFilters } from "@/lib/contacts-filters";
+import {
+  extractPhoneSearchDigits,
+  MIN_PHONE_SEARCH_DIGITS,
+  phoneDigitsContainsOrFilter,
+} from "@/lib/phone-search";
 
 type ContactForSearch = {
   first_name: string;
@@ -199,7 +204,18 @@ export function contactRowMatchesListFilters(
     if (!Array.isArray(tags) || !tags.includes(f.tag)) return false;
   }
   if (f.political_stance && String(row.political_stance ?? "") !== f.political_stance) return false;
-  if (f.phone && !ilikeMatch(row.phone, f.phone) && !ilikeMatch(row.phone2, f.phone)) return false;
+  if (f.phone) {
+    const digits = extractPhoneSearchDigits(f.phone);
+    const phoneHit =
+      digits.length >= MIN_PHONE_SEARCH_DIGITS
+        ? extractPhoneSearchDigits(row.phone ?? "").includes(digits) ||
+          extractPhoneSearchDigits(row.phone2 ?? "").includes(digits) ||
+          extractPhoneSearchDigits(row.landline ?? "").includes(digits)
+        : ilikeMatch(row.phone, f.phone) ||
+          ilikeMatch(row.phone2, f.phone) ||
+          ilikeMatch(row.landline, f.phone);
+    if (!phoneHit) return false;
+  }
 
   const ageMin = parseOptionalInt(f.age_min);
   const ageMax = parseOptionalInt(f.age_max);
@@ -984,8 +1000,13 @@ export function applyContactListFiltersToBuilder(
   if (f.tag) query = query.contains("tags", [f.tag]);
   if (f.political_stance) query = query.eq("political_stance", f.political_stance);
   if (f.phone?.trim()) {
-    const p = f.phone.trim();
-    query = query.or(`phone.ilike.%${p}%,phone2.ilike.%${p}%,landline.ilike.%${p}%`);
+    const digits = extractPhoneSearchDigits(f.phone);
+    if (digits.length >= MIN_PHONE_SEARCH_DIGITS) {
+      query = query.or(phoneDigitsContainsOrFilter(digits));
+    } else {
+      const p = f.phone.trim();
+      query = query.or(`phone.ilike.%${p}%,phone2.ilike.%${p}%,landline.ilike.%${p}%`);
+    }
   }
   if (f.age_min) {
     const n = parseInt(f.age_min, 10);
@@ -1178,7 +1199,14 @@ export async function queryContactsList(
   if (opts.priority) query = query.eq("priority", opts.priority);
   if (opts.tag) query = query.contains("tags", [opts.tag]);
   if (opts.group_id) query = query.eq("group_id", opts.group_id);
-  if (opts.phone) query = query.ilike("phone", `%${opts.phone}%`);
+  if (opts.phone) {
+    const digits = extractPhoneSearchDigits(opts.phone);
+    if (digits.length >= MIN_PHONE_SEARCH_DIGITS) {
+      query = query.or(phoneDigitsContainsOrFilter(digits));
+    } else {
+      query = query.ilike("phone", `%${opts.phone}%`);
+    }
+  }
   if (opts.political_stance) query = query.eq("political_stance", opts.political_stance);
   if (opts.age_min != null && Number.isFinite(opts.age_min)) query = query.gte("age", opts.age_min);
   if (opts.age_max != null && Number.isFinite(opts.age_max)) query = query.lte("age", opts.age_max);

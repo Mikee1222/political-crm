@@ -60,6 +60,11 @@ import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
 import { cn } from "@/lib/utils";
 import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
+import {
+  CONTACTS_NAV_KEY,
+  isContactsSearchNavActive,
+  loadContactsSearchNav,
+} from "@/lib/search-session-state";
 
 const card =
   "contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm";
@@ -192,6 +197,7 @@ type ContactNavInfo = {
   next: string | null;
   position: number;
   total: number;
+  fromSearch: boolean;
 };
 
 type SupporterRow = {
@@ -429,9 +435,18 @@ function ContactDetailPage() {
   const alexPage = useOptionalAlexandraPageContact();
   const aliveRef = useRef(true);
 
+  const fromSearchParam = searchParams.get("from") === "search";
+  const fromSearchNav = Boolean(id && (fromSearchParam || isContactsSearchNavActive(id)));
+
   const contactDetailHref = useCallback(
-    (targetId: string) => (focusMode ? `/contacts/${targetId}?focus=1` : `/contacts/${targetId}`),
-    [focusMode],
+    (targetId: string) => {
+      const params = new URLSearchParams();
+      if (fromSearchNav) params.set("from", "search");
+      if (focusMode) params.set("focus", "1");
+      const q = params.toString();
+      return q ? `/contacts/${targetId}?${q}` : `/contacts/${targetId}`;
+    },
+    [focusMode, fromSearchNav],
   );
 
   const applyFocusModeDom = useCallback((val: boolean) => {
@@ -856,12 +871,36 @@ function ContactDetailPage() {
   useEffect(() => {
     if (!id) return;
     try {
-      const stored = sessionStorage.getItem("contacts_nav");
+      const searchNav = loadContactsSearchNav();
+      const fromSearch =
+        searchParams.get("from") === "search" ||
+        Boolean(searchNav?.ids.includes(id));
+
+      // Prefer dedicated search-nav when this contact is in that set.
+      if (fromSearch && searchNav?.ids.includes(id)) {
+        const idx = searchNav.ids.indexOf(id);
+        const n = searchNav.ids.length;
+        setNavInfo({
+          prev: searchNav.ids[(idx - 1 + n) % n] ?? null,
+          next: searchNav.ids[(idx + 1) % n] ?? null,
+          position: idx + 1,
+          total: n,
+          fromSearch: true,
+        });
+        return;
+      }
+
+      const stored = sessionStorage.getItem(CONTACTS_NAV_KEY);
       if (!stored) {
         setNavInfo(null);
         return;
       }
-      const nav = JSON.parse(stored) as { ids?: string[] };
+      const nav = JSON.parse(stored) as { ids?: string[]; source?: string };
+      // Only use list-page nav when not claiming search origin without membership.
+      if (nav.source === "search" && !nav.ids?.includes(id)) {
+        setNavInfo(null);
+        return;
+      }
       const ids = nav.ids ?? [];
       const idx = ids.indexOf(id);
       if (idx === -1) {
@@ -873,11 +912,12 @@ function ContactDetailPage() {
         next: ids[idx + 1] ?? null,
         position: idx + 1,
         total: ids.length,
+        fromSearch: nav.source === "search",
       });
     } catch {
       setNavInfo(null);
     }
-  }, [id]);
+  }, [id, searchParams]);
 
   useEffect(() => {
     if (!id) return;
@@ -1316,15 +1356,32 @@ function ContactDetailPage() {
       ) : null}
       <div className={cn(focusMode && "max-w-6xl mx-auto px-6 py-4")}>
     <div className="min-h-full -m-6 overflow-x-hidden bg-[var(--bg-primary)] p-4 pb-4 text-[var(--text-primary)] sm:p-6 md:-m-8 md:p-8 md:pb-8">
-      <div className="mb-4 flex min-w-0 items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => router.push(focusMode ? "/contacts?focus=1" : "/contacts")}
-          className={lux.btnSecondary + " inline-flex shrink-0 items-center gap-1.5 !py-1.5 text-xs sm:gap-2 sm:!py-2 sm:text-sm"}
-        >
-          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-          Επαφές
-        </button>
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (navInfo?.fromSearch || fromSearchNav) {
+                router.push("/contacts/search");
+                return;
+              }
+              router.push(focusMode ? "/contacts?focus=1" : "/contacts");
+            }}
+            className={lux.btnSecondary + " inline-flex shrink-0 items-center gap-1.5 !py-1.5 text-xs sm:gap-2 sm:!py-2 sm:text-sm"}
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+            {navInfo?.fromSearch || fromSearchNav ? "Αναζήτηση" : "Επαφές"}
+          </button>
+          {navInfo?.fromSearch || fromSearchNav ? (
+            <button
+              type="button"
+              onClick={() => router.push("/contacts/search")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-3 py-1.5 text-[11px] font-semibold text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_20%,var(--bg-elevated))]"
+            >
+              Λίστα αποτελεσμάτων
+            </button>
+          ) : null}
+        </div>
         {navInfo ? (
           <div className="flex min-w-0 shrink items-center gap-1 sm:gap-2">
             <button
@@ -1332,20 +1389,24 @@ function ContactDetailPage() {
               onClick={() => navInfo.prev && router.push(contactDetailHref(navInfo.prev))}
               disabled={!navInfo.prev}
               className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
+              aria-label="Προηγούμενο αποτέλεσμα"
             >
               <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-              <span className="sm:inline">Προηγούμενο</span>
+              <span className="hidden sm:inline">Προηγούμενο</span>
             </button>
             <span className="shrink-0 whitespace-nowrap text-[11px] text-[var(--text-muted)] sm:text-xs">
-              {navInfo.position} / {navInfo.total}
+              {navInfo.fromSearch
+                ? `${navInfo.position} / ${navInfo.total} αποτελέσματα`
+                : `${navInfo.position} / ${navInfo.total}`}
             </span>
             <button
               type="button"
               onClick={() => navInfo.next && router.push(contactDetailHref(navInfo.next))}
               disabled={!navInfo.next}
               className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
+              aria-label="Επόμενο αποτέλεσμα"
             >
-              <span className="sm:inline">Επόμενο</span>
+              <span className="hidden sm:inline">Επόμενο</span>
               <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
             </button>
           </div>

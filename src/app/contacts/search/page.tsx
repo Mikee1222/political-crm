@@ -42,11 +42,13 @@ import { lux } from "@/lib/luxury-styles";
 import { hasMinRole } from "@/lib/roles";
 import { buildActiveFilterSummaryLabel } from "@/lib/search-filter-summary";
 import {
+  clearContactsSearchNav,
   clearSearchSessionState,
   CONTACTS_SEARCH_FRESH_KEY,
   CONTACTS_SEARCH_STATE_KEY,
   consumeSearchFreshIntent,
   loadSearchSessionState,
+  saveContactsSearchNav,
   saveSearchSessionState,
   SEARCH_FRESH_EVENT,
 } from "@/lib/search-session-state";
@@ -234,6 +236,7 @@ function ContactSearchPageInner() {
 
     if (consumeSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY)) {
       clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+      clearContactsSearchNav();
       return;
     }
 
@@ -278,6 +281,7 @@ function ContactSearchPageInner() {
       if (detail?.freshKey !== CONTACTS_SEARCH_FRESH_KEY) return;
       consumeSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY);
       clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+      clearContactsSearchNav();
       restoredFingerprintRef.current = null;
       setRestoredFromCache(false);
       const d = getDefaultContactFilters();
@@ -395,6 +399,7 @@ function ContactSearchPageInner() {
   const runSearch = useCallback(
     (f: ContactListFilters) => {
       clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+      clearContactsSearchNav();
       restoredFingerprintRef.current = null;
       setRestoredFromCache(false);
       const next = { ...cloneContactListFilters(f), page: "1" };
@@ -424,6 +429,7 @@ function ContactSearchPageInner() {
 
   const clearFilters = () => {
     clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
+    clearContactsSearchNav();
     restoredFingerprintRef.current = null;
     setRestoredFromCache(false);
     const d = getDefaultContactFilters();
@@ -505,15 +511,28 @@ function ContactSearchPageInner() {
   };
 
   const contactHref = useCallback(
-    (id: string) => (focusMode ? `/contacts/${id}?focus=1` : `/contacts/${id}`),
+    (id: string) => {
+      const params = new URLSearchParams();
+      params.set("from", "search");
+      if (focusMode) params.set("focus", "1");
+      return `/contacts/${id}?${params.toString()}`;
+    },
     [focusMode],
   );
   const navigateToContact = useCallback(
     (id: string) => {
       persistSearchState();
+      const labels: Record<string, string> = {};
+      for (const c of contacts) {
+        labels[c.id] = `${c.first_name} ${c.last_name}`.trim();
+      }
+      saveContactsSearchNav(
+        contacts.map((c) => c.id),
+        { labels, total },
+      );
       router.push(contactHref(id));
     },
-    [persistSearchState, router, contactHref],
+    [persistSearchState, router, contactHref, contacts, total],
   );
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

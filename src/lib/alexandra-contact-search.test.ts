@@ -171,7 +171,7 @@ describe("searchAlexandraContacts", () => {
     expect(hits[0]?.first_name).toBe("Μαρία");
   });
 
-  it("uses exact ilike for phone lookup", async () => {
+  it("uses digit-normalized contains ilike for phone lookup", async () => {
     const or = vi.fn().mockReturnThis();
     const limit = vi.fn().mockResolvedValue({
       data: [{ id: "2", first_name: "A", last_name: "B", phone: "6911111111" }],
@@ -187,7 +187,14 @@ describe("searchAlexandraContacts", () => {
     await searchAlexandraContacts(supabase as never, { phone: "6911111111" });
 
     expect(or).toHaveBeenCalledWith(
-      "phone.ilike.%6911111111%,phone2.ilike.%6911111111%,landline.ilike.%6911111111%",
+      "phone_digits.ilike.%6911111111%,phone2_digits.ilike.%6911111111%,landline_digits.ilike.%6911111111%",
     );
+  });
+
+  it("skips phone lookup under 4 digits", async () => {
+    const from = vi.fn();
+    const hits = await searchAlexandraContacts({ from } as never, { phone: "691" });
+    expect(hits).toEqual([]);
+    expect(from).not.toHaveBeenCalled();
   });
 });

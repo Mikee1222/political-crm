@@ -5,6 +5,12 @@ import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { fetchGroupNamesByContactId } from "@/lib/contact-group-members";
 import { normalizeGreekName } from "@/lib/duplicate-detection";
+import {
+  extractPhoneSearchDigits,
+  isPhoneOnlyQuery,
+  phoneDigitsContainsOrFilter,
+  shouldRunPhoneSearch,
+} from "@/lib/phone-search";
 
 export const dynamic = "force-dynamic";
 
@@ -20,34 +26,31 @@ function splitQueryParts(raw: string): string[] {
   return raw.split(/\s+/).filter(Boolean);
 }
 
-/** PostgREST ilike value; quote when pattern contains reserved characters. */
-function ilikePattern(escaped: string, prefixOnly = false): string {
-  const pat = prefixOnly ? `${escaped}%` : `%${escaped}%`;
+/** PostgREST ilike value; quote when pattern contains reserved characters. Always contains. */
+function ilikePattern(escaped: string): string {
+  const pat = `%${escaped}%`;
   if (/[,\s().]/.test(pat)) {
     return `"${pat.replace(/"/g, '\\"')}"`;
   }
   return pat;
 }
 
-function ilikeFilter(column: string, escaped: string, prefixOnly = false): string {
-  return `${column}.ilike.${ilikePattern(escaped, prefixOnly)}`;
+function ilikeFilter(column: string, escaped: string): string {
+  return `${column}.ilike.${ilikePattern(escaped)}`;
 }
 
 function andIlike(firstCol: string, firstEsc: string, lastCol: string, lastEsc: string): string {
   return `and(${ilikeFilter(firstCol, firstEsc)},${ilikeFilter(lastCol, lastEsc)})`;
 }
 
-function buildContactDirectOrFilter(raw: string, esc: string, isPhone: boolean): string {
+/** Text-field OR filter (no phone columns — phone uses digit-normalized columns separately). */
+function buildContactDirectOrFilter(raw: string, esc: string): string {
   const parts = splitQueryParts(raw);
   const normParts = parts.map((p) => escapeIlike(normalizeGreekName(p)));
-  const phonePattern = isPhone ? ilikePattern(esc, true) : ilikePattern(esc);
   const textPattern = ilikePattern(esc);
   const otherFields = [
     `father_name.ilike.${textPattern}`,
     `mother_name.ilike.${textPattern}`,
-    `phone.ilike.${phonePattern}`,
-    `phone2.ilike.${phonePattern}`,
-    `landline.ilike.${phonePattern}`,
     `email.ilike.${textPattern}`,
     `contact_code.ilike.${textPattern}`,
     `municipality.ilike.${textPattern}`,
@@ -117,6 +120,11 @@ function hasQ(v: string | null | undefined, q: string) {
   return normalizeGreekName(v).includes(normalizeGreekName(q));
 }
 
+function phoneFieldMatches(v: string | null | undefined, digits: string) {
+  if (v == null || !digits) return false;
+  return extractPhoneSearchDigits(v).includes(digits);
+}
+
 const CONTACT_SELECT =
   "id, first_name, last_name, phone, phone2, landline, municipality, email, contact_code, father_name, mother_name, area, notes, tags";
 
@@ -169,7 +177,15 @@ function contactFieldReasons(
     const sn = snippet(String(row.mother_name), raw);
     if (sn) reasons.push(`Μητρώνυμο: «${sn}»`);
   }
-  for (const k of ["phone", "phone2", "landline", "email", "contact_code"] as const) {
+  const phoneDigits = extractPhoneSearchDigits(raw);
+  for (const k of ["phone", "phone2", "landline"] as const) {
+    if (phoneDigits.length >= 4 && phoneFieldMatches(row[k] as string | null, phoneDigits)) {
+      reasons.push(`Πεδίο «${k}»`);
+    } else if (phoneDigits.length < 4 && hasQ(row[k] as string | null, raw)) {
+      reasons.push(`Πεδίο «${k}»`);
+    }
+  }
+  for (const k of ["email", "contact_code"] as const) {
     if (hasQ(row[k] as string | null, raw)) {
       reasons.push(`Πεδίο «${k}»`);
     }
@@ -254,40 +270,76 @@ export async function GET(request: NextRequest) {
       });
     }
     const esc = escapeIlike(normalizeGreekName(raw));
-    const isPhone = /^\d{6,}$/.test(raw);
+    const phoneDigits = extractPhoneSearchDigits(raw);
+    const phoneOnly = isPhoneOnlyQuery(raw);
+    const runPhoneDigits = shouldRunPhoneSearch(raw);
     const p = ilikePattern(esc);
-    const contactOrFilter = buildContactDirectOrFilter(raw, esc, isPhone);
+
+    // Digit-by-digit: do not hit phone search until 4+ digits are typed.
+    if (phoneOnly && !runPhoneDigits) {
+      return NextResponse.json({
+        contacts: [] as SearchContactHit[],
+        requests: [] as SearchRequestHit[],
+        tasks: [] as SearchTaskHit[],
+        campaigns: [] as SearchCampaignHit[],
+      });
+    }
+
+    // Digit-only (4+): search normalized phone columns only.
+    // Mixed / name: text fields; also merge phone_digits contains when 4+ digits present.
+    const contactTextPromise = phoneOnly
+      ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
+      : supabase.from("contacts").select(CONTACT_SELECT).or(buildContactDirectOrFilter(raw, esc)).limit(35);
+
+    const contactPhonePromise = runPhoneDigits
+      ? supabase
+          .from("contacts")
+          .select(CONTACT_SELECT)
+          .or(phoneDigitsContainsOrFilter(phoneDigits))
+          .limit(35)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null });
 
     const [
       cDirect,
+      cPhone,
       cNotes,
       cReq,
       rRes,
       tRes,
       caRes,
     ] = await Promise.all([
-      supabase
-        .from("contacts")
-        .select(CONTACT_SELECT)
-        .or(contactOrFilter)
-        .limit(35),
-      supabase.from("contact_notes").select("contact_id, content").ilike("content", `%${esc}%`).limit(45),
-      supabase
-        .from("requests")
-        .select("id, contact_id, title, description")
-        .or(`title.ilike.${p},description.ilike.${p}`)
-        .limit(45),
-      supabase
-        .from("requests")
-        .select("id, request_code, title, status, description, contact_id, contacts!contact_id(first_name, last_name)")
-        .or(`title.ilike.${p},request_code.ilike.${p},description.ilike.${p}`)
-        .limit(10),
-      supabase.from("tasks").select("id, title, due_date, completed").or(`title.ilike.${p},description.ilike.${p}`).limit(5),
-      supabase.from("campaigns").select("id, name, status").or(`name.ilike.${p},description.ilike.${p}`).limit(5),
+      contactTextPromise,
+      contactPhonePromise,
+      phoneOnly
+        ? Promise.resolve({ data: [] as { contact_id: string; content: string }[] })
+        : supabase.from("contact_notes").select("contact_id, content").ilike("content", `%${esc}%`).limit(45),
+      phoneOnly
+        ? Promise.resolve({ data: [] as { contact_id: string; title: string; description: string | null }[] })
+        : supabase
+            .from("requests")
+            .select("id, contact_id, title, description")
+            .or(`title.ilike.${p},description.ilike.${p}`)
+            .limit(45),
+      phoneOnly
+        ? Promise.resolve({ data: [] as Record<string, unknown>[] })
+        : supabase
+            .from("requests")
+            .select("id, request_code, title, status, description, contact_id, contacts!contact_id(first_name, last_name)")
+            .or(`title.ilike.${p},request_code.ilike.${p},description.ilike.${p}`)
+            .limit(10),
+      phoneOnly
+        ? Promise.resolve({ data: [] as SearchTaskHit[] })
+        : supabase.from("tasks").select("id, title, due_date, completed").or(`title.ilike.${p},description.ilike.${p}`).limit(5),
+      phoneOnly
+        ? Promise.resolve({ data: [] as SearchCampaignHit[] })
+        : supabase.from("campaigns").select("id, name, status").or(`name.ilike.${p},description.ilike.${p}`).limit(5),
     ]);
 
     if (cDirect.error) {
       return NextResponse.json({ error: cDirect.error.message }, { status: 400 });
+    }
+    if (cPhone.error) {
+      return NextResponse.json({ error: cPhone.error.message }, { status: 400 });
     }
 
     const noteRows = (cNotes.data ?? []) as { contact_id: string; content: string }[];
@@ -334,7 +386,12 @@ export async function GET(request: NextRequest) {
       });
     };
 
-    for (const row of (cDirect.data ?? []) as Record<string, unknown>[]) {
+    const directRows = [
+      ...((cDirect.data ?? []) as Record<string, unknown>[]),
+      ...((cPhone.data ?? []) as Record<string, unknown>[]),
+    ];
+
+    for (const row of directRows) {
       const { reasons, aiMatch: fieldAi } = contactFieldReasons(row, raw);
       const id = String(row.id);
       const noteHits = noteByContact.get(id);

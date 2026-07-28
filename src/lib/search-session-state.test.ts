@@ -4,9 +4,14 @@ import {
   consumeSearchFreshIntent,
   loadSearchSessionState,
   markSearchFreshIntent,
+  saveContactsSearchNav,
   saveSearchSessionState,
   SEARCH_STATE_TTL_MS,
   urlHasRanSearch,
+  clearContactsSearchNav,
+  loadContactsSearchNav,
+  isContactsSearchNavActive,
+  CONTACTS_NAV_KEY,
 } from "@/lib/search-session-state";
 
 const KEY = "test-search-state-v1";
@@ -107,5 +112,22 @@ describe("search-session-state", () => {
   it("urlHasRanSearch", () => {
     expect(urlHasRanSearch("ran=1&page=2")).toBe(true);
     expect(urlHasRanSearch("page=2")).toBe(false);
+  });
+
+  it("saves and loads contacts search nav for prev/next", () => {
+    saveContactsSearchNav(["a", "b", "c"], {
+      labels: { a: "A", b: "B", c: "C" },
+      total: 47,
+    });
+    const nav = loadContactsSearchNav();
+    expect(nav?.ids).toEqual(["a", "b", "c"]);
+    expect(nav?.source).toBe("search");
+    expect(nav?.total).toBe(47);
+    expect(isContactsSearchNavActive("b")).toBe(true);
+    expect(isContactsSearchNavActive("z")).toBe(false);
+    expect(JSON.parse(sessionStorage.getItem(CONTACTS_NAV_KEY)!).source).toBe("search");
+
+    clearContactsSearchNav();
+    expect(loadContactsSearchNav()).toBeNull();
   });
 });

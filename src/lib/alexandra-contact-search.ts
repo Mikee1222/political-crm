@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContactListFilters } from "@/lib/contacts-filters";
 import { isNameOnlyFilter, searchContactsByName } from "@/lib/contacts-query";
+import {
+  extractPhoneSearchDigits,
+  MIN_PHONE_SEARCH_DIGITS,
+  phoneDigitsContainsOrFilter,
+} from "@/lib/phone-search";
 
 /** Default/max rows returned by Alexandra broad contact search tools. */
 export const ALEXANDRA_CONTACT_SEARCH_DEFAULT_LIMIT = 75;
@@ -190,7 +195,7 @@ export function buildContactComboboxSearchParamSets(
   const sets: URLSearchParams[] = [];
 
   if (classified.kind === "phone" || classified.kind === "both") {
-    if (classified.phone) {
+    if (classified.phone && classified.phone.length >= MIN_PHONE_SEARCH_DIGITS) {
       const u = new URLSearchParams();
       u.set("limit", String(limit));
       u.set("phone", classified.phone);
@@ -267,10 +272,14 @@ export async function countAlexandraContacts(
 ): Promise<number> {
   const phone = opts.phone?.trim() ?? "";
   if (phone) {
+    const digits = extractPhoneSearchDigits(phone);
+    if (digits.length < MIN_PHONE_SEARCH_DIGITS) {
+      return 0;
+    }
     const { count, error } = await supabase
       .from("contacts")
       .select("id", { count: "exact", head: true })
-      .or(`phone.ilike.%${phone}%,phone2.ilike.%${phone}%,landline.ilike.%${phone}%`);
+      .or(phoneDigitsContainsOrFilter(digits));
     if (error) throw new Error(error.message);
     return count ?? 0;
   }
@@ -300,10 +309,14 @@ export async function searchAlexandraContacts(
 
   const phone = opts.phone?.trim() ?? "";
   if (phone) {
+    const digits = extractPhoneSearchDigits(phone);
+    if (digits.length < MIN_PHONE_SEARCH_DIGITS) {
+      return [];
+    }
     const { data, error } = await supabase
       .from("contacts")
       .select(CONTACT_SEARCH_SELECT)
-      .or(`phone.ilike.%${phone}%,phone2.ilike.%${phone}%,landline.ilike.%${phone}%`)
+      .or(phoneDigitsContainsOrFilter(digits))
       .limit(limit);
     if (error) throw new Error(error.message);
     return mapHits((data ?? []) as Record<string, unknown>[]);
