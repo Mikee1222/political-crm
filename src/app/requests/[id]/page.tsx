@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { computeSlaStatus } from "@/lib/request-sla";
@@ -21,7 +21,12 @@ import {
 } from "@/lib/request-statuses";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
 import { AISummaryCard } from "@/components/ai-summary-card";
+import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
+import {
+  isRequestsSearchNavActive,
+  loadRequestsSearchNav,
+} from "@/lib/search-session-state";
 
 type ContactCard = {
   id: string;
@@ -66,6 +71,14 @@ type Note = {
   created_at: string;
   author_name?: string | null;
   author_full_name: string;
+};
+
+type RequestNavInfo = {
+  prev: string | null;
+  next: string | null;
+  position: number;
+  total: number;
+  fromSearch: boolean;
 };
 
 const OPEN = OPEN_REQUEST_STATUSES;
@@ -153,8 +166,25 @@ function SlaBar({
 
 
 export default function RequestDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-6 text-sm text-[var(--text-secondary)]" aria-busy>
+          Φόρτωση…
+        </div>
+      }
+    >
+      <CrmErrorBoundary title="Δεν φορτώθηκε το αίτημα.">
+        <RequestDetailPageInner />
+      </CrmErrorBoundary>
+    </Suspense>
+  );
+}
+
+function RequestDetailPageInner() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile } = useProfile();
   const resolveName = useResolveAuthorName();
   const id = typeof params?.id === "string" ? params.id : "";
@@ -170,8 +200,22 @@ export default function RequestDetailPage() {
   const [portalMsg, setPortalMsg] = useState("");
   const [savingMsg, setSavingMsg] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [navInfo, setNavInfo] = useState<RequestNavInfo | null>(null);
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
   const alexPage = useOptionalAlexandraPageContext();
+
+  const fromSearchParam = searchParams.get("from") === "search";
+  const fromSearchNav = Boolean(id && (fromSearchParam || isRequestsSearchNavActive(id)));
+
+  const requestDetailHref = useCallback(
+    (targetId: string) => {
+      const params = new URLSearchParams();
+      if (fromSearchNav) params.set("from", "search");
+      const q = params.toString();
+      return q ? `/requests/${targetId}?${q}` : `/requests/${targetId}`;
+    },
+    [fromSearchNav],
+  );
 
   const setPageContext = alexPage?.setPageContext;
   useEffect(() => {
@@ -205,16 +249,44 @@ export default function RequestDetailPage() {
       setNotes(req.notes ?? []);
       void fetchWithTimeout(`/api/requests/${encodeURIComponent(req.id)}/view`, { method: "POST" }).catch(() => {});
       if (req.id && req.id !== id) {
-        router.replace(`/requests/${req.id}`, { scroll: false });
+        const qs = fromSearchNav ? "?from=search" : "";
+        router.replace(`/requests/${req.id}${qs}`, { scroll: false });
       }
     } catch {
       setErr("Σφάλμα φόρτωσης");
     }
-  }, [id, router]);
+  }, [id, router, fromSearchNav]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const searchNav = loadRequestsSearchNav();
+      const fromSearch =
+        searchParams.get("from") === "search" ||
+        Boolean(searchNav?.ids.includes(id));
+
+      if (fromSearch && searchNav?.ids.includes(id)) {
+        const idx = searchNav.ids.indexOf(id);
+        const n = searchNav.ids.length;
+        setNavInfo({
+          prev: searchNav.ids[(idx - 1 + n) % n] ?? null,
+          next: searchNav.ids[(idx + 1) % n] ?? null,
+          position: idx + 1,
+          total: n,
+          fromSearch: true,
+        });
+        return;
+      }
+
+      setNavInfo(null);
+    } catch {
+      setNavInfo(null);
+    }
+  }, [id, searchParams]);
 
   const handleStatusChange = useCallback(
     async (rawNextStatus: string) => {
@@ -295,10 +367,61 @@ export default function RequestDetailPage() {
 
   return (
     <div className="min-h-0 space-y-6 overflow-x-hidden p-4 pb-4 sm:p-6 sm:pb-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button type="button" onClick={() => router.push("/requests")} className={lux.btnSecondary + " w-fit gap-1"}>
-          <ArrowLeft className="h-4 w-4" /> Λίστα αιτημάτων
-        </button>
+      <div className="mb-0 flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (navInfo?.fromSearch || fromSearchNav) {
+                router.push("/requests/search");
+                return;
+              }
+              router.push("/requests");
+            }}
+            className={lux.btnSecondary + " inline-flex w-fit shrink-0 items-center gap-1.5 !py-1.5 text-xs sm:gap-2 sm:!py-2 sm:text-sm"}
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+            {navInfo?.fromSearch || fromSearchNav ? "Αναζήτηση" : "Λίστα αιτημάτων"}
+          </button>
+          {navInfo?.fromSearch || fromSearchNav ? (
+            <button
+              type="button"
+              onClick={() => router.push("/requests/search")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-3 py-1.5 text-[11px] font-semibold text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_20%,var(--bg-elevated))]"
+            >
+              Λίστα αποτελεσμάτων
+            </button>
+          ) : null}
+        </div>
+        {navInfo ? (
+          <div className="flex min-w-0 shrink items-center gap-1 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => navInfo.prev && router.push(requestDetailHref(navInfo.prev))}
+              disabled={!navInfo.prev}
+              className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
+              aria-label="Προηγούμενο αποτέλεσμα"
+            >
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+              <span className="hidden sm:inline">Προηγούμενο</span>
+            </button>
+            <span className="shrink-0 whitespace-nowrap text-[11px] text-[var(--text-muted)] sm:text-xs">
+              {navInfo.fromSearch
+                ? `${navInfo.position} / ${navInfo.total} αποτελέσματα`
+                : `${navInfo.position} / ${navInfo.total}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => navInfo.next && router.push(requestDetailHref(navInfo.next))}
+              disabled={!navInfo.next}
+              className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
+              aria-label="Επόμενο αποτέλεσμα"
+            >
+              <span className="hidden sm:inline">Επόμενο</span>
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <header

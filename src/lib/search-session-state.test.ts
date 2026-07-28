@@ -12,6 +12,11 @@ import {
   loadContactsSearchNav,
   isContactsSearchNavActive,
   CONTACTS_NAV_KEY,
+  saveRequestsSearchNav,
+  loadRequestsSearchNav,
+  clearRequestsSearchNav,
+  isRequestsSearchNavActive,
+  REQUESTS_SEARCH_NAV_KEY,
 } from "@/lib/search-session-state";
 
 const KEY = "test-search-state-v1";
@@ -129,5 +134,30 @@ describe("search-session-state", () => {
 
     clearContactsSearchNav();
     expect(loadContactsSearchNav()).toBeNull();
+  });
+
+  it("saves and loads requests search nav for prev/next", () => {
+    saveRequestsSearchNav(["r1", "r2", "r3"], {
+      labels: { r1: "#1 Title", r2: "#2 Title" },
+      total: 12,
+    });
+    const nav = loadRequestsSearchNav();
+    expect(nav?.ids).toEqual(["r1", "r2", "r3"]);
+    expect(nav?.source).toBe("search");
+    expect(nav?.total).toBe(12);
+    expect(isRequestsSearchNavActive("r2")).toBe(true);
+    expect(isRequestsSearchNavActive("missing")).toBe(false);
+    expect(sessionStorage.getItem(REQUESTS_SEARCH_NAV_KEY)).not.toBeNull();
+
+    clearRequestsSearchNav();
+    expect(loadRequestsSearchNav()).toBeNull();
+    expect(sessionStorage.getItem(REQUESTS_SEARCH_NAV_KEY)).toBeNull();
+  });
+
+  it("clears empty entity search nav ids", () => {
+    saveRequestsSearchNav(["x"]);
+    expect(loadRequestsSearchNav()).not.toBeNull();
+    saveRequestsSearchNav([]);
+    expect(loadRequestsSearchNav()).toBeNull();
   });
 });

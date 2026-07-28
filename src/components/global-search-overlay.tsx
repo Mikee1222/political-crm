@@ -11,6 +11,7 @@ import {
   CONTACTS_SEARCH_FRESH_KEY,
   markSearchFreshIntent,
   REQUESTS_SEARCH_FRESH_KEY,
+  saveContactsSearchNav,
 } from "@/lib/search-session-state";
 
 type SContact = {
@@ -245,6 +246,19 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
         onClose();
         return;
       }
+      if (e.k === "c") {
+        const labels: Record<string, string> = {};
+        for (const x of c) {
+          labels[x.id] = `${x.first_name} ${x.last_name}`.trim();
+        }
+        saveContactsSearchNav(
+          c.map((x) => x.id),
+          { labels, total: c.length },
+        );
+        router.push(`/contacts/${e.id}?from=search`);
+        onClose();
+        return;
+      }
       if (e.k === "t") {
         router.push("/tasks");
       } else {
@@ -252,7 +266,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
       }
       onClose();
     },
-    [onClose, router],
+    [c, onClose, router],
   );
 
   useEffect(() => {

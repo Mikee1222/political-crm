@@ -39,6 +39,7 @@ import {
   loadSearchSessionState,
   REQUESTS_SEARCH_FRESH_KEY,
   REQUESTS_SEARCH_STATE_KEY,
+  saveRequestsSearchNav,
   saveSearchSessionState,
   SEARCH_FRESH_EVENT,
 } from "@/lib/search-session-state";
@@ -481,7 +482,16 @@ function RequestSearchPageInner() {
                           statusColors={statusColors}
                           onNavigate={() => {
                             persistSearchState();
-                            router.push(`/requests/${r.id}`);
+                            const labels: Record<string, string> = {};
+                            for (const row of requests) {
+                              labels[row.id] =
+                                (row.request_code != null ? `#${row.request_code} ` : "") + row.title;
+                            }
+                            saveRequestsSearchNav(
+                              requests.map((row) => row.id),
+                              { labels, total },
+                            );
+                            router.push(`/requests/${r.id}?from=search`);
                           }}
                         />
                       </li>
