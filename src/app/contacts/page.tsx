@@ -1707,6 +1707,24 @@ function ContactsPage() {
                       >
                         Καμπάνια
                       </button>
+                      <button
+                        type="button"
+                        className="h-9 w-full rounded-lg border border-[#C9A84C]/40 bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--bg-elevated))] px-3.5 text-[13px] font-medium text-[var(--accent-gold)] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent-gold)_20%,var(--bg-elevated))] disabled:opacity-50 sm:w-auto"
+                        disabled={saving || !selectedIds.length}
+                        onClick={() => {
+                          try {
+                            sessionStorage.setItem(
+                              "campaign_create_contact_ids",
+                              JSON.stringify(selectedIds),
+                            );
+                          } catch {
+                            /* ignore */
+                          }
+                          window.location.href = "/campaigns?create=1";
+                        }}
+                      >
+                        Νέα καμπάνια
+                      </button>
                     </div>
                     <div className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-end">
                       <div className="min-w-0 flex-1">

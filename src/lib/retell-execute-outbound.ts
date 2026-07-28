@@ -1,3 +1,4 @@
+import { pickCampaignDialPhone } from "@/lib/campaign-contact-phone";
 import { buildCreatePhoneCallBody } from "@/lib/retell-outbound";
 
 export type RetellContactRow = {
@@ -5,6 +6,8 @@ export type RetellContactRow = {
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
+  phone2?: string | null;
+  landline?: string | null;
 };
 
 const phoneDigits = (s: string) => s.replace(/\D/g, "");
@@ -20,7 +23,7 @@ export async function executeRetellCreatePhoneCall(
   | { ok: true; call_id: string | null; retell: Record<string, unknown> }
   | { ok: false; status: number; error: string; detail?: unknown }
 > {
-  const phone = (contact.phone ?? "").toString().trim();
+  const phone = pickCampaignDialPhone(contact) ?? "";
   if (!phone || phoneDigits(phone).length < 8) {
     return { ok: false, status: 400, error: "Η επαφή δεν έχει έγκυρο αριθμό τηλεφώνου" };
   }

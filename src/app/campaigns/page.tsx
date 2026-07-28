@@ -1,8 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, CheckCircle2, FileText, LayoutGrid, Megaphone, Play, Search, Plus, Radio, Trash2 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState, type ComponentType } from "react";
+import {
+  BarChart3,
+  CheckCircle2,
+  FileText,
+  LayoutGrid,
+  Megaphone,
+  MessageCircle,
+  Phone,
+  PhoneOff,
+  Play,
+  Plus,
+  Radio,
+  RotateCcw,
+  Search,
+  Trash2,
+  XCircle,
+} from "lucide-react";
+import { FormEvent, Suspense, useCallback, useEffect, useState, type ComponentType } from "react";
+import { useSearchParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
@@ -17,6 +34,14 @@ import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 
+export default function CampaignsPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-[var(--text-muted)]">Φόρτωση καμπανιών…</p>}>
+      <CampaignsPageInner />
+    </Suspense>
+  );
+}
+
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
 type Campaign = {
@@ -28,10 +53,15 @@ type Campaign = {
   status: string;
   channel?: string;
   concurrent_lines?: number | null;
+  retell_agent_name?: string | null;
+  retell_agent_id_resolved?: string | null;
   stats: OutcomeStats;
   progress: number;
   callsMade: number;
   contactTotal: number;
+  withPhone?: number;
+  withoutPhone?: number;
+  remaining?: number;
   sentiment?: {
     positiveRate: number;
     trendDelta: number | null;
@@ -49,13 +79,16 @@ type NewFilter = {
   tag: string;
 };
 
+const CAMPAIGN_CREATE_IDS_KEY = "campaign_create_contact_ids";
+
 const statusBadge =
   "inline-flex min-h-7 min-w-0 max-w-full shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide";
 
 const goldCta =
   "no-mobile-scale inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full border-2 border-[#8B6914] bg-gradient-to-b from-[#E8C96B] to-[#8B6914] px-4 text-xs font-bold text-[#0A1628] shadow-sm transition duration-200 hover:brightness-110 sm:text-sm";
 
-export default function CampaignsPage() {
+function CampaignsPageInner() {
+  const searchParams = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
@@ -76,8 +109,12 @@ export default function CampaignsPage() {
   });
   const [options, setOptions] = useState<FieldOptions | null>(null);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
+  const [previewWithPhone, setPreviewWithPhone] = useState<number | null>(null);
+  const [previewWithoutPhone, setPreviewWithoutPhone] = useState<number | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [dialingId, setDialingId] = useState<string | null>(null);
+  const [redialingId, setRedialingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [nameFieldErr, setNameFieldErr] = useState<string | null>(null);
@@ -95,6 +132,34 @@ export default function CampaignsPage() {
     void load().finally(() => setLoading(false));
   }, [load]);
 
+  // Deep-link / session: create from advanced search selection
+  useEffect(() => {
+    const create = searchParams.get("create");
+    const idsParam = searchParams.get("ids");
+    let ids: string[] = [];
+    if (idsParam) {
+      ids = [...new Set(idsParam.split(",").map((x) => x.trim()).filter(Boolean))];
+    } else if (typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(CAMPAIGN_CREATE_IDS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as unknown;
+          if (Array.isArray(parsed)) {
+            ids = parsed.map((x) => String(x).trim()).filter(Boolean);
+          }
+          sessionStorage.removeItem(CAMPAIGN_CREATE_IDS_KEY);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (create === "1" || ids.length > 0) {
+      if (ids.length > 0) setSelectedContactIds(ids);
+      setConcurrentLines(3);
+      setModal(true);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     if (!modal) return;
     fetchWithTimeout("/api/contacts/field-options")
@@ -109,6 +174,28 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     if (!modal) return;
+    if (selectedContactIds.length > 0) {
+      setPreviewing(true);
+      const q = new URLSearchParams();
+      q.set("contact_ids", selectedContactIds.join(","));
+      const t = setTimeout(() => {
+        fetchWithTimeout(`/api/campaigns/preview?${q.toString()}`)
+          .then((r) => r.json())
+          .then((d) => {
+            setPreviewCount(typeof d.count === "number" ? d.count : null);
+            setPreviewWithPhone(typeof d.with_phone === "number" ? d.with_phone : null);
+            setPreviewWithoutPhone(typeof d.without_phone === "number" ? d.without_phone : null);
+          })
+          .catch(() => {
+            setPreviewCount(null);
+            setPreviewWithPhone(null);
+            setPreviewWithoutPhone(null);
+          })
+          .finally(() => setPreviewing(false));
+      }, 200);
+      return () => clearTimeout(t);
+    }
+
     const q = new URLSearchParams();
     if (filter.call_status) q.set("call_status", filter.call_status);
     if (filter.area) q.set("area", filter.area);
@@ -117,18 +204,33 @@ export default function CampaignsPage() {
     if (filter.tag) q.set("tag", filter.tag);
     if (!q.toString()) {
       setPreviewCount(null);
+      setPreviewWithPhone(null);
+      setPreviewWithoutPhone(null);
       return;
     }
     setPreviewing(true);
     const t = setTimeout(() => {
       fetchWithTimeout(`/api/campaigns/preview?${q.toString()}`)
         .then((r) => r.json())
-        .then((d) => setPreviewCount(typeof d.count === "number" ? d.count : null))
-        .catch(() => setPreviewCount(null))
+        .then((d) => {
+          setPreviewCount(typeof d.count === "number" ? d.count : null);
+          setPreviewWithPhone(typeof d.with_phone === "number" ? d.with_phone : null);
+          setPreviewWithoutPhone(typeof d.without_phone === "number" ? d.without_phone : null);
+        })
+        .catch(() => {
+          setPreviewCount(null);
+          setPreviewWithPhone(null);
+          setPreviewWithoutPhone(null);
+        })
         .finally(() => setPreviewing(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [modal, filter]);
+  }, [modal, filter, selectedContactIds]);
+
+  const selectedType = campaignTypes.find((x) => x.id === campaignTypeId);
+  const agentPreview = selectedType?.retell_agent_id
+    ? selectedType.retell_agent_id
+    : "RETELL_AGENT_ID (προεπιλογή περιβάλλοντος)";
 
   const createCampaign = async (e: FormEvent) => {
     e.preventDefault();
@@ -141,24 +243,28 @@ export default function CampaignsPage() {
     }
     setSaving(true);
     try {
-      const f = {
-        call_status: filter.call_status || undefined,
-        area: filter.area || undefined,
-        municipality: filter.municipality || undefined,
-        priority: filter.priority || undefined,
-        tag: filter.tag || undefined,
+      const body: Record<string, unknown> = {
+        name,
+        description: description || null,
+        channel: campaignChannel,
+        campaign_type_id: campaignTypeId || null,
+        concurrent_lines: clampConcurrentLines(concurrentLines),
       };
+      if (selectedContactIds.length > 0) {
+        body.contact_ids = selectedContactIds;
+      } else {
+        body.filter = {
+          call_status: filter.call_status || undefined,
+          area: filter.area || undefined,
+          municipality: filter.municipality || undefined,
+          priority: filter.priority || undefined,
+          tag: filter.tag || undefined,
+        };
+      }
       const res = await fetchWithTimeout("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          description: description || null,
-          filter: f,
-          channel: campaignChannel,
-          campaign_type_id: campaignTypeId || null,
-          concurrent_lines: clampConcurrentLines(concurrentLines),
-        }),
+        body: JSON.stringify(body),
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; assigned_contacts?: number };
       if (!res.ok) {
@@ -174,6 +280,7 @@ export default function CampaignsPage() {
       setCampaignChannel("call");
       setCampaignTypeId("");
       setConcurrentLines(3);
+      setSelectedContactIds([]);
       setFilter({ call_status: "", area: "", municipality: "", priority: "", tag: "" });
       await load();
     } catch (err) {
@@ -191,21 +298,22 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-8 max-md:space-y-6">
-      <section
-        className="data-hq-card relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_2px_20px_rgba(0,0,0,0.06)] sm:p-6"
-      >
+      <section className="data-hq-card relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_2px_20px_rgba(0,0,0,0.06)] sm:p-6">
         <div className="pointer-events-none absolute -right-12 -top-8 h-40 w-40 rounded-full bg-[var(--accent-gold)]/10 blur-3xl" aria-hidden />
         <div className="relative flex flex-col gap-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">Καμπάνιες</h1>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">Θέση κλήσεων, αποτελέσματα & ίχνος επικοινωνίας.</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                Θέση κλήσεων, αποτελέσματα & ίχνος επικοινωνίας.
+              </p>
             </div>
             <button
               type="button"
               className={goldCta + " w-full min-w-0 sm:w-auto sm:self-center"}
               onClick={() => {
                 setFormErr(null);
+                setSelectedContactIds([]);
                 setConcurrentLines(3);
                 setModal(true);
               }}
@@ -215,34 +323,19 @@ export default function CampaignsPage() {
             </button>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <TopMetric
-              label="Σύνολο"
-              value={totalN}
-              sub="Όλες οι καταχωρήσεις"
-              icon={BarChart3}
-            />
-            <TopMetric
-              label="Ενεργές"
-              value={activeN}
-              sub="Σε εξέλιξη"
-              icon={Radio}
-            />
-            <TopMetric
-              label="Ολοκληρώθηκαν"
-              value={doneN}
-              sub="Έκλεισαν"
-              icon={CheckCircle2}
-            />
+            <TopMetric label="Σύνολο" value={totalN} sub="Όλες οι καταχωρήσεις" icon={BarChart3} />
+            <TopMetric label="Ενεργές" value={activeN} sub="Σε εξέλιξη" icon={Radio} />
+            <TopMetric label="Ολοκληρώθηκαν" value={doneN} sub="Έκλεισαν" icon={CheckCircle2} />
           </div>
         </div>
       </section>
 
-      {loading && (
-        <p className="text-sm text-[var(--text-muted)]">Φόρτωση καμπανιών…</p>
-      )}
+      {loading && <p className="text-sm text-[var(--text-muted)]">Φόρτωση καμπανιών…</p>}
 
       {!loading && campaigns.length === 0 && (
-        <p className="text-center text-sm text-[var(--text-secondary)]">Δεν έχετε ακόμα δημιουργήσει καμία καμπάνια.</p>
+        <p className="text-center text-sm text-[var(--text-secondary)]">
+          Δεν έχετε ακόμα δημιουργήσει καμία καμπάνια.
+        </p>
       )}
 
       <ul className="flex flex-col gap-4">
@@ -250,13 +343,15 @@ export default function CampaignsPage() {
           const isActive = c.status === "active";
           const isDone = c.status === "completed";
           const s = c.stats;
-          const hasPool = c.contactTotal > 0;
+          const dialable = c.withPhone ?? c.contactTotal;
+          const hasPool = dialable > 0;
           const barPct = hasPool ? Math.min(100, c.progress) : s.total > 0 ? 100 : 0;
           const leftBorder = isActive
             ? "border-l-[var(--accent-gold)]"
             : isDone
               ? "border-l-emerald-500"
               : "border-l-stone-400/70 [data-theme='light']:border-l-stone-300";
+          const isWhatsApp = c.channel === "whatsapp";
           return (
             <li
               key={c.id}
@@ -268,7 +363,9 @@ export default function CampaignsPage() {
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                    <h2 className="min-w-0 text-[1.125rem] font-bold leading-tight text-[var(--text-primary)]">{c.name}</h2>
+                    <h2 className="min-w-0 text-[1.125rem] font-bold leading-tight text-[var(--text-primary)]">
+                      {c.name}
+                    </h2>
                     <span
                       className={
                         statusBadge +
@@ -281,32 +378,49 @@ export default function CampaignsPage() {
                     >
                       {isActive ? "Ενεργή" : isDone ? "Ολοκληρώθηκε" : c.status ?? "—"}
                     </span>
-                    {c.channel === "whatsapp" ? (
+                    {isWhatsApp ? (
                       <span
                         className={
-                          statusBadge + " border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                          statusBadge +
+                          " inline-flex items-center gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
                         }
                       >
+                        <MessageCircle className="h-3 w-3" />
                         WhatsApp
                       </span>
                     ) : (
-                      <span className={statusBadge + " border-sky-500/30 bg-sky-500/10 text-sky-200"}>Κλήσεις</span>
+                      <span
+                        className={
+                          statusBadge +
+                          " inline-flex items-center gap-1 border-sky-500/30 bg-sky-500/10 text-sky-200"
+                        }
+                      >
+                        <Phone className="h-3 w-3" />
+                        Κλήσεις
+                      </span>
                     )}
                   </div>
                   <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                     {c.created_at
-                      ? formatDateAthens(c.created_at, { day: "2-digit", month: "2-digit", year: "numeric" })
+                      ? formatDateAthens(c.created_at, {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        })
                       : "—"}
-                    {c.started_at
-                      ? ` · Έναρξη: ${formatDateAthens(c.started_at)}`
-                      : ""}
+                    {c.started_at ? ` · Έναρξη: ${formatDateAthens(c.started_at)}` : ""}
                   </p>
+                  {c.retell_agent_name ? (
+                    <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                      Agent: <span className="font-medium">{c.retell_agent_name}</span>
+                    </p>
+                  ) : null}
                 </div>
-                <Megaphone
-                  className="h-5 w-5 shrink-0 text-[#C9A84C] opacity-90 [data-theme='light']:text-amber-700"
-                  strokeWidth={2}
-                  aria-hidden
-                />
+                {isWhatsApp ? (
+                  <MessageCircle className="h-5 w-5 shrink-0 text-emerald-400 opacity-90" strokeWidth={2} aria-hidden />
+                ) : (
+                  <Megaphone className="h-5 w-5 shrink-0 text-[#C9A84C] opacity-90" strokeWidth={2} aria-hidden />
+                )}
               </div>
 
               {c.description ? (
@@ -315,12 +429,12 @@ export default function CampaignsPage() {
 
               <div className="mt-4">
                 <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                  <span>Κλήσεις {hasPool ? "προς επαφές" : ""}</span>
+                  <span>Πρόοδος (με αριθμό)</span>
                   <span className="text-[var(--text-secondary)]">
                     {hasPool
-                      ? `${c.callsMade} / ${c.contactTotal}`
+                      ? `${c.callsMade} / ${dialable}`
                       : s.total
-                        ? `${s.total} κλήση/εις (χωρίς δεσμ. περιοχών)`
+                        ? `${s.total} κλήση/εις`
                         : "0 / 0"}
                   </span>
                 </div>
@@ -330,13 +444,32 @@ export default function CampaignsPage() {
                     style={{ width: `${barPct}%`, transition: "width 0.25s ease" }}
                   />
                 </div>
+                {c.withoutPhone != null && c.withoutPhone > 0 ? (
+                  <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    {c.withPhone ?? dialable} με αριθμό · {c.withoutPhone} χωρίς (εξαιρούνται)
+                  </p>
+                ) : null}
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2.5">
-                <CampaignStat label="Σύνολο" value={s.total} numClass="text-slate-600 [data-theme='light']:text-slate-800" />
-                <CampaignStat label="Θετικοί" value={s.positive} numClass="text-emerald-500" />
-                <CampaignStat label="Αρνητικοί" value={s.negative} numClass="text-rose-500" />
-                <CampaignStat label="Δεν Απάντησαν" value={s.noAnswer} numClass="text-amber-600" />
+              <div className="mt-4 grid grid-cols-3 gap-2.5">
+                <CampaignStat
+                  label="Θετικοί"
+                  value={s.positive}
+                  numClass="text-emerald-500"
+                  icon={CheckCircle2}
+                />
+                <CampaignStat
+                  label="Αρνητικοί"
+                  value={s.negative}
+                  numClass="text-rose-500"
+                  icon={XCircle}
+                />
+                <CampaignStat
+                  label="Δεν Απάντησαν"
+                  value={s.noAnswer}
+                  numClass="text-amber-600"
+                  icon={PhoneOff}
+                />
               </div>
 
               {c.sentiment && c.sentiment.trendDelta != null && (
@@ -359,54 +492,87 @@ export default function CampaignsPage() {
                   <FileText className="h-4 w-4 opacity-70" />
                   Προβολή
                 </Link>
-                <button
-                  type="button"
-                  className={goldCta + " flex-1 min-w-0 sm:flex-none sm:px-4"}
-                  disabled={dialingId === c.id || !isActive || !c.contactTotal}
-                  title={!c.contactTotal ? "Δεν υπάρχει αναλυτική λίστα επαφών" : undefined}
-                  onClick={async () => {
-                    setDialingId(c.id);
-                    setFormErr(null);
-                    const maxPerRun = 25;
-                    let started = 0;
-                    try {
-                      const lines = clampConcurrentLines(c.concurrent_lines);
-                      const maxBatches = Math.ceil(maxPerRun / Math.max(1, lines));
-                      for (let i = 0; i < maxBatches; i += 1) {
-                        const r = await fetchWithTimeout(`/api/campaigns/${c.id}/dial-next`, { method: "POST" });
+                {!isWhatsApp && (
+                  <button
+                    type="button"
+                    className={goldCta + " min-w-0 flex-1 sm:flex-none sm:px-4"}
+                    disabled={dialingId === c.id || !isActive || !dialable}
+                    title={!dialable ? "Δεν υπάρχουν επαφές με αριθμό" : undefined}
+                    onClick={async () => {
+                      setDialingId(c.id);
+                      setFormErr(null);
+                      try {
+                        const r = await fetchWithTimeout(`/api/campaigns/${c.id}/dial-next`, {
+                          method: "POST",
+                        });
                         const j = (await r.json().catch(() => ({}))) as {
                           error?: string;
                           results?: Array<{ ok: boolean }>;
                         };
                         if (!r.ok) {
-                          const msg = j.error ?? "Σφάλμα";
-                          if (r.status === 400 && msg.includes("όλες")) {
-                            if (started === 0) setFormErr("Όλες οι επαφές έχουν ήδη κληθεί.");
-                            break;
-                          }
-                          setFormErr(msg);
+                          setFormErr(j.error ?? "Σφάλμα");
                           return;
                         }
                         const n = (j.results ?? []).filter((x) => x.ok).length;
-                        if (n === 0) break;
-                        started += n;
-                        if (started >= maxPerRun) break;
+                        if (n > 0) {
+                          showToast(`Ξεκίνησαν ${n} κλήσεις`, "success");
+                          void load();
+                        }
+                      } finally {
+                        setDialingId(null);
                       }
-                      if (started > 0) void load();
-                    } finally {
-                      setDialingId(null);
-                    }
-                  }}
-                >
-                  {dialingId === c.id ? (
-                    "Σύνδεση…"
-                  ) : (
-                    <>
-                      <Play className="h-3.5 w-3.5" />
-                      <span>Εκκίνηση Κλήσεων</span>
-                    </>
-                  )}
-                </button>
+                    }}
+                  >
+                    {dialingId === c.id ? (
+                      "Σύνδεση…"
+                    ) : (
+                      <>
+                        <Play className="h-3.5 w-3.5" />
+                        <span>Εκκίνηση Κλήσεων</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                {!isWhatsApp && s.noAnswer > 0 && isActive && (
+                  <button
+                    type="button"
+                    className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20 sm:flex-none"
+                    disabled={redialingId === c.id}
+                    title="Επανεκκίνηση επαφών που δεν απάντησαν"
+                    onClick={async () => {
+                      setRedialingId(c.id);
+                      setFormErr(null);
+                      try {
+                        const r = await fetchWithTimeout(
+                          `/api/campaigns/${c.id}/dial-next?redial_no_answer=1`,
+                          { method: "POST" },
+                        );
+                        const j = (await r.json().catch(() => ({}))) as {
+                          error?: string;
+                          results?: Array<{ ok: boolean }>;
+                        };
+                        if (!r.ok) {
+                          setFormErr(j.error ?? "Σφάλμα");
+                          showToast(j.error ?? "Σφάλμα", "error");
+                          return;
+                        }
+                        const n = (j.results ?? []).filter((x) => x.ok).length;
+                        showToast(
+                          n > 0
+                            ? `Επανεκκίνηση: ${n} κλήσεις`
+                            : "Δεν ξεκίνησαν κλήσεις",
+                          n > 0 ? "success" : "error",
+                        );
+                        if (n > 0) void load();
+                      } finally {
+                        setRedialingId(null);
+                      }
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {redialingId === c.id ? "…" : "Επανεκκίνηση"}
+                  </button>
+                )}
                 {isActive ? (
                   <button
                     type="button"
@@ -482,7 +648,10 @@ export default function CampaignsPage() {
       </ul>
 
       {formErr && !modal && (
-        <p className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-red-500/40 bg-[var(--bg-card)] px-4 py-2 text-sm text-red-200 shadow-xl max-md:bottom-28" role="alert">
+        <p
+          className="fixed bottom-24 left-1/2 z-50 max-md:bottom-28 -translate-x-1/2 rounded-lg border border-red-500/40 bg-[var(--bg-card)] px-4 py-2 text-sm text-red-200 shadow-xl"
+          role="alert"
+        >
           {formErr}
         </p>
       )}
@@ -495,7 +664,12 @@ export default function CampaignsPage() {
         ariaLabel="Νέα καμπάνια"
         footer={
           <>
-            <button type="button" className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:w-auto"} onClick={() => setModal(false)} disabled={saving}>
+            <button
+              type="button"
+              className={lux.btnSecondary + " !min-h-11 w-full !justify-center sm:w-auto"}
+              onClick={() => setModal(false)}
+              disabled={saving}
+            >
               Άκυρο
             </button>
             <FormSubmitButton
@@ -503,7 +677,7 @@ export default function CampaignsPage() {
               form="campaign-create-form"
               loading={saving}
               variant="gold"
-              className={goldCta + " !h-12 !w-full !rounded-xl sm:!w-auto !min-w-0 sm:!px-6"}
+              className={goldCta + " !h-12 !min-w-0 !w-full !rounded-xl sm:!w-auto sm:!px-6"}
             >
               Αποθήκευση
             </FormSubmitButton>
@@ -511,213 +685,258 @@ export default function CampaignsPage() {
         }
       >
         <form id="campaign-create-form" className="flex min-h-0 w-full flex-col" onSubmit={createCampaign}>
-            <p className="mb-4 text-xs text-[var(--text-muted)]">Όνομα, περιγραφή και ποιες επαφές θα τρέχουν (φίλτρα).</p>
+          <p className="mb-4 text-xs text-[var(--text-muted)]">
+            Όνομα, περιγραφή και ποιες επαφές θα τρέχουν (φίλτρα ή επιλεγμένες από αναζήτηση).
+          </p>
 
-            <div className="space-y-4">
-              {formErr && (
-                <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">{formErr}</p>
+          <div className="space-y-4">
+            {formErr && (
+              <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                {formErr}
+              </p>
+            )}
+
+            {selectedContactIds.length > 0 && (
+              <div className="rounded-xl border border-[#C9A84C]/30 bg-[#C9A84C]/10 px-3 py-2 text-sm text-[var(--text-primary)]">
+                Επιλεγμένες επαφές από αναζήτηση:{" "}
+                <strong className="tabular-nums">{selectedContactIds.length}</strong>
+                <button
+                  type="button"
+                  className="ml-2 text-xs text-[#C9A84C] underline"
+                  onClick={() => setSelectedContactIds([])}
+                >
+                  Καθαρισμός — χρήση φίλτρων
+                </button>
+              </div>
+            )}
+
+            <div>
+              <label className={lux.label} htmlFor="c-name">
+                Όνομα<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+              </label>
+              <input
+                id="c-name"
+                className={[lux.input, "!text-base", nameFieldErr ? lux.inputError : ""]
+                  .filter(Boolean)
+                  .join(" ")}
+                required
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameFieldErr) setNameFieldErr(null);
+                }}
+                onBlur={() => {
+                  if (!name.trim()) setNameFieldErr("Υποχρεωτικό όνομα");
+                }}
+                placeholder="π.χ. Θερινή εξόρμηση 2025"
+                aria-invalid={nameFieldErr ? true : undefined}
+              />
+              {nameFieldErr && (
+                <p className="mt-1 text-xs text-red-400" role="alert">
+                  {nameFieldErr}
+                </p>
               )}
-
-              <div>
-                <label className={lux.label} htmlFor="c-name">
-                  Όνομα<span className="ml-0.5 text-red-500" aria-hidden>*</span>
-                </label>
-                <input
-                  id="c-name"
-                  className={[lux.input, "!text-base", nameFieldErr ? lux.inputError : ""].filter(Boolean).join(" ")}
-                  required
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    if (nameFieldErr) setNameFieldErr(null);
-                  }}
-                  onBlur={() => {
-                    if (!name.trim()) setNameFieldErr("Υποχρεωτικό όνομα");
-                  }}
-                  placeholder="π.χ. Θερινή εξόρμηση 2025"
-                  aria-invalid={nameFieldErr ? true : undefined}
-                />
-                {nameFieldErr && (
-                  <p className="mt-1 text-xs text-red-400" role="alert">
-                    {nameFieldErr}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className={lux.label} htmlFor="c-desc">Περιγραφή (προαιρετική)</label>
-                <textarea
-                  id="c-desc"
-                  className={lux.textarea + " !min-h-[88px] !text-base"}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  placeholder="Σύντομη περιγραφή στόχων…"
-                />
-              </div>
-
-              <div>
-                <label className={lux.label} htmlFor="c-ctype">Τύπος καμπάνιας (AI / Retell)</label>
-                <HqSelect
-                  id="c-ctype"
-                  className="!min-h-11 !text-base"
-                  value={campaignTypeId}
-                  onChange={(e) => setCampaignTypeId(e.target.value)}
-                >
-                  <option value="">— Επιλέξτε —</option>
-                  {campaignTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </HqSelect>
-                <p className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">
-                  {campaignTypeId
-                    ? (() => {
-                        const t = campaignTypes.find((x) => x.id === campaignTypeId);
-                        return t?.retell_agent_id
-                          ? `Retell agent: ${t.retell_agent_id}`
-                          : "Χωρίς agent στον τύπο — θα χρησιμοποιηθεί RETELL_AGENT_ID.";
-                      })()
-                    : "Προαιρετικό· ορίζει τον Retell agent για κλήσεις."}
-                </p>
-              </div>
-
-              <div>
-                <label className={lux.label} htmlFor="c-ch">Κανάλι</label>
-                <HqSelect
-                  id="c-ch"
-                  className="!min-h-11 !text-base"
-                  value={campaignChannel}
-                  onChange={(e) => setCampaignChannel(e.target.value as "call" | "whatsapp")}
-                >
-                  <option value="call">Κλήσεις (Retell)</option>
-                  <option value="whatsapp">WhatsApp</option>
-                </HqSelect>
-                <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                  Το κανάλι αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
-                </p>
-              </div>
-
-              <div>
-                <label className={lux.label} htmlFor="c-conc">
-                  Παράλληλες γραμμές κλήσης
-                </label>
-                <input
-                  id="c-conc"
-                  type="number"
-                  min={CONCURRENT_LINES_MIN}
-                  max={CONCURRENT_LINES_MAX}
-                  className={lux.input + " !min-h-11 !text-base tabular-nums"}
-                  value={concurrentLines}
-                  onChange={(e) => {
-                    const n = parseInt(e.target.value, 10);
-                    setConcurrentLines(Number.isFinite(n) ? n : CONCURRENT_LINES_MIN);
-                  }}
-                />
-                <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
-                  Πόσες ταυτόχρονες κλήσεις να κάνει ο agent ({CONCURRENT_LINES_MIN}–{CONCURRENT_LINES_MAX}). Προεπιλογή: 3.
-                </p>
-              </div>
-
-              <p className="text-xs font-medium uppercase tracking-wider text-[#C9A84C]">Φιλτράρισμα επαφών</p>
-              <p className="text-[11px] text-[var(--text-muted)]">Χρειάζεται τουλάχιστον ένα κριτήριο.</p>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={lux.label} htmlFor="c-st">Κατάσταση κλήσης</label>
-                  <HqSelect
-                    id="c-st"
-                    className="!min-h-11 !text-base"
-                    value={filter.call_status}
-                    onChange={(e) => setFilter((f) => ({ ...f, call_status: e.target.value }))}
-                  >
-                    <option value="">Όλες</option>
-                    <option value="Pending">Αναμονή</option>
-                    <option value="Positive">Θετική</option>
-                    <option value="Negative">Αρνητική</option>
-                    <option value="No Answer">Δεν απάντησε</option>
-                  </HqSelect>
-                </div>
-                <div>
-                  <label className={lux.label} htmlFor="c-pri">Προτεραιότητα</label>
-                  <HqSelect
-                    id="c-pri"
-                    className="!min-h-11 !text-base"
-                    value={filter.priority}
-                    onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value }))}
-                  >
-                    <option value="">Όλες</option>
-                    <option value="High">Υψηλή</option>
-                    <option value="Medium">Μεσαία</option>
-                    <option value="Low">Χαμηλή</option>
-                  </HqSelect>
-                </div>
-                <div>
-                  <label className={lux.label} htmlFor="c-area">Περιοχή</label>
-                  <HqSelect
-                    id="c-area"
-                    className="!min-h-11 !text-base"
-                    value={filter.area}
-                    onChange={(e) => setFilter((f) => ({ ...f, area: e.target.value }))}
-                  >
-                    <option value="">Όλες</option>
-                    {(options?.areas ?? []).map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </HqSelect>
-                </div>
-                <div>
-                  <label className={lux.label} htmlFor="c-mun">Δήμος που ψηφίζει (περίπου)</label>
-                  <HqSelect
-                    id="c-mun"
-                    className="!min-h-11 !text-base"
-                    value={filter.municipality}
-                    onChange={(e) => setFilter((f) => ({ ...f, municipality: e.target.value }))}
-                  >
-                    <option value="">Όλοι</option>
-                    {(options?.municipalities ?? []).map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </HqSelect>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className={lux.label} htmlFor="c-tag">Ετικέτα (ακριβές tag)</label>
-                  <div className="relative">
-                    <input
-                      id="c-tag"
-                      className={lux.input + " !text-base !pl-9"}
-                      value={filter.tag}
-                      onChange={(e) => setFilter((f) => ({ ...f, tag: e.target.value }))}
-                    />
-                    <LayoutGrid className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className="flex items-center justify-between gap-2 rounded-xl border border-[#C9A84C]/25 bg-[#050D1A]/60 px-4 py-3"
-                role="status"
-                aria-live="polite"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#C9A84C]/15 text-[#C9A84C]">
-                    <Search className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Προεπισκόπηση</p>
-                    <p className="text-sm text-[var(--text-primary)]">Επαφές που ταιριάζουν</p>
-                  </div>
-                </div>
-                <p className="shrink-0 text-2xl font-bold text-[#C9A84C] tabular-nums sm:text-3xl">
-                  {previewing || previewCount == null ? "—" : previewCount}
-                </p>
-              </div>
             </div>
-          </form>
+            <div>
+              <label className={lux.label} htmlFor="c-desc">
+                Περιγραφή (προαιρετική)
+              </label>
+              <textarea
+                id="c-desc"
+                className={lux.textarea + " !min-h-[88px] !text-base"}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                placeholder="Σύντομη περιγραφή στόχων…"
+              />
+            </div>
+
+            <div>
+              <label className={lux.label} htmlFor="c-ctype">
+                Τύπος καμπάνιας (AI / Retell)
+              </label>
+              <HqSelect
+                id="c-ctype"
+                className="!min-h-11 !text-base"
+                value={campaignTypeId}
+                onChange={(e) => setCampaignTypeId(e.target.value)}
+              >
+                <option value="">— Επιλέξτε —</option>
+                {campaignTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </HqSelect>
+              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                Agent που θα χρησιμοποιηθεί:{" "}
+                <span className="font-mono text-[var(--text-secondary)]">{agentPreview}</span>
+              </p>
+            </div>
+
+            <div>
+              <label className={lux.label} htmlFor="c-ch">
+                Κανάλι
+              </label>
+              <HqSelect
+                id="c-ch"
+                className="!min-h-11 !text-base"
+                value={campaignChannel}
+                onChange={(e) => setCampaignChannel(e.target.value as "call" | "whatsapp")}
+              >
+                <option value="call">Κλήσεις (Retell)</option>
+                <option value="whatsapp">WhatsApp</option>
+              </HqSelect>
+              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                Το κανάλι αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
+              </p>
+            </div>
+
+            <div>
+              <label className={lux.label} htmlFor="c-conc">
+                Παράλληλες γραμμές κλήσης
+              </label>
+              <input
+                id="c-conc"
+                type="number"
+                min={CONCURRENT_LINES_MIN}
+                max={CONCURRENT_LINES_MAX}
+                className={lux.input + " !min-h-11 !text-base tabular-nums"}
+                value={concurrentLines}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setConcurrentLines(Number.isFinite(n) ? n : CONCURRENT_LINES_MIN);
+                }}
+              />
+            </div>
+
+            {selectedContactIds.length === 0 && (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wider text-[#C9A84C]">
+                  Φιλτράρισμα επαφών
+                </p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Χρειάζεται τουλάχιστον ένα κριτήριο — ή επιλέξτε επαφές από{" "}
+                  <Link href="/contacts/search" className="text-[#C9A84C] underline">
+                    προηγμένη αναζήτηση
+                  </Link>{" "}
+                  και «Νέα καμπάνια».
+                </p>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={lux.label} htmlFor="c-st">
+                      Κατάσταση κλήσης
+                    </label>
+                    <HqSelect
+                      id="c-st"
+                      className="!min-h-11 !text-base"
+                      value={filter.call_status}
+                      onChange={(e) => setFilter((f) => ({ ...f, call_status: e.target.value }))}
+                    >
+                      <option value="">Όλες</option>
+                      <option value="Pending">Αναμονή</option>
+                      <option value="Positive">Θετική</option>
+                      <option value="Negative">Αρνητική</option>
+                      <option value="No Answer">Δεν απάντησε</option>
+                    </HqSelect>
+                  </div>
+                  <div>
+                    <label className={lux.label} htmlFor="c-pri">
+                      Προτεραιότητα
+                    </label>
+                    <HqSelect
+                      id="c-pri"
+                      className="!min-h-11 !text-base"
+                      value={filter.priority}
+                      onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value }))}
+                    >
+                      <option value="">Όλες</option>
+                      <option value="High">Υψηλή</option>
+                      <option value="Medium">Μεσαία</option>
+                      <option value="Low">Χαμηλή</option>
+                    </HqSelect>
+                  </div>
+                  <div>
+                    <label className={lux.label} htmlFor="c-area">
+                      Περιοχή
+                    </label>
+                    <HqSelect
+                      id="c-area"
+                      className="!min-h-11 !text-base"
+                      value={filter.area}
+                      onChange={(e) => setFilter((f) => ({ ...f, area: e.target.value }))}
+                    >
+                      <option value="">Όλες</option>
+                      {(options?.areas ?? []).map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </HqSelect>
+                  </div>
+                  <div>
+                    <label className={lux.label} htmlFor="c-mun">
+                      Δήμος που ψηφίζει (περίπου)
+                    </label>
+                    <HqSelect
+                      id="c-mun"
+                      className="!min-h-11 !text-base"
+                      value={filter.municipality}
+                      onChange={(e) => setFilter((f) => ({ ...f, municipality: e.target.value }))}
+                    >
+                      <option value="">Όλοι</option>
+                      {(options?.municipalities ?? []).map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </HqSelect>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className={lux.label} htmlFor="c-tag">
+                      Ετικέτα (ακριβές tag)
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="c-tag"
+                        className={lux.input + " !pl-9 !text-base"}
+                        value={filter.tag}
+                        onChange={(e) => setFilter((f) => ({ ...f, tag: e.target.value }))}
+                      />
+                      <LayoutGrid className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div
+              className="flex items-center justify-between gap-2 rounded-xl border border-[#C9A84C]/25 bg-[#050D1A]/60 px-4 py-3"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#C9A84C]/15 text-[#C9A84C]">
+                  <Search className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">
+                    Προεπισκόπηση
+                  </p>
+                  <p className="text-sm text-[var(--text-primary)]">
+                    {previewing || previewWithPhone == null
+                      ? "Επαφές που ταιριάζουν"
+                      : `${previewWithPhone} με αριθμό / ${previewWithoutPhone ?? 0} χωρίς`}
+                  </p>
+                </div>
+              </div>
+              <p className="shrink-0 text-2xl font-bold tabular-nums text-[#C9A84C] sm:text-3xl">
+                {previewing || previewCount == null ? "—" : previewCount}
+              </p>
+            </div>
+          </div>
+        </form>
       </CenteredModal>
     </div>
   );
@@ -741,7 +960,10 @@ function TopMetric({
       </div>
       <div className="min-w-0">
         <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
-        <p className="text-2xl font-bold tabular-nums text-[var(--accent-gold)] [data-theme='light']:text-amber-800 sm:text-3xl" style={{ fontFeatureSettings: '"tnum"' }}>
+        <p
+          className="text-2xl font-bold tabular-nums text-[var(--accent-gold)] [data-theme='light']:text-amber-800 sm:text-3xl"
+          style={{ fontFeatureSettings: '"tnum"' }}
+        >
           {value}
         </p>
         <p className="text-[10px] text-[var(--text-muted)] sm:text-xs">{sub}</p>
@@ -750,11 +972,27 @@ function TopMetric({
   );
 }
 
-function CampaignStat({ label, value, numClass }: { label: string; value: number; numClass: string }) {
+function CampaignStat({
+  label,
+  value,
+  numClass,
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  numClass: string;
+  icon: ComponentType<{ className?: string }>;
+}) {
   return (
     <div className="flex flex-col justify-center rounded-xl border border-[var(--border)]/80 bg-[var(--bg-elevated)]/25 p-2.5 [data-theme='light']:border-slate-200/90 [data-theme='light']:bg-slate-50/80">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
-      <span className={["mt-0.5 text-lg font-bold tabular-nums sm:text-xl", numClass].join(" ")} style={{ fontFeatureSettings: '"tnum"' }}>
+      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+        <Icon className={`h-3 w-3 ${numClass}`} />
+        {label}
+      </span>
+      <span
+        className={["mt-0.5 text-lg font-bold tabular-nums sm:text-xl", numClass].join(" ")}
+        style={{ fontFeatureSettings: '"tnum"' }}
+      >
         {value}
       </span>
     </div>

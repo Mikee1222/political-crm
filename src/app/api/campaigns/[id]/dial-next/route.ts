@@ -1,5 +1,5 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { getNextUncalledContactIds } from "@/lib/campaign-dial-queue";
@@ -18,8 +18,9 @@ type DialResult =
 
 /**
  * Εκκινεί έως `concurrent_lines` παράλληλες Retell κλήσεις (500ms καθυστέρηση μεταξύ εκκινήσεων).
+ * Παραλείπει επαφές χωρίς αριθμό. `?redial_no_answer=1` για επανεκκίνηση «Δεν απάντησε».
  */
-export async function POST(_: Request, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
   const { profile, supabase } = crm;
@@ -35,9 +36,13 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
   }
 
   const campaignId = params.id;
+  const redialNoAnswer =
+    request.nextUrl.searchParams.get("redial_no_answer") === "1" ||
+    request.nextUrl.searchParams.get("redial_no_answer") === "true";
+
   const { data: campDial, error: campDialErr } = await supabase
     .from("campaigns")
-    .select("concurrent_lines")
+    .select("concurrent_lines, channel")
     .eq("id", campaignId)
     .maybeSingle();
   if (campDialErr) {
@@ -46,15 +51,32 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
   if (!campDial) {
     return NextResponse.json({ error: "Καμπάνια δεν βρέθηκε" }, { status: 404 });
   }
+  const channel = String((campDial as { channel?: string | null }).channel ?? "call");
+  if (channel === "whatsapp") {
+    return NextResponse.json(
+      { error: "Η καμπάνια είναι WhatsApp — οι κλήσεις Retell δεν ισχύουν" },
+      { status: 400 },
+    );
+  }
+
   const batch = clampConcurrentLines((campDial as { concurrent_lines?: unknown }).concurrent_lines);
 
-  const { contactIds, error: queueErr } = await getNextUncalledContactIds(supabase, campaignId, batch);
+  const { contactIds, error: queueErr } = await getNextUncalledContactIds(
+    supabase,
+    campaignId,
+    batch,
+    { redialNoAnswer },
+  );
   if (queueErr) {
     return NextResponse.json({ error: queueErr }, { status: 400 });
   }
   if (contactIds.length === 0) {
     return NextResponse.json(
-      { error: "Έχετε κληθεί όλες οι επαφές της καμπάνιας" },
+      {
+        error: redialNoAnswer
+          ? "Δεν υπάρχουν επαφές «Δεν απάντησε» για επανεκκίνηση"
+          : "Έχετε κληθεί όλες οι επαφές της καμπάνιας",
+      },
       { status: 400 },
     );
   }
@@ -70,7 +92,7 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
   const dialOne = async (contactId: string): Promise<DialResult> => {
     const { data: contact, error: contactErr } = await supabase
       .from("contacts")
-      .select("id, first_name, last_name, phone")
+      .select("id, first_name, last_name, phone, phone2, landline")
       .eq("id", contactId)
       .single();
     if (contactErr || !contact) {
@@ -81,6 +103,8 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       first_name: string | null;
       last_name: string | null;
       phone: string | null;
+      phone2: string | null;
+      landline: string | null;
     };
     const retell = await executeRetellCreatePhoneCall(row, campaignId, agentOverride);
     if (!retell.ok) {
@@ -127,5 +151,6 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
     results,
     contact_id: firstOk?.contact_id,
     call_id: firstOk?.call_id ?? null,
+    redial_no_answer: redialNoAnswer,
   });
 }
