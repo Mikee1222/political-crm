@@ -9,14 +9,11 @@ import {
   Megaphone,
   MessageCircle,
   Phone,
-  PhoneOff,
   Play,
   Plus,
   Radio,
-  RotateCcw,
   Search,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import { FormEvent, Suspense, useCallback, useEffect, useState, type ComponentType } from "react";
 import { useSearchParams } from "next/navigation";
@@ -114,7 +111,6 @@ function CampaignsPageInner() {
   const [previewing, setPreviewing] = useState(false);
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [dialingId, setDialingId] = useState<string | null>(null);
-  const [redialingId, setRedialingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [nameFieldErr, setNameFieldErr] = useState<string | null>(null);
@@ -346,61 +342,55 @@ function CampaignsPageInner() {
           const dialable = c.withPhone ?? c.contactTotal;
           const hasPool = dialable > 0;
           const barPct = hasPool ? Math.min(100, c.progress) : s.total > 0 ? 100 : 0;
-          const leftBorder = isActive
-            ? "border-l-[var(--accent-gold)]"
-            : isDone
-              ? "border-l-emerald-500"
-              : "border-l-stone-400/70 [data-theme='light']:border-l-stone-300";
           const isWhatsApp = c.channel === "whatsapp";
+          const agentLabel = c.retell_agent_name?.trim() || null;
           return (
             <li
               key={c.id}
-              className={[
-                "data-hq-card relative flex w-full max-w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] border-l-4 bg-[var(--bg-card)] p-5 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_2px_20px_rgba(0,0,0,0.06)]",
-                leftBorder,
-              ].join(" ")}
+              className="relative flex w-full max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-4 bg-white p-5 shadow-[0_2px_16px_rgba(10,22,40,0.06)]"
+              style={{ borderLeftColor: "#D4AF37" }}
             >
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                    <h2 className="min-w-0 text-[1.125rem] font-bold leading-tight text-[var(--text-primary)]">
+                    <h2 className="min-w-0 text-xl font-bold leading-tight text-[#0A1628]">
                       {c.name}
                     </h2>
                     <span
                       className={
                         statusBadge +
                         (isActive
-                          ? " border-[#C9A84C]/45 bg-[var(--accent-gold)]/10 text-[var(--accent-gold)]"
+                          ? " border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#8B6914]"
                           : isDone
-                            ? " border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
-                            : " border-[var(--border)] bg-[var(--bg-elevated)]/50 text-[var(--text-secondary)]")
+                            ? " border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                            : " border-slate-200 bg-slate-50 text-slate-600")
                       }
                     >
-                      {isActive ? "Ενεργή" : isDone ? "Ολοκληρώθηκε" : c.status ?? "—"}
+                      {isActive ? "ΕΝΕΡΓΗ" : isDone ? "ΟΛΟΚΛΗΡΩΘΗΚΕ" : (c.status ?? "—").toUpperCase()}
                     </span>
                     {isWhatsApp ? (
                       <span
                         className={
                           statusBadge +
-                          " inline-flex items-center gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                          " inline-flex items-center gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
                         }
                       >
                         <MessageCircle className="h-3 w-3" />
-                        WhatsApp
+                        WHATSAPP
                       </span>
                     ) : (
                       <span
                         className={
                           statusBadge +
-                          " inline-flex items-center gap-1 border-sky-500/30 bg-sky-500/10 text-sky-200"
+                          " inline-flex items-center gap-1 border-sky-500/30 bg-sky-500/10 text-sky-700"
                         }
                       >
                         <Phone className="h-3 w-3" />
-                        Κλήσεις
+                        ΚΛΗΣΕΙΣ
                       </span>
                     )}
                   </div>
-                  <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                  <p className="mt-1.5 text-xs text-slate-500">
                     {c.created_at
                       ? formatDateAthens(c.created_at, {
                           day: "2-digit",
@@ -408,77 +398,76 @@ function CampaignsPageInner() {
                           year: "numeric",
                         })
                       : "—"}
-                    {c.started_at ? ` · Έναρξη: ${formatDateAthens(c.started_at)}` : ""}
+                    {agentLabel ? (
+                      <>
+                        {" · "}
+                        Agent: <span className="font-medium text-slate-700">{agentLabel}</span>
+                      </>
+                    ) : null}
                   </p>
-                  {c.retell_agent_name ? (
-                    <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                      Agent: <span className="font-medium">{c.retell_agent_name}</span>
-                    </p>
-                  ) : null}
                 </div>
                 {isWhatsApp ? (
-                  <MessageCircle className="h-5 w-5 shrink-0 text-emerald-400 opacity-90" strokeWidth={2} aria-hidden />
+                  <MessageCircle className="h-5 w-5 shrink-0 text-emerald-500 opacity-90" strokeWidth={2} aria-hidden />
                 ) : (
-                  <Megaphone className="h-5 w-5 shrink-0 text-[#C9A84C] opacity-90" strokeWidth={2} aria-hidden />
+                  <Megaphone className="h-5 w-5 shrink-0 text-[#D4AF37] opacity-90" strokeWidth={2} aria-hidden />
                 )}
               </div>
 
               {c.description ? (
-                <p className="mt-2 line-clamp-2 text-sm text-[var(--text-secondary)]">{c.description}</p>
+                <p className="mt-2 line-clamp-2 text-sm text-slate-600">{c.description}</p>
               ) : null}
 
               <div className="mt-4">
-                <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                  <span>Πρόοδος (με αριθμό)</span>
-                  <span className="text-[var(--text-secondary)]">
+                <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  <span>Πρόοδος</span>
+                  <span className="normal-case tracking-normal text-slate-700">
                     {hasPool
-                      ? `${c.callsMade} / ${dialable}`
+                      ? `${c.callsMade} / ${dialable} επαφές με αριθμό`
                       : s.total
                         ? `${s.total} κλήση/εις`
-                        : "0 / 0"}
+                        : "0 / 0 επαφές με αριθμό"}
                   </span>
                 </div>
-                <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)]/90 ring-1 ring-inset ring-[#C9A84C]/12">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className="h-full rounded-full bg-[#C9A84C] shadow-[0_0_10px_rgba(201,168,76,0.35)]"
-                    style={{ width: `${barPct}%`, transition: "width 0.25s ease" }}
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${barPct}%`,
+                      backgroundColor: "#D4AF37",
+                      transition: "width 0.25s ease",
+                    }}
                   />
                 </div>
-                {c.withoutPhone != null && c.withoutPhone > 0 ? (
-                  <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                    {c.withPhone ?? dialable} με αριθμό · {c.withoutPhone} χωρίς (εξαιρούνται)
-                  </p>
-                ) : null}
               </div>
 
               <div className="mt-4 grid grid-cols-3 gap-2.5">
-                <CampaignStat
-                  label="Θετικοί"
+                <CampaignStatEmoji
+                  emoji="🔗"
+                  label="Συνδέθηκε με ΚΚ"
                   value={s.positive}
-                  numClass="text-emerald-500"
-                  icon={CheckCircle2}
+                  tone="emerald"
                 />
-                <CampaignStat
-                  label="Αρνητικοί"
+                <CampaignStatEmoji
+                  emoji="✗"
+                  label="Δεν ήθελε"
                   value={s.negative}
-                  numClass="text-rose-500"
-                  icon={XCircle}
+                  tone="rose"
                 />
-                <CampaignStat
-                  label="Δεν Απάντησαν"
+                <CampaignStatEmoji
+                  emoji="📵"
+                  label="Δεν απάντησε"
                   value={s.noAnswer}
-                  numClass="text-amber-600"
-                  icon={PhoneOff}
+                  tone="orange"
                 />
               </div>
 
               {c.sentiment && c.sentiment.trendDelta != null && (
-                <p className="mt-3 text-xs text-[var(--text-muted)]">
-                  Θετική αναλογία {c.sentiment.positiveRate}%
+                <p className="mt-3 text-xs text-slate-500">
+                  Συνδέθηκε με ΚΚ {c.sentiment.positiveRate}%
                   {c.sentiment.trendDelta >= 0 ? (
-                    <span className="ml-1 font-semibold text-emerald-500">+{c.sentiment.trendDelta}%</span>
+                    <span className="ml-1 font-semibold text-emerald-600">+{c.sentiment.trendDelta}%</span>
                   ) : (
-                    <span className="ml-1 font-semibold text-rose-400">{c.sentiment.trendDelta}%</span>
+                    <span className="ml-1 font-semibold text-rose-500">{c.sentiment.trendDelta}%</span>
                   )}{" "}
                   <span>έναντι προηγούμενης</span>
                 </p>
@@ -487,7 +476,7 @@ function CampaignsPageInner() {
               <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                 <Link
                   href={`/campaigns/${c.id}`}
-                  className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-transparent px-3 text-sm font-medium text-[var(--text-primary)] transition hover:border-[#C9A84C]/40 hover:bg-[var(--bg-elevated)]/60 sm:min-w-[6.5rem] sm:flex-none"
+                  className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-[#0A1628] transition hover:border-[#D4AF37]/50 hover:bg-[#FDFAF5] sm:min-w-[6.5rem] sm:flex-none"
                 >
                   <FileText className="h-4 w-4 opacity-70" />
                   Προβολή
@@ -533,50 +522,10 @@ function CampaignsPageInner() {
                     )}
                   </button>
                 )}
-                {!isWhatsApp && s.noAnswer > 0 && isActive && (
-                  <button
-                    type="button"
-                    className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20 sm:flex-none"
-                    disabled={redialingId === c.id}
-                    title="Επανεκκίνηση επαφών που δεν απάντησαν"
-                    onClick={async () => {
-                      setRedialingId(c.id);
-                      setFormErr(null);
-                      try {
-                        const r = await fetchWithTimeout(
-                          `/api/campaigns/${c.id}/dial-next?redial_no_answer=1`,
-                          { method: "POST" },
-                        );
-                        const j = (await r.json().catch(() => ({}))) as {
-                          error?: string;
-                          results?: Array<{ ok: boolean }>;
-                        };
-                        if (!r.ok) {
-                          setFormErr(j.error ?? "Σφάλμα");
-                          showToast(j.error ?? "Σφάλμα", "error");
-                          return;
-                        }
-                        const n = (j.results ?? []).filter((x) => x.ok).length;
-                        showToast(
-                          n > 0
-                            ? `Επανεκκίνηση: ${n} κλήσεις`
-                            : "Δεν ξεκίνησαν κλήσεις",
-                          n > 0 ? "success" : "error",
-                        );
-                        if (n > 0) void load();
-                      } finally {
-                        setRedialingId(null);
-                      }
-                    }}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    {redialingId === c.id ? "…" : "Επανεκκίνηση"}
-                  </button>
-                )}
                 {isActive ? (
                   <button
                     type="button"
-                    className="h-10 min-w-0 flex-1 rounded-xl border-2 border-emerald-500/50 bg-transparent px-3 text-sm font-semibold text-emerald-500 transition hover:bg-emerald-500/10 sm:min-w-[7rem] sm:flex-none [data-theme='light']:text-emerald-600"
+                    className="h-10 min-w-0 flex-1 rounded-xl border-2 border-emerald-500/50 bg-transparent px-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-500/10 sm:min-w-[7rem] sm:flex-none"
                     disabled={togglingId === c.id}
                     onClick={async () => {
                       setTogglingId(c.id);
@@ -597,7 +546,7 @@ function CampaignsPageInner() {
                 ) : (
                   <button
                     type="button"
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-transparent px-3 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)]/80 sm:min-w-[7rem] sm:flex-none"
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-transparent px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:min-w-[7rem] sm:flex-none"
                     disabled={togglingId === c.id}
                     onClick={async () => {
                       setTogglingId(c.id);
@@ -972,25 +921,36 @@ function TopMetric({
   );
 }
 
-function CampaignStat({
+function CampaignStatEmoji({
+  emoji,
   label,
   value,
-  numClass,
-  icon: Icon,
+  tone,
 }: {
+  emoji: string;
   label: string;
   value: number;
-  numClass: string;
-  icon: ComponentType<{ className?: string }>;
+  tone: "emerald" | "rose" | "orange";
 }) {
+  const toneClass =
+    tone === "emerald"
+      ? "text-emerald-600"
+      : tone === "rose"
+        ? "text-rose-600"
+        : "text-orange-600";
+  const borderClass =
+    tone === "emerald"
+      ? "border-emerald-200 bg-emerald-50/70"
+      : tone === "rose"
+        ? "border-rose-200 bg-rose-50/70"
+        : "border-orange-200 bg-orange-50/70";
   return (
-    <div className="flex flex-col justify-center rounded-xl border border-[var(--border)]/80 bg-[var(--bg-elevated)]/25 p-2.5 [data-theme='light']:border-slate-200/90 [data-theme='light']:bg-slate-50/80">
-      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-        <Icon className={`h-3 w-3 ${numClass}`} />
-        {label}
+    <div className={`flex flex-col justify-center rounded-xl border p-2.5 ${borderClass}`}>
+      <span className={`text-[10px] font-bold uppercase tracking-wide ${toneClass}`}>
+        {emoji} {label}
       </span>
       <span
-        className={["mt-0.5 text-lg font-bold tabular-nums sm:text-xl", numClass].join(" ")}
+        className={`mt-0.5 text-lg font-bold tabular-nums sm:text-xl ${toneClass}`}
         style={{ fontFeatureSettings: '"tnum"' }}
       >
         {value}

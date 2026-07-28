@@ -88,6 +88,7 @@ type CampaignHead = {
   campaign_type_id?: string | null;
   retell_agent_id?: string | null;
   retell_agent_name?: string | null;
+  last_no_answer_redial_at?: string | null;
   campaign_type?: { id: string; name: string; color: string; retell_agent_id?: string | null } | null;
   concurrent_lines?: number | null;
 };
@@ -305,6 +306,9 @@ export default function CampaignDetailPage() {
   const [assignedPage, setAssignedPage] = useState(1);
   const [autoDial, setAutoDial] = useState(false);
   const [redialMode, setRedialMode] = useState(false);
+  const [noAnswerCount, setNoAnswerCount] = useState(0);
+  const [lastRedialAt, setLastRedialAt] = useState<string | null>(null);
+  const [redialBusy, setRedialBusy] = useState(false);
   const autoDialRef = useRef(false);
   const dialingRef = useRef(false);
   const [editingName, setEditingName] = useState(false);
@@ -356,10 +360,37 @@ export default function CampaignDetailPage() {
       });
       setNameDraft(String(j.campaign?.name ?? ""));
       setDescDraft(String(j.campaign?.description ?? ""));
+      const stamped = j.campaign?.last_no_answer_redial_at;
+      if (typeof stamped === "string" && stamped) {
+        setLastRedialAt(stamped);
+      }
     } finally {
       setLoading(false);
     }
   }, [id, outcome, assignedPage]);
+
+  const loadNoAnswerCount = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await fetchWithTimeout(`/api/campaigns/${id}/redial-no-answer`);
+      const j = (await res.json().catch(() => ({}))) as {
+        count?: number;
+        last_no_answer_redial_at?: string | null;
+        error?: string;
+      };
+      if (!res.ok) return;
+      setNoAnswerCount(typeof j.count === "number" ? j.count : 0);
+      if (typeof j.last_no_answer_redial_at === "string" && j.last_no_answer_redial_at) {
+        setLastRedialAt(j.last_no_answer_redial_at);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void loadNoAnswerCount();
+  }, [loadNoAnswerCount, data?.stats?.noAnswer]);
 
   const patchCampaign = useCallback(
     async (body: Record<string, unknown>) => {
@@ -685,11 +716,24 @@ export default function CampaignDetailPage() {
                 )}
               </div>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Agent:{" "}
-                <span className="font-medium text-[var(--text-secondary)]">
-                  {c.retell_agent_name || c.retell_agent_id || "—"}
-                </span>
-                {c.campaign_type?.name ? ` · Τύπος: ${c.campaign_type.name}` : ""}
+                {(() => {
+                  const agent =
+                    c.retell_agent_name?.trim() ||
+                    (c.retell_agent_id
+                      ? c.retell_agent_id.length > 8
+                        ? `${c.retell_agent_id.slice(0, 8)}...`
+                        : c.retell_agent_id
+                      : null);
+                  return agent ? (
+                    <>
+                      Agent:{" "}
+                      <span className="font-medium text-[var(--text-secondary)]">{agent}</span>
+                      {c.campaign_type?.name ? ` · Τύπος: ${c.campaign_type.name}` : ""}
+                    </>
+                  ) : c.campaign_type?.name ? (
+                    <>Τύπος: {c.campaign_type.name}</>
+                  ) : null;
+                })()}
               </p>
               <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                 {data?.withPhone ?? 0} με αριθμό / {data?.withoutPhone ?? 0} χωρίς
@@ -816,14 +860,74 @@ export default function CampaignDetailPage() {
               </button>
             </div>
           </div>
-          <label className="mt-3 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-            <input
-              type="checkbox"
-              checked={redialMode}
-              onChange={(e) => setRedialMode(e.target.checked)}
-            />
-            Επανεκκίνηση μόνο «Δεν απάντησε»
-          </label>
+          <div className="mt-3 space-y-2">
+            <button
+              type="button"
+              className={
+                lux.btnSecondary +
+                " !h-auto !min-h-10 w-full !justify-start gap-2 !whitespace-normal !px-3 !py-2.5 !text-left !text-sm sm:w-auto"
+              }
+              disabled={redialBusy || noAnswerCount <= 0}
+              onClick={() => {
+                const x = noAnswerCount;
+                if (
+                  !confirm(
+                    `Θέλετε να ξανακαλέσετε ${x} επαφές που δεν απάντησαν;`,
+                  )
+                ) {
+                  return;
+                }
+                setRedialBusy(true);
+                setErr(null);
+                void (async () => {
+                  try {
+                    const r = await fetchWithTimeout(`/api/campaigns/${id}/redial-no-answer`, {
+                      method: "POST",
+                    });
+                    const j = (await r.json().catch(() => ({}))) as {
+                      error?: string;
+                      eligible?: number;
+                      last_no_answer_redial_at?: string;
+                    };
+                    if (!r.ok) {
+                      setErr(j.error ?? "Σφάλμα επανεκκίνησης");
+                      showToast(j.error ?? "Σφάλμα επανεκκίνησης", "error");
+                      return;
+                    }
+                    const stamped = j.last_no_answer_redial_at ?? new Date().toISOString();
+                    setLastRedialAt(stamped);
+                    setRedialMode(true);
+                    if (typeof j.eligible === "number") setNoAnswerCount(j.eligible);
+                    showToast(
+                      `✓ Επανεκκινήθηκε — ${formatDateTimeAthens(stamped)}`,
+                      "success",
+                    );
+                    // Kick first redial batch
+                    const dial = await fetchWithTimeout(
+                      `/api/campaigns/${id}/dial-next?redial_no_answer=1`,
+                      { method: "POST" },
+                    );
+                    if (dial.ok) void load();
+                    void loadNoAnswerCount();
+                  } finally {
+                    setRedialBusy(false);
+                  }
+                })();
+              }}
+            >
+              {redialBusy
+                ? "Επανεκκίνηση…"
+                : lastRedialAt
+                  ? `📵 Επανεκκίνηση ξανά (${noAnswerCount} επαφές)`
+                  : `📵 Επανεκκίνηση «Δεν Απάντησε» (${noAnswerCount} επαφές)`}
+            </button>
+            {lastRedialAt ? (
+              <p className="text-xs text-emerald-600">
+                ✓ Τελευταία επανεκκίνηση: {formatDateTimeAthens(lastRedialAt)}
+                {redialMode ? " · λειτουργία επανεκκίνησης ενεργή" : ""}
+              </p>
+            ) : null}
+          </div>
         </section>
       )}
 
@@ -955,21 +1059,19 @@ export default function CampaignDetailPage() {
               Ζωντανό ταμπλό κλήσεων
             </h2>
             <span className="text-[10px] text-gray-500">
-              {live?.agent_name || c.retell_agent_name
-                ? `Agent: ${live?.agent_name || c.retell_agent_name}`
-                : ""}
-              {(live?.agent_name || c.retell_agent_name) && c?.status === "active" && isCallChannel
-                ? " · "
-                : ""}
-              {c?.status === "active" && isCallChannel ? "Ανανέωση κάθε 5 δευτ." : ""}
+              {(() => {
+                const agent = live?.agent_name || c.retell_agent_name;
+                if (!agent) return c?.status === "active" && isCallChannel ? "Ανανέωση κάθε 5 δευτ." : "";
+                return `Agent: ${agent}${c?.status === "active" && isCallChannel ? " · Ανανέωση κάθε 5 δευτ." : ""}`;
+              })()}
             </span>
           </div>
 
           <div className="mb-4">
             <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-gray-500">
               <span>Πρόοδος</span>
-              <span style={{ color: NAVY }}>
-                {callsMadeDisplay} / {contactTotalDisplay}
+              <span className="normal-case tracking-normal" style={{ color: NAVY }}>
+                {callsMadeDisplay} κλήθηκαν από {contactTotalDisplay}
               </span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
@@ -988,42 +1090,27 @@ export default function CampaignDetailPage() {
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <GoldKpi
-              label="Σημειώθηκαν"
-              value={String(s.total)}
-              valueColor={NAVY}
-            />
-            <GoldKpi
-              label="Θετικοί"
+              label="🔗 Συνδέθηκε με ΚΚ"
               value={String(s.positive)}
               valueColor="#16A34A"
             />
             <GoldKpi
-              label="Αρνητικοί"
+              label="✗ Δεν ήθελε σύνδεση"
               value={String(s.negative)}
               valueColor="#DC2626"
             />
             <GoldKpi
-              label="Δεν Απάντησαν"
+              label="📵 Δεν απάντησε"
               value={String(s.noAnswer)}
               valueColor="#EA580C"
             />
-            <div
-              className="rounded-lg border bg-white p-3"
-              style={{ borderColor: `${GOLD}55`, borderTopWidth: 3, borderTopColor: GOLD }}
-            >
-              <p
-                className="text-[9px] font-bold uppercase tracking-widest"
-                style={{ color: GOLD }}
-              >
-                Με αριθμό / {contactTotalDisplay || "—"}
-              </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: NAVY }}>
-                {callsMadeDisplay}
-              </p>
-              <p className="text-[10px] text-gray-500">κλήθηκαν</p>
-            </div>
+            <GoldKpi
+              label="Σύνολο κλήσεων"
+              value={String(s.total)}
+              valueColor={NAVY}
+            />
           </div>
         </section>
       )}

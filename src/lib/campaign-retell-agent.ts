@@ -1,5 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** Truncate raw Retell agent ids for display (first 8 chars + ellipsis). */
+export function truncateRetellAgentId(agentId: string): string {
+  const id = agentId.trim();
+  if (!id) return "";
+  if (id.length <= 8) return id;
+  return `${id.slice(0, 8)}...`;
+}
+
+/**
+ * Prefer catalog name; otherwise truncated id. Returns null when nothing to show.
+ */
+export function formatRetellAgentDisplay(
+  agentId: string | null | undefined,
+  catalogName: string | null | undefined,
+): string | null {
+  const id = (agentId ?? "").trim();
+  const name = (catalogName ?? "").trim();
+  if (name && name !== id) return name;
+  if (!id) return null;
+  return truncateRetellAgentId(id);
+}
+
 /** Agent id για Retell κλήσεις: από την καμπάνια, αλλιώς RETELL_AGENT_ID. */
 export async function getRetellAgentIdForCampaign(
   supabase: SupabaseClient,
@@ -18,7 +40,7 @@ export async function getRetellAgentIdForCampaign(
   return (process.env.RETELL_AGENT_ID ?? "").trim() || null;
 }
 
-/** Resolve display name from `retell_agents` catalog (falls back to agent id). */
+/** Resolve display name from `retell_agents` catalog (falls back to truncated agent id). */
 export async function resolveRetellAgentName(
   supabase: SupabaseClient,
   agentId: string | null | undefined,
@@ -34,7 +56,7 @@ export async function resolveRetellAgentName(
   if (row?.name?.trim()) {
     return { agent_id: id, agent_name: row.name.trim() };
   }
-  return { agent_id: id, agent_name: id };
+  return { agent_id: id, agent_name: truncateRetellAgentId(id) };
 }
 
 export async function getRetellAgentInfoForCampaign(

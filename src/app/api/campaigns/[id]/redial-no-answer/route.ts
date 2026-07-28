@@ -20,7 +20,20 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     }
     const { contactIds, error } = await getNoAnswerContactIds(crm.supabase, params.id);
     if (error) return NextResponse.json({ error }, { status: 400 });
-    return NextResponse.json({ count: contactIds.length, contact_ids: contactIds });
+
+    const { data: camp } = await crm.supabase
+      .from("campaigns")
+      .select("last_no_answer_redial_at")
+      .eq("id", params.id)
+      .maybeSingle();
+    const last =
+      (camp as { last_no_answer_redial_at?: string | null } | null)?.last_no_answer_redial_at ?? null;
+
+    return NextResponse.json({
+      count: contactIds.length,
+      contact_ids: contactIds,
+      last_no_answer_redial_at: last,
+    });
   } catch (e) {
     console.error("[api/campaigns/id/redial-no-answer GET]", e);
     return nextJsonError();
@@ -28,8 +41,8 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 /**
- * Ξεκινά επανεκκίνηση: καλεί dial-next λογική για no-answer subset (ένα batch).
- * Client μπορεί επίσης να καλέσει απευθείας dial-next?redial_no_answer=1 σε loop.
+ * Ξεκινά επανεκκίνηση: αποθηκεύει timestamp και επιβεβαιώνει eligibility.
+ * Client καλεί dial-next?redial_no_answer=1 για τις κλήσεις.
  */
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   try {
@@ -46,6 +59,14 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
         { status: 400 },
       );
     }
+
+    const stampedAt = new Date().toISOString();
+    const { error: updErr } = await crm.supabase
+      .from("campaigns")
+      .update({ last_no_answer_redial_at: stampedAt })
+      .eq("id", params.id);
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 });
+
     const { contactIds: nextBatch, error: qErr } = await getNextUncalledContactIds(
       crm.supabase,
       params.id,
@@ -53,10 +74,12 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       { redialNoAnswer: true },
     );
     if (qErr) return NextResponse.json({ error: qErr }, { status: 400 });
+
     return NextResponse.json({
       ok: true,
       eligible: contactIds.length,
       next_ready: nextBatch.length,
+      last_no_answer_redial_at: stampedAt,
       message: `Έτοιμοι για επανεκκίνηση: ${contactIds.length}. Χρησιμοποιήστε dial-next?redial_no_answer=1.`,
     });
   } catch (e) {

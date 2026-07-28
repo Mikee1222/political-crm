@@ -11,6 +11,8 @@ import {
   getRetellAgentInfoForCampaign,
   resolveRetellAgentName,
 } from "@/lib/campaign-retell-agent";
+import { fetchRowsInBatches } from "@/lib/supabase-batch";
+
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE_DEFAULT = 50;
@@ -27,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const { data: camp, error: campErr } = await supabase
       .from("campaigns")
       .select(
-        "id, name, created_at, started_at, description, status, channel, campaign_type_id, retell_agent_id, concurrent_lines, campaign_types ( id, name, color, retell_agent_id )",
+        "id, name, created_at, started_at, description, status, channel, campaign_type_id, retell_agent_id, concurrent_lines, last_no_answer_redial_at, campaign_types ( id, name, color, retell_agent_id )",
       )
       .eq("id", params.id)
       .single();
@@ -40,17 +42,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const pageSizeRaw = parseInt(sp.get("page_size") ?? String(PAGE_SIZE_DEFAULT), 10);
     const pageSize = Math.min(100, Math.max(1, Number.isFinite(pageSizeRaw) ? pageSizeRaw : PAGE_SIZE_DEFAULT));
 
-    const { data: assignedRows, error: assErr } = await supabase
-      .from("campaign_contacts")
-      .select(
-        "contact_id, added_at, contacts ( id, first_name, last_name, phone, phone2, landline )",
-      )
-      .eq("campaign_id", params.id)
-      .order("added_at", { ascending: true });
-    if (assErr) {
-      return NextResponse.json({ error: assErr.message }, { status: 400 });
-    }
-
     type ContactShape = {
       id: string;
       first_name: string;
@@ -60,12 +51,29 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       landline: string | null;
     };
 
-    const allAssigned = (assignedRows ?? []).map((row: unknown) => {
-      const r = row as {
-        contact_id: string;
-        added_at: string;
-        contacts: ContactShape | ContactShape[] | null;
-      };
+    type AssignedRowRaw = {
+      contact_id: string;
+      added_at: string;
+      contacts: ContactShape | ContactShape[] | null;
+    };
+
+    const { rows: assignedRows, error: assErr } = await fetchRowsInBatches<AssignedRowRaw>(
+      (from, to) =>
+        supabase
+          .from("campaign_contacts")
+          .select(
+            "contact_id, added_at, contacts ( id, first_name, last_name, phone, phone2, landline )",
+          )
+          .eq("campaign_id", params.id)
+          .order("added_at", { ascending: true })
+          .order("contact_id", { ascending: true })
+          .range(from, to),
+    );
+    if (assErr) {
+      return NextResponse.json({ error: assErr }, { status: 400 });
+    }
+
+    const allAssigned = assignedRows.map((r) => {
       const c = Array.isArray(r.contacts) ? r.contacts[0] : r.contacts;
       return {
         contact_id: r.contact_id,
@@ -79,13 +87,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       contactHasAnyCampaignPhone(row.contact),
     );
 
-    const { data: allCallMeta } = await supabase
-      .from("calls")
-      .select("contact_id, outcome")
-      .eq("campaign_id", params.id);
+    const { rows: allCallMeta, error: callMetaErr } = await fetchRowsInBatches<{
+      contact_id: string | null;
+      outcome: string | null;
+    }>((from, to) =>
+      supabase
+        .from("calls")
+        .select("contact_id, outcome")
+        .eq("campaign_id", params.id)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    if (callMetaErr) {
+      return NextResponse.json({ error: callMetaErr }, { status: 400 });
+    }
+
     const outcomesByContact = new Map<string, string[]>();
     const callCountByContact = new Map<string, number>();
-    for (const r of (allCallMeta ?? []) as Array<{ contact_id: string | null; outcome: string | null }>) {
+    for (const r of allCallMeta) {
       if (!r.contact_id) continue;
       callCountByContact.set(r.contact_id, (callCountByContact.get(r.contact_id) ?? 0) + 1);
       const list = outcomesByContact.get(r.contact_id) ?? [];
@@ -123,20 +142,37 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const rollup = await getCampaignRollup(supabase, params.id);
     const outcome = sp.get("outcome");
-    let query = supabase
-      .from("calls")
-      .select(
-        "id, called_at, outcome, duration_seconds, transferred_to_politician, contact_id, contacts(phone, phone2, landline, first_name, last_name)",
-      )
-      .eq("campaign_id", params.id)
-      .order("called_at", { ascending: false });
-    if (outcome) query = query.eq("outcome", outcome);
-    const { data, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    const calls = (data ?? []).map((row) => {
-      const cont = (row as { contacts: unknown }).contacts;
+
+    type CallLogRow = {
+      id: string;
+      called_at: string | null;
+      outcome: string | null;
+      duration_seconds: number | null;
+      transferred_to_politician: boolean | null;
+      contact_id: string;
+      contacts: unknown;
+    };
+
+    const { rows: callLogRows, error: callLogErr } = await fetchRowsInBatches<CallLogRow>(
+      (from, to) => {
+        let q = supabase
+          .from("calls")
+          .select(
+            "id, called_at, outcome, duration_seconds, transferred_to_politician, contact_id, contacts(phone, phone2, landline, first_name, last_name)",
+          )
+          .eq("campaign_id", params.id)
+          .order("called_at", { ascending: false })
+          .order("id", { ascending: false });
+        if (outcome) q = q.eq("outcome", outcome);
+        return q.range(from, to);
+      },
+    );
+    if (callLogErr) return NextResponse.json({ error: callLogErr }, { status: 400 });
+
+    const calls = callLogRows.map((row) => {
+      const cont = row.contacts;
       const contact = Array.isArray(cont) ? cont[0] : cont;
-      return { ...(row as object), contacts: contact ?? null };
+      return { ...row, contacts: contact ?? null };
     });
 
     const campRow = { ...(camp as Record<string, unknown>) };
@@ -166,6 +202,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         campaign_type: typeFlat ?? null,
         retell_agent_name: agentResolved.agent_name,
         retell_agent_id_resolved: agentResolved.agent_id,
+        last_no_answer_redial_at:
+          (camp as { last_no_answer_redial_at?: string | null }).last_no_answer_redial_at ?? null,
       },
       stats: rollup.stats,
       progress: Math.round(rollup.progress * 10) / 10,

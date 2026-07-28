@@ -5,6 +5,7 @@ import {
   isNoAnswerRetellOutcome,
   isPositiveRetellOutcome,
 } from "@/lib/retell-call-outcomes";
+import { fetchRowsInBatches } from "@/lib/supabase-batch";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -39,20 +40,33 @@ function unwrapContact(
   return Array.isArray(c) ? c[0] ?? null : c;
 }
 
+/** Load all campaign_contacts (+ nested phone fields), paginated past PostgREST 1000 cap. */
+export async function fetchAllCampaignContactPhoneRows(
+  supabase: SupabaseClient,
+  campaignId: string,
+): Promise<{ rows: AssignedPhoneRow[]; error: string | null }> {
+  return fetchRowsInBatches<AssignedPhoneRow>((from, to) =>
+    supabase
+      .from("campaign_contacts")
+      .select("contact_id, contacts ( phone, phone2, landline )")
+      .eq("campaign_id", campaignId)
+      .order("added_at", { ascending: true })
+      .order("contact_id", { ascending: true })
+      .range(from, to),
+  );
+}
+
 export async function getCampaignPhoneTotals(
   supabase: SupabaseClient,
   campaignId: string,
 ): Promise<CampaignPhoneTotals> {
-  const { data: assigned, error } = await supabase
-    .from("campaign_contacts")
-    .select("contact_id, contacts ( phone, phone2, landline )")
-    .eq("campaign_id", campaignId);
+  const { rows: assigned, error } = await fetchAllCampaignContactPhoneRows(supabase, campaignId);
   if (error) {
     return { withPhone: 0, withoutPhone: 0, assignedCount: 0 };
   }
   let withPhone = 0;
   let withoutPhone = 0;
-  for (const row of (assigned ?? []) as AssignedPhoneRow[]) {
+  for (const row of assigned) {
     if (contactHasAnyCampaignPhone(unwrapContact(row.contacts))) withPhone += 1;
     else withoutPhone += 1;
   }
@@ -67,15 +81,19 @@ export async function getCampaignRollup(
   supabase: SupabaseClient,
   campaignId: string,
 ) {
-  const { data: callRows } = await supabase
-    .from("calls")
-    .select("outcome, contact_id, duration_seconds")
-    .eq("campaign_id", campaignId);
-  const calls = (callRows ?? []) as Array<{
+  const { rows: callRows, error: callErr } = await fetchRowsInBatches<{
     outcome: string | null;
     contact_id: string;
     duration_seconds: number | null;
-  }>;
+  }>((from, to) =>
+    supabase
+      .from("calls")
+      .select("outcome, contact_id, duration_seconds")
+      .eq("campaign_id", campaignId)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const calls = callErr ? [] : callRows;
   const stats = tallyOutcomes(calls);
   const distinctContactIds = new Set(calls.map((c) => c.contact_id).filter(Boolean));
   const callsMade = distinctContactIds.size;

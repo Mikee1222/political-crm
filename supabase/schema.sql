@@ -1361,6 +1361,9 @@ alter table public.campaigns
 alter table public.campaigns
   add column if not exists concurrent_lines integer not null default 3;
 
+alter table public.campaigns
+  add column if not exists last_no_answer_redial_at timestamptz;
+
 create index if not exists idx_campaigns_campaign_type_id on public.campaigns (campaign_type_id);
 
 alter table public.campaign_types enable row level security;
