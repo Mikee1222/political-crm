@@ -108,12 +108,24 @@ type HeadData = {
   calls: CallRow[];
 };
 
+type OpenRequestChip = {
+  id: string;
+  title: string | null;
+  category: string | null;
+  status: string | null;
+};
+
 type OngoingCall = {
   call_id: string;
   contact_id: string | null;
   contact_name: string | null;
   phone: string | null;
   duration_so_far_sec: number | null;
+  started_at: string | null;
+  call_phase: "ringing" | "connected";
+  transferred_to_kk: boolean;
+  open_requests_count: number;
+  open_requests: OpenRequestChip[];
 };
 
 type LastCompleted = {
@@ -125,6 +137,8 @@ type LastCompleted = {
   outcome_label: string;
   called_at: string | null;
   duration_seconds: number | null;
+  open_requests_count: number;
+  open_requests: OpenRequestChip[];
 };
 
 type LiveSnapshot = {
@@ -135,6 +149,7 @@ type LiveSnapshot = {
   agent_name: string | null;
   ongoing_calls: OngoingCall[];
   last_completed: LastCompleted[];
+  stats: OutcomeStats | null;
   progress: number | null;
   callsMade: number | null;
   contactTotal: number | null;
@@ -142,6 +157,10 @@ type LiveSnapshot = {
   estimatedRemainingSec: number | null;
   estimated_completion_at: string | null;
 };
+
+const GOLD = "#D4AF37";
+const CREAM = "#FDFAF5";
+const NAVY = "#0A1628";
 
 const tableTh = "text-left text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]";
 
@@ -164,6 +183,105 @@ function formatEta(sec: number | null | undefined): string {
   return `~${sec}δ`;
 }
 
+function normalizeOpenRequests(raw: unknown): OpenRequestChip[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      const r = item as Partial<OpenRequestChip>;
+      if (!r || typeof r.id !== "string") return null;
+      return {
+        id: r.id,
+        title: r.title ?? null,
+        category: r.category ?? null,
+        status: r.status ?? null,
+      };
+    })
+    .filter((x): x is OpenRequestChip => x != null)
+    .slice(0, 3);
+}
+
+function normalizeOngoingCalls(raw: unknown): OngoingCall[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const o = item as Partial<OngoingCall>;
+    const phase = o.call_phase === "connected" ? "connected" : "ringing";
+    return {
+      call_id: String(o.call_id ?? ""),
+      contact_id: o.contact_id ?? null,
+      contact_name: o.contact_name ?? null,
+      phone: o.phone ?? null,
+      duration_so_far_sec:
+        typeof o.duration_so_far_sec === "number" ? o.duration_so_far_sec : null,
+      started_at: o.started_at ?? null,
+      call_phase: phase,
+      transferred_to_kk: Boolean(o.transferred_to_kk),
+      open_requests_count:
+        typeof o.open_requests_count === "number" ? o.open_requests_count : 0,
+      open_requests: normalizeOpenRequests(o.open_requests),
+    };
+  });
+}
+
+function normalizeLastCompleted(raw: unknown): LastCompleted[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const lc = item as Partial<LastCompleted>;
+    return {
+      id: String(lc.id ?? ""),
+      contact_id: String(lc.contact_id ?? ""),
+      contact_name: lc.contact_name ?? null,
+      phone: lc.phone ?? null,
+      outcome: lc.outcome ?? null,
+      outcome_label: lc.outcome_label ?? retellOutcomeLabel(lc.outcome ?? null),
+      called_at: lc.called_at ?? null,
+      duration_seconds:
+        typeof lc.duration_seconds === "number" ? lc.duration_seconds : null,
+      open_requests_count:
+        typeof lc.open_requests_count === "number" ? lc.open_requests_count : 0,
+      open_requests: normalizeOpenRequests(lc.open_requests),
+    };
+  });
+}
+
+/** Compact Greek relative time: «πριν 2λ» */
+function formatAgoCompact(iso: string | null | undefined, nowMs: number): string {
+  if (!iso) return "—";
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return "—";
+  const sec = Math.max(0, Math.floor((nowMs - then) / 1000));
+  if (sec < 60) return `πριν ${sec}δ`;
+  const m = Math.floor(sec / 60);
+  if (m < 60) return `πριν ${m}λ`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `πριν ${h}ώ`;
+  return `πριν ${Math.floor(h / 24)}η`;
+}
+
+function formatDurationGreekFull(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const s = Math.floor(seconds);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}λ ${r}δ`;
+}
+
+function liveCallElapsedSec(
+  call: OngoingCall,
+  nowMs: number,
+): number | null {
+  if (call.started_at) {
+    const start = Date.parse(call.started_at);
+    if (Number.isFinite(start)) return Math.max(0, Math.floor((nowMs - start) / 1000));
+  }
+  return call.duration_so_far_sec;
+}
+
+function requestChipLabel(r: OpenRequestChip): string {
+  const label = (r.category || r.title || "Αίτημα").trim();
+  const short = label.length > 18 ? `${label.slice(0, 17)}…` : label;
+  return `📋 ${short}`;
+}
+
 export default function CampaignDetailPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
@@ -174,6 +292,7 @@ export default function CampaignDetailPage() {
   const [err, setErr] = useState<string | null>(null);
   const [live, setLive] = useState<LiveSnapshot | null>(null);
   const [liveErr, setLiveErr] = useState<string | null>(null);
+  const [liveNowMs, setLiveNowMs] = useState(() => Date.now());
   const [addOpen, setAddOpen] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [addResults, setAddResults] = useState<
@@ -355,8 +474,9 @@ export default function CampaignDetailPage() {
           typeof j.concurrent_lines === "number" ? j.concurrent_lines : CONCURRENT_LINES_DEFAULT,
         ),
         agent_name: j.agent_name ?? null,
-        ongoing_calls: (j.ongoing_calls ?? []) as OngoingCall[],
-        last_completed: (j.last_completed ?? []) as LastCompleted[],
+        ongoing_calls: normalizeOngoingCalls(j.ongoing_calls),
+        last_completed: normalizeLastCompleted(j.last_completed),
+        stats: (j.stats as OutcomeStats | null | undefined) ?? null,
         progress: j.progress ?? null,
         callsMade: j.callsMade ?? null,
         contactTotal: j.contactTotal ?? null,
@@ -372,6 +492,13 @@ export default function CampaignDetailPage() {
       clearInterval(t);
     };
   }, [id, campStatus, isCallChannel]);
+
+  // 1s tick for live duration timers + «πριν Νλ» freshness
+  useEffect(() => {
+    if (campStatus !== "active" || !isCallChannel) return;
+    const t = setInterval(() => setLiveNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [campStatus, isCallChannel]);
 
   // Auto-dial: every ~10s if lines free and contacts remain
   useEffect(() => {
@@ -438,7 +565,7 @@ export default function CampaignDetailPage() {
   }, [addOpen, addSearch]);
 
   const c = data?.campaign;
-  const s = data?.stats;
+  const s = live?.stats ?? data?.stats;
   const hasPool = (data?.contactTotal ?? 0) > 0;
   const barPct = hasPool
     ? Math.min(100, live?.progress ?? data?.progress ?? 0)
@@ -446,6 +573,8 @@ export default function CampaignDetailPage() {
       ? 100
       : 0;
   const etaSec = live?.estimatedRemainingSec ?? data?.estimatedRemainingSec ?? null;
+  const callsMadeDisplay = live?.callsMade ?? data?.callsMade ?? 0;
+  const contactTotalDisplay = live?.contactTotal ?? data?.contactTotal ?? 0;
 
   if (!id) {
     return <p className="text-sm text-[var(--text-secondary)]">Μη έγκυρο id.</p>;
@@ -700,130 +829,113 @@ export default function CampaignDetailPage() {
 
       {c?.status === "active" && isCallChannel && (
         <section
-          className="rounded-2xl border border-[#1e5fa8]/35 bg-gradient-to-r from-[#0a1628] to-[#0F1E35] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.35)] sm:p-5"
+          className="rounded-2xl border bg-white p-4 sm:p-5"
+          style={{ borderColor: GOLD }}
           aria-live="polite"
         >
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-[#C9A84C]">
-              Ζωντανό ταμπλό κλήσεων
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2
+              className="text-sm font-bold uppercase tracking-widest"
+              style={{ color: GOLD }}
+            >
+              Live κλήσεις
             </h2>
-            <span className="text-[10px] text-[var(--text-muted)]">
-              {live?.agent_name ? `Agent: ${live.agent_name} · ` : ""}
-              Ανανέωση κάθε 5 δευτ.
+            <span className="text-[10px] text-gray-500">
+              {live != null ? live.ongoing_count : "—"}/
+              {clampConcurrentLines(c.concurrent_lines)} γραμμές
               {autoDial ? " · Αυτόματη συνέχεια ON" : ""}
             </span>
           </div>
-          {liveErr && <p className="mb-2 text-xs text-amber-200">{liveErr}</p>}
-
-          <div className="mb-4">
-            <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-              <span>Πρόοδος</span>
-              <span>
-                {live?.callsMade ?? data?.callsMade ?? 0} / {live?.contactTotal ?? data?.contactTotal ?? 0}
-              </span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#050D1A] ring-1 ring-[#C9A84C]/15">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[#1e5fa8] to-[#C9A84C]"
-                style={{ width: `${barPct}%` }}
-              />
-            </div>
-            <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-              Εκτιμ. ολοκλήρωση: {formatEta(etaSec)}
-              {live?.estimated_completion_at
-                ? ` (${formatDateTimeAthens(live.estimated_completion_at)})`
-                : ""}
-            </p>
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-[#050D1A]/40 px-3 py-3 sm:px-4">
-            <p className="text-base font-semibold tabular-nums text-emerald-200 sm:text-lg">
-              {live != null ? live.ongoing_count : "—"}/
-              {clampConcurrentLines(c.concurrent_lines)}
-              <span className="ml-2 text-sm font-normal text-[var(--text-secondary)]">
-                γραμμές ενεργές
-              </span>
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-emerald-500/25 bg-[#050D1A]/50 p-3">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">
-                Ενεργές κλήσεις
-              </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-300">
-                {live?.ongoing_count ?? "—"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#C9A84C]/25 bg-[#050D1A]/50 p-3">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">
-                Κλήσεις σήμερα
-              </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--text-primary)]">
-                {live?.called_today != null ? live.called_today : "—"}
-              </p>
-              <p className="text-[10px] text-[var(--text-muted)]">Ευρώπη/Αθήνα</p>
-            </div>
-            <div className="rounded-xl border border-sky-500/25 bg-[#050D1A]/50 p-3">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-subtitle)]">
-                Ποσοστό επιτυχίας (σήμερα)
-              </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-sky-200">
-                {live?.success_rate_today_pct != null ? `${live.success_rate_today_pct}%` : "—"}
-              </p>
-            </div>
-          </div>
-
-          {(live?.ongoing_calls?.length ?? 0) > 0 && (
-            <div className="mt-4">
-              <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">
-                Τώρα καλούνται
-              </h3>
-              <ul className="space-y-1.5">
-                {live!.ongoing_calls.map((oc) => (
-                  <li
-                    key={oc.call_id || `${oc.contact_id}-${oc.phone}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/20 bg-[#050D1A]/40 px-3 py-2 text-sm"
-                  >
-                    <span className="font-medium text-[var(--text-primary)]">
-                      {oc.contact_name || "—"}
-                    </span>
-                    <span className="font-mono text-xs text-[var(--text-secondary)]">
-                      {oc.phone || "—"}
-                    </span>
-                    <span className="tabular-nums text-xs text-emerald-300">
-                      {formatDurationGreek(oc.duration_so_far_sec)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {liveErr && (
+            <p className="mb-2 text-xs text-amber-700">{liveErr}</p>
           )}
-
-          {(live?.last_completed?.length ?? 0) > 0 && (
-            <div className="mt-4">
-              <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">
-                Τελευταίες 5 ολοκληρωμένες
-              </h3>
-              <ul className="space-y-1.5">
-                {live!.last_completed.map((lc) => (
-                  <li
-                    key={lc.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[#050D1A]/30 px-3 py-2 text-sm"
+          {(live?.ongoing_calls?.length ?? 0) === 0 ? (
+            <div
+              className="flex items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-sm text-gray-500"
+              style={{ borderColor: `${GOLD}66`, background: CREAM }}
+            >
+              <span
+                className="inline-block h-2 w-2 animate-pulse rounded-full"
+                style={{ backgroundColor: GOLD }}
+                aria-hidden
+              />
+              Καμία ενεργή κλήση αυτή τη στιγμή
+            </div>
+          ) : (
+            <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+              {live!.ongoing_calls.map((oc) => {
+                const elapsed = liveCallElapsedSec(oc, liveNowMs);
+                const phase =
+                  oc.transferred_to_kk || (elapsed != null && elapsed >= 8)
+                    ? "connected"
+                    : oc.call_phase;
+                const pulseColor = phase === "connected" ? "#16A34A" : GOLD;
+                return (
+                  <article
+                    key={oc.call_id || `${oc.contact_id}-${oc.phone}`}
+                    className="w-[280px] shrink-0 rounded-xl border bg-white p-3 shadow-sm"
+                    style={{ borderColor: GOLD }}
                   >
-                    <Link
-                      href={`/contacts/${lc.contact_id}`}
-                      className="font-medium text-[var(--text-primary)] hover:text-[#C9A84C]"
-                    >
-                      {lc.contact_name || "—"}
-                    </Link>
-                    <OutcomePill o={lc.outcome} />
-                    <span className="text-xs text-[var(--text-muted)]">
-                      {formatDurationGreek(lc.duration_seconds)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold" style={{ color: NAVY }}>
+                          {oc.contact_id ? (
+                            <Link
+                              href={`/contacts/${oc.contact_id}`}
+                              className="hover:underline"
+                              style={{ color: NAVY }}
+                            >
+                              {oc.contact_name || "—"}
+                            </Link>
+                          ) : (
+                            oc.contact_name || "—"
+                          )}
+                        </p>
+                        <p className="mt-0.5 font-mono text-xs text-gray-500">
+                          {oc.phone || "—"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <span
+                          className="inline-block h-2.5 w-2.5 animate-pulse rounded-full"
+                          style={{ backgroundColor: pulseColor }}
+                          title={phase === "connected" ? "Συνδεδεμένη" : "Κουδουνίζει"}
+                          aria-hidden
+                        />
+                        <span
+                          className="tabular-nums text-xs font-semibold"
+                          style={{ color: NAVY }}
+                        >
+                          {formatDurationGreekFull(elapsed)}
+                        </span>
+                      </div>
+                    </div>
+                    {oc.transferred_to_kk && (
+                      <span className="mt-2 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-[#16A34A] ring-1 ring-emerald-200">
+                        🔗 Συνδέθηκε με ΚΚ
+                      </span>
+                    )}
+                    {(oc.open_requests?.length ?? 0) > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {oc.open_requests.map((r) => (
+                          <span
+                            key={r.id}
+                            className="inline-flex max-w-full truncate rounded-md bg-[#FDFAF5] px-1.5 py-0.5 text-[10px] font-medium text-gray-700 ring-1 ring-[#D4AF37]/40"
+                            title={r.title ?? r.category ?? ""}
+                          >
+                            {requestChipLabel(r)}
+                          </span>
+                        ))}
+                        {oc.open_requests_count > oc.open_requests.length && (
+                          <span className="text-[10px] text-gray-500">
+                            +{oc.open_requests_count - oc.open_requests.length}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -831,30 +943,137 @@ export default function CampaignDetailPage() {
 
       {c && s && data && (
         <section
-          className="relative overflow-hidden rounded-2xl border border-[var(--border)] p-4 shadow-[0_4px_32px_rgba(0,0,0,0.45)] sm:p-5"
-          style={{ background: "linear-gradient(165deg, #0F1E35 0%, #050D1A 100%)" }}
+          className="relative overflow-hidden rounded-2xl border p-4 sm:p-5"
+          style={{ background: CREAM, borderColor: GOLD }}
+          aria-live="polite"
         >
-          <div className="relative grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <KpiBox label="Σημειώθηκαν" value={String(s.total)} sub="κλήση/εις" color="text-white" border="border-slate-500/20" />
-            <KpiBox label="Θετικοί" value={String(s.positive)} sub="αποτέλεσμα" color="text-emerald-300" border="border-emerald-500/20" />
-            <KpiBox label="Αρνητικοί" value={String(s.negative)} sub="αποτέλεσμα" color="text-rose-300" border="border-rose-500/20" />
-            <KpiBox label="Δεν Απάντησαν" value={String(s.noAnswer)} sub="αποτέλεσμα" color="text-amber-200" border="border-amber-500/20" />
-            <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-[#C9A84C]">Με αριθμό</p>
-              <p className="text-lg font-bold text-[var(--text-primary)]">
-                {data.callsMade}{" "}
-                <span className="text-sm font-normal text-[var(--text-subtitle)]">
-                  / {data.contactTotal || "—"}
-                </span>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+            <h2
+              className="border-l-[3px] pl-3 text-sm font-bold uppercase tracking-widest"
+              style={{ color: GOLD, borderLeftColor: GOLD }}
+            >
+              Ζωντανό ταμπλό κλήσεων
+            </h2>
+            <span className="text-[10px] text-gray-500">
+              {live?.agent_name || c.retell_agent_name
+                ? `Agent: ${live?.agent_name || c.retell_agent_name}`
+                : ""}
+              {(live?.agent_name || c.retell_agent_name) && c?.status === "active" && isCallChannel
+                ? " · "
+                : ""}
+              {c?.status === "active" && isCallChannel ? "Ανανέωση κάθε 5 δευτ." : ""}
+            </span>
+          </div>
+
+          <div className="mb-4">
+            <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-gray-500">
+              <span>Πρόοδος</span>
+              <span style={{ color: NAVY }}>
+                {callsMadeDisplay} / {contactTotalDisplay}
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+              <div
+                className="h-full rounded-full transition-[width] duration-500"
+                style={{ width: `${barPct}%`, backgroundColor: GOLD }}
+              />
+            </div>
+            {c.status === "active" && isCallChannel && (
+              <p className="mt-1 text-[10px] text-gray-500">
+                Εκτιμ. ολοκλήρωση: {formatEta(etaSec)}
+                {live?.estimated_completion_at
+                  ? ` (${formatDateTimeAthens(live.estimated_completion_at)})`
+                  : ""}
               </p>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[#050D1A] ring-1 ring-[#C9A84C]/15">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#1e5fa8] to-[#C9A84C]"
-                  style={{ width: `${barPct}%` }}
-                />
-              </div>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <GoldKpi
+              label="Σημειώθηκαν"
+              value={String(s.total)}
+              valueColor={NAVY}
+            />
+            <GoldKpi
+              label="Θετικοί"
+              value={String(s.positive)}
+              valueColor="#16A34A"
+            />
+            <GoldKpi
+              label="Αρνητικοί"
+              value={String(s.negative)}
+              valueColor="#DC2626"
+            />
+            <GoldKpi
+              label="Δεν Απάντησαν"
+              value={String(s.noAnswer)}
+              valueColor="#EA580C"
+            />
+            <div
+              className="rounded-lg border bg-white p-3"
+              style={{ borderColor: `${GOLD}55`, borderTopWidth: 3, borderTopColor: GOLD }}
+            >
+              <p
+                className="text-[9px] font-bold uppercase tracking-widest"
+                style={{ color: GOLD }}
+              >
+                Με αριθμό / {contactTotalDisplay || "—"}
+              </p>
+              <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: NAVY }}>
+                {callsMadeDisplay}
+              </p>
+              <p className="text-[10px] text-gray-500">κλήθηκαν</p>
             </div>
           </div>
+        </section>
+      )}
+
+      {c?.status === "active" && isCallChannel && (
+        <section
+          className="rounded-2xl border bg-white p-4 sm:p-5"
+          style={{ borderColor: GOLD }}
+        >
+          <h2
+            className="mb-3 text-sm font-bold uppercase tracking-widest"
+            style={{ color: GOLD }}
+          >
+            Τελευταίες κλήσεις
+          </h2>
+          {(live?.last_completed?.length ?? 0) === 0 ? (
+            <p className="text-sm text-gray-500">Καμία ολοκληρωμένη κλήση ακόμα.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {live!.last_completed.map((lc) => (
+                <li
+                  key={lc.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2.5 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0 flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/contacts/${lc.contact_id}`}
+                      className="font-semibold hover:underline"
+                      style={{ color: NAVY }}
+                    >
+                      {lc.contact_name || "—"}
+                    </Link>
+                    <OutcomePill o={lc.outcome} light />
+                    {lc.open_requests_count > 0 && (
+                      <span className="text-[10px] font-medium text-gray-500">
+                        📋 {lc.open_requests_count} αίτημ
+                        {lc.open_requests_count === 1 ? "α" : "ατα"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span className="tabular-nums" style={{ color: NAVY }}>
+                      {formatDurationGreekFull(lc.duration_seconds)}
+                    </span>
+                    <span>{formatAgoCompact(lc.called_at, liveNowMs)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
@@ -1237,33 +1456,31 @@ function PhoneStack({
   );
 }
 
-function KpiBox({
+function GoldKpi({
   label,
   value,
-  sub,
-  color,
-  border,
+  valueColor,
 }: {
   label: string;
   value: string;
-  sub: string;
-  color: string;
-  border: string;
+  valueColor: string;
 }) {
   return (
-    <div className={["rounded-lg border p-2.5 sm:p-3", border, "bg-[#050D1A]/30"].join(" ")}>
-      <p className="text-[8px] font-bold uppercase leading-tight tracking-wider text-[var(--text-subtitle)] sm:text-[9px] sm:tracking-widest">
-        {label}
+    <div
+      className="rounded-lg border bg-white p-3"
+      style={{ borderColor: `${GOLD}55`, borderTopWidth: 3, borderTopColor: GOLD }}
+    >
+      <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: valueColor }}>
+        {value}
       </p>
-      <p className={["mt-0.5 text-xl font-bold sm:text-2xl", color].join(" ")}>{value}</p>
-      <p className="text-[8px] text-[var(--text-subtitle)] sm:text-[9px]">{sub}</p>
     </div>
   );
 }
 
-function OutcomePill({ o }: { o: string | null }) {
+function OutcomePill({ o, light = false }: { o: string | null; light?: boolean }) {
   const t = o ?? "—";
-  const map: Record<string, { bg: string; text: string; ring: string; icon: typeof CheckCircle2 }> = {
+  const darkMap: Record<string, { bg: string; text: string; ring: string; icon: typeof CheckCircle2 }> = {
     Positive: { bg: "bg-emerald-500/15", text: "text-emerald-200", ring: "ring-emerald-500/25", icon: CheckCircle2 },
     Negative: { bg: "bg-rose-500/15", text: "text-rose-200", ring: "ring-rose-500/25", icon: XCircle },
     "No Answer": { bg: "bg-amber-500/15", text: "text-amber-200", ring: "ring-amber-500/25", icon: PhoneOff },
@@ -1287,10 +1504,35 @@ function OutcomePill({ o }: { o: string | null }) {
     },
     Pending: { bg: "bg-sky-500/15", text: "text-sky-200", ring: "ring-sky-500/25", icon: Clock },
   };
+  const lightMap: Record<string, { bg: string; text: string; ring: string; icon: typeof CheckCircle2 }> = {
+    Positive: { bg: "bg-emerald-50", text: "text-[#16A34A]", ring: "ring-emerald-200", icon: CheckCircle2 },
+    Negative: { bg: "bg-red-50", text: "text-[#DC2626]", ring: "ring-red-200", icon: XCircle },
+    "No Answer": { bg: "bg-orange-50", text: "text-[#EA580C]", ring: "ring-orange-200", icon: PhoneOff },
+    "Συνδέθηκε με ΚΚ": {
+      bg: "bg-emerald-50",
+      text: "text-[#16A34A]",
+      ring: "ring-emerald-200",
+      icon: CheckCircle2,
+    },
+    "Δεν ήθελε σύνδεση με ΚΚ": {
+      bg: "bg-red-50",
+      text: "text-[#DC2626]",
+      ring: "ring-red-200",
+      icon: XCircle,
+    },
+    "Δεν απάντησε": {
+      bg: "bg-orange-50",
+      text: "text-[#EA580C]",
+      ring: "ring-orange-200",
+      icon: PhoneOff,
+    },
+    Pending: { bg: "bg-sky-50", text: "text-sky-700", ring: "ring-sky-200", icon: Clock },
+  };
+  const map = light ? lightMap : darkMap;
   const c = map[t] ?? {
-    bg: "bg-slate-500/10",
-    text: "text-[#E2E8F0]",
-    ring: "ring-slate-500/20",
+    bg: light ? "bg-slate-50" : "bg-slate-500/10",
+    text: light ? "text-slate-700" : "text-[#E2E8F0]",
+    ring: light ? "ring-slate-200" : "ring-slate-500/20",
     icon: Clock,
   };
   const Icon = c.icon;

@@ -10,15 +10,33 @@ import { isSameEuropeAthensCalendarDay } from "@/lib/campaign-athens-day";
 import { nextJsonError } from "@/lib/api-resilience";
 import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
 import {
+  detectRetellTransfer,
   isConcludedRetellOutcome,
   isPositiveRetellOutcome,
   retellOutcomeLabel,
 } from "@/lib/retell-call-outcomes";
 import { getCampaignRollup } from "@/lib/campaign-stats";
 import { pickCampaignDialPhone } from "@/lib/campaign-contact-phone";
+import {
+  getRequestStatusQueryValues,
+  REQUEST_STATUS_OPEN,
+} from "@/lib/request-statuses";
+
 export const dynamic = "force-dynamic";
 
 type RetellListCall = Record<string, unknown>;
+
+type OpenRequestChip = {
+  id: string;
+  title: string | null;
+  category: string | null;
+  status: string | null;
+};
+
+type ContactOpenRequests = {
+  open_requests_count: number;
+  open_requests: OpenRequestChip[];
+};
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -40,6 +58,62 @@ function callStartMs(call: RetellListCall): number | null {
     return Number.isFinite(t) ? t : null;
   }
   return null;
+}
+
+/** Ringing vs connected heuristic for live Retell phone calls. */
+function resolveCallPhase(
+  durationSec: number | null,
+  transferred: boolean,
+): "ringing" | "connected" {
+  if (transferred) return "connected";
+  if (durationSec == null) return "ringing";
+  return durationSec < 8 ? "ringing" : "connected";
+}
+
+async function fetchOpenRequestsByContactIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contactIds: string[],
+): Promise<Map<string, ContactOpenRequests>> {
+  const map = new Map<string, ContactOpenRequests>();
+  const unique = [...new Set(contactIds.filter(Boolean))];
+  for (const id of unique) {
+    map.set(id, { open_requests_count: 0, open_requests: [] });
+  }
+  if (unique.length === 0) return map;
+
+  const openStatuses = getRequestStatusQueryValues(REQUEST_STATUS_OPEN);
+  const { data: rows, error } = await supabase
+    .from("requests")
+    .select("id, title, category, status, contact_id, created_at")
+    .in("contact_id", unique)
+    .in("status", openStatuses)
+    .order("created_at", { ascending: false });
+
+  if (error || !rows) return map;
+
+  type ReqRow = {
+    id: string;
+    title: string | null;
+    category: string | null;
+    status: string | null;
+    contact_id: string;
+  };
+
+  for (const row of rows as ReqRow[]) {
+    const bucket = map.get(row.contact_id);
+    if (!bucket) continue;
+    bucket.open_requests_count += 1;
+    if (bucket.open_requests.length < 3) {
+      bucket.open_requests.push({
+        id: row.id,
+        title: row.title,
+        category: row.category,
+        status: row.status,
+      });
+    }
+  }
+  return map;
 }
 
 export async function GET(request: NextRequest) {
@@ -100,7 +174,7 @@ export async function GET(request: NextRequest) {
 
     // Filter ongoing to this campaign when metadata present
     const now = Date.now();
-    const ongoingEnriched = list
+    const ongoingBase = list
       .map((call) => {
         const meta = asRecord(call.metadata) ?? {};
         const callCampaign = String(meta.campaign_id ?? "").trim();
@@ -115,28 +189,35 @@ export async function GET(request: NextRequest) {
         const start = callStartMs(call);
         const duration_so_far_sec =
           start != null ? Math.max(0, Math.floor((now - start) / 1000)) : null;
+        const transferred_to_kk = detectRetellTransfer(call);
+        const call_phase = resolveCallPhase(duration_so_far_sec, transferred_to_kk);
         return {
           call_id: String(call.call_id ?? call.id ?? ""),
           contact_id: contactId,
           contact_name: name,
           phone: toNumber,
           duration_so_far_sec,
+          started_at: start != null ? new Date(start).toISOString() : null,
+          call_phase,
+          transferred_to_kk,
           campaign_id: callCampaign || null,
+          open_requests_count: 0,
+          open_requests: [] as OpenRequestChip[],
         };
       })
       .filter((x): x is NonNullable<typeof x> => x != null);
 
     // Fill missing names from CRM for campaign calls
     if (campaignId) {
-      const needIds = ongoingEnriched
+      const needIds = ongoingBase
         .filter((o) => o.contact_id && !o.contact_name)
-        .map((o) => o.contact_id!) ;
+        .map((o) => o.contact_id!);
       if (needIds.length > 0) {
         const { data: contacts } = await crm.supabase
           .from("contacts")
           .select("id, first_name, last_name, phone, phone2, landline")
           .in("id", needIds);
-        const map = new Map(
+        const cmap = new Map(
           ((contacts ?? []) as Array<{
             id: string;
             first_name: string | null;
@@ -146,9 +227,9 @@ export async function GET(request: NextRequest) {
             landline: string | null;
           }>).map((c) => [c.id, c]),
         );
-        for (const o of ongoingEnriched) {
+        for (const o of ongoingBase) {
           if (!o.contact_id) continue;
-          const c = map.get(o.contact_id);
+          const c = cmap.get(o.contact_id);
           if (!c) continue;
           if (!o.contact_name) {
             o.contact_name = [c.first_name, c.last_name].filter(Boolean).join(" ") || null;
@@ -172,6 +253,8 @@ export async function GET(request: NextRequest) {
       outcome_label: string;
       called_at: string | null;
       duration_seconds: number | null;
+      open_requests_count: number;
+      open_requests: OpenRequestChip[];
     }> = [];
     let progress: number | null = null;
     let callsMade: number | null = null;
@@ -180,6 +263,12 @@ export async function GET(request: NextRequest) {
     let avgDurationSec: number | null = null;
     let estimatedRemainingSec: number | null = null;
     let estimated_completion_at: string | null = null;
+    let stats: {
+      total: number;
+      positive: number;
+      negative: number;
+      noAnswer: number;
+    } | null = null;
 
     if (campaignId) {
       const { data: campMeta } = await crm.supabase
@@ -248,11 +337,14 @@ export async function GET(request: NextRequest) {
               outcome_label: retellOutcomeLabel(r.outcome),
               called_at: r.called_at,
               duration_seconds: r.duration_seconds,
+              open_requests_count: 0,
+              open_requests: [] as OpenRequestChip[],
             };
           });
       }
 
       const rollup = await getCampaignRollup(crm.supabase, campaignId);
+      stats = rollup.stats;
       progress = Math.round(rollup.progress * 10) / 10;
       callsMade = rollup.callsMade;
       contactTotal = rollup.withPhone;
@@ -269,17 +361,37 @@ export async function GET(request: NextRequest) {
       } else if (estimatedRemainingSec === 0) {
         estimated_completion_at = new Date().toISOString();
       }
+
+      const requestContactIds = [
+        ...ongoingBase.map((o) => o.contact_id).filter((id): id is string => Boolean(id)),
+        ...last_completed.map((lc) => lc.contact_id),
+      ];
+      const reqMap = await fetchOpenRequestsByContactIds(crm.supabase, requestContactIds);
+      for (const o of ongoingBase) {
+        if (!o.contact_id) continue;
+        const bucket = reqMap.get(o.contact_id);
+        if (!bucket) continue;
+        o.open_requests_count = bucket.open_requests_count;
+        o.open_requests = bucket.open_requests;
+      }
+      for (const lc of last_completed) {
+        const bucket = reqMap.get(lc.contact_id);
+        if (!bucket) continue;
+        lc.open_requests_count = bucket.open_requests_count;
+        lc.open_requests = bucket.open_requests;
+      }
     }
 
     return NextResponse.json({
       agent_id: agentId,
       agent_name: agentInfo.agent_name,
-      ongoing_count: ongoingEnriched.length,
-      ongoing_calls: ongoingEnriched,
+      ongoing_count: ongoingBase.length,
+      ongoing_calls: ongoingBase,
       last_completed,
       called_today,
       success_rate_today_pct,
       concurrent_lines: campaignId ? concurrent_lines : undefined,
+      stats,
       progress,
       callsMade,
       contactTotal,
