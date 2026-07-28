@@ -72,7 +72,13 @@ function NamedaySection({ day }: { day: NamedayDay }) {
   );
 }
 
-export function DashboardWidgetsGrid({ data }: { data: DashboardWidgetsData }) {
+export function DashboardWidgetsGrid({
+  data,
+  groupsLoading = false,
+}: {
+  data: DashboardWidgetsData;
+  groupsLoading?: boolean;
+}) {
   return (
     <section
       className={[lux.cardFlat, "relative !overflow-hidden border-l-[3px] !border-l-[var(--accent-gold)] space-y-4 !p-5"].join(
@@ -192,7 +198,13 @@ export function DashboardWidgetsGrid({ data }: { data: DashboardWidgetsData }) {
         </WidgetShell>
 
         <WidgetShell title="ΟΜΑΔΕΣ ΠΡΟΣΩΠΩΝ" icon={Users} href="/analytics">
-          {data.groups.length === 0 ? (
+          {groupsLoading ? (
+            <ul className="space-y-2" aria-busy="true" aria-label="Φόρτωση ομάδων">
+              {Array.from({ length: 4 }, (_, i) => (
+                <li key={i} className="hq-skeleton-shimmer h-10 rounded-lg" />
+              ))}
+            </ul>
+          ) : data.groups.length === 0 ? (
             <EmptyLine text="Δεν υπάρχουν ομάδες με μέλη." />
           ) : (
             <ul className="space-y-2">

@@ -4,6 +4,7 @@ import { listAllCalendarsEventsHttp } from "@/lib/google-calendar";
 import { tallyOutcomes } from "@/lib/campaign-stats";
 import { contactCelebratesNameday, resolveNamedayNamesForDay } from "@/lib/namedays";
 import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
+import { logFetchTimings, timedFetch } from "@/lib/server-timing";
 
 function monthDay(d: Date) {
   return { month: d.getMonth() + 1, day: d.getDate() };
@@ -95,19 +96,46 @@ export async function fetchBriefingTodayData(
 
   const birthdayPattern = `%-${m}-${d}`;
 
-  const [nameDayRes, allContacts, reqOpenRes, stalledReqRes, overdueTop5Res, birthdayRes, tasksRes, pendingTasksRes, weekRes, campaignsRes, callsYest] =
-    await Promise.all([
+  const [
+    tNamedays,
+    tContacts,
+    tOpenReq,
+    tStalled,
+    tOverdueTop5,
+    tBirthdays,
+    tTasksDue,
+    tPendingTasks,
+    tWeekContacts,
+    tCampaigns,
+    tCallsYest,
+    tOverdueCount,
+    tCalendar,
+  ] = await Promise.all([
+    timedFetch(
+      "namedays",
       supabase.from("name_days").select("names").eq("month", month).eq("day", day).maybeSingle(),
+    ),
+    timedFetch(
+      "contacts_nameday_fields",
       supabase.from("contacts").select("id, first_name, last_name, nickname, phone, created_at"),
+    ),
+    timedFetch(
+      "open_requests",
       supabase
         .from("requests")
         .select("id", { count: "exact", head: true })
         .in("status", OPEN_REQUEST_QUERY_VALUES),
+    ),
+    timedFetch(
+      "stalled_requests",
       supabase
         .from("requests")
         .select("id", { count: "exact", head: true })
         .in("status", OPEN_REQUEST_QUERY_VALUES)
         .lt("created_at", weekAgo.toISOString()),
+    ),
+    timedFetch(
+      "overdue_top5",
       supabase
         .from("requests")
         .select("id, request_code, title, created_at, status")
@@ -115,29 +143,106 @@ export async function fetchBriefingTodayData(
         .lt("created_at", weekAgo.toISOString())
         .order("created_at", { ascending: true })
         .limit(5),
+    ),
+    timedFetch(
+      "birthdays",
       supabase
         .from("contacts")
         .select("id, first_name, last_name, phone, birthday")
         .not("birthday", "is", null)
         .ilike("birthday", birthdayPattern)
         .limit(10),
+    ),
+    timedFetch(
+      "tasks_due_today",
       supabase
         .from("tasks")
         .select("id, title, due_date, contact_id, completed, contacts(first_name, last_name)")
         .eq("completed", false)
         .eq("due_date", todayStr),
+    ),
+    timedFetch(
+      "pending_tasks",
       supabase.from("tasks").select("id", { count: "exact", head: true }).eq("completed", false),
+    ),
+    timedFetch(
+      "contacts_this_week",
       supabase
         .from("contacts")
         .select("id", { count: "exact", head: true })
         .gte("created_at", startOfWeekMonday(now).toISOString()),
-      supabase.from("campaigns").select("id, name, started_at").not("started_at", "is", null).order("started_at", { ascending: false }),
+    ),
+    timedFetch(
+      "campaigns",
+      supabase
+        .from("campaigns")
+        .select("id, name, started_at")
+        .not("started_at", "is", null)
+        .order("started_at", { ascending: false }),
+    ),
+    timedFetch(
+      "calls_yesterday",
       supabase
         .from("calls")
         .select("outcome, called_at")
         .gte("called_at", yRange.timeMin)
         .lte("called_at", yRange.timeMax),
-    ]);
+    ),
+    timedFetch(
+      "overdue_request_count",
+      supabase
+        .from("requests")
+        .select("id", { count: "exact", head: true })
+        .in("status", OPEN_REQUEST_QUERY_VALUES)
+        .lt("sla_due_date", todayStr),
+    ),
+    timedFetch(
+      "calendar",
+      userIdForCalendar
+        ? listAllCalendarsEventsHttp(userIdForCalendar, athensDayRange(todayStr))
+        : Promise.resolve({
+            ok: false as const,
+            code: "not_connected" as const,
+            calendars_found: [] as Array<{
+              id: string;
+              summary: string | null;
+              accessRole: string | null;
+              primary?: boolean;
+            }>,
+            time_range: { timeMin: "", timeMax: "" },
+          }),
+    ),
+  ]);
+
+  logFetchTimings("dashboard", [
+    tNamedays,
+    tContacts,
+    tOpenReq,
+    tStalled,
+    tOverdueTop5,
+    tBirthdays,
+    tTasksDue,
+    tPendingTasks,
+    tWeekContacts,
+    tCampaigns,
+    tCallsYest,
+    tOverdueCount,
+    tCalendar,
+  ]);
+
+  const nameDayRes = tNamedays.value;
+  const allContacts = tContacts.value;
+  const reqOpenRes = tOpenReq.value;
+  const stalledReqRes = tStalled.value;
+  const overdueTop5Res = tOverdueTop5.value;
+  const birthdayRes = tBirthdays.value;
+  const tasksRes = tTasksDue.value;
+  const pendingTasksRes = tPendingTasks.value;
+  const weekRes = tWeekContacts.value;
+  const campaignsRes = tCampaigns.value;
+  const callsYest = tCallsYest.value;
+  const overdueCountRes = tOverdueCount.value;
+  const calResult = tCalendar.value;
 
   if (
     nameDayRes.error ||
@@ -150,15 +255,15 @@ export async function fetchBriefingTodayData(
     pendingTasksRes.error ||
     weekRes.error ||
     campaignsRes.error ||
-    callsYest.error
+    callsYest.error ||
+    overdueCountRes.error
   ) {
     return { ...empty, todayYmd: todayStr, todayYmdSla: todayStr };
   }
 
   let calEvents: BriefingTodayData["calendar"]["events"] = [];
   let calConnected = false;
-  if (userIdForCalendar) {
-    const calResult = await listAllCalendarsEventsHttp(userIdForCalendar, athensDayRange(todayStr));
+  if (userIdForCalendar && calResult && "ok" in calResult) {
     calEvents =
       calResult.ok && "events" in calResult
         ? calResult.events.map((e) => ({
@@ -170,12 +275,7 @@ export async function fetchBriefingTodayData(
     calConnected = Boolean(calResult.ok);
   }
 
-  const { count: overdueCount, error: overdueErr } = await supabase
-    .from("requests")
-    .select("id", { count: "exact", head: true })
-    .in("status", OPEN_REQUEST_QUERY_VALUES)
-    .lt("sla_due_date", todayStr);
-  const overdueRequestCount = !overdueErr ? overdueCount ?? 0 : 0;
+  const overdueRequestCount = overdueCountRes.count ?? 0;
 
   const todayNames = resolveNamedayNamesForDay(
     (nameDayRes.data?.names as string[] | undefined) ?? [],
@@ -204,25 +304,43 @@ export async function fetchBriefingTodayData(
   const yCalls = (callsYest.data ?? []) as Array<{ outcome: string | null }>;
   const yTally = tallyOutcomes(yCalls.map((c) => ({ outcome: c.outcome })));
 
-  const campaignRows = (campaignsRes.data ?? []) as Array<{ id: string; name: string; started_at: string | null }>;
+  const campaignRows = (campaignsRes.data ?? []) as Array<{
+    id: string;
+    name: string;
+    started_at: string | null;
+  }>;
+
+  // Parallel campaign call tallies (was sequential).
+  const campaignTimed = await Promise.all(
+    campaignRows.map((campaign) =>
+      timedFetch(
+        `campaign_calls_${campaign.id.slice(0, 8)}`,
+        supabase.from("calls").select("outcome").eq("campaign_id", campaign.id),
+      ),
+    ),
+  );
+  if (campaignTimed.length > 0) {
+    logFetchTimings(
+      "dashboard",
+      campaignTimed.map((t) => ({ label: t.label, ms: t.ms })),
+    );
+  }
+
   const withStats: BriefingTodayData["campaigns"] = [];
-  for (const campaign of campaignRows) {
-    try {
-      const { data: callRows, error: callErr } = await supabase.from("calls").select("outcome").eq("campaign_id", campaign.id);
-      if (callErr) continue;
-      const calls = (callRows ?? []) as Array<{ outcome: string | null }>;
-      const total = calls.length;
-      const positive = calls.filter((c) => c.outcome === "Positive").length;
-      withStats.push({
-        id: campaign.id,
-        name: campaign.name,
-        started_at: campaign.started_at,
-        callsTotal: total,
-        positive,
-      });
-    } catch {
-      /* skip */
-    }
+  for (let i = 0; i < campaignRows.length; i++) {
+    const campaign = campaignRows[i]!;
+    const callRes = campaignTimed[i]!.value;
+    if (callRes.error) continue;
+    const calls = (callRes.data ?? []) as Array<{ outcome: string | null }>;
+    const total = calls.length;
+    const positive = calls.filter((c) => c.outcome === "Positive").length;
+    withStats.push({
+      id: campaign.id,
+      name: campaign.name,
+      started_at: campaign.started_at,
+      callsTotal: total,
+      positive,
+    });
   }
 
   const tasks = (tasksRes.data ?? []) as Array<{

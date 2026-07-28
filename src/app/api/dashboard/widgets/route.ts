@@ -1,12 +1,14 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
-import { fetchDashboardWidgetsData, type DashboardWidgetsData } from "@/lib/dashboard-widgets-data";
-import { NextResponse } from "next/server";
-import { createTtlCache } from "@/lib/ttl-cache";
+import {
+  fetchDashboardGroups,
+  fetchDashboardWidgetsData,
+  fetchDashboardWidgetsFast,
+  type DashboardWidgetsData,
+} from "@/lib/dashboard-widgets-data";
+import { NextRequest, NextResponse } from "next/server";
 import { createServerTiming, withServerTimingHeaders } from "@/lib/server-timing";
 
 export const dynamic = "force-dynamic";
-
-const WIDGETS_CACHE_TTL_MS = 60_000;
 
 const empty: DashboardWidgetsData = {
   namedays: [],
@@ -18,25 +20,33 @@ const empty: DashboardWidgetsData = {
   groups: [],
 };
 
-const widgetsCache = createTtlCache<{ userId: string; data: DashboardWidgetsData }>(WIDGETS_CACHE_TTL_MS);
-
-export async function GET() {
+/**
+ * scope=fast  — namedays, recent inserts/updates/requests, per-user views (no groups)
+ * scope=groups — group distribution only (shared TTL cache)
+ * scope=all (default) — everything
+ */
+export async function GET(req: NextRequest) {
   const timing = createServerTiming();
   try {
     const crm = await timing.time("auth", () => checkCRMAccess());
     if (!crm.allowed) return withServerTimingHeaders(crm.response, timing);
     const { supabase, user } = crm;
 
-    const cached = widgetsCache.get();
-    if (cached.hit && cached.value.userId === user.id) {
-      timing.mark("cache", 0, `hit age=${cached.ageMs}ms`);
-      console.log(`[api/dashboard/widgets] cache HIT age=${cached.ageMs}ms`);
-      return withServerTimingHeaders(NextResponse.json(cached.value.data), timing);
+    const scope = (req.nextUrl.searchParams.get("scope") ?? "all").toLowerCase();
+
+    if (scope === "groups") {
+      const groups = await timing.time("groups", () => fetchDashboardGroups(supabase));
+      return withServerTimingHeaders(NextResponse.json({ groups }), timing);
+    }
+
+    if (scope === "fast") {
+      const data = await timing.time("widgets_fast", () =>
+        fetchDashboardWidgetsFast(supabase, user.id),
+      );
+      return withServerTimingHeaders(NextResponse.json(data), timing);
     }
 
     const data = await timing.time("widgets", () => fetchDashboardWidgetsData(supabase, user.id));
-    widgetsCache.set({ userId: user.id, data });
-    console.log("[api/dashboard/widgets] cache MISS — stored 60s TTL");
     return withServerTimingHeaders(NextResponse.json(data), timing);
   } catch (e) {
     console.error("[api/dashboard/widgets]", e);

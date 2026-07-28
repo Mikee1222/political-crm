@@ -5,7 +5,12 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { getRequestStatusQueryValues, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
 import { createTtlCache } from "@/lib/ttl-cache";
-import { createServerTiming, withServerTimingHeaders } from "@/lib/server-timing";
+import {
+  createServerTiming,
+  logFetchTimings,
+  timedFetch,
+  withServerTimingHeaders,
+} from "@/lib/server-timing";
 
 export const dynamic = "force-dynamic";
 
@@ -72,36 +77,112 @@ export async function GET() {
         const todayYmd = `${y}-${mo}-${da}`;
 
         const queriesStarted = Date.now();
-        const [c1, c2, c3, c4, c5, c6, c7, c7b, c7c, c8, c9] = await Promise.all([
-          supabase.from("contacts").select("*", { count: "exact", head: true }),
-          supabase.from("calls").select("*", { count: "exact", head: true }).gte("called_at", todayIso),
-          supabase.from("calls").select("outcome"),
-          supabase.from("contacts").select("*", { count: "exact", head: true }).eq("call_status", "Pending"),
-          supabase
-            .from("calls")
-            .select("id, called_at, outcome, contacts(first_name,last_name)")
-            .order("called_at", { ascending: false })
-            .limit(8),
-          supabase
-            .from("contacts")
-            .select("id", { count: "exact", head: true })
-            .or(`last_contacted_at.is.null,last_contacted_at.lt."${cutIso}"`),
-          supabase
-            .from("requests")
-            .select("id", { count: "exact", head: true })
-            .in("status", getRequestStatusQueryValues(REQUEST_STATUS_OPEN))
-            .lt("sla_due_date", todayYmd),
-          supabase.from("contacts").select("id", { count: "exact", head: true }).is("phone", null),
-          supabase.from("contacts").select("id", { count: "exact", head: true }).eq("phone", ""),
-          supabase.from("supporters").select("id", { count: "exact", head: true }),
-          supabase.from("supporters").select("amount"),
+        const [
+          tTotalContacts,
+          tCallsToday,
+          tCallsPositive,
+          tCallsTotal,
+          tPending,
+          tRecentCalls,
+          tNotCalled30,
+          tOverdue,
+          tPhoneNull,
+          tPhoneEmpty,
+          tSupporters,
+          tAmounts,
+        ] = await Promise.all([
+          timedFetch(
+            "total_contacts",
+            supabase.from("contacts").select("*", { count: "exact", head: true }),
+          ),
+          timedFetch(
+            "calls_today",
+            supabase.from("calls").select("*", { count: "exact", head: true }).gte("called_at", todayIso),
+          ),
+          timedFetch(
+            "calls_positive_count",
+            supabase.from("calls").select("id", { count: "exact", head: true }).eq("outcome", "Positive"),
+          ),
+          timedFetch(
+            "calls_total_count",
+            supabase.from("calls").select("id", { count: "exact", head: true }),
+          ),
+          timedFetch(
+            "pending_contacts",
+            supabase.from("contacts").select("*", { count: "exact", head: true }).eq("call_status", "Pending"),
+          ),
+          timedFetch(
+            "recent_calls",
+            supabase
+              .from("calls")
+              .select("id, called_at, outcome, contacts(first_name,last_name)")
+              .order("called_at", { ascending: false })
+              .limit(8),
+          ),
+          timedFetch(
+            "not_called_30",
+            supabase
+              .from("contacts")
+              .select("id", { count: "exact", head: true })
+              .or(`last_contacted_at.is.null,last_contacted_at.lt."${cutIso}"`),
+          ),
+          timedFetch(
+            "overdue_requests",
+            supabase
+              .from("requests")
+              .select("id", { count: "exact", head: true })
+              .in("status", getRequestStatusQueryValues(REQUEST_STATUS_OPEN))
+              .lt("sla_due_date", todayYmd),
+          ),
+          timedFetch(
+            "contacts_phone_null",
+            supabase.from("contacts").select("id", { count: "exact", head: true }).is("phone", null),
+          ),
+          timedFetch(
+            "contacts_phone_empty",
+            supabase.from("contacts").select("id", { count: "exact", head: true }).eq("phone", ""),
+          ),
+          timedFetch(
+            "supporter_count",
+            supabase.from("supporters").select("id", { count: "exact", head: true }),
+          ),
+          timedFetch("supporter_amounts", supabase.from("supporters").select("amount")),
         ]);
-        timing.mark("queries", Date.now() - queriesStarted, "11 parallel aggregates");
+        const timed = [
+          tTotalContacts,
+          tCallsToday,
+          tCallsPositive,
+          tCallsTotal,
+          tPending,
+          tRecentCalls,
+          tNotCalled30,
+          tOverdue,
+          tPhoneNull,
+          tPhoneEmpty,
+          tSupporters,
+          tAmounts,
+        ];
+        logFetchTimings("dashboard", timed);
+        timing.mark("queries", Date.now() - queriesStarted, `${timed.length} parallel aggregates`);
+
+        const c1 = tTotalContacts.value;
+        const c2 = tCallsToday.value;
+        const cPositive = tCallsPositive.value;
+        const cTotalCalls = tCallsTotal.value;
+        const c4 = tPending.value;
+        const c5 = tRecentCalls.value;
+        const c6 = tNotCalled30.value;
+        const c7 = tOverdue.value;
+        const c7b = tPhoneNull.value;
+        const c7c = tPhoneEmpty.value;
+        const c8 = tSupporters.value;
+        const c9 = tAmounts.value;
 
         if (
           c1.error ||
           c2.error ||
-          c3.error ||
+          cPositive.error ||
+          cTotalCalls.error ||
           c4.error ||
           c5.error ||
           c6.error ||
@@ -116,12 +197,11 @@ export async function GET() {
 
         const totalContacts = c1.count ?? 0;
         const totalCallsToday = c2.count ?? 0;
-        const allCalls = c3.data;
         const pendingContacts = c4.count ?? 0;
         const recentCalls = c5.data;
 
-        const positive = allCalls?.filter((c) => c.outcome === "Positive").length ?? 0;
-        const total = allCalls?.length ?? 0;
+        const positive = cPositive.count ?? 0;
+        const total = cTotalCalls.count ?? 0;
         const positiveRate = total > 0 ? (positive / total) * 100 : 0;
 
         const recentActivity = (recentCalls ?? []).map((c) => {

@@ -289,6 +289,8 @@ export default function DashboardPage() {
   const alexPage = useOptionalAlexandraPageContext();
   const [now, setNow] = useState(() => new Date());
   const [ready, setReady] = useState(false);
+  const [metricsReady, setMetricsReady] = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(true);
   const [data, setData] = useState<DashboardData>(EMPTY_DASH);
   const [briefing, setBriefing] = useState<Briefing>(EMPTY_BRIEF);
   const [acts, setActs] = useState<Act[]>([]);
@@ -329,6 +331,8 @@ export default function DashboardPage() {
     (async () => {
       const t0 =
         typeof performance !== "undefined" ? performance.now() : Date.now();
+      const elapsed = () =>
+        Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - t0);
 
       type DashBundle = {
         d: unknown;
@@ -344,41 +348,54 @@ export default function DashboardPage() {
         setBriefing(parseBriefing(cached.b));
         setActs(parseActs(cached.a));
         setWidgets(parseWidgets(cached.w));
+        setMetricsReady(true);
+        setGroupsLoading(false);
         setReady(true);
-        console.log(
-          `[dashboard] client cache HIT first paint ${Math.round(
-            (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
-          )}ms`,
-        );
+        console.log(`[dashboard] client cache HIT first paint ${elapsed()}ms`);
         return;
       }
 
-      // Critical path: metrics first for meaningful first paint, then secondary panels.
-      const d = await fetchJsonWithTimeout<unknown>("/api/dashboard", {}, CLIENT_FETCH_TIMEOUT_MS);
-      if (cancelled) return;
-      setData(parseDashboard(d));
-      setReady(true);
-      console.log(
-        `[dashboard] metrics first paint ${Math.round(
-          (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
-        )}ms`,
+      // Fast path first: recently viewed / inserts / namedays — show immediately.
+      const fastP = fetchJsonWithTimeout<unknown>(
+        "/api/dashboard/widgets?scope=fast",
+        {},
+        CLIENT_FETCH_TIMEOUT_MS,
       );
 
-      const [b, a, w] = await Promise.all([
-        fetchJsonWithTimeout<unknown>("/api/briefing/today", {}, CLIENT_FETCH_TIMEOUT_MS),
-        fetchJsonWithTimeout<unknown>("/api/activity/recent", {}, CLIENT_FETCH_TIMEOUT_MS),
-        fetchJsonWithTimeout<unknown>("/api/dashboard/widgets", {}, CLIENT_FETCH_TIMEOUT_MS),
-      ]);
+      // Slow path in parallel (does not block first paint).
+      const dashP = fetchJsonWithTimeout<unknown>("/api/dashboard", {}, CLIENT_FETCH_TIMEOUT_MS);
+      const briefP = fetchJsonWithTimeout<unknown>("/api/briefing/today", {}, CLIENT_FETCH_TIMEOUT_MS);
+      const actP = fetchJsonWithTimeout<unknown>("/api/activity/recent", {}, CLIENT_FETCH_TIMEOUT_MS);
+      const groupsP = fetchJsonWithTimeout<{ groups?: DashboardWidgetsData["groups"] }>(
+        "/api/dashboard/widgets?scope=groups",
+        {},
+        CLIENT_FETCH_TIMEOUT_MS,
+      );
+
+      const wFast = await fastP;
       if (cancelled) return;
+      setWidgets(parseWidgets(wFast));
+      setReady(true);
+      console.log(`[dashboard] fast widgets first paint ${elapsed()}ms`);
+
+      const [d, b, a, g] = await Promise.all([dashP, briefP, actP, groupsP]);
+      if (cancelled) return;
+
+      setData(parseDashboard(d));
+      setMetricsReady(true);
       setBriefing(parseBriefing(b));
       setActs(parseActs(a));
-      setWidgets(parseWidgets(w));
-      setClientTtlCache("dashboard:bundle", { d, b, a, w }, DASH_CLIENT_TTL_MS);
-      console.log(
-        `[dashboard] full load ${Math.round(
-          (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
-        )}ms`,
+      const groups = Array.isArray(g?.groups) ? g.groups : [];
+      setWidgets((prev) => ({ ...prev, groups }));
+      setGroupsLoading(false);
+
+      const fullWidgets = { ...parseWidgets(wFast), groups };
+      setClientTtlCache(
+        "dashboard:bundle",
+        { d, b, a, w: fullWidgets },
+        DASH_CLIENT_TTL_MS,
       );
+      console.log(`[dashboard] full load ${elapsed()}ms`);
     })();
     return () => {
       cancelled = true;
@@ -510,7 +527,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <DashboardWidgetsGrid data={widgets} />
+      <DashboardWidgetsGrid data={widgets} groupsLoading={groupsLoading} />
 
       <section
         className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 [data-theme='light']:bg-white"
@@ -777,7 +794,10 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        aria-busy={!metricsReady}
+      >
         <Stat
           title="Σύνολο επαφών"
           value={safeTotalContacts}

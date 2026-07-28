@@ -4,6 +4,25 @@
 
 export type TimingMark = { name: string; durationMs: number; description?: string };
 
+/** Time a single promise; use inside Promise.all for per-fetch duration logs. */
+export async function timedFetch<T>(
+  label: string,
+  promise: PromiseLike<T>,
+): Promise<{ label: string; ms: number; value: T }> {
+  const t0 = Date.now();
+  const value = await promise;
+  return { label, ms: Date.now() - t0, value };
+}
+
+/** Log `[prefix] a: 12ms, b: 34ms, ...` from timedFetch results. */
+export function logFetchTimings(
+  prefix: string,
+  parts: Array<{ label: string; ms: number }>,
+): void {
+  const body = parts.map((p) => `${p.label}: ${p.ms}ms`).join(", ");
+  console.log(`[${prefix}] ${body}`);
+}
+
 export function createServerTiming() {
   const marks: TimingMark[] = [];
   const startedAt = Date.now();
