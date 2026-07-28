@@ -4,8 +4,6 @@ import { retellHttpLlmJson, retellLlmPostBodySchema, runRetellLlmHttp } from "@/
 import {
   applyRetellHeuristics,
   buildKaragkounisTransferSystemPrompt,
-  getFirstName,
-  mergeCallMetadata,
   RETELL_DECLINE_LINE,
   RETELL_OPENING_LINE,
   RETELL_SONNET_MODEL,
@@ -86,9 +84,6 @@ export async function POST(request: NextRequest) {
       return new Response(encodeSse({ error: "Λείπει η ANTHROPIC_API_KEY" }), { status: 503, headers: SSE_HEADERS });
     }
     const rid = typeof parsed.data.response_id === "number" ? parsed.data.response_id : 1;
-    const call = parsed.data.call ?? null;
-    const meta = mergeCallMetadata(call) as Record<string, string | undefined | null>;
-    const first = getFirstName(meta);
     const transcript = parsed.data.transcript ?? [];
     const msgs = transcriptToMessages(
       transcript.map((t) => ({ role: t.role, content: t.content == null ? "" : String(t.content) })),
@@ -99,7 +94,7 @@ export async function POST(request: NextRequest) {
         { status: 200, headers: SSE_HEADERS },
       );
     }
-    const system = buildKaragkounisTransferSystemPrompt(first);
+    const system = buildKaragkounisTransferSystemPrompt();
     const client = new Anthropic({ apiKey: key });
 
     const stream = new ReadableStream({

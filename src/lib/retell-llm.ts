@@ -10,7 +10,7 @@ export const RETELL_DECLINE_LINE = "Εντάξει, καλή συνέχεια!";
 /**
  * Single-turn transfer offer for Karagkounis office outbound calls.
  */
-export function buildKaragkounisTransferSystemPrompt(_firstName?: string) {
+export function buildKaragkounisTransferSystemPrompt() {
   return `Είσαι ο βοηθός του γραφείου του βουλευτή Κωνσταντίνου Καραγκούνη. 
 Μόλις απαντήσει ο πολίτης, πες: 'Καλησπέρα σας, σας καλώ από το γραφείο του βουλευτή κ. Καραγκούνη. Θέλετε να σας τον συνδέσω;'
 Αν πει ΝΑΙ ή θετική απάντηση: χρησιμοποίησε το transfer_call tool αμέσως.
@@ -37,8 +37,8 @@ export function buildNamedaySystemPrompt(firstName: string) {
 }
 
 /** @deprecated Use buildKaragkounisTransferSystemPrompt for outbound Retell. */
-export function buildGreekPoliticalOfficeSystemPrompt(firstName: string) {
-  return buildKaragkounisTransferSystemPrompt(firstName);
+export function buildGreekPoliticalOfficeSystemPrompt() {
+  return buildKaragkounisTransferSystemPrompt();
 }
 
 type RetellLlmResult = {

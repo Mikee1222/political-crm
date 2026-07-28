@@ -3,8 +3,6 @@ import { z } from "zod";
 import {
   applyRetellHeuristics,
   buildKaragkounisTransferSystemPrompt,
-  getFirstName,
-  mergeCallMetadata,
   RETELL_DECLINE_LINE,
   RETELL_OPENING_LINE,
   RETELL_SONNET_MODEL,
@@ -86,7 +84,6 @@ export async function runRetellLlmHttp(
   const body = parsed.data;
   const it = body.interaction_type?.trim() ?? "";
   const rid = body.response_id;
-  const call = body.call ?? null;
 
   if (it === "reminder_required" || it === "reminder") {
     return { status: 200, body: retellHttpLlmJson(rid, "Είστε ακόμα εκεί;", false) };
@@ -101,8 +98,6 @@ export async function runRetellLlmHttp(
     if (!key) {
       return { status: 503, body: { error: "Λείπει η ANTHROPIC_API_KEY" } };
     }
-    const meta = mergeCallMetadata(call) as Record<string, string | undefined | null>;
-    const first = getFirstName(meta);
     const transcript = body.transcript ?? [];
     const msgs = transcriptToMessages(
       transcript.map((t) => ({ role: t.role, content: t.content == null ? "" : String(t.content) })),
@@ -113,7 +108,7 @@ export async function runRetellLlmHttp(
         body: retellHttpLlmJson(rid, RETELL_OPENING_LINE, false),
       };
     }
-    const system = buildKaragkounisTransferSystemPrompt(first);
+    const system = buildKaragkounisTransferSystemPrompt();
     const client = new Anthropic({ apiKey: key });
     const claudePromise = client.messages.create({
       model: RETELL_SONNET_MODEL,

@@ -698,6 +698,8 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
         <div
           ref={resultsRef}
           data-global-search-results
+          role="listbox"
+          aria-label="Αποτελέσματα αναζήτησης"
           className="max-h-[70vh] space-y-5 overflow-y-auto px-3 py-4 text-left sm:px-4"
         >
           {showEmptyRecent && recent.length > 0 ? (
@@ -782,6 +784,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     <button
                       type="button"
                       key={g.id}
+                      role="option"
                       onClick={() => go(e)}
                       className={resultItemClass(isActive, "flex items-start gap-3")}
                       data-global-search-item
@@ -858,6 +861,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     <button
                       type="button"
                       key={req.id}
+                      role="option"
                       onClick={() => go(e)}
                       className={resultItemClass(isActive, "flex items-start gap-3")}
                       data-global-search-item
@@ -910,6 +914,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                   <button
                     type="button"
                     key={task.id}
+                    role="option"
                     onClick={() => go(e)}
                     className={resultItemClass(isActive, "mb-1")}
                     data-global-search-item
@@ -939,6 +944,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                   <Link
                     key={camp.id}
                     href={e.href}
+                    role="option"
                     onClick={onClose}
                     className={resultItemClass(isActive, "mb-1 block")}
                     data-global-search-item
@@ -969,6 +975,7 @@ export function GlobalSearchOverlay({ open, onClose, role }: Props) {
                     <button
                       type="button"
                       key={ae.id}
+                      role="option"
                       onClick={() => go(ae)}
                       className={resultItemClass(isActive, "font-medium text-[#C9A84C]")}
                       data-global-search-item

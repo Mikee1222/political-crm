@@ -3,8 +3,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   applyRetellHeuristics,
   buildKaragkounisTransferSystemPrompt,
-  getFirstName,
-  mergeCallMetadata,
   RETELL_DECLINE_LINE,
   RETELL_OPENING_LINE,
   RETELL_SONNET_MODEL,
@@ -77,7 +75,6 @@ async function handleResponseOrReminder(
   ws: WebSocket,
   interaction: "response_required" | "reminder_required",
   request: z.infer<typeof retellIncomingSchema>,
-  state: LlmState,
 ) {
   const rid = typeof request.response_id === "number" ? request.response_id : 1;
   if (interaction === "reminder_required") {
@@ -92,17 +89,6 @@ async function handleResponseOrReminder(
     );
     return;
   }
-  const callObj = state.call ?? (request as { call?: unknown }).call;
-  const meta = mergeCallMetadata(
-    (typeof callObj === "object" && callObj
-      ? callObj
-      : null) as {
-        metadata?: Record<string, unknown> | null;
-        retell_llm_dynamic_variables?: Record<string, string> | null;
-      } | null,
-  ) as Record<string, string | undefined | null>;
-  const first = getFirstName(meta);
-
   const transcript = request.transcript ?? [];
   const msgs = transcriptToMessages(
     transcript.map((t) => ({ role: t.role, content: t.content == null ? "" : String(t.content) })),
@@ -111,7 +97,7 @@ async function handleResponseOrReminder(
     sendToRetell(ws, responseEvent(rid, RETELL_OPENING_LINE, true, false));
     return;
   }
-  const system = buildKaragkounisTransferSystemPrompt(first);
+  const system = buildKaragkounisTransferSystemPrompt();
   const client = new Anthropic({ apiKey: key });
   const claudePromise = client.messages.create({
     model: RETELL_SONNET_MODEL,
@@ -208,11 +194,11 @@ export function attachRetellLlmSocket(ws: WebSocket, callId: string) {
         return;
       }
       if (it === "reminder_required") {
-        await handleResponseOrReminder(ws, "reminder_required", parsed, state);
+        await handleResponseOrReminder(ws, "reminder_required", parsed);
         return;
       }
       if (it === "response_required") {
-        await handleResponseOrReminder(ws, "response_required", parsed, state);
+        await handleResponseOrReminder(ws, "response_required", parsed);
         return;
       }
       if (isCallInit(it)) {
