@@ -280,9 +280,14 @@ export default function CampaignDetailPage() {
   const patchConcurrentLines = useCallback(
     async (next: number) => {
       const v = clampConcurrentLines(next);
-      const ok = await patchCampaign({ concurrent_lines: v });
-      if (ok) setLinesDraft(String(v));
-      return ok;
+      setLinesSaving(true);
+      try {
+        const ok = await patchCampaign({ concurrent_lines: v });
+        if (ok) setLinesDraft(String(v));
+        return ok;
+      } finally {
+        setLinesSaving(false);
+      }
     },
     [patchCampaign],
   );
