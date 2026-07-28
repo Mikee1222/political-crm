@@ -2,9 +2,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import {
   applyRetellHeuristics,
-  buildGreekPoliticalOfficeSystemPrompt,
+  buildKaragkounisTransferSystemPrompt,
   getFirstName,
   mergeCallMetadata,
+  RETELL_DECLINE_LINE,
+  RETELL_OPENING_LINE,
   RETELL_SONNET_MODEL,
   transcriptToMessages,
 } from "@/lib/retell-llm";
@@ -67,15 +69,6 @@ function isCallInit(s: string | undefined) {
   return s === "call_initated" || s === "call_initiated" || s === "call_init" || s === "initiated";
 }
 
-function firstNameFromRequestBody(raw: Record<string, unknown>, call: z.infer<typeof retellLlmPostBodySchema>["call"]) {
-  const top = raw.first_name;
-  if (typeof top === "string" && top.trim()) return top.trim();
-  const meta = mergeCallMetadata(
-    call as { metadata?: Record<string, unknown> | null; retell_llm_dynamic_variables?: Record<string, string> | null } | null,
-  ) as Record<string, string | undefined | null>;
-  return getFirstName(meta);
-}
-
 /**
  * Stateless HTTP / SSE handler for the same JSON body Retell’s examples use in demos.
  * Official **live** custom LLM integration uses **WebSocket** (see `server.ts` + `npm run dev:retell-llm-ws`).
@@ -94,16 +87,13 @@ export async function runRetellLlmHttp(
   const it = body.interaction_type?.trim() ?? "";
   const rid = body.response_id;
   const call = body.call ?? null;
-  const rawObj = raw;
 
   if (it === "reminder_required" || it === "reminder") {
     return { status: 200, body: retellHttpLlmJson(rid, "Είστε ακόμα εκεί;", false) };
   }
 
   if (isCallInit(it)) {
-    const name = firstNameFromRequestBody(rawObj, call);
-    const opening = `Καλημέρα ${name}! Καλώ από το πολιτικό γραφείο του Κώστα Καραγκούνη.`;
-    return { status: 200, body: retellHttpLlmJson(rid, opening, false) };
+    return { status: 200, body: retellHttpLlmJson(rid, RETELL_OPENING_LINE, false) };
   }
 
   if (it === "response_required") {
@@ -120,18 +110,14 @@ export async function runRetellLlmHttp(
     if (msgs.length === 0) {
       return {
         status: 200,
-        body: retellHttpLlmJson(
-          rid,
-          "Χρόνια πολλά! Να είστε καλά, και μη διστάσετε να επικοινωνήσετε με το γραφείο μας.",
-          true,
-        ),
+        body: retellHttpLlmJson(rid, RETELL_OPENING_LINE, false),
       };
     }
-    const system = buildGreekPoliticalOfficeSystemPrompt(first);
+    const system = buildKaragkounisTransferSystemPrompt(first);
     const client = new Anthropic({ apiKey: key });
     const claudePromise = client.messages.create({
       model: RETELL_SONNET_MODEL,
-      max_tokens: 400,
+      max_tokens: 200,
       system,
       messages: msgs,
     });
@@ -142,31 +128,20 @@ export async function runRetellLlmHttp(
     if (result === "timeout") {
       return {
         status: 200,
-        body: retellHttpLlmJson(
-          rid,
-          "Συγνώμη, υπήρξε μικρή καθυστέρηση. Ξαναλέτε, σας παρακαλώ, τι χρειάζεστε;",
-          false,
-        ),
+        body: retellHttpLlmJson(rid, RETELL_DECLINE_LINE, true),
       };
     }
     const claudeRes = result;
     const textBlock = claudeRes.content[0];
     if (!textBlock || textBlock.type !== "text") {
-      return { status: 200, body: retellHttpLlmJson(rid, "Χρόνια πολλά! Να είστε καλά.", true) };
+      return { status: 200, body: retellHttpLlmJson(rid, RETELL_DECLINE_LINE, true) };
     }
     const spoken = textBlock.text.trim();
     const h = applyRetellHeuristics(spoken);
     if (h.transfer_call) {
       return { status: 200, body: retellHttpLlmJson(rid, spoken, false, { transfer_call: true }) };
     }
-    let endCall = h.end_call;
-    if (!h.end_call) {
-      const lo = spoken.toLowerCase();
-      if (lo.includes("χρόνια πολλά") && !spoken.includes("?")) {
-        endCall = true;
-      }
-    }
-    return { status: 200, body: retellHttpLlmJson(rid, spoken, endCall) };
+    return { status: 200, body: retellHttpLlmJson(rid, spoken, h.end_call) };
   }
 
   return {

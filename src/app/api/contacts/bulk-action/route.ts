@@ -15,7 +15,16 @@ const schema = z.object({
   field: z.string().optional(),
 });
 
-const STATUSES = new Set(["Pending", "Positive", "Negative", "No Answer"]);
+const STATUSES = new Set([
+  "Pending",
+  "Positive",
+  "Negative",
+  "No Answer",
+  "Θετικό",
+  "Αρνητικό",
+  "Δεν Απάντησε",
+  "Επικοινώνησε",
+]);
 const PRIORITIES = new Set(["Low", "Medium", "High", "Urgent"]);
 const UPDATE_FIELDS = new Set(["call_status", "group_id", "priority"]);
 

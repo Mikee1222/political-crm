@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { retellHttpLlmJson, retellLlmPostBodySchema, runRetellLlmHttp } from "@/lib/retell-llm-ws/retell-llm-http-core";
 import {
   applyRetellHeuristics,
-  buildGreekPoliticalOfficeSystemPrompt,
+  buildKaragkounisTransferSystemPrompt,
   getFirstName,
   mergeCallMetadata,
+  RETELL_DECLINE_LINE,
+  RETELL_OPENING_LINE,
   RETELL_SONNET_MODEL,
   transcriptToMessages,
 } from "@/lib/retell-llm";
@@ -30,7 +32,7 @@ const SSE_HEADERS: Record<string, string> = {
   "X-Accel-Buffering": "no",
 };
 
-const RETELL_LLM_DASHBOARD_HINT = `Είσαι φωνητικός βοηθός του πολιτικού γραφείου του βουλευτή Κώστα Καραγκούνη. Μιλάς πάντα στα ελληνικά, σύντομα και ευγενικά.`;
+const RETELL_LLM_DASHBOARD_HINT = `Είσαι ο βοηθός του γραφείου του βουλευτή Κωνσταντίνου Καραγκούνη. Μόλις απαντήσει ο πολίτης, πες: 'Καλησπέρα σας, σας καλώ από το γραφείο του βουλευτή κ. Καραγκούνη. Θέλετε να σας τον συνδέσω;' Αν πει ΝΑΙ: transfer_call. Αν πει ΟΧΙ: 'Εντάξει, καλή συνέχεια!' και end_call. Μην πεις τίποτα άλλο.`;
 
 function wantsSse(request: NextRequest) {
   const a = request.headers.get("accept") ?? "";
@@ -93,17 +95,11 @@ export async function POST(request: NextRequest) {
     );
     if (msgs.length === 0) {
       return new Response(
-        encodeSse(
-          retellHttpLlmJson(
-            rid,
-            "Χρόνια πολλά! Να είστε καλά, και μη διστάσετε να επικοινωνήσετε με το γραφείο μας.",
-            true,
-          ),
-        ),
+        encodeSse(retellHttpLlmJson(rid, RETELL_OPENING_LINE, false)),
         { status: 200, headers: SSE_HEADERS },
       );
     }
-    const system = buildGreekPoliticalOfficeSystemPrompt(first);
+    const system = buildKaragkounisTransferSystemPrompt(first);
     const client = new Anthropic({ apiKey: key });
 
     const stream = new ReadableStream({
@@ -114,20 +110,14 @@ export async function POST(request: NextRequest) {
         try {
           const created = client.messages.create({
             model: RETELL_SONNET_MODEL,
-            max_tokens: 400,
+            max_tokens: 200,
             system,
             messages: msgs,
             stream: true,
           });
           const claudeStream = (await Promise.race([created, timeout])) as Awaited<typeof created> | "t";
           if (claudeStream === "t") {
-            write(
-              retellHttpLlmJson(
-                rid,
-                "Συγνώμη, υπήρξε μικρή καθυστέρηση. Ξαναλέτε, σας παρακαλώ, τι χρειάζεστε;",
-                false,
-              ),
-            );
+            write(retellHttpLlmJson(rid, RETELL_DECLINE_LINE, true));
             return;
           }
           let full = "";
@@ -145,7 +135,7 @@ export async function POST(request: NextRequest) {
           }
           const spoken = full.trim();
           if (!spoken) {
-            write(retellHttpLlmJson(rid, "Χρόνια πολλά! Να είστε καλά.", true));
+            write(retellHttpLlmJson(rid, RETELL_DECLINE_LINE, true));
             return;
           }
           const h = applyRetellHeuristics(spoken);
@@ -154,18 +144,11 @@ export async function POST(request: NextRequest) {
             write({ ...o, content_complete: true, end_call: false });
             return;
           }
-          let endCall = h.end_call;
-          if (!h.end_call) {
-            const lo = spoken.toLowerCase();
-            if (lo.includes("χρόνια πολλά") && !spoken.includes("?")) {
-              endCall = true;
-            }
-          }
           write({
             response_id: rid,
             content: "",
             content_complete: true,
-            end_call: endCall,
+            end_call: h.end_call,
           } as const);
         } catch (e) {
           console.error("[api/retell/llm] SSE stream", e);

@@ -101,7 +101,10 @@ export async function GET() {
           ),
           timedFetch(
             "calls_positive_count",
-            supabase.from("calls").select("id", { count: "exact", head: true }).eq("outcome", "Positive"),
+            supabase
+              .from("calls")
+              .select("id", { count: "exact", head: true })
+              .in("outcome", ["Positive", "Συνδέθηκε με ΚΚ"]),
           ),
           timedFetch(
             "calls_total_count",

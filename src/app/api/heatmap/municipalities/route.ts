@@ -35,9 +35,9 @@ type MuniStats = {
 
 function tally(status: string | null | undefined, bucket: { positive: number; negative: number; pending: number; noAnswer: number }) {
   const s = status ?? "Pending";
-  if (s === "Positive") bucket.positive += 1;
-  else if (s === "Negative") bucket.negative += 1;
-  else if (s === "No Answer") bucket.noAnswer += 1;
+  if (s === "Positive" || s === "Θετικό") bucket.positive += 1;
+  else if (s === "Negative" || s === "Αρνητικό") bucket.negative += 1;
+  else if (s === "No Answer" || s === "Δεν Απάντησε") bucket.noAnswer += 1;
   else bucket.pending += 1;
 }
 

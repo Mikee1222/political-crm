@@ -6,6 +6,10 @@ import { getRetellAgentIdForCampaign } from "@/lib/campaign-retell-agent";
 import { isSameEuropeAthensCalendarDay } from "@/lib/campaign-athens-day";
 import { nextJsonError } from "@/lib/api-resilience";
 import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
+import {
+  isConcludedRetellOutcome,
+  isPositiveRetellOutcome,
+} from "@/lib/retell-call-outcomes";
 export const dynamic = "force-dynamic";
 
 type RetellListCall = Record<string, unknown>;
@@ -87,10 +91,8 @@ export async function GET(request: NextRequest) {
           (r) => r.called_at && isSameEuropeAthensCalendarDay(r.called_at),
         );
         called_today = todayRows.length;
-        const concluded = todayRows.filter(
-          (r) => r.outcome === "Positive" || r.outcome === "Negative" || r.outcome === "No Answer",
-        );
-        const pos = concluded.filter((r) => r.outcome === "Positive").length;
+        const concluded = todayRows.filter((r) => isConcludedRetellOutcome(r.outcome));
+        const pos = concluded.filter((r) => isPositiveRetellOutcome(r.outcome)).length;
         success_rate_today_pct =
           concluded.length > 0 ? Math.round((pos / concluded.length) * 1000) / 10 : null;
       }

@@ -3,7 +3,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 /**
  * Verifies Retell webhook `x-retell-signature` per
  * https://docs.retellai.com/features/secure-webhook
- * Message: rawBody + timestamp (ms), key: API key, HMAC-SHA256 hex.
+ * Message: rawBody + timestamp (ms), key: webhook signing secret (Retell API key with webhook badge),
+ * HMAC-SHA256 hex.
  */
 export function verifyRetellWebhookSignature(
   rawBody: string,

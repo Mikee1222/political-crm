@@ -2,34 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/activity-log";
 import { mergeCallMetadata, getContactId } from "@/lib/retell-llm";
+import { resolveRetellCallOutcome } from "@/lib/retell-call-outcomes";
 import { nextJsonError } from "@/lib/api-resilience";
-// import { verifyRetellWebhookSignature } from "@/lib/retell-webhook-verify";
-// TODO: Re-enable HMAC verification (x-retell-signature + raw body) once the signing key / algorithm matches Retell’s dashboard.
+import { verifyRetellWebhookSignature } from "@/lib/retell-webhook-verify";
 
 export const dynamic = "force-dynamic";
 
 type TranscriptEntry = { role: string; content?: string | null };
-
-function getLastAgentFromCall(call: Record<string, unknown> | null | undefined): string {
-  if (!call) return "";
-  const obj = call as { transcript?: TranscriptEntry[]; transcript_object?: TranscriptEntry[] };
-  const list = (obj.transcript_object as TranscriptEntry[] | undefined) || (obj.transcript as TranscriptEntry[] | undefined);
-  if (Array.isArray(list)) {
-    for (let i = list.length - 1; i >= 0; i--) {
-      const r = list[i];
-      if (r && String(r.role).toLowerCase() === "agent" && (r.content ?? "")) {
-        return String(r.content);
-      }
-    }
-  }
-  if (typeof obj.transcript === "string" && (obj.transcript as string).length) {
-    const t = (obj.transcript as string)
-      .split("\n")
-      .filter((l) => /^\s*agent[:\s]/i.test(l) || l.includes("Agent:"));
-    if (t.length) return t[t.length - 1]!.replace(/^\s*agent[:\s]*/i, "").replace(/^Agent:\s*/i, "").trim();
-  }
-  return "";
-}
 
 function transcriptSummary(call: Record<string, unknown> | null | undefined): string | null {
   if (!call) return null;
@@ -54,38 +33,39 @@ function transcriptSummary(call: Record<string, unknown> | null | undefined): st
 }
 
 /**
- * call_successful, duration, disconnection, last agent line (συνδέω / ενοχλήσαμε / etc.)
+ * HMAC secret for x-retell-signature.
+ * Retell signs with the API key that has the webhook badge — set the same value as RETELL_WEBHOOK_SECRET
+ * (or leave secret unset in local/dev to skip verification).
  */
-function resolveOutcome(
-  call: Record<string, unknown> | null | undefined,
-  durationSec: number,
-  lastAgent: string,
-) {
-  if (Number.isFinite(durationSec) && durationSec >= 0 && durationSec < 10) {
-    return { call_status: "No Answer" as const, outcome: "No Answer" as const, transferred: false, reason: "σύντομη/χωρίς απάντηση" };
+function retellWebhookSigningSecret(): string | undefined {
+  return process.env.RETELL_WEBHOOK_SECRET?.trim() || process.env.RETELL_API_KEY?.trim() || undefined;
+}
+
+function assertRetellWebhookAuth(rawBody: string, request: NextRequest): NextResponse | null {
+  const secret = retellWebhookSigningSecret();
+  const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+
+  if (!secret) {
+    if (isProd) {
+      console.error("[api/retell/webhook] RETELL_WEBHOOK_SECRET (or RETELL_API_KEY) missing — rejecting in production");
+      return NextResponse.json({ error: "Webhook verification not configured" }, { status: 401 });
+    }
+    // Local/dev: allow without secret so sandbox testing still works.
+    return null;
   }
-  const la = lastAgent;
-  if (/συνδέ/iu.test(la) || /Ένα(?:ν)?\s*στιγμ|στιγμάκι/iu.test(la)) {
-    return { call_status: "Positive" as const, outcome: "Positive" as const, transferred: true, reason: "μετάφορα" };
+
+  const signature = request.headers.get("x-retell-signature");
+  if (!verifyRetellWebhookSignature(rawBody, secret, signature)) {
+    return NextResponse.json({ error: "Μη έγκυρη υπογραφή webhook" }, { status: 401 });
   }
-  if (/Λυπάμαι/iu.test(la) && /ενοχλ/iu.test(la)) {
-    return { call_status: "Negative" as const, outcome: "Negative" as const, transferred: false, reason: "αρνητική/ενόχληση" };
-  }
-  const dReason =
-    (call as { disconnection_reason?: string }).disconnection_reason
-    || (call as { disconnection?: string }).disconnection
-    || "";
-  if (dReason && /no_?answer|not_?connected|unanswered/iu.test(String(dReason))) {
-    return { call_status: "No Answer" as const, outcome: "No Answer" as const, transferred: false, reason: "retell" };
-  }
-  return { call_status: "No Answer" as const, outcome: "No Answer" as const, transferred: false, reason: "προεπιλογή" };
+  return null;
 }
 
 export async function POST(request: NextRequest) {
   try {
   const rawBody = await request.text();
-  // const signature = request.headers.get("x-retell-signature");
-  // TODO: Re-enable — if (!verifyRetellWebhookSignature(rawBody, process.env.RETELL_API_KEY, signature)) { return 401; }
+  const authErr = assertRetellWebhookAuth(rawBody, request);
+  if (authErr) return authErr;
 
   let body: { call?: Record<string, unknown> | null; event?: string };
   try {
@@ -124,8 +104,7 @@ export async function POST(request: NextRequest) {
   );
   const durationSec = Number.isFinite(durationMs) && durationMs > 0 ? Math.floor(durationMs / 1000) : 0;
 
-  const lastAgent = getLastAgentFromCall(call);
-  const { call_status, outcome, transferred, reason } = resolveOutcome(call, durationSec, lastAgent);
+  const { call_status, outcome, transferred, reason } = resolveRetellCallOutcome(call, durationSec);
   const s1 = transcriptSummary(call);
   const s2 = (call as { call_analysis?: { call_summary?: string | null } })?.call_analysis?.call_summary ?? null;
   const rawNotes = s1 ?? s2;

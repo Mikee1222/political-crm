@@ -195,9 +195,12 @@ function priorityDotStyle(pr: string | null | undefined): CSSProperties {
 /** Status dot / 3px bar — tokens only (Θετικός / Αναμονή / Αρνητικός / default). */
 function callStatusAccentStyle(st: string | null | undefined): CSSProperties {
   const s = st ?? "";
-  if (s === "Positive") return { background: "var(--success)" };
+  if (s === "Positive" || s === "Θετικό") return { background: "var(--success)" };
   if (s === "Pending") return { background: "var(--warning)" };
-  if (s === "Negative") return { background: "var(--danger)" };
+  if (s === "Negative" || s === "Αρνητικό") return { background: "var(--danger)" };
+  if (s === "No Answer" || s === "Δεν Απάντησε") {
+    return { background: "color-mix(in srgb, var(--warning) 70%, var(--border))" };
+  }
   return { background: "color-mix(in srgb, var(--text-muted) 55%, var(--border))" };
 }
 

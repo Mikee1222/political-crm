@@ -290,9 +290,16 @@ function OutcomeBadge({ o }: { o: string | null | undefined }) {
     Positive: "bg-[rgba(16,185,129,0.15)] text-[#10B981] ring-1 ring-[rgba(16,185,129,0.35)]",
     Negative: "bg-red-500/15 text-red-300 ring-1 ring-red-500/30",
     "No Answer": "bg-[rgba(245,158,11,0.15)] text-[#F59E0B] ring-1 ring-[rgba(245,158,11,0.35)]",
+    "Συνδέθηκε με ΚΚ": "bg-[rgba(16,185,129,0.15)] text-[#10B981] ring-1 ring-[rgba(16,185,129,0.35)]",
+    "Δεν ήθελε σύνδεση με ΚΚ": "bg-red-500/15 text-red-300 ring-1 ring-red-500/30",
+    "Δεν απάντησε": "bg-[rgba(245,158,11,0.15)] text-[#F59E0B] ring-1 ring-[rgba(245,158,11,0.35)]",
   };
   const cls = map[t] ?? "bg-[var(--bg-elevated)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]";
-  const el: Record<string, string> = { Positive: "Θετικό", Negative: "Αρνητικό", "No Answer": "Δεν απάντησε" };
+  const el: Record<string, string> = {
+    Positive: "Συνδέθηκε με ΚΚ",
+    Negative: "Δεν ήθελε σύνδεση με ΚΚ",
+    "No Answer": "Δεν απάντησε",
+  };
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>
       {el[t] ?? t}

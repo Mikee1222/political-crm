@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 // API key: header `x-api-key` or query `?key=` (see requirePublicApiKey)
 import { requirePublicApiKey } from "@/lib/public-api-auth";
 import { nextJsonError } from "@/lib/api-resilience";
+import { isPositiveRetellOutcome } from "@/lib/retell-call-outcomes";
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
         .limit(8),
     ]);
 
-  const positive = allCalls?.filter((c) => c.outcome === "Positive").length ?? 0;
+  const positive = allCalls?.filter((c) => isPositiveRetellOutcome(c.outcome)).length ?? 0;
   const total = allCalls?.length ?? 0;
   const positiveRate = total > 0 ? (positive / total) * 100 : 0;
 

@@ -2,9 +2,11 @@ import type { WebSocket } from "ws";
 import Anthropic from "@anthropic-ai/sdk";
 import {
   applyRetellHeuristics,
-  buildGreekPoliticalOfficeSystemPrompt,
+  buildKaragkounisTransferSystemPrompt,
   getFirstName,
   mergeCallMetadata,
+  RETELL_DECLINE_LINE,
+  RETELL_OPENING_LINE,
   RETELL_SONNET_MODEL,
   transcriptToMessages,
 } from "@/lib/retell-llm";
@@ -71,21 +73,6 @@ function isCallInit(s: string | undefined) {
   return s === "call_initated" || s === "call_initiated" || s === "call_init" || s === "initiated";
 }
 
-function firstNameFromCall(raw: z.infer<typeof retellIncomingSchema>, call: LlmState["call"]) {
-  const top = (raw as { first_name?: string }).first_name;
-  if (typeof top === "string" && top.trim()) return top.trim();
-  if (!call || typeof call !== "object") {
-    return "φίλε";
-  }
-  const meta = mergeCallMetadata(
-    call as {
-      metadata?: Record<string, unknown> | null;
-      retell_llm_dynamic_variables?: Record<string, string> | null;
-    },
-  ) as Record<string, string | undefined | null>;
-  return getFirstName(meta);
-}
-
 async function handleResponseOrReminder(
   ws: WebSocket,
   interaction: "response_required" | "reminder_required",
@@ -121,22 +108,14 @@ async function handleResponseOrReminder(
     transcript.map((t) => ({ role: t.role, content: t.content == null ? "" : String(t.content) })),
   );
   if (msgs.length === 0) {
-    sendToRetell(
-      ws,
-      responseEvent(
-        rid,
-        "Χρόνια πολλά! Να είστε καλά, και μη διστάσετε να επικοινωνήσετε με το γραφείο μας.",
-        true,
-        true,
-      ),
-    );
+    sendToRetell(ws, responseEvent(rid, RETELL_OPENING_LINE, true, false));
     return;
   }
-  const system = buildGreekPoliticalOfficeSystemPrompt(first);
+  const system = buildKaragkounisTransferSystemPrompt(first);
   const client = new Anthropic({ apiKey: key });
   const claudePromise = client.messages.create({
     model: RETELL_SONNET_MODEL,
-    max_tokens: 400,
+    max_tokens: 200,
     system,
     messages: msgs,
   });
@@ -145,21 +124,13 @@ async function handleResponseOrReminder(
   });
   const result = await Promise.race([claudePromise, timeoutPromise]);
   if (result === "timeout") {
-    sendToRetell(
-      ws,
-      responseEvent(
-        rid,
-        "Συγνώμη, υπήρξε μικρή καθυστέρηση. Ξαναλέτε, σας παρακαλώ, τι χρειάζεστε;",
-        true,
-        false,
-      ),
-    );
+    sendToRetell(ws, responseEvent(rid, RETELL_DECLINE_LINE, true, true));
     return;
   }
   const claudeRes = result;
   const textBlock = claudeRes.content[0];
   if (!textBlock || textBlock.type !== "text") {
-    sendToRetell(ws, responseEvent(rid, "Χρόνια πολλά! Να είστε καλά.", true, true));
+    sendToRetell(ws, responseEvent(rid, RETELL_DECLINE_LINE, true, true));
     return;
   }
   const spoken = textBlock.text.trim();
@@ -170,32 +141,15 @@ async function handleResponseOrReminder(
     return;
   }
   if (h.transfer_call && !transferNum) {
-    sendToRetell(
-      ws,
-      responseEvent(rid, `${spoken} (Μεταφορά: ορίστε RETELL_TRANSFER_NUMBER.)`, true, false),
-    );
+    console.error("[retell-llm-ws] transfer_call without RETELL_TRANSFER_NUMBER");
+    sendToRetell(ws, responseEvent(rid, spoken, true, false));
     return;
   }
-  let endCall = h.end_call;
-  if (!h.end_call) {
-    const lo = spoken.toLowerCase();
-    if (lo.includes("χρόνια πολλά") && !spoken.includes("?")) {
-      endCall = true;
-    }
-  }
-  sendToRetell(ws, responseEvent(rid, spoken, true, endCall));
+  sendToRetell(ws, responseEvent(rid, spoken, true, h.end_call));
 }
 
 function sendBeginGreeting(ws: WebSocket, state: LlmState) {
-  const name = firstNameFromCall(
-    { transcript: [] } as z.infer<typeof retellIncomingSchema>,
-    state.call,
-  );
-  const opening = `Καλημέρα ${name}! Καλώ από το πολιτικό γραφείο του Κώστα Καραγκούνη.`;
-  sendToRetell(
-    ws,
-    responseEvent(0, opening, true, false),
-  );
+  sendToRetell(ws, responseEvent(0, RETELL_OPENING_LINE, true, false));
   state.beginSent = true;
 }
 

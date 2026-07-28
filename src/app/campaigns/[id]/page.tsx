@@ -76,10 +76,13 @@ function formatDuration(s: number | null | undefined): string {
 function outcomeGreek(o: string | null | undefined): string {
   const t = o ?? "—";
   const m: Record<string, string> = {
-    Positive: "Θετικό",
-    Negative: "Αρνητικό",
+    Positive: "Συνδέθηκε με ΚΚ",
+    Negative: "Δεν ήθελε σύνδεση με ΚΚ",
     "No Answer": "Δεν απάντησε",
     Pending: "Αναμονή",
+    "Συνδέθηκε με ΚΚ": "Συνδέθηκε με ΚΚ",
+    "Δεν ήθελε σύνδεση με ΚΚ": "Δεν ήθελε σύνδεση με ΚΚ",
+    "Δεν απάντησε": "Δεν απάντησε",
   };
   return m[t] ?? t;
 }
@@ -621,9 +624,12 @@ export default function CampaignDetailPage() {
                 onChange={(e) => setOutcome(e.target.value)}
               >
                 <option value="">Όλα</option>
-                <option value="Positive">Θετικό</option>
-                <option value="Negative">Αρνητικό</option>
-                <option value="No Answer">Δεν απάντησε</option>
+                <option value="Συνδέθηκε με ΚΚ">Συνδέθηκε με ΚΚ</option>
+                <option value="Δεν ήθελε σύνδεση με ΚΚ">Δεν ήθελε σύνδεση με ΚΚ</option>
+                <option value="Δεν απάντησε">Δεν απάντησε</option>
+                <option value="Positive">Θετικό (παλιό)</option>
+                <option value="Negative">Αρνητικό (παλιό)</option>
+                <option value="No Answer">Δεν απάντησε (παλιό)</option>
               </HqSelect>
             </div>
             <button
@@ -744,6 +750,9 @@ function OutcomePill({ o }: { o: string | null }) {
     Positive: { bg: "bg-emerald-500/15", text: "text-emerald-200", ring: "ring-emerald-500/25" },
     Negative: { bg: "bg-rose-500/15", text: "text-rose-200", ring: "ring-rose-500/25" },
     "No Answer": { bg: "bg-amber-500/15", text: "text-amber-200", ring: "ring-amber-500/25" },
+    "Συνδέθηκε με ΚΚ": { bg: "bg-emerald-500/15", text: "text-emerald-200", ring: "ring-emerald-500/25" },
+    "Δεν ήθελε σύνδεση με ΚΚ": { bg: "bg-rose-500/15", text: "text-rose-200", ring: "ring-rose-500/25" },
+    "Δεν απάντησε": { bg: "bg-amber-500/15", text: "text-amber-200", ring: "ring-amber-500/25" },
   };
   const c = map[t] ?? { bg: "bg-slate-500/10", text: "text-[#E2E8F0]", ring: "ring-slate-500/20" };
   return (

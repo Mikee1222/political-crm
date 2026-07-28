@@ -62,6 +62,9 @@ export const callStatusPill: Record<string, string> = {
   Positive: "bg-[var(--status-positive-bg)] text-[var(--status-positive-text)] ring-1 ring-inset ring-[var(--status-positive-text)]/30",
   Negative: "bg-[var(--status-negative-bg)] text-[var(--status-negative-text)] ring-1 ring-inset ring-[var(--status-negative-text)]/30",
   "No Answer": "bg-[var(--status-noanswer-bg)] text-[var(--status-noanswer-text)] ring-1 ring-inset ring-[var(--status-noanswer-text)]/30",
+  Θετικό: "bg-[var(--status-positive-bg)] text-[var(--status-positive-text)] ring-1 ring-inset ring-[var(--status-positive-text)]/30",
+  Αρνητικό: "bg-[var(--status-negative-bg)] text-[var(--status-negative-text)] ring-1 ring-inset ring-[var(--status-negative-text)]/30",
+  "Δεν Απάντησε": "bg-[var(--status-noanswer-bg)] text-[var(--status-noanswer-text)] ring-1 ring-inset ring-[var(--status-noanswer-text)]/30",
   Επικοινώνησε:
     "bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/30",
 };
@@ -79,6 +82,9 @@ export function callStatusLabel(key: string | null | undefined): string {
     Positive: "Θετική",
     Negative: "Αρνητική",
     "No Answer": "Δεν απαντά",
+    Θετικό: "Θετικό",
+    Αρνητικό: "Αρνητικό",
+    "Δεν Απάντησε": "Δεν Απάντησε",
     Επικοινώνησε: "Επικοινώνησε",
   };
   return m[key ?? "Pending"] ?? (key || "—");

@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  isNegativeRetellOutcome,
+  isNoAnswerRetellOutcome,
+  isPositiveRetellOutcome,
+} from "@/lib/retell-call-outcomes";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -6,9 +11,9 @@ export function tallyOutcomes(
   callRows: Array<{ outcome: string | null; contact_id?: string }>,
 ): OutcomeStats {
   const total = callRows.length;
-  const positive = callRows.filter((c) => c.outcome === "Positive").length;
-  const negative = callRows.filter((c) => c.outcome === "Negative").length;
-  const noAnswer = callRows.filter((c) => c.outcome === "No Answer").length;
+  const positive = callRows.filter((c) => isPositiveRetellOutcome(c.outcome)).length;
+  const negative = callRows.filter((c) => isNegativeRetellOutcome(c.outcome)).length;
+  const noAnswer = callRows.filter((c) => isNoAnswerRetellOutcome(c.outcome)).length;
   return { total, positive, negative, noAnswer };
 }
 

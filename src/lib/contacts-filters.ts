@@ -483,6 +483,9 @@ const STATUS_LABEL: Record<string, string> = {
   Positive: "Θετική",
   Negative: "Αρνητική",
   "No Answer": "Δεν απαντά",
+  Θετικό: "Θετικό",
+  Αρνητικό: "Αρνητικό",
+  "Δεν Απάντησε": "Δεν Απάντησε",
 };
 
 export function summarizeContactFilters(f: ContactListFilters, groupNames: Map<string, string>): string {

@@ -4,6 +4,9 @@ export const CONTACT_CALL_STATUS_OPTIONS = [
   { value: "Positive", label: "Θετική" },
   { value: "Negative", label: "Αρνητική" },
   { value: "No Answer", label: "Δεν απαντά" },
+  { value: "Θετικό", label: "Θετικό" },
+  { value: "Αρνητικό", label: "Αρνητικό" },
+  { value: "Δεν Απάντησε", label: "Δεν Απάντησε" },
   { value: "Επικοινώνησε", label: "Επικοινώνησε" },
 ] as const;
 
