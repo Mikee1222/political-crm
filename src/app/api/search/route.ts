@@ -126,7 +126,7 @@ function phoneFieldMatches(v: string | null | undefined, digits: string) {
 }
 
 const CONTACT_SELECT =
-  "id, first_name, last_name, phone, phone2, landline, municipality, email, contact_code, father_name, mother_name, area, notes, tags";
+  "id, first_name, last_name, phone, phone2, landline, municipality, email, contact_code, father_name, mother_name, area, notes, tags, political_stance, call_status";
 
 export type SearchContactHit = {
   id: string;
@@ -135,6 +135,8 @@ export type SearchContactHit = {
   phone: string | null;
   municipality: string | null;
   contact_code?: string | null;
+  political_stance?: string | null;
+  call_status?: string | null;
   group_names?: string[];
   matchReasons: string[];
   aiMatch?: boolean;
@@ -145,6 +147,8 @@ export type SearchRequestHit = {
   request_code: string | null;
   title: string;
   status: string | null;
+  category?: string | null;
+  created_at?: string | null;
   snippet: string | null;
   requester_name?: string | null;
 };
@@ -324,7 +328,9 @@ export async function GET(request: NextRequest) {
         ? Promise.resolve({ data: [] as Record<string, unknown>[] })
         : supabase
             .from("requests")
-            .select("id, request_code, title, status, description, contact_id, contacts!contact_id(first_name, last_name)")
+            .select(
+              "id, request_code, title, status, category, created_at, description, contact_id, contacts!contact_id(first_name, last_name)",
+            )
             .or(`title.ilike.${p},request_code.ilike.${p},description.ilike.${p}`)
             .limit(10),
       phoneOnly
@@ -426,6 +432,8 @@ export async function GET(request: NextRequest) {
         phone: (row.phone as string | null) ?? null,
         municipality: (row.municipality as string | null) ?? null,
         contact_code: (row.contact_code as string | null) ?? null,
+        political_stance: (row.political_stance as string | null) ?? null,
+        call_status: (row.call_status as string | null) ?? null,
         matchReasons: allReasons,
         aiMatch: ai,
       });
@@ -467,6 +475,8 @@ export async function GET(request: NextRequest) {
         phone: (row.phone as string | null) ?? null,
         municipality: (row.municipality as string | null) ?? null,
         contact_code: (row.contact_code as string | null) ?? null,
+        political_stance: (row.political_stance as string | null) ?? null,
+        call_status: (row.call_status as string | null) ?? null,
         matchReasons: allReasons,
         aiMatch: ai,
       });
@@ -488,6 +498,8 @@ export async function GET(request: NextRequest) {
       request_code: (row.request_code as string | null) ?? null,
       title: String(row.title ?? ""),
       status: (row.status as string | null) ?? null,
+      category: (row.category as string | null) ?? null,
+      created_at: (row.created_at as string | null) ?? null,
       snippet: snippet(String(row.description ?? row.title ?? ""), raw),
       requester_name: requesterNameFromRow(row),
     }));
