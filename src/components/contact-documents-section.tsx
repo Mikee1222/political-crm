@@ -113,30 +113,35 @@ function uploadContactDocXHR(
 }
 
 function PdfPreviewPane({
-  fileUrl,
+  proxyUrl,
+  downloadUrl,
   name,
 }: {
-  fileUrl: string;
+  proxyUrl: string;
+  downloadUrl: string | null;
   name: string;
 }) {
-  const [iframeLoading, setIframeLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [previewFailed, setPreviewFailed] = useState(false);
   const loadedRef = useRef(false);
-  const googleDocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
 
   useEffect(() => {
-    console.log("[PDF preview] signed/file URL:", fileUrl);
-    console.log("[PDF preview] Google Docs viewer URL:", googleDocsUrl);
     loadedRef.current = false;
-    setIframeLoading(true);
+    setLoading(true);
     setPreviewFailed(false);
     const t = window.setTimeout(() => {
       if (loadedRef.current) return;
-      setIframeLoading(false);
+      setLoading(false);
       setPreviewFailed(true);
     }, 10_000);
     return () => window.clearTimeout(t);
-  }, [fileUrl, googleDocsUrl]);
+  }, [proxyUrl]);
+
+  const markLoaded = () => {
+    loadedRef.current = true;
+    setLoading(false);
+    setPreviewFailed(false);
+  };
 
   if (previewFailed) {
     return (
@@ -145,39 +150,130 @@ function PdfPreviewPane({
         <p className="max-w-sm text-sm text-[var(--text-secondary)]">
           Δεν ήταν δυνατή η προεπισκόπηση.
         </p>
-        <a
-          href={fileUrl}
-          download={name}
-          target="_blank"
-          rel="noreferrer"
-          className={lux.btnPrimary + " inline-flex items-center gap-2"}
-        >
-          <ArrowDownToLine className="h-4 w-4" />
-          Λήψη
-        </a>
+        {downloadUrl ? (
+          <a
+            href={downloadUrl}
+            download={name}
+            target="_blank"
+            rel="noreferrer"
+            className={lux.btnPrimary + " inline-flex items-center gap-2"}
+          >
+            <ArrowDownToLine className="h-4 w-4" />
+            Λήψη
+          </a>
+        ) : null}
       </div>
     );
   }
 
   return (
     <div className="relative min-h-[600px] h-[70vh] w-full bg-white">
-      {iframeLoading ? (
+      {loading ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0b1220]/80">
           <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" aria-hidden />
           <span className="sr-only">Φόρτωση προεπισκόπησης</span>
         </div>
       ) : null}
-      <iframe
-        title={name}
-        src={googleDocsUrl}
+      <object
+        data={proxyUrl}
+        type="application/pdf"
         width="100%"
-        height="100%"
-        style={{ border: "none", minHeight: "600px" }}
-        className="h-full w-full"
+        height="600px"
+        className="h-full min-h-[600px] w-full"
+        onLoad={markLoaded}
+      >
+        <embed
+          title={name}
+          src={proxyUrl}
+          type="application/pdf"
+          width="100%"
+          height="600px"
+          className="h-full min-h-[600px] w-full"
+          onLoad={markLoaded}
+        />
+        {downloadUrl ? (
+          <a href={downloadUrl} download={name} target="_blank" rel="noreferrer">
+            Λήψη {name}
+          </a>
+        ) : (
+          <a href={proxyUrl} target="_blank" rel="noreferrer">
+            Άνοιγμα {name}
+          </a>
+        )}
+      </object>
+    </div>
+  );
+}
+
+function ImagePreviewPane({
+  proxyUrl,
+  downloadUrl,
+  name,
+}: {
+  proxyUrl: string;
+  downloadUrl: string | null;
+  name: string;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    loadedRef.current = false;
+    setLoading(true);
+    setPreviewFailed(false);
+    const t = window.setTimeout(() => {
+      if (loadedRef.current) return;
+      setLoading(false);
+      setPreviewFailed(true);
+    }, 10_000);
+    return () => window.clearTimeout(t);
+  }, [proxyUrl]);
+
+  if (previewFailed) {
+    return (
+      <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+        <FileX className="h-10 w-10 text-[var(--text-muted)]" aria-hidden />
+        <p className="max-w-sm text-sm text-[var(--text-secondary)]">
+          Δεν ήταν δυνατή η προεπισκόπηση.
+        </p>
+        {downloadUrl ? (
+          <a
+            href={downloadUrl}
+            download={name}
+            target="_blank"
+            rel="noreferrer"
+            className={lux.btnPrimary + " inline-flex items-center gap-2"}
+          >
+            <ArrowDownToLine className="h-4 w-4" />
+            Λήψη
+          </a>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex min-h-[240px] items-center justify-center">
+      {loading ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0b1220]/80">
+          <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" aria-hidden />
+          <span className="sr-only">Φόρτωση προεπισκόπησης</span>
+        </div>
+      ) : null}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={proxyUrl}
+        alt={name}
+        className="mx-auto max-h-[70vh] w-auto max-w-full object-contain p-4"
         onLoad={() => {
           loadedRef.current = true;
-          setIframeLoading(false);
+          setLoading(false);
           setPreviewFailed(false);
+        }}
+        onError={() => {
+          setLoading(false);
+          setPreviewFailed(true);
         }}
       />
     </div>
@@ -198,8 +294,8 @@ function PreviewModal({
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
   const [fileUrl, setFileUrl] = useState<string | null>(doc.signed_url);
-  const [resolvingUrl, setResolvingUrl] = useState(!doc.signed_url);
   const kind = contactDocPreviewKind(doc.file_type, doc.name);
+  const proxyUrl = `/api/contacts/${contactId}/documents/${doc.id}/preview`;
 
   useEffect(() => {
     setMounted(true);
@@ -209,37 +305,26 @@ function PreviewModal({
     let cancelled = false;
     async function ensureSignedUrl() {
       if (doc.signed_url) {
-        console.log("[document preview] using list/upload signed_url:", doc.signed_url);
         setFileUrl(doc.signed_url);
-        setResolvingUrl(false);
         return;
       }
-      setResolvingUrl(true);
       try {
         const dr = await fetchWithTimeout(
           `/api/documents?contact_id=${encodeURIComponent(contactId)}`,
         );
         if (!dr.ok) {
-          if (!cancelled) {
-            setFileUrl(null);
-            setResolvingUrl(false);
-          }
+          if (!cancelled) setFileUrl(null);
           return;
         }
         const j = (await dr.json()) as { documents?: ContactDocRow[] };
         const fresh = (j.documents ?? []).find((d) => d.id === doc.id);
         const url = fresh?.signed_url ?? null;
         if (!cancelled) {
-          console.log("[document preview] refreshed signed_url:", url);
           setFileUrl(url);
           if (url) onSignedUrl?.(doc.id, url);
-          setResolvingUrl(false);
         }
       } catch {
-        if (!cancelled) {
-          setFileUrl(null);
-          setResolvingUrl(false);
-        }
+        if (!cancelled) setFileUrl(null);
       }
     }
     void ensureSignedUrl();
@@ -266,10 +351,10 @@ function PreviewModal({
 
   if (!mounted || typeof document === "undefined") return null;
 
-  const showUnsupported =
-    !resolvingUrl && (kind === "unsupported" || !fileUrl);
-  const showImage = kind === "image" && !!fileUrl && !resolvingUrl;
-  const showPdf = kind === "pdf" && !!fileUrl && !resolvingUrl;
+  const showUnsupported = kind === "unsupported";
+  const showImage = kind === "image";
+  const showPdf = kind === "pdf";
+  const downloadUrl = fileUrl ?? proxyUrl;
 
   return createPortal(
     <div
@@ -299,46 +384,33 @@ function PreviewModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-black/40">
-          {resolvingUrl ? (
-            <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 px-6 py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" aria-hidden />
-              <p className="text-sm text-[var(--text-secondary)]">Προετοιμασία προεπισκόπησης…</p>
-            </div>
-          ) : null}
           {showImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={fileUrl!}
-              alt={doc.name}
-              className="mx-auto max-h-[70vh] w-auto max-w-full object-contain p-4"
-            />
+            <ImagePreviewPane proxyUrl={proxyUrl} downloadUrl={fileUrl} name={doc.name} />
           ) : null}
-          {showPdf ? <PdfPreviewPane fileUrl={fileUrl!} name={doc.name} /> : null}
+          {showPdf ? (
+            <PdfPreviewPane proxyUrl={proxyUrl} downloadUrl={fileUrl} name={doc.name} />
+          ) : null}
           {showUnsupported ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 px-6 py-16 text-center">
               <FileX className="h-10 w-10 text-[var(--text-muted)]" aria-hidden />
               <p className="max-w-sm text-sm text-[var(--text-secondary)]">
-                {!fileUrl
-                  ? "Δεν είναι διαθέσιμος σύνδεσμος προεπισκόπησης. Χρησιμοποιήστε τη λήψη."
-                  : "Δεν υποστηρίζεται προεπισκόπηση — κατεβάστε το αρχείο"}
+                Δεν υποστηρίζεται προεπισκόπηση — κατεβάστε το αρχείο
               </p>
             </div>
           ) : null}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
-          {fileUrl ? (
-            <a
-              href={fileUrl}
-              download={doc.name}
-              target="_blank"
-              rel="noreferrer"
-              className={lux.btnPrimary + " inline-flex items-center gap-2"}
-            >
-              <ArrowDownToLine className="h-4 w-4" />
-              Λήψη
-            </a>
-          ) : null}
+          <a
+            href={downloadUrl}
+            download={doc.name}
+            target="_blank"
+            rel="noreferrer"
+            className={lux.btnPrimary + " inline-flex items-center gap-2"}
+          >
+            <ArrowDownToLine className="h-4 w-4" />
+            Λήψη
+          </a>
           <button type="button" className={lux.btnSecondary} onClick={onClose}>
             Κλείσιμο
           </button>
