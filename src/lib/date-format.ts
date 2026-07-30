@@ -111,6 +111,28 @@ export function formatCallLogDateTime(calledAt: string | null | undefined): stri
   });
 }
 
+/** Compact call-history stamp: «30/07 20:26» (Europe/Athens). */
+export function formatCallHistoryCompact(calledAt: string | null | undefined): string {
+  const d = parseInstant(calledAt);
+  if (!d) return "—";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: ATHENS_TZ,
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  const day = get("day");
+  const month = get("month");
+  const hour = get("hour");
+  const minute = get("minute");
+  if (!day || !month || !hour || !minute) return "—";
+  return `${day}/${month} ${hour}:${minute}`;
+}
+
 /** Relative elapsed time from a UTC instant (Greek copy for very recent marks). */
 export function formatRelativeAthens(value: string | Date | null | undefined): string {
   const then = parseInstant(value);

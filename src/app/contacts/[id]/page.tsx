@@ -25,12 +25,16 @@ import {
 } from "lucide-react";
 import {
   formatCalendarDateOnly,
+  formatCallHistoryCompact,
   formatCallLogDateTime,
   formatDateAthens,
   formatDateTimeAthens,
   formatDateTimeEnGb,
   formatRelativeAthens,
 } from "@/lib/date-format";
+import { formatDurationGreek } from "@/lib/campaign-contact-status";
+import { hasCallTranscript, parseCallTranscript } from "@/lib/call-transcript";
+import { retellOutcomeBadgeClass, retellOutcomeLabel } from "@/lib/retell-call-outcomes";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -102,7 +106,10 @@ type Call = {
   called_at: string | null;
   outcome: string | null;
   notes: string | null;
+  transcript?: string | null;
   duration_seconds: number | null;
+  campaign_id?: string | null;
+  campaign_name?: string | null;
 };
 type Task = { id: string; title: string; due_date: string | null; completed: boolean };
 type RequestItem = {
@@ -285,25 +292,61 @@ function authorInitials(name: string) {
 }
 
 function OutcomeBadge({ o }: { o: string | null | undefined }) {
-  const t = o ?? "—";
-  const map: Record<string, string> = {
-    Positive: "bg-[rgba(16,185,129,0.15)] text-[#10B981] ring-1 ring-[rgba(16,185,129,0.35)]",
-    Negative: "bg-red-500/15 text-red-300 ring-1 ring-red-500/30",
-    "No Answer": "bg-[rgba(245,158,11,0.15)] text-[#F59E0B] ring-1 ring-[rgba(245,158,11,0.35)]",
-    "Συνδέθηκε με ΚΚ": "bg-[rgba(16,185,129,0.15)] text-[#10B981] ring-1 ring-[rgba(16,185,129,0.35)]",
-    "Δεν ήθελε σύνδεση με ΚΚ": "bg-red-500/15 text-red-300 ring-1 ring-red-500/30",
-    "Δεν απάντησε": "bg-[rgba(245,158,11,0.15)] text-[#F59E0B] ring-1 ring-[rgba(245,158,11,0.35)]",
-  };
-  const cls = map[t] ?? "bg-[var(--bg-elevated)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]";
-  const el: Record<string, string> = {
-    Positive: "Συνδέθηκε με ΚΚ",
-    Negative: "Δεν ήθελε σύνδεση με ΚΚ",
-    "No Answer": "Δεν απάντησε",
-  };
+  const label = retellOutcomeLabel(o);
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>
-      {el[t] ?? t}
+    <span
+      className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-bold tracking-wide ${retellOutcomeBadgeClass(o)}`}
+    >
+      {label}
     </span>
+  );
+}
+
+function CallTranscriptBlock({ raw }: { raw: string }) {
+  const [open, setOpen] = useState(false);
+  const turns = useMemo(() => parseCallTranscript(raw), [raw]);
+  if (!turns.length) return null;
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[11px] font-medium text-[var(--accent-gold)] hover:underline"
+      >
+        {open ? "Απόκρυψη συνομιλίας ▲" : "Εμφάνιση συνομιλίας ▼"}
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/50 px-2.5 py-2">
+          {turns.map((t, i) => {
+            const isAgent = t.role === "agent";
+            const isUser = t.role === "user";
+            return (
+              <p
+                key={`${t.role}-${i}`}
+                className={[
+                  "text-[11px] leading-relaxed",
+                  isAgent
+                    ? "text-[var(--accent-gold)]"
+                    : isUser
+                      ? "text-[var(--text-muted)]"
+                      : "text-[var(--text-secondary)]",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "mr-1 font-semibold",
+                    isAgent ? "text-[var(--accent-blue-bright)]" : "",
+                  ].join(" ")}
+                >
+                  {isAgent ? "🤖 agent" : isUser ? "👤 user" : "•"}:
+                </span>
+                {t.text}
+              </p>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -383,6 +426,7 @@ function ContactDetailPage() {
   const resolveName = useResolveAuthorName();
   const { openTab } = useContactTabs();
   const canManage = hasMinRole(profile?.role, "manager", profile?.access_tier);
+  const isAdmin = profile?.role === "admin";
   const canEdit = can(profile, "contacts_edit");
   const canViewAiSummary = can(profile, "ai_summary_view");
   const isCaller = !canEdit;
@@ -409,6 +453,7 @@ function ContactDetailPage() {
   const [contactNotes, setContactNotes] = useState<ContactNoteItem[]>([]);
   const [callLogs, setCallLogs] = useState<ContactCallLogItem[]>([]);
   const [markingContacted, setMarkingContacted] = useState(false);
+  const [cleaningPending, setCleaningPending] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSending, setNoteSending] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -550,10 +595,23 @@ function ContactDetailPage() {
           }
         }
         let logs: ContactCallLogItem[] = [];
+        let historyCalls: Call[] | null = null;
+        let cleanedCallStatus: string | null | undefined;
         if (logsRes.ok) {
           try {
-            const ljson = (await logsRes.json()) as { logs?: ContactCallLogItem[] };
+            const ljson = (await logsRes.json()) as {
+              logs?: ContactCallLogItem[];
+              calls?: Call[];
+              call_status?: string | null;
+              contact_call_status_updated?: boolean;
+            };
             logs = ljson.logs ?? [];
+            if (Array.isArray(ljson.calls)) {
+              historyCalls = ljson.calls;
+            }
+            if (ljson.contact_call_status_updated && ljson.call_status != null) {
+              cleanedCallStatus = ljson.call_status;
+            }
           } catch {
             logs = [];
           }
@@ -574,7 +632,7 @@ function ContactDetailPage() {
           return;
         }
         const raw = data.contact as Contact | null;
-        const calls = (data.calls ?? []) as Call[];
+        const calls = (historyCalls ?? (data.calls ?? [])) as Call[];
         const tasks = (data.tasks ?? []) as Task[];
         const requests = (data.requests ?? []) as RequestItem[];
         let supporters: SupporterRow[] = [];
@@ -616,6 +674,7 @@ function ContactDetailPage() {
               group_id: raw.group_id ?? null,
               phone2: raw.phone2 ?? null,
               landline: raw.landline ?? null,
+              ...(cleanedCallStatus != null ? { call_status: cleanedCallStatus } : {}),
             });
           } else {
             setContact(null);
@@ -1265,6 +1324,51 @@ function ContactDetailPage() {
       showToast("Η καταγραφή διαγράφηκε.", "success");
     } catch {
       showToast("Σφάλμα δικτύου.", "error");
+    }
+  };
+
+  const handleCleanupPendingCalls = async () => {
+    if (!id || !isAdmin || cleaningPending) return;
+    if (
+      !confirm(
+        "Καθαρισμός Pending/Αναμονή κλήσεων παλαιότερων από 1 ώρα → Δεν απάντησε;",
+      )
+    ) {
+      return;
+    }
+    setCleaningPending(true);
+    try {
+      const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}/call-logs`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cleanup_pending" }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        cleaned?: number;
+        calls?: Call[];
+        call_status?: string | null;
+        contact_call_status_updated?: boolean;
+      };
+      if (!res.ok) {
+        showToast(j.error ?? "Αποτυχία καθαρισμού", "error");
+        return;
+      }
+      if (Array.isArray(j.calls)) {
+        setCalls(j.calls);
+      }
+      if (j.contact_call_status_updated && j.call_status != null) {
+        setContact((prev) => (prev ? { ...prev, call_status: j.call_status ?? prev.call_status } : prev));
+      }
+      const n = j.cleaned ?? 0;
+      showToast(
+        n > 0 ? `Καθαρίστηκαν ${n} εκκρεμείς κλήσεις.` : "Δεν βρέθηκαν εκκρεμείς κλήσεις (>1ώ).",
+        "success",
+      );
+    } catch {
+      showToast("Σφάλμα δικτύου.", "error");
+    } finally {
+      setCleaningPending(false);
     }
   };
 
@@ -2939,33 +3043,56 @@ function ContactDetailPage() {
 
             {/* G Calls timeline */}
             <div {...animDelay(7)} className={card}>
-              <h2 className={cardTitle}>Ιστορικό κλήσεων</h2>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)]/80 pb-3">
+                <h2 className="mb-0 text-sm font-semibold tracking-wide text-[var(--text-primary)]">Ιστορικό κλήσεων</h2>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    disabled={cleaningPending}
+                    onClick={() => void handleCleanupPendingCalls()}
+                    className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:border-amber-500/40 hover:text-amber-200 disabled:opacity-50"
+                  >
+                    {cleaningPending ? "Καθαρισμός…" : "Καθαρισμός Pending"}
+                  </button>
+                )}
+              </div>
               {calls.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Δεν υπάρχουν κλήσεις ακόμα</p>
               ) : (
                 <ul className="relative space-y-0">
-                  {calls.map((cl, i) => (
-                    <li key={cl.id} className="relative flex gap-3 pb-4 last:pb-0">
-                      {i < calls.length - 1 && (
-                        <span className="absolute left-2 top-4 h-[calc(100%-4px)] w-px bg-[var(--border)]" />
-                      )}
-                      <span className="relative z-[1] mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-gold)] ring-2 ring-[var(--bg-card)]" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-[var(--text-primary)]">
-                          {cl.called_at ? formatCallLogDateTime(cl.called_at) : "—"}
-                        </p>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <OutcomeBadge o={cl.outcome} />
-                          {cl.duration_seconds != null && (
-                            <span className="text-[11px] text-[var(--text-muted)]">
-                              {cl.duration_seconds}s
-                            </span>
-                          )}
+                  {calls.map((cl, i) => {
+                    const transcriptRaw = cl.transcript ?? cl.notes;
+                    const showTranscript = hasCallTranscript(transcriptRaw);
+                    return (
+                      <li key={cl.id} className="relative flex gap-3 pb-4 last:pb-0">
+                        {i < calls.length - 1 && (
+                          <span className="absolute left-2 top-4 h-[calc(100%-4px)] w-px bg-[var(--border)]" />
+                        )}
+                        <span className="relative z-[1] mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-gold)] ring-2 ring-[var(--bg-card)]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <p className="text-xs font-semibold text-[var(--text-primary)]">
+                              {cl.called_at ? formatCallHistoryCompact(cl.called_at) : "—"}
+                            </p>
+                            {cl.duration_seconds != null && (
+                              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                                {formatDurationGreek(cl.duration_seconds)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <OutcomeBadge o={cl.outcome} />
+                          </div>
+                          {cl.campaign_name ? (
+                            <p className="mt-1 text-[10px] text-[var(--text-muted)]">{cl.campaign_name}</p>
+                          ) : null}
+                          {showTranscript && transcriptRaw ? (
+                            <CallTranscriptBlock raw={transcriptRaw} />
+                          ) : null}
                         </div>
-                        {cl.notes && <p className="mt-1 text-xs text-[var(--text-secondary)]">{cl.notes}</p>}
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

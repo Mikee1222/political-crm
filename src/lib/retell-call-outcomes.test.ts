@@ -8,6 +8,8 @@ import {
   RETELL_OUTCOME_NO_ANSWER,
   detectRetellTransfer,
   resolveRetellCallOutcome,
+  retellOutcomeBadgeClass,
+  retellOutcomeLabel,
 } from "@/lib/retell-call-outcomes";
 import { applyRetellHeuristics } from "@/lib/retell-llm";
 
@@ -104,5 +106,23 @@ describe("applyRetellHeuristics", () => {
       end_call: false,
       transfer_call: true,
     });
+  });
+});
+
+describe("retellOutcomeLabel / badge", () => {
+  it("maps legacy and pending labels", () => {
+    expect(retellOutcomeLabel("Pending")).toBe("Αναμονή");
+    expect(retellOutcomeLabel("Positive")).toBe(RETELL_OUTCOME_CONNECTED);
+    expect(retellOutcomeLabel(RETELL_OUTCOME_NO_ANSWER)).toBe(RETELL_OUTCOME_NO_ANSWER);
+  });
+
+  it("returns distinct badge classes for the three Retell outcomes", () => {
+    const a = retellOutcomeBadgeClass(RETELL_OUTCOME_CONNECTED);
+    const b = retellOutcomeBadgeClass(RETELL_OUTCOME_DECLINED);
+    const c = retellOutcomeBadgeClass(RETELL_OUTCOME_NO_ANSWER);
+    expect(a).not.toBe(b);
+    expect(b).not.toBe(c);
+    expect(a).toContain("emerald");
+    expect(c).toContain("amber");
   });
 });

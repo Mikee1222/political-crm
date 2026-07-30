@@ -220,3 +220,17 @@ export function retellOutcomeLabel(outcome: string | null | undefined): string {
   };
   return legacy[outcome] ?? outcome;
 }
+
+/** Tailwind classes for prominent outcome badges on contact call history. */
+export function retellOutcomeBadgeClass(outcome: string | null | undefined): string {
+  const label = retellOutcomeLabel(outcome);
+  const map: Record<string, string> = {
+    [RETELL_OUTCOME_CONNECTED]:
+      "bg-emerald-500/20 text-emerald-300 ring-2 ring-emerald-400/50",
+    [RETELL_OUTCOME_DECLINED]: "bg-red-500/20 text-red-300 ring-2 ring-red-400/45",
+    [RETELL_OUTCOME_NO_ANSWER]:
+      "bg-amber-500/20 text-amber-200 ring-2 ring-amber-400/50",
+    Αναμονή: "bg-sky-500/20 text-sky-200 ring-2 ring-sky-400/45",
+  };
+  return map[label] ?? "bg-[var(--bg-elevated)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]";
+}
