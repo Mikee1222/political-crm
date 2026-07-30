@@ -4,10 +4,14 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
+import {
+  CONTACT_DOC_MAX_BYTES,
+  contactDocumentRejectReason,
+} from "@/lib/contact-documents";
 
 export const dynamic = "force-dynamic";
 
-const MAX_BYTES = 50 * 1024 * 1024;
+const LIBRARY_MAX_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,14 +29,27 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof Blob) || !file.size) {
       return NextResponse.json({ error: "Άκυρο αρχείο" }, { status: 400 });
     }
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json({ error: "Το αρχείο υπερβαίνει το όριο 50MB" }, { status: 400 });
-    }
     if (!library && !contactId && !requestId) {
       return NextResponse.json({ error: "Χρειάζεται contact_id, request_id ή library=1" }, { status: 400 });
     }
 
     const nameRaw = (file as File & { name?: string }).name ?? "upload";
+    const mime = file.type || null;
+
+    if (library) {
+      if (file.size > LIBRARY_MAX_BYTES) {
+        return NextResponse.json({ error: "Το αρχείο υπερβαίνει το όριο 50MB" }, { status: 400 });
+      }
+    } else {
+      const reject = contactDocumentRejectReason({ name: nameRaw, type: mime, size: file.size });
+      if (reject) {
+        return NextResponse.json({ error: reject }, { status: 400 });
+      }
+      if (file.size > CONTACT_DOC_MAX_BYTES) {
+        return NextResponse.json({ error: "Το αρχείο υπερβαίνει το όριο 10MB" }, { status: 400 });
+      }
+    }
+
     const safe = nameRaw.replace(/[^\w.\- ()\u0370-\u03FF\u1F00-\u1FFF]+/g, "_");
     const path = `crm/${user.id}/${Date.now()}-${safe}`;
 
@@ -65,7 +82,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: dErr.message }, { status: 400 });
     }
 
-    return NextResponse.json({ document: ins });
+    let signed_url: string | null = null;
+    const { data: signed } = await admin.storage.from("documents").createSignedUrl(path, 3600);
+    signed_url = signed?.signedUrl ?? null;
+
+    return NextResponse.json({ document: { ...ins, signed_url } });
   } catch (e) {
     console.error("[api/documents/upload]", e);
     return nextJsonError();
