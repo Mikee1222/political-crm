@@ -47,6 +47,10 @@ export function pickRetellDialPhone(c: RetellDialPhoneFields | null | undefined)
 /**
  * Retell v2 `create-phone-call` request body. Uses `override_agent_id` (Retell API name).
  * See https://docs.retellai.com/api-references/create-phone-call
+ *
+ * Dynamic vars (`retell_llm_dynamic_variables`) are required so Single Prompt Agents can
+ * interpolate {{first_name}} etc., and so the webhook can resolve contact_id.
+ * `campaign_id` stays in metadata (and dynamic vars when present) for pending-call matching.
  */
 export function buildCreatePhoneCallBody(
   toNumber: string,

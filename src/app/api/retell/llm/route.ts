@@ -135,6 +135,8 @@ export async function POST(request: NextRequest) {
           }
           const h = applyRetellHeuristics(spoken);
           if (h.transfer_call) {
+            // Single Prompt Agent configures transfer in Retell dashboard;
+            // RETELL_TRANSFER_NUMBER is only for custom LLM WS/HTTP path.
             const transferNum = process.env.RETELL_TRANSFER_NUMBER?.trim();
             if (transferNum) {
               const o = retellHttpLlmJson(rid, spoken, false, {

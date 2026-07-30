@@ -121,6 +121,8 @@ async function handleResponseOrReminder(
   }
   const spoken = textBlock.text.trim();
   const h = applyRetellHeuristics(spoken);
+  // Single Prompt Agent configures transfer in Retell dashboard;
+  // RETELL_TRANSFER_NUMBER is only for custom LLM WS/HTTP path.
   const transferNum = process.env.RETELL_TRANSFER_NUMBER?.trim();
   if (h.transfer_call && transferNum) {
     sendToRetell(ws, responseEvent(rid, spoken, true, false, { transfer_number: transferNum }));

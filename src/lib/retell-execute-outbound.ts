@@ -39,6 +39,9 @@ export async function executeRetellCreatePhoneCall(
       error: e instanceof Error ? e.message : "Ρύθμιση Retell",
     };
   }
+  // Safe to log: body has no API keys (auth is Bearer header only).
+  console.log("[retell-execute-outbound] create-phone-call request body:", JSON.stringify(callBody));
+
   const retellRes = await fetch("https://api.retellai.com/v2/create-phone-call", {
     method: "POST",
     headers: {
@@ -48,7 +51,13 @@ export async function executeRetellCreatePhoneCall(
     body: JSON.stringify(callBody),
   });
   const payload = (await retellRes.json().catch(() => ({}))) as { call_id?: string; [k: string]: unknown };
+  const callId = typeof payload.call_id === "string" ? payload.call_id : null;
   if (!retellRes.ok) {
+    console.error("[retell-execute-outbound] Retell API error:", {
+      status: retellRes.status,
+      call_id: callId,
+      detail: payload,
+    });
     return {
       ok: false,
       status: 400,
@@ -56,9 +65,13 @@ export async function executeRetellCreatePhoneCall(
       detail: payload,
     };
   }
+  console.log("[retell-execute-outbound] Retell API success:", {
+    status: retellRes.status,
+    call_id: callId,
+  });
   return {
     ok: true,
-    call_id: typeof payload.call_id === "string" ? payload.call_id : null,
+    call_id: callId,
     retell: payload,
   };
 }

@@ -140,6 +140,9 @@ export function getLastAgentLine(call: Record<string, unknown> | null | undefine
  * - duration < 15s and no transfer → no answer
  * - otherwise (≥15s, no transfer) → declined
  * - Retell dial/voicemail disconnect → no answer (even if duration ≥ 15)
+ *
+ * Never returns Pending/Αναμονή — those are only for in-flight dial rows.
+ * Webhook must UPDATE the Pending row on call_ended or the UI stays «Αναμονή».
  */
 export function resolveRetellCallOutcome(
   call: Record<string, unknown> | null | undefined,

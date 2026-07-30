@@ -28,6 +28,7 @@ const FIELDS: {
   placeholder: string;
   type?: "password" | "tel" | "text";
   sensitive?: boolean;
+  hint?: string;
 }[] = [
   {
     key: "retell_api_key",
@@ -53,6 +54,8 @@ const FIELDS: {
     label: "Αριθμός Transfer",
     placeholder: "+30...",
     type: "tel",
+    // Used only by custom LLM WS/HTTP; Single Prompt Agent sets transfer in Retell dashboard.
+    hint: "Για Single Prompt Agent, ο αριθμός transfer ρυθμίζεται απευθείας στο Retell dashboard.",
   },
   {
     key: "retell_webhook_secret",
@@ -213,6 +216,9 @@ export function RetellSettingsSection() {
                     <Pencil className="h-4 w-4" />
                   </button>
                 </div>
+                {f.hint ? (
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">{f.hint}</p>
+                ) : null}
               </div>
             );
           })}
