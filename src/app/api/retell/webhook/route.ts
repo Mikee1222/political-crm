@@ -4,7 +4,10 @@ import { logActivity } from "@/lib/activity-log";
 import { mergeCallMetadata, getContactId } from "@/lib/retell-llm";
 import { resolveRetellCallOutcome } from "@/lib/retell-call-outcomes";
 import { nextJsonError } from "@/lib/api-resilience";
-import { verifyRetellWebhookSignature } from "@/lib/retell-webhook-verify";
+import {
+  isRetellWebhookTestEvent,
+  verifyRetellWebhookSignature,
+} from "@/lib/retell-webhook-verify";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +15,10 @@ export const dynamic = "force-dynamic";
  * Expected Retell webhook URL (production):
  *   https://crm.kkaragkounis.com/api/retell/webhook
  * Configure this in the Retell dashboard → Agent / Account → Webhook.
+ *
+ * Public route (middleware `isRetellPublic` bypasses session auth).
+ * Security: HMAC via RETELL_WEBHOOK_SECRET or RETELL_API_KEY for real call events.
+ * Dashboard/curl probes with `event: "test"` (or ping) return 200 without HMAC.
  */
 
 type TranscriptEntry = { role: string; content?: string | null };
@@ -89,8 +96,6 @@ function assertRetellWebhookAuth(rawBody: string, request: NextRequest): NextRes
 export async function POST(request: NextRequest) {
   try {
   const rawBody = await request.text();
-  const authErr = assertRetellWebhookAuth(rawBody, request);
-  if (authErr) return authErr;
 
   let body: { call?: Record<string, unknown> | null; event?: string };
   try {
@@ -99,6 +104,15 @@ export async function POST(request: NextRequest) {
     console.error("[api/retell/webhook] invalid JSON body");
     return NextResponse.json({ error: "Άκυρο JSON" }, { status: 400 });
   }
+
+  // Connectivity probe from Retell dashboard / curl — ack before HMAC (unsigned is OK).
+  if (isRetellWebhookTestEvent(body)) {
+    console.log("[api/retell/webhook] test/ping ack (HMAC skipped)");
+    return NextResponse.json({ ok: true });
+  }
+
+  const authErr = assertRetellWebhookAuth(rawBody, request);
+  if (authErr) return authErr;
 
   const ev = body.event;
   console.log("[api/retell/webhook] event type:", ev ?? "(missing)");

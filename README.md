@@ -49,5 +49,6 @@ npm run dev
 
 - Trigger outbound call: `POST /api/retell/call`
 - Retell webhook: `POST /api/retell/webhook`
+- Production webhook URL: `https://crm.kkaragkounis.com/api/retell/webhook`
 
-Configure το Retell webhook URL στο dashboard σου προς το endpoint της εφαρμογής.
+Configure this URL in the Retell dashboard (account or agent webhook). Session auth is bypassed for `/api/retell/webhook` and `/api/retell/llm`; real call events require HMAC (`RETELL_WEBHOOK_SECRET` or `RETELL_API_KEY`). A body like `{"event":"test"}` returns 200 without a signature (dashboard / curl connectivity check).
