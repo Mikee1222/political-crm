@@ -135,8 +135,22 @@ export async function POST(request: NextRequest) {
           }
           const h = applyRetellHeuristics(spoken);
           if (h.transfer_call) {
-            const o = retellHttpLlmJson(rid, spoken, false, { transfer_call: true });
-            write({ ...o, content_complete: true, end_call: false });
+            const transferNum = process.env.RETELL_TRANSFER_NUMBER?.trim();
+            if (transferNum) {
+              const o = retellHttpLlmJson(rid, spoken, false, {
+                transfer_call: true,
+                transfer_number: transferNum,
+              });
+              write({ ...o, content_complete: true, end_call: false });
+              return;
+            }
+            console.error("[api/retell/llm] transfer_call without RETELL_TRANSFER_NUMBER");
+            write({
+              response_id: rid,
+              content: "",
+              content_complete: true,
+              end_call: false,
+            } as const);
             return;
           }
           write({

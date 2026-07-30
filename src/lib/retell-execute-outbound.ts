@@ -1,5 +1,4 @@
-import { pickCampaignDialPhone } from "@/lib/campaign-contact-phone";
-import { buildCreatePhoneCallBody } from "@/lib/retell-outbound";
+import { buildCreatePhoneCallBody, pickRetellDialPhone } from "@/lib/retell-outbound";
 
 export type RetellContactRow = {
   id: string;
@@ -9,8 +8,6 @@ export type RetellContactRow = {
   phone2?: string | null;
   landline?: string | null;
 };
-
-const phoneDigits = (s: string) => s.replace(/\D/g, "");
 
 /**
  * POST create-phone-call to Retell; does not update Supabase.
@@ -23,8 +20,8 @@ export async function executeRetellCreatePhoneCall(
   | { ok: true; call_id: string | null; retell: Record<string, unknown> }
   | { ok: false; status: number; error: string; detail?: unknown }
 > {
-  const phone = pickCampaignDialPhone(contact) ?? "";
-  if (!phone || phoneDigits(phone).length < 8) {
+  const phone = pickRetellDialPhone(contact);
+  if (!phone) {
     return { ok: false, status: 400, error: "Η επαφή δεν έχει έγκυρο αριθμό τηλεφώνου" };
   }
   if (!process.env.RETELL_API_KEY) {

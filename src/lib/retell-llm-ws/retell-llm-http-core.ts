@@ -43,13 +43,14 @@ export type RetellHttpLlmResponse = {
   content_complete: true;
   end_call: boolean;
   transfer_call?: true;
+  transfer_number?: string;
 };
 
 export function retellHttpLlmJson(
   responseId: number | undefined,
   content: string,
   end_call: boolean,
-  extra?: { transfer_call?: true },
+  extra?: { transfer_call?: true; transfer_number?: string },
 ): RetellHttpLlmResponse {
   const response_id = typeof responseId === "number" && Number.isFinite(responseId) ? responseId : 1;
   const o: RetellHttpLlmResponse = {
@@ -59,6 +60,7 @@ export function retellHttpLlmJson(
     end_call,
   };
   if (extra?.transfer_call) o.transfer_call = true;
+  if (extra?.transfer_number) o.transfer_number = extra.transfer_number;
   return o;
 }
 
@@ -134,7 +136,18 @@ export async function runRetellLlmHttp(
     const spoken = textBlock.text.trim();
     const h = applyRetellHeuristics(spoken);
     if (h.transfer_call) {
-      return { status: 200, body: retellHttpLlmJson(rid, spoken, false, { transfer_call: true }) };
+      const transferNum = process.env.RETELL_TRANSFER_NUMBER?.trim();
+      if (transferNum) {
+        return {
+          status: 200,
+          body: retellHttpLlmJson(rid, spoken, false, {
+            transfer_call: true,
+            transfer_number: transferNum,
+          }),
+        };
+      }
+      console.error("[retell-llm-http] transfer_call without RETELL_TRANSFER_NUMBER");
+      return { status: 200, body: retellHttpLlmJson(rid, spoken, false) };
     }
     return { status: 200, body: retellHttpLlmJson(rid, spoken, h.end_call) };
   }
