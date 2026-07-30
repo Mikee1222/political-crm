@@ -27,11 +27,23 @@ export async function executeRetellCreatePhoneCall(
   if (!process.env.RETELL_API_KEY) {
     return { ok: false, status: 503, error: "Η Retell δεν έχει ρυθμιστεί (λείπει RETELL_API_KEY)" };
   }
+  if (contact.first_name == null || String(contact.first_name).trim() === "") {
+    console.warn(
+      "[retell-outbound] first_name missing at dial time",
+      { contact_id: contact.id },
+    );
+  }
+  if (contact.last_name == null || String(contact.last_name).trim() === "") {
+    console.warn(
+      "[retell-outbound] last_name missing at dial time",
+      { contact_id: contact.id },
+    );
+  }
   const first = String(contact.first_name || "").trim() || "Φίλε";
   const last = String(contact.last_name || "").trim();
-  let callBody: Record<string, unknown>;
+  let body: Record<string, unknown>;
   try {
-    callBody = buildCreatePhoneCallBody(phone, first, last, contact.id, campaignId, overrideAgentId);
+    body = buildCreatePhoneCallBody(phone, first, last, contact.id, campaignId, overrideAgentId);
   } catch (e) {
     return {
       ok: false,
@@ -40,7 +52,7 @@ export async function executeRetellCreatePhoneCall(
     };
   }
   // Safe to log: body has no API keys (auth is Bearer header only).
-  console.log("[retell-execute-outbound] create-phone-call request body:", JSON.stringify(callBody));
+  console.log("[retell-outbound] full request body:", JSON.stringify(body, null, 2));
 
   const retellRes = await fetch("https://api.retellai.com/v2/create-phone-call", {
     method: "POST",
@@ -48,7 +60,7 @@ export async function executeRetellCreatePhoneCall(
       Authorization: `Bearer ${process.env.RETELL_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(callBody),
+    body: JSON.stringify(body),
   });
   const payload = (await retellRes.json().catch(() => ({}))) as { call_id?: string; [k: string]: unknown };
   const callId = typeof payload.call_id === "string" ? payload.call_id : null;

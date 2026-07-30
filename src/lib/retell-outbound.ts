@@ -51,7 +51,14 @@ export function pickRetellDialPhone(c: RetellDialPhoneFields | null | undefined)
  * Dynamic vars (`retell_llm_dynamic_variables`) are required so Single Prompt Agents can
  * interpolate {{first_name}} etc., and so the webhook can resolve contact_id.
  * `campaign_id` stays in metadata (and dynamic vars when present) for pending-call matching.
+ *
+ * Retell requires dynamic variables to be declared in Agent settings under
+ * "Default Dynamic Variables"; otherwise Retell ignores them even when sent in the API body.
  */
+function asRetellDynVar(value: string | null | undefined): string {
+  return value == null ? "" : String(value);
+}
+
 export function buildCreatePhoneCallBody(
   toNumber: string,
   firstName: string,
@@ -69,22 +76,26 @@ export function buildCreatePhoneCallBody(
   if (!agent) {
     throw new Error("Ρύθμιση Retell: λείπει agent (τύπος καμπάνιας ή RETELL_AGENT_ID)");
   }
-  const last = lastName.trim();
+  // Always send string keys so Retell receives declared dynamic variables (never omit / null).
+  const first_name = asRetellDynVar(firstName);
+  const last_name = asRetellDynVar(lastName);
+  const contact_id = asRetellDynVar(contactId);
+  const campaign_id = campaignId == null ? null : asRetellDynVar(campaignId);
   return {
     from_number: process.env.RETELL_FROM_NUMBER,
     to_number: toNumber,
     override_agent_id: agent,
     metadata: {
-      first_name: firstName,
-      last_name: last,
-      contact_id: contactId,
-      campaign_id: campaignId,
+      first_name,
+      last_name,
+      contact_id,
+      campaign_id,
     },
     retell_llm_dynamic_variables: {
-      first_name: firstName,
-      last_name: last,
-      contact_id: contactId,
-      ...(campaignId ? { campaign_id: campaignId } : {}),
+      first_name,
+      last_name,
+      contact_id,
+      ...(campaign_id ? { campaign_id } : {}),
     },
   };
 }

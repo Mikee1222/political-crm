@@ -98,4 +98,24 @@ describe("buildCreatePhoneCallBody", () => {
       else process.env.RETELL_AGENT_ID = prevAgent;
     }
   });
+
+  it("coerces dynamic variable values to strings (empty when blank)", () => {
+    const prevFrom = process.env.RETELL_FROM_NUMBER;
+    const prevAgent = process.env.RETELL_AGENT_ID;
+    process.env.RETELL_FROM_NUMBER = "+302104446076";
+    process.env.RETELL_AGENT_ID = "agent_test";
+    try {
+      const body = buildCreatePhoneCallBody("+306943129495", "", "", "contact-1", null);
+      expect(body.retell_llm_dynamic_variables).toEqual({
+        first_name: "",
+        last_name: "",
+        contact_id: "contact-1",
+      });
+    } finally {
+      if (prevFrom === undefined) delete process.env.RETELL_FROM_NUMBER;
+      else process.env.RETELL_FROM_NUMBER = prevFrom;
+      if (prevAgent === undefined) delete process.env.RETELL_AGENT_ID;
+      else process.env.RETELL_AGENT_ID = prevAgent;
+    }
+  });
 });
