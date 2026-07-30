@@ -11,6 +11,7 @@ import {
   FileType,
   FileX,
   Image as ImageIcon,
+  Loader2,
   Trash2,
   Upload,
   X,
@@ -111,20 +112,141 @@ function uploadContactDocXHR(
   });
 }
 
+function PdfPreviewPane({
+  fileUrl,
+  name,
+}: {
+  fileUrl: string;
+  name: string;
+}) {
+  const [iframeLoading, setIframeLoading] = useState(true);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const loadedRef = useRef(false);
+  const googleDocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+
+  useEffect(() => {
+    console.log("[PDF preview] signed/file URL:", fileUrl);
+    console.log("[PDF preview] Google Docs viewer URL:", googleDocsUrl);
+    loadedRef.current = false;
+    setIframeLoading(true);
+    setPreviewFailed(false);
+    const t = window.setTimeout(() => {
+      if (loadedRef.current) return;
+      setIframeLoading(false);
+      setPreviewFailed(true);
+    }, 10_000);
+    return () => window.clearTimeout(t);
+  }, [fileUrl, googleDocsUrl]);
+
+  if (previewFailed) {
+    return (
+      <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+        <FileX className="h-10 w-10 text-[var(--text-muted)]" aria-hidden />
+        <p className="max-w-sm text-sm text-[var(--text-secondary)]">
+          Δεν ήταν δυνατή η προεπισκόπηση.
+        </p>
+        <a
+          href={fileUrl}
+          download={name}
+          target="_blank"
+          rel="noreferrer"
+          className={lux.btnPrimary + " inline-flex items-center gap-2"}
+        >
+          <ArrowDownToLine className="h-4 w-4" />
+          Λήψη
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-[600px] h-[70vh] w-full bg-white">
+      {iframeLoading ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0b1220]/80">
+          <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" aria-hidden />
+          <span className="sr-only">Φόρτωση προεπισκόπησης</span>
+        </div>
+      ) : null}
+      <iframe
+        title={name}
+        src={googleDocsUrl}
+        width="100%"
+        height="100%"
+        style={{ border: "none", minHeight: "600px" }}
+        className="h-full w-full"
+        onLoad={() => {
+          loadedRef.current = true;
+          setIframeLoading(false);
+          setPreviewFailed(false);
+        }}
+      />
+    </div>
+  );
+}
+
 function PreviewModal({
   doc,
+  contactId,
   onClose,
+  onSignedUrl,
 }: {
   doc: ContactDocRow;
+  contactId: string;
   onClose: () => void;
+  onSignedUrl?: (id: string, signedUrl: string) => void;
 }) {
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
+  const [fileUrl, setFileUrl] = useState<string | null>(doc.signed_url);
+  const [resolvingUrl, setResolvingUrl] = useState(!doc.signed_url);
   const kind = contactDocPreviewKind(doc.file_type, doc.name);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function ensureSignedUrl() {
+      if (doc.signed_url) {
+        console.log("[document preview] using list/upload signed_url:", doc.signed_url);
+        setFileUrl(doc.signed_url);
+        setResolvingUrl(false);
+        return;
+      }
+      setResolvingUrl(true);
+      try {
+        const dr = await fetchWithTimeout(
+          `/api/documents?contact_id=${encodeURIComponent(contactId)}`,
+        );
+        if (!dr.ok) {
+          if (!cancelled) {
+            setFileUrl(null);
+            setResolvingUrl(false);
+          }
+          return;
+        }
+        const j = (await dr.json()) as { documents?: ContactDocRow[] };
+        const fresh = (j.documents ?? []).find((d) => d.id === doc.id);
+        const url = fresh?.signed_url ?? null;
+        if (!cancelled) {
+          console.log("[document preview] refreshed signed_url:", url);
+          setFileUrl(url);
+          if (url) onSignedUrl?.(doc.id, url);
+          setResolvingUrl(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setFileUrl(null);
+          setResolvingUrl(false);
+        }
+      }
+    }
+    void ensureSignedUrl();
+    return () => {
+      cancelled = true;
+    };
+  }, [doc.id, doc.signed_url, contactId, onSignedUrl]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -143,6 +265,11 @@ function PreviewModal({
   }, [onClose]);
 
   if (!mounted || typeof document === "undefined") return null;
+
+  const showUnsupported =
+    !resolvingUrl && (kind === "unsupported" || !fileUrl);
+  const showImage = kind === "image" && !!fileUrl && !resolvingUrl;
+  const showPdf = kind === "pdf" && !!fileUrl && !resolvingUrl;
 
   return createPortal(
     <div
@@ -172,37 +299,37 @@ function PreviewModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-black/40">
-          {kind === "image" && doc.signed_url ? (
+          {resolvingUrl ? (
+            <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 px-6 py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" aria-hidden />
+              <p className="text-sm text-[var(--text-secondary)]">Προετοιμασία προεπισκόπησης…</p>
+            </div>
+          ) : null}
+          {showImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={doc.signed_url}
+              src={fileUrl!}
               alt={doc.name}
               className="mx-auto max-h-[70vh] w-auto max-w-full object-contain p-4"
             />
           ) : null}
-          {kind === "pdf" && doc.signed_url ? (
-            <iframe
-              title={doc.name}
-              src={doc.signed_url}
-              className="h-[70vh] w-full border-0 bg-white"
-            />
-          ) : null}
-          {(kind === "unsupported" || !doc.signed_url) && (
+          {showPdf ? <PdfPreviewPane fileUrl={fileUrl!} name={doc.name} /> : null}
+          {showUnsupported ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 px-6 py-16 text-center">
               <FileX className="h-10 w-10 text-[var(--text-muted)]" aria-hidden />
               <p className="max-w-sm text-sm text-[var(--text-secondary)]">
-                {!doc.signed_url
-                  ? "Δεν είναι διαθέσιμος σύνδεσμος προεπισκόπησης."
+                {!fileUrl
+                  ? "Δεν είναι διαθέσιμος σύνδεσμος προεπισκόπησης. Χρησιμοποιήστε τη λήψη."
                   : "Δεν υποστηρίζεται προεπισκόπηση — κατεβάστε το αρχείο"}
               </p>
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
-          {doc.signed_url ? (
+          {fileUrl ? (
             <a
-              href={doc.signed_url}
+              href={fileUrl}
               download={doc.name}
               target="_blank"
               rel="noreferrer"
@@ -233,6 +360,13 @@ export function ContactDocumentsSection({ contactId }: { contactId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [preview, setPreview] = useState<ContactDocRow | null>(null);
+
+  const onPreviewSignedUrl = useCallback((id: string, signedUrl: string) => {
+    setDocs((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, signed_url: signedUrl } : d)),
+    );
+    setPreview((p) => (p && p.id === id ? { ...p, signed_url: signedUrl } : p));
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -553,7 +687,14 @@ export function ContactDocumentsSection({ contactId }: { contactId: string }) {
         </>
       )}
 
-      {preview ? <PreviewModal doc={preview} onClose={() => setPreview(null)} /> : null}
+      {preview ? (
+        <PreviewModal
+          doc={preview}
+          contactId={contactId}
+          onClose={() => setPreview(null)}
+          onSignedUrl={onPreviewSignedUrl}
+        />
+      ) : null}
     </div>
   );
 }
