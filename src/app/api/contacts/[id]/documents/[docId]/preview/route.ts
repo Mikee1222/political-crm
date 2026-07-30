@@ -4,7 +4,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
-import { fileExtension } from "@/lib/contact-documents";
+import { documentsStorageObjectPath, fileExtension } from "@/lib/contact-documents";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,14 @@ function inlineDisposition(name: string): string {
   return `inline; filename="${safe}"; filename*=UTF-8''${encoded}`;
 }
 
+type DocPreviewRow = {
+  id: string;
+  contact_id: string | null;
+  name: string;
+  file_url: string;
+  file_type: string | null;
+};
+
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string; docId: string }> },
@@ -49,35 +57,64 @@ export async function GET(
     }
 
     const admin = createServiceClient();
-    const { data: row, error: fe } = await admin
+    const selectCols = "id, contact_id, name, file_url, file_type";
+
+    const { data: owned, error: ownedErr } = await admin
       .from("documents")
-      .select("id, contact_id, name, file_url, file_type")
+      .select(selectCols)
       .eq("id", docId)
       .eq("contact_id", contactId)
       .maybeSingle();
 
-    if (fe) {
-      return NextResponse.json({ error: fe.message }, { status: 400 });
-    }
-    if (!row) {
-      return NextResponse.json({ error: "Άκυρο έγγραφο" }, { status: 404 });
+    if (ownedErr) {
+      return NextResponse.json({ error: ownedErr.message }, { status: 400 });
     }
 
-    const doc = row as {
-      id: string;
-      contact_id: string;
-      name: string;
-      file_url: string;
-      file_type: string | null;
-    };
+    let doc = owned as DocPreviewRow | null;
+
+    if (doc) {
+      console.info("[documents preview] found with ownership", { docId, contactId });
+    } else {
+      console.warn("[documents preview] ownership miss, trying id-only", { docId, contactId });
+      const { data: byId, error: byIdErr } = await admin
+        .from("documents")
+        .select(selectCols)
+        .eq("id", docId)
+        .maybeSingle();
+
+      if (byIdErr) {
+        return NextResponse.json({ error: byIdErr.message }, { status: 400 });
+      }
+
+      doc = (byId as DocPreviewRow | null) ?? null;
+      if (!doc) {
+        console.warn("[documents preview] not found", { docId, contactId });
+        return NextResponse.json({ error: "Άκυρο έγγραφο" }, { status: 404 });
+      }
+
+      console.info("[documents preview] found by id", {
+        docId,
+        routeContactId: contactId,
+        rowContactId: doc.contact_id,
+      });
+    }
 
     if (!doc.file_url) {
       return NextResponse.json({ error: "Λείπει το αρχείο" }, { status: 404 });
     }
 
-    const { data: blob, error: dlErr } = await admin.storage.from("documents").download(doc.file_url);
+    const storagePath = documentsStorageObjectPath(doc.file_url);
+    if (!storagePath) {
+      console.error("[documents preview] invalid storage path", {
+        docId,
+        file_url_prefix: doc.file_url.slice(0, 80),
+      });
+      return NextResponse.json({ error: "Λείπει το αρχείο" }, { status: 404 });
+    }
+
+    const { data: blob, error: dlErr } = await admin.storage.from("documents").download(storagePath);
     if (dlErr || !blob) {
-      console.error("[documents preview download]", dlErr?.message);
+      console.error("[documents preview download]", dlErr?.message, { storagePath });
       return NextResponse.json({ error: "Αποτυχία ανάκτησης αρχείου" }, { status: 404 });
     }
 

@@ -4,6 +4,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
+import { documentsStorageObjectPath } from "@/lib/contact-documents";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export async function DELETE(
     if (fe || !row) {
       return NextResponse.json({ error: "Άκυρο έγγραφο" }, { status: 404 });
     }
-    const path = (row as { file_url: string }).file_url;
+    const path = documentsStorageObjectPath((row as { file_url: string }).file_url);
     if (path) {
       const { error: re } = await admin.storage.from("documents").remove([path]);
       if (re) {

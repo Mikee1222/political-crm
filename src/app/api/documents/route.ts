@@ -5,6 +5,7 @@ import { hasMinRole } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
+import { documentsStorageObjectPath } from "@/lib/contact-documents";
 
 export const dynamic = "force-dynamic";
 
@@ -60,11 +61,14 @@ export async function GET(request: NextRequest) {
     const documents = await Promise.all(
       rows.map(async (r) => {
         let signedUrl: string | null = null;
-        const { data: s } = await sc.storage.from("documents").createSignedUrl(r.file_url, 3600);
-        signedUrl = s?.signedUrl ?? null;
-        if (!signedUrl) {
-          const { data: s2 } = await admin.storage.from("documents").createSignedUrl(r.file_url, 3600);
-          signedUrl = s2?.signedUrl ?? null;
+        const objectPath = documentsStorageObjectPath(r.file_url);
+        if (objectPath) {
+          const { data: s } = await sc.storage.from("documents").createSignedUrl(objectPath, 3600);
+          signedUrl = s?.signedUrl ?? null;
+          if (!signedUrl) {
+            const { data: s2 } = await admin.storage.from("documents").createSignedUrl(objectPath, 3600);
+            signedUrl = s2?.signedUrl ?? null;
+          }
         }
         return {
           ...r,

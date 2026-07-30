@@ -102,3 +102,55 @@ export function contactDocPreviewKind(fileType: string | null | undefined, name:
   }
   return "unsupported";
 }
+
+const DOCUMENTS_BUCKET = "documents";
+
+/**
+ * Normalize `documents.file_url` for `storage.from('documents').download/createSignedUrl`.
+ * Accepts plain object paths (`crm/…/file.pdf`) and full Supabase public/signed URLs.
+ */
+export function documentsStorageObjectPath(
+  fileUrlOrPath: string | null | undefined,
+  bucket: string = DOCUMENTS_BUCKET,
+): string | null {
+  const raw = (fileUrlOrPath ?? "").trim();
+  if (!raw) return null;
+
+  if (!/^https?:\/\//i.test(raw)) {
+    let path = raw.replace(/^\/+/, "");
+    if (path.startsWith(`${bucket}/`)) {
+      path = path.slice(bucket.length + 1);
+    }
+    return path || null;
+  }
+
+  try {
+    const u = new URL(raw);
+    const objectMatch = u.pathname.match(
+      /\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+)$/,
+    );
+    if (objectMatch) {
+      const pathBucket = decodeURIComponent(objectMatch[1] ?? "");
+      const objectPath = decodeURIComponent(objectMatch[2] ?? "");
+      if (!objectPath) return null;
+      if (pathBucket && pathBucket !== bucket) {
+        console.warn("[documentsStorageObjectPath] bucket mismatch", {
+          expected: bucket,
+          found: pathBucket,
+        });
+      }
+      return objectPath;
+    }
+
+    const marker = `/${bucket}/`;
+    const idx = u.pathname.indexOf(marker);
+    if (idx >= 0) {
+      const objectPath = decodeURIComponent(u.pathname.slice(idx + marker.length));
+      return objectPath || null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}

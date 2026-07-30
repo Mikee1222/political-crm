@@ -4,6 +4,7 @@ import {
   contactDocIconKind,
   contactDocPreviewKind,
   contactDocumentRejectReason,
+  documentsStorageObjectPath,
   formatFileSize,
   isAllowedContactDocument,
 } from "./contact-documents";
@@ -46,5 +47,27 @@ describe("contact-documents", () => {
     expect(formatFileSize(500)).toBe("500 B");
     expect(formatFileSize(2048)).toBe("2.0 KB");
     expect(formatFileSize(2 * 1024 * 1024)).toBe("2.0 MB");
+  });
+
+  it("extracts storage object paths from plain paths and URLs", () => {
+    expect(documentsStorageObjectPath("crm/user/1-a.pdf")).toBe("crm/user/1-a.pdf");
+    expect(documentsStorageObjectPath("/documents/crm/user/1-a.pdf")).toBe("crm/user/1-a.pdf");
+    expect(
+      documentsStorageObjectPath(
+        "https://viibonjvztoczcrftdea.supabase.co/storage/v1/object/public/documents/crm/u/f.pdf",
+      ),
+    ).toBe("crm/u/f.pdf");
+    expect(
+      documentsStorageObjectPath(
+        "https://viibonjvztoczcrftdea.supabase.co/storage/v1/object/sign/documents/crm/u/f%20x.pdf?token=abc",
+      ),
+    ).toBe("crm/u/f x.pdf");
+    expect(
+      documentsStorageObjectPath(
+        "https://example.supabase.co/storage/v1/object/authenticated/documents/crm/u/a.pdf",
+      ),
+    ).toBe("crm/u/a.pdf");
+    expect(documentsStorageObjectPath("")).toBeNull();
+    expect(documentsStorageObjectPath(null)).toBeNull();
   });
 });
