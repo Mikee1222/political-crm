@@ -5,17 +5,16 @@ import {
   BarChart3,
   CheckCircle2,
   FileText,
-  LayoutGrid,
   Megaphone,
   MessageCircle,
+  Minus,
   Phone,
   Play,
   Plus,
   Radio,
-  Search,
   Trash2,
 } from "lucide-react";
-import { FormEvent, Suspense, useCallback, useEffect, useState, type ComponentType } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateAthens } from "@/lib/date-format";
@@ -26,9 +25,14 @@ import {
   CONCURRENT_LINES_MAX,
   CONCURRENT_LINES_MIN,
 } from "@/lib/campaign-concurrent-lines";
+import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
+import { getMunicipalitiesCached, peekMunicipalities } from "@/lib/geo-lists-cache";
+import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 export default function CampaignsPage() {
@@ -66,14 +70,13 @@ type Campaign = {
   };
 };
 
-type FieldOptions = { areas: string[]; municipalities: string[] };
-
 type NewFilter = {
   call_status: string;
   area: string;
   municipality: string;
   priority: string;
   tag: string;
+  group_ids: string[];
 };
 
 const CAMPAIGN_CREATE_IDS_KEY = "campaign_create_contact_ids";
@@ -83,6 +86,18 @@ const statusBadge =
 
 const goldCta =
   "no-mobile-scale inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full border-2 border-[#8B6914] bg-gradient-to-b from-[#E8C96B] to-[#8B6914] px-4 text-xs font-bold text-[#0A1628] shadow-sm transition duration-200 hover:brightness-110 sm:text-sm";
+
+const sectionLabel =
+  "mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[#D4AF37]";
+
+const emptyFilter = (): NewFilter => ({
+  call_status: "",
+  area: "",
+  municipality: "",
+  priority: "",
+  tag: "",
+  group_ids: [],
+});
 
 function CampaignsPageInner() {
   const searchParams = useSearchParams();
@@ -97,14 +112,11 @@ function CampaignsPageInner() {
   const [campaignTypes, setCampaignTypes] = useState<CampaignTypeRow[]>([]);
   const [campaignTypeId, setCampaignTypeId] = useState("");
   const [concurrentLines, setConcurrentLines] = useState(3);
-  const [filter, setFilter] = useState<NewFilter>({
-    call_status: "",
-    area: "",
-    municipality: "",
-    priority: "",
-    tag: "",
-  });
-  const [options, setOptions] = useState<FieldOptions | null>(null);
+  const [filter, setFilter] = useState<NewFilter>(emptyFilter);
+  const [areas, setAreas] = useState<string[]>([]);
+  const [municipalities, setMunicipalities] = useState<string[]>(() => peekMunicipalities() ?? []);
+  const [muniLoading, setMuniLoading] = useState(false);
+  const [groups, setGroups] = useState<ContactGroupRow[]>([]);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewWithPhone, setPreviewWithPhone] = useState<number | null>(null);
   const [previewWithoutPhone, setPreviewWithoutPhone] = useState<number | null>(null);
@@ -158,14 +170,44 @@ function CampaignsPageInner() {
 
   useEffect(() => {
     if (!modal) return;
-    fetchWithTimeout("/api/contacts/field-options")
-      .then((r) => r.json())
-      .then((d: FieldOptions) => setOptions({ areas: d.areas ?? [], municipalities: d.municipalities ?? [] }))
-      .catch(() => setOptions({ areas: [], municipalities: [] }));
-    fetchWithTimeout("/api/campaign-types")
-      .then((r) => r.json())
-      .then((d: { types?: CampaignTypeRow[] }) => setCampaignTypes(d.types ?? []))
-      .catch(() => setCampaignTypes([]));
+    let cancelled = false;
+    setMuniLoading(!(peekMunicipalities()?.length));
+
+    void Promise.all([
+      fetchWithTimeout("/api/contacts/field-options").then(async (r) => {
+        const d = (await r.json()) as { areas?: string[] };
+        return d.areas ?? [];
+      }),
+      getMunicipalitiesCached(),
+      fetchWithTimeout("/api/campaign-types").then(async (r) => {
+        const d = (await r.json()) as { types?: CampaignTypeRow[] };
+        return d.types ?? [];
+      }),
+      fetchWithTimeout("/api/groups").then(async (r) => {
+        const d = (await r.json()) as { groups?: ContactGroupRow[] };
+        return dedupeContactGroupsById(d.groups ?? []);
+      }),
+    ])
+      .then(([areaList, muniList, types, groupList]) => {
+        if (cancelled) return;
+        setAreas(areaList);
+        setMunicipalities(muniList);
+        setMuniLoading(false);
+        setCampaignTypes(types);
+        setGroups(groupList);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAreas([]);
+        setMunicipalities([]);
+        setMuniLoading(false);
+        setCampaignTypes([]);
+        setGroups([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [modal]);
 
   useEffect(() => {
@@ -188,7 +230,7 @@ function CampaignsPageInner() {
             setPreviewWithoutPhone(null);
           })
           .finally(() => setPreviewing(false));
-      }, 200);
+      }, 500);
       return () => clearTimeout(t);
     }
 
@@ -198,6 +240,7 @@ function CampaignsPageInner() {
     if (filter.municipality) q.set("municipality", filter.municipality);
     if (filter.priority) q.set("priority", filter.priority);
     if (filter.tag) q.set("tag", filter.tag);
+    if (filter.group_ids.length) q.set("group_ids", filter.group_ids.join(","));
     if (!q.toString()) {
       setPreviewCount(null);
       setPreviewWithPhone(null);
@@ -219,14 +262,37 @@ function CampaignsPageInner() {
           setPreviewWithoutPhone(null);
         })
         .finally(() => setPreviewing(false));
-    }, 300);
+    }, 500);
     return () => clearTimeout(t);
   }, [modal, filter, selectedContactIds]);
 
   const selectedType = campaignTypes.find((x) => x.id === campaignTypeId);
-  const agentPreview = selectedType?.retell_agent_id
-    ? selectedType.retell_agent_id
-    : "RETELL_AGENT_ID (προεπιλογή περιβάλλοντος)";
+  const agentLabel =
+    selectedType?.retell_agent_name?.trim() ||
+    (selectedType?.retell_agent_id ? selectedType.retell_agent_id : null);
+
+  const groupOptions = useMemo(
+    () =>
+      groups.map((g) => ({
+        value: g.id,
+        label: g.year != null ? `${g.name} (${g.year})` : g.name,
+        group: g.category ?? "Άλλο",
+        color: g.color,
+      })),
+    [groups],
+  );
+
+  const areaOptions = useMemo(
+    () => areas.map((a) => ({ value: a, label: a })),
+    [areas],
+  );
+
+  const municipalityOptions = useMemo(
+    () => municipalities.map((m) => ({ value: m, label: m })),
+    [municipalities],
+  );
+
+  const nameFilled = name.trim().length > 0;
 
   const createCampaign = async (e: FormEvent) => {
     e.preventDefault();
@@ -255,6 +321,7 @@ function CampaignsPageInner() {
           municipality: filter.municipality || undefined,
           priority: filter.priority || undefined,
           tag: filter.tag || undefined,
+          group_ids: filter.group_ids.length ? filter.group_ids : undefined,
         };
       }
       const res = await fetchWithTimeout("/api/campaigns", {
@@ -277,7 +344,7 @@ function CampaignsPageInner() {
       setCampaignTypeId("");
       setConcurrentLines(3);
       setSelectedContactIds([]);
-      setFilter({ call_status: "", area: "", municipality: "", priority: "", tag: "" });
+      setFilter(emptyFilter());
       await load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Σφάλμα δικτύου";
@@ -291,6 +358,14 @@ function CampaignsPageInner() {
   const totalN = campaigns.length;
   const activeN = campaigns.filter((c) => c.status === "active").length;
   const doneN = campaigns.filter((c) => c.status === "completed").length;
+
+  const previewText = (() => {
+    if (previewing) return "Υπολογισμός…";
+    if (previewWithPhone == null) return "Επιλέξτε φίλτρα για προεπισκόπηση";
+    const withN = previewWithPhone;
+    const withoutN = previewWithoutPhone ?? 0;
+    return `${withN} επαφές με αριθμό · ${withoutN} χωρίς αριθμό (εξαιρούνται)`;
+  })();
 
   return (
     <div className="space-y-8 max-md:space-y-6">
@@ -609,7 +684,7 @@ function CampaignsPageInner() {
         open={modal}
         onClose={() => setModal(false)}
         title="Νέα Καμπάνια"
-        className="w-full max-w-[720px]"
+        className="w-full max-w-[720px] rounded-2xl bg-white shadow-2xl [&>header]:border-b-2 [&>header]:border-[#D4AF37]"
         ariaLabel="Νέα καμπάνια"
         footer={
           <>
@@ -625,8 +700,12 @@ function CampaignsPageInner() {
               type="submit"
               form="campaign-create-form"
               loading={saving}
+              disabled={!nameFilled}
               variant="gold"
-              className={goldCta + " !h-12 !min-w-0 !w-full !rounded-xl sm:!w-auto sm:!px-6"}
+              className={
+                goldCta +
+                " !h-12 !min-w-0 !w-full !rounded-xl sm:!w-auto sm:!px-6 disabled:opacity-50"
+              }
             >
               Αποθήκευση
             </FormSubmitButton>
@@ -634,24 +713,20 @@ function CampaignsPageInner() {
         }
       >
         <form id="campaign-create-form" className="flex min-h-0 w-full flex-col" onSubmit={createCampaign}>
-          <p className="mb-4 text-xs text-[var(--text-muted)]">
-            Όνομα, περιγραφή και ποιες επαφές θα τρέχουν (φίλτρα ή επιλεγμένες από αναζήτηση).
-          </p>
-
-          <div className="space-y-4">
+          <div className="space-y-6">
             {formErr && (
-              <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              <p className="rounded-lg border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {formErr}
               </p>
             )}
 
             {selectedContactIds.length > 0 && (
-              <div className="rounded-xl border border-[#C9A84C]/30 bg-[#C9A84C]/10 px-3 py-2 text-sm text-[var(--text-primary)]">
+              <div className="rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-2 text-sm text-slate-800">
                 Επιλεγμένες επαφές από αναζήτηση:{" "}
                 <strong className="tabular-nums">{selectedContactIds.length}</strong>
                 <button
                   type="button"
-                  className="ml-2 text-xs text-[#C9A84C] underline"
+                  className="ml-2 text-xs text-[#D4AF37] underline"
                   onClick={() => setSelectedContactIds([])}
                 >
                   Καθαρισμός — χρήση φίλτρων
@@ -659,117 +734,170 @@ function CampaignsPageInner() {
               </div>
             )}
 
-            <div>
-              <label className={lux.label} htmlFor="c-name">
-                Όνομα<span className="ml-0.5 text-red-500" aria-hidden>*</span>
-              </label>
-              <input
-                id="c-name"
-                className={[lux.input, "!text-base", nameFieldErr ? lux.inputError : ""]
-                  .filter(Boolean)
-                  .join(" ")}
-                required
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (nameFieldErr) setNameFieldErr(null);
-                }}
-                onBlur={() => {
-                  if (!name.trim()) setNameFieldErr("Υποχρεωτικό όνομα");
-                }}
-                placeholder="π.χ. Θερινή εξόρμηση 2025"
-                aria-invalid={nameFieldErr ? true : undefined}
-              />
-              {nameFieldErr && (
-                <p className="mt-1 text-xs text-red-400" role="alert">
-                  {nameFieldErr}
-                </p>
-              )}
-            </div>
-            <div>
-              <label className={lux.label} htmlFor="c-desc">
-                Περιγραφή (προαιρετική)
-              </label>
-              <textarea
-                id="c-desc"
-                className={lux.textarea + " !min-h-[88px] !text-base"}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="Σύντομη περιγραφή στόχων…"
-              />
-            </div>
+            {/* Section 1 — Βασικά */}
+            <section>
+              <p className={sectionLabel}>Βασικά στοιχεία</p>
+              <div className="space-y-3">
+                <div>
+                  <label className={lux.label} htmlFor="c-name">
+                    Όνομα<span className="ml-0.5 text-red-500" aria-hidden>*</span>
+                  </label>
+                  <input
+                    id="c-name"
+                    className={[
+                      lux.input,
+                      "!h-12 !text-base font-medium",
+                      nameFieldErr ? lux.inputError : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    required
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (nameFieldErr) setNameFieldErr(null);
+                    }}
+                    onBlur={() => {
+                      if (!name.trim()) setNameFieldErr("Υποχρεωτικό όνομα");
+                    }}
+                    placeholder="π.χ. Θερινή εξόρμηση 2026"
+                    aria-invalid={nameFieldErr ? true : undefined}
+                  />
+                  {nameFieldErr && (
+                    <p className="mt-1 text-xs text-red-500" role="alert">
+                      {nameFieldErr}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className={lux.label} htmlFor="c-desc">
+                    Περιγραφή
+                  </label>
+                  <textarea
+                    id="c-desc"
+                    className={lux.textarea + " !min-h-0 !resize-none !text-base"}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={2}
+                    placeholder="Προαιρετική περιγραφή…"
+                  />
+                </div>
+              </div>
+            </section>
 
-            <div>
-              <label className={lux.label} htmlFor="c-ctype">
-                Τύπος καμπάνιας (AI / Retell)
-              </label>
-              <HqSelect
-                id="c-ctype"
-                className="!min-h-11 !text-base"
-                value={campaignTypeId}
-                onChange={(e) => setCampaignTypeId(e.target.value)}
-              >
-                <option value="">— Επιλέξτε —</option>
-                {campaignTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </HqSelect>
-              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                Agent που θα χρησιμοποιηθεί:{" "}
-                <span className="font-mono text-[var(--text-secondary)]">{agentPreview}</span>
-              </p>
-            </div>
+            {/* Section 2 — Ρυθμίσεις κλήσεων */}
+            <section>
+              <p className={sectionLabel}>Ρυθμίσεις κλήσεων</p>
+              <div className="space-y-4">
+                <div>
+                  <label className={lux.label} htmlFor="c-ctype">
+                    Τύπος καμπάνιας
+                  </label>
+                  <HqSelect
+                    id="c-ctype"
+                    className="!min-h-11 !text-base"
+                    value={campaignTypeId}
+                    onChange={(e) => setCampaignTypeId(e.target.value)}
+                  >
+                    <option value="">— Επιλέξτε —</option>
+                    {campaignTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.retell_agent_name ? ` · ${t.retell_agent_name}` : ""}
+                      </option>
+                    ))}
+                  </HqSelect>
+                  {agentLabel ? (
+                    <p className="mt-1.5 text-sm font-medium text-[#D4AF37]">
+                      Agent: {agentLabel}
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                      Agent: προεπιλογή περιβάλλοντος (RETELL_AGENT_ID)
+                    </p>
+                  )}
+                </div>
 
-            <div>
-              <label className={lux.label} htmlFor="c-ch">
-                Κανάλι
-              </label>
-              <HqSelect
-                id="c-ch"
-                className="!min-h-11 !text-base"
-                value={campaignChannel}
-                onChange={(e) => setCampaignChannel(e.target.value as "call" | "whatsapp")}
-              >
-                <option value="call">Κλήσεις (Retell)</option>
-                <option value="whatsapp">WhatsApp</option>
-              </HqSelect>
-              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                Το κανάλι αποθηκεύεται στο CRM· για WhatsApp στείλτε μηνύματα από μαζικές ενέργειες επαφών.
-              </p>
-            </div>
+                <div>
+                  <span className={lux.label}>Κανάλι</span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCampaignChannel("call")}
+                      className={
+                        "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border-2 px-3 text-sm font-semibold transition sm:flex-none " +
+                        (campaignChannel === "call"
+                          ? "border-[#D4AF37] bg-[#D4AF37]/15 text-slate-900"
+                          : "border-[var(--border)] bg-transparent text-[var(--text-secondary)] hover:border-[#D4AF37]/50")
+                      }
+                    >
+                      <Phone className="h-4 w-4" aria-hidden />
+                      Κλήσεις (Retell)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCampaignChannel("whatsapp")}
+                      className={
+                        "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border-2 px-3 text-sm font-semibold transition sm:flex-none " +
+                        (campaignChannel === "whatsapp"
+                          ? "border-[#D4AF37] bg-[#D4AF37]/15 text-slate-900"
+                          : "border-[var(--border)] bg-transparent text-[var(--text-secondary)] hover:border-[#D4AF37]/50")
+                      }
+                    >
+                      <MessageCircle className="h-4 w-4" aria-hidden />
+                      WhatsApp
+                    </button>
+                  </div>
+                </div>
 
-            <div>
-              <label className={lux.label} htmlFor="c-conc">
-                Παράλληλες γραμμές κλήσης
-              </label>
-              <input
-                id="c-conc"
-                type="number"
-                min={CONCURRENT_LINES_MIN}
-                max={CONCURRENT_LINES_MAX}
-                className={lux.input + " !min-h-11 !text-base tabular-nums"}
-                value={concurrentLines}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10);
-                  setConcurrentLines(Number.isFinite(n) ? n : CONCURRENT_LINES_MIN);
-                }}
-              />
-            </div>
+                <div>
+                  <span className={lux.label}>Παράλληλες γραμμές</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-3">
+                    <div className="inline-flex items-center overflow-hidden rounded-xl border border-[var(--border)]">
+                      <button
+                        type="button"
+                        className="flex h-11 w-11 items-center justify-center text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+                        disabled={concurrentLines <= CONCURRENT_LINES_MIN}
+                        onClick={() =>
+                          setConcurrentLines((n) => clampConcurrentLines(n - 1))
+                        }
+                        aria-label="Μείωση γραμμών"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="min-w-[2.5rem] text-center text-base font-bold tabular-nums text-[var(--text-primary)]">
+                        {concurrentLines}
+                      </span>
+                      <button
+                        type="button"
+                        className="flex h-11 w-11 items-center justify-center text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+                        disabled={concurrentLines >= CONCURRENT_LINES_MAX}
+                        onClick={() =>
+                          setConcurrentLines((n) => clampConcurrentLines(n + 1))
+                        }
+                        aria-label="Αύξηση γραμμών"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <p className="text-sm text-[var(--text-muted)]">
+                      {concurrentLines} ταυτόχρονες κλήσεις
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
 
+            {/* Section 3 — Φίλτρα */}
             {selectedContactIds.length === 0 && (
-              <>
-                <p className="text-xs font-medium uppercase tracking-wider text-[#C9A84C]">
-                  Φιλτράρισμα επαφών
-                </p>
-                <p className="text-[11px] text-[var(--text-muted)]">
-                  Χρειάζεται τουλάχιστον ένα κριτήριο — ή επιλέξτε επαφές από{" "}
-                  <Link href="/contacts/search" className="text-[#C9A84C] underline">
+              <section>
+                <p className={sectionLabel}>Φιλτράρισμα επαφών</p>
+                <p className="mb-3 text-[11px] text-[var(--text-muted)]">
+                  Τουλάχιστον ένα κριτήριο — ή επιλέξτε από{" "}
+                  <Link href="/contacts/search" className="text-[#D4AF37] underline">
                     προηγμένη αναζήτηση
-                  </Link>{" "}
-                  και «Νέα καμπάνια».
+                  </Link>
+                  .
                 </p>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -784,10 +912,11 @@ function CampaignsPageInner() {
                       onChange={(e) => setFilter((f) => ({ ...f, call_status: e.target.value }))}
                     >
                       <option value="">Όλες</option>
-                      <option value="Pending">Αναμονή</option>
-                      <option value="Positive">Θετική</option>
-                      <option value="Negative">Αρνητική</option>
-                      <option value="No Answer">Δεν απάντησε</option>
+                      {CONTACT_CALL_STATUS_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </HqSelect>
                   </div>
                   <div>
@@ -810,78 +939,76 @@ function CampaignsPageInner() {
                     <label className={lux.label} htmlFor="c-area">
                       Περιοχή
                     </label>
-                    <HqSelect
+                    <SearchableSelect
                       id="c-area"
-                      className="!min-h-11 !text-base"
+                      options={areaOptions}
                       value={filter.area}
-                      onChange={(e) => setFilter((f) => ({ ...f, area: e.target.value }))}
-                    >
-                      <option value="">Όλες</option>
-                      {(options?.areas ?? []).map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </HqSelect>
+                      onChange={(area) => setFilter((f) => ({ ...f, area }))}
+                      placeholder="Όλες οι περιοχές"
+                      emptyText="Δεν βρέθηκαν περιοχές"
+                      searchPlaceholder="Αναζήτηση περιοχής…"
+                    />
                   </div>
                   <div>
                     <label className={lux.label} htmlFor="c-mun">
-                      Δήμος που ψηφίζει (περίπου)
+                      Δήμος που ψηφίζει
                     </label>
-                    <HqSelect
+                    <SearchableSelect
                       id="c-mun"
-                      className="!min-h-11 !text-base"
+                      options={municipalityOptions}
                       value={filter.municipality}
-                      onChange={(e) => setFilter((f) => ({ ...f, municipality: e.target.value }))}
-                    >
-                      <option value="">Όλοι</option>
-                      {(options?.municipalities ?? []).map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </HqSelect>
+                      onChange={(municipality) => setFilter((f) => ({ ...f, municipality }))}
+                      placeholder="Όλοι οι δήμοι"
+                      emptyText="Δεν βρέθηκαν δήμοι"
+                      loading={muniLoading}
+                      loadingText="Φόρτωση δήμων…"
+                      searchPlaceholder="Αναζήτηση δήμου…"
+                    />
                   </div>
                   <div className="sm:col-span-2">
                     <label className={lux.label} htmlFor="c-tag">
-                      Ετικέτα (ακριβές tag)
+                      Ετικέτα
                     </label>
-                    <div className="relative">
-                      <input
-                        id="c-tag"
-                        className={lux.input + " !pl-9 !text-base"}
-                        value={filter.tag}
-                        onChange={(e) => setFilter((f) => ({ ...f, tag: e.target.value }))}
-                      />
-                      <LayoutGrid className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-                    </div>
+                    <input
+                      id="c-tag"
+                      className={lux.input + " !text-base"}
+                      value={filter.tag}
+                      onChange={(e) => setFilter((f) => ({ ...f, tag: e.target.value }))}
+                      placeholder="Ακριβές tag…"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className={lux.label}>Ομάδα</label>
+                    <SearchableMultiSelect
+                      options={groupOptions}
+                      values={filter.group_ids}
+                      onToggle={(id) =>
+                        setFilter((f) => ({
+                          ...f,
+                          group_ids: f.group_ids.includes(id)
+                            ? f.group_ids.filter((x) => x !== id)
+                            : [...f.group_ids, id],
+                        }))
+                      }
+                      placeholder="Επιλέξτε ομάδες…"
+                      emptyText="Δεν βρέθηκαν ομάδες"
+                      countSummaryWhenMultiple
+                    />
                   </div>
                 </div>
-              </>
+              </section>
             )}
 
             <div
-              className="flex items-center justify-between gap-2 rounded-xl border border-[#C9A84C]/25 bg-[#050D1A]/60 px-4 py-3"
+              className="rounded-xl border border-[#D4AF37]/35 bg-[#D4AF37]/15 px-4 py-3"
               role="status"
               aria-live="polite"
             >
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#C9A84C]/15 text-[#C9A84C]">
-                  <Search className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">
-                    Προεπισκόπηση
-                  </p>
-                  <p className="text-sm text-[var(--text-primary)]">
-                    {previewing || previewWithPhone == null
-                      ? "Επαφές που ταιριάζουν"
-                      : `${previewWithPhone} με αριθμό / ${previewWithoutPhone ?? 0} χωρίς`}
-                  </p>
-                </div>
-              </div>
-              <p className="shrink-0 text-2xl font-bold tabular-nums text-[#C9A84C] sm:text-3xl">
-                {previewing || previewCount == null ? "—" : previewCount}
+              <p className="text-sm font-medium text-slate-900">
+                🔍 {previewText}
+                {previewCount != null && !previewing ? (
+                  <span className="ml-2 tabular-nums text-[#8B6914]">({previewCount} σύνολο)</span>
+                ) : null}
               </p>
             </div>
           </div>

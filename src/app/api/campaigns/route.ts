@@ -5,7 +5,11 @@ import { hasMinRole } from "@/lib/roles";
 import { logActivity } from "@/lib/activity-log";
 import { firstNameFromFull } from "@/lib/activity-descriptions";
 import { getCampaignRollup } from "@/lib/campaign-stats";
-import { listContactIdsMatching, type ContactFilter } from "@/lib/contacts-filter-query";
+import {
+  contactFilterHasCriteria,
+  listContactIdsMatching,
+  type ContactFilter,
+} from "@/lib/contacts-filter-query";
 import { nextJsonError } from "@/lib/api-resilience";
 import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
 import { resolveRetellAgentName } from "@/lib/campaign-retell-agent";
@@ -136,17 +140,19 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(body.contact_ids) && body.contact_ids.length > 0) {
       contactIds = [...new Set(body.contact_ids.map((x) => String(x).trim()).filter(Boolean))];
     } else {
+      const rawGroupIds = body.filter?.group_ids;
+      const group_ids = Array.isArray(rawGroupIds)
+        ? [...new Set(rawGroupIds.map((x) => String(x).trim()).filter(Boolean))]
+        : undefined;
       const f: ContactFilter = {
         call_status: body.filter?.call_status,
         area: body.filter?.area,
         municipality: body.filter?.municipality,
         priority: body.filter?.priority,
         tag: body.filter?.tag,
+        group_ids: group_ids?.length ? group_ids : undefined,
       };
-      const hasFilter = Boolean(
-        f.call_status || f.area || f.municipality || f.priority || f.tag,
-      );
-      if (!hasFilter) {
+      if (!contactFilterHasCriteria(f)) {
         return NextResponse.json(
           { error: "Επιλέξτε τουλάχιστον ένα κριτήριο φίλτρου για τις επαφές ή contact_ids" },
           { status: 400 },

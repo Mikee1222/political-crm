@@ -2,10 +2,23 @@ import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { countContactsMatching, listContactIdsMatching, type ContactFilter } from "@/lib/contacts-filter-query";
+import {
+  contactFilterHasCriteria,
+  countContactsMatching,
+  listContactIdsMatching,
+  type ContactFilter,
+} from "@/lib/contacts-filter-query";
 import { nextJsonError } from "@/lib/api-resilience";
 import { contactHasAnyCampaignPhone } from "@/lib/campaign-contact-phone";
 export const dynamic = "force-dynamic";
+
+function parseGroupIds(request: NextRequest): string[] {
+  const collected: string[] = [];
+  for (const v of request.nextUrl.searchParams.getAll("group_ids")) {
+    collected.push(...v.split(","));
+  }
+  return [...new Set(collected.map((x) => x.trim()).filter(Boolean))];
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,16 +58,17 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const groupIds = parseGroupIds(request);
     const f: ContactFilter = {
       call_status: request.nextUrl.searchParams.get("call_status") ?? undefined,
       area: request.nextUrl.searchParams.get("area") ?? undefined,
       municipality: request.nextUrl.searchParams.get("municipality") ?? undefined,
       priority: request.nextUrl.searchParams.get("priority") ?? undefined,
       tag: request.nextUrl.searchParams.get("tag") ?? undefined,
+      group_ids: groupIds.length ? groupIds : undefined,
     };
 
-    const hasFilter = Boolean(f.call_status || f.area || f.municipality || f.priority || f.tag);
-    if (!hasFilter) {
+    if (!contactFilterHasCriteria(f)) {
       return NextResponse.json({ count: null, with_phone: null, without_phone: null });
     }
 
