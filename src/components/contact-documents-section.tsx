@@ -27,6 +27,71 @@ import {
   type ContactDocIconKind,
 } from "@/lib/contact-documents";
 import { lux } from "@/lib/luxury-styles";
+import { useFormToast } from "@/contexts/form-toast-context";
+
+const DOCS_FETCH_TIMEOUT_MS = 20_000;
+
+async function fetchContactDocumentsList(contactId: string): Promise<{
+  documents: ContactDocRow[];
+  error: string | null;
+  source: "scoped" | "fallback" | "none";
+}> {
+  const scopedUrl = `/api/contacts/${encodeURIComponent(contactId)}/documents`;
+  console.log("[contact-documents] fetch called", { contactId, url: scopedUrl });
+
+  const parseDocs = async (res: Response): Promise<ContactDocRow[]> => {
+    const j = (await res.json()) as { documents?: ContactDocRow[] };
+    return j.documents ?? [];
+  };
+
+  try {
+    const dr = await fetchWithTimeout(scopedUrl, { timeoutMs: DOCS_FETCH_TIMEOUT_MS });
+    console.log("[contact-documents] scoped response", { status: dr.status, ok: dr.ok });
+    if (dr.ok) {
+      const documents = await parseDocs(dr);
+      console.log("[contact-documents] scoped body", { count: documents.length });
+      return { documents, error: null, source: "scoped" };
+    }
+
+    let scopedErr = `Αποτυχία φόρτωσης εγγράφων (${dr.status})`;
+    try {
+      const ej = (await dr.clone().json()) as { error?: string };
+      if (ej.error) scopedErr = ej.error;
+    } catch {
+      /* non-JSON (e.g. HTML 404) */
+    }
+
+    const fallbackUrl = `/api/documents?contact_id=${encodeURIComponent(contactId)}`;
+    console.log("[contact-documents] scoped failed, trying fallback", {
+      status: dr.status,
+      fallbackUrl,
+    });
+    const fr = await fetchWithTimeout(fallbackUrl, { timeoutMs: DOCS_FETCH_TIMEOUT_MS });
+    console.log("[contact-documents] fallback response", { status: fr.status, ok: fr.ok });
+    if (fr.ok) {
+      const documents = await parseDocs(fr);
+      console.log("[contact-documents] fallback body", { count: documents.length });
+      return { documents, error: null, source: "fallback" };
+    }
+
+    return { documents: [], error: scopedErr, source: "none" };
+  } catch (e) {
+    console.error("[contact-documents] fetch error", e);
+    try {
+      const fallbackUrl = `/api/documents?contact_id=${encodeURIComponent(contactId)}`;
+      console.log("[contact-documents] network error, trying fallback", { fallbackUrl });
+      const fr = await fetchWithTimeout(fallbackUrl, { timeoutMs: DOCS_FETCH_TIMEOUT_MS });
+      console.log("[contact-documents] fallback response", { status: fr.status, ok: fr.ok });
+      if (fr.ok) {
+        const documents = await parseDocs(fr);
+        return { documents, error: null, source: "fallback" };
+      }
+    } catch (e2) {
+      console.error("[contact-documents] fallback error", e2);
+    }
+    return { documents: [], error: "Αποτυχία φόρτωσης εγγράφων", source: "none" };
+  }
+}
 
 export type ContactDocRow = {
   id: string;
@@ -75,14 +140,14 @@ function DocTypeIcon({ kind }: { kind: ContactDocIconKind }) {
   );
 }
 
-function uploadContactDocXHR(
-  file: File,
-  contactId: string,
+function postDocumentXHR(
+  url: string,
+  fd: FormData,
   onProgress: (pct: number) => void,
-): Promise<{ ok: boolean; document?: ContactDocRow; error?: string }> {
+): Promise<{ ok: boolean; document?: ContactDocRow; error?: string; status: number }> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/contacts/${encodeURIComponent(contactId)}/documents`);
+    xhr.open("POST", url);
     xhr.withCredentials = true;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -96,19 +161,57 @@ function uploadContactDocXHR(
           document?: ContactDocRow;
         };
         if (xhr.status >= 200 && xhr.status < 300 && j.document) {
-          resolve({ ok: true, document: j.document });
+          resolve({ ok: true, document: j.document, status: xhr.status });
         } else {
-          resolve({ ok: false, error: j.error ?? "Σφάλμα αποστολής" });
+          resolve({
+            ok: false,
+            error: j.error ?? "Σφάλμα αποστολής",
+            status: xhr.status,
+          });
         }
       } catch {
-        resolve({ ok: false, error: "Άκυρη απάντηση" });
+        resolve({ ok: false, error: "Άκυρη απάντηση", status: xhr.status });
       }
     };
-    xhr.onerror = () => resolve({ ok: false, error: "Σφάλμα δικτύου" });
-    const fd = new FormData();
-    fd.set("file", file);
+    xhr.onerror = () => resolve({ ok: false, error: "Σφάλμα δικτύου", status: 0 });
     xhr.send(fd);
   });
+}
+
+async function uploadContactDocXHR(
+  file: File,
+  contactId: string,
+  onProgress: (pct: number) => void,
+): Promise<{ ok: boolean; document?: ContactDocRow; error?: string }> {
+  const scopedUrl = `/api/contacts/${encodeURIComponent(contactId)}/documents`;
+  console.log("[contact-documents] upload called", { contactId, url: scopedUrl, name: file.name });
+  const fd = new FormData();
+  fd.set("file", file);
+  const scoped = await postDocumentXHR(scopedUrl, fd, onProgress);
+  console.log("[contact-documents] upload scoped response", {
+    ok: scoped.ok,
+    status: scoped.status,
+    error: scoped.error,
+  });
+  if (scoped.ok) return scoped;
+
+  // Scoped route missing (404) or hard fail — fall back to legacy upload.
+  if (scoped.status === 404 || scoped.status === 405 || scoped.status === 0) {
+    const legacyUrl = "/api/documents/upload";
+    console.log("[contact-documents] upload fallback", { legacyUrl });
+    const legacyFd = new FormData();
+    legacyFd.set("file", file);
+    legacyFd.set("contact_id", contactId);
+    const legacy = await postDocumentXHR(legacyUrl, legacyFd, onProgress);
+    console.log("[contact-documents] upload fallback response", {
+      ok: legacy.ok,
+      status: legacy.status,
+      error: legacy.error,
+    });
+    return legacy;
+  }
+
+  return scoped;
 }
 
 type PreviewLoadState = "loading" | "loaded" | "error";
@@ -302,15 +405,8 @@ function PreviewModal({
         return;
       }
       try {
-        const dr = await fetchWithTimeout(
-          `/api/contacts/${encodeURIComponent(contactId)}/documents`,
-        );
-        if (!dr.ok) {
-          if (!cancelled) setFileUrl(null);
-          return;
-        }
-        const j = (await dr.json()) as { documents?: ContactDocRow[] };
-        const fresh = (j.documents ?? []).find((d) => d.id === doc.id);
+        const { documents } = await fetchContactDocumentsList(contactId);
+        const fresh = documents.find((d) => d.id === doc.id);
         const url = fresh?.signed_url ?? null;
         if (!cancelled) {
           setFileUrl(url);
@@ -416,6 +512,7 @@ function PreviewModal({
 
 export function ContactDocumentsSection({ contactId }: { contactId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useFormToast();
   const [docs, setDocs] = useState<ContactDocRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [drag, setDrag] = useState(false);
@@ -434,20 +531,22 @@ export function ContactDocumentsSection({ contactId }: { contactId: string }) {
   }, []);
 
   const load = useCallback(async () => {
-    try {
-      const dr = await fetchWithTimeout(
-        `/api/contacts/${encodeURIComponent(contactId)}/documents`,
-      );
-      if (dr.ok) {
-        const j = (await dr.json()) as { documents?: ContactDocRow[] };
-        setDocs(j.documents ?? []);
-      }
-    } catch {
-      setDocs([]);
-    } finally {
-      setLoading(false);
+    setLoading(true);
+    const result = await fetchContactDocumentsList(contactId);
+    setDocs(result.documents);
+    if (result.error) {
+      setError(result.error);
+      showToast(result.error, "error");
+      console.warn("[contact-documents] load failed", result);
+    } else {
+      setError(null);
+      console.log("[contact-documents] load ok", {
+        source: result.source,
+        count: result.documents.length,
+      });
     }
-  }, [contactId]);
+    setLoading(false);
+  }, [contactId, showToast]);
 
   useEffect(() => {
     void load();
@@ -493,7 +592,9 @@ export function ContactDocumentsSection({ contactId }: { contactId: string }) {
           return [r.document!, ...prev];
         });
       } else {
-        setError(r.error ?? "Η μεταφόρτωση απέτυχε.");
+        const msg = r.error ?? "Η μεταφόρτωση απέτυχε.";
+        setError(msg);
+        showToast(msg, "error");
       }
     }
     setUpPct(null);

@@ -1,8 +1,7 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
+import { forbidden, type UserProfile } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { nextJsonError } from "@/lib/api-resilience";
 import {
@@ -24,6 +23,33 @@ type DocRow = {
   created_at: string;
   uploaded_by: string | null;
 };
+
+type RouteParams = { params: { id: string } | Promise<{ id: string }> };
+
+async function resolveContactId(context: RouteParams): Promise<string> {
+  const p = await Promise.resolve(context.params);
+  return typeof p?.id === "string" ? p.id : "";
+}
+
+/** Match contact-page canManage: system roles or custom roles via roles.access_tier. */
+async function assertDocumentsManager(profile: UserProfile | null | undefined) {
+  if (hasMinRole(profile?.role, "manager", profile?.access_tier)) return null;
+  const roleName = profile?.role;
+  if (!roleName) return forbidden();
+  try {
+    const admin = createServiceClient();
+    const { data: tierRow } = await admin
+      .from("roles")
+      .select("access_tier")
+      .eq("name", roleName)
+      .maybeSingle();
+    const tier = (tierRow as { access_tier?: string } | null)?.access_tier;
+    if (hasMinRole(roleName, "manager", tier)) return null;
+  } catch (e) {
+    console.warn("[api/contacts/documents] access_tier lookup failed", e);
+  }
+  return forbidden();
+}
 
 async function documentsForContact(contactId: string) {
   const admin = createServiceClient();
@@ -48,18 +74,14 @@ async function documentsForContact(contactId: string) {
     }
   }
 
-  const sc = await createClient();
+  // Service role only — avoids slow/failed user-session signed URLs that can abort the client fetch.
   const documents = await Promise.all(
     rows.map(async (r) => {
       let signedUrl: string | null = null;
       const objectPath = documentsStorageObjectPath(r.file_url);
       if (objectPath) {
-        const { data: s } = await sc.storage.from("documents").createSignedUrl(objectPath, 3600);
+        const { data: s } = await admin.storage.from("documents").createSignedUrl(objectPath, 3600);
         signedUrl = s?.signedUrl ?? null;
-        if (!signedUrl) {
-          const { data: s2 } = await admin.storage.from("documents").createSignedUrl(objectPath, 3600);
-          signedUrl = s2?.signedUrl ?? null;
-        }
       }
       return {
         ...r,
@@ -72,16 +94,13 @@ async function documentsForContact(contactId: string) {
   return { error: null as null, documents };
 }
 
-export async function GET(
-  _request: NextRequest,
-  context: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: NextRequest, context: RouteParams) {
   try {
-    const { id: contactId } = await context.params;
+    const contactId = await resolveContactId(context);
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile } = crm;
-    if (!hasMinRole(profile?.role, "manager")) return forbidden();
+    const denied = await assertDocumentsManager(crm.profile);
+    if (denied) return denied;
 
     if (!contactId) {
       return NextResponse.json({ error: "Άκυρο αίτημα" }, { status: 400 });
@@ -99,16 +118,14 @@ export async function GET(
 }
 
 /** Upload a document scoped to this contact (`contact_id` always set; `file_url` = storage object path). */
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: NextRequest, context: RouteParams) {
   try {
-    const { id: contactId } = await context.params;
+    const contactId = await resolveContactId(context);
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { user, profile } = crm;
-    if (!hasMinRole(profile?.role, "manager")) return forbidden();
+    const { user } = crm;
+    const denied = await assertDocumentsManager(crm.profile);
+    if (denied) return denied;
 
     if (!contactId) {
       return NextResponse.json({ error: "Άκυρο αίτημα" }, { status: 400 });

@@ -41,16 +41,38 @@ type DocPreviewRow = {
   file_type: string | null;
 };
 
-export async function GET(
-  _request: NextRequest,
-  context: { params: Promise<{ id: string; docId: string }> },
-) {
+type PreviewParams = {
+  params: { id: string; docId: string } | Promise<{ id: string; docId: string }>;
+};
+
+async function assertPreviewManager(profile: { role?: string; access_tier?: string } | null) {
+  if (hasMinRole(profile?.role, "manager", profile?.access_tier)) return null;
+  const roleName = profile?.role;
+  if (!roleName) return forbidden();
   try {
-    const { id: contactId, docId } = await context.params;
+    const admin = createServiceClient();
+    const { data: tierRow } = await admin
+      .from("roles")
+      .select("access_tier")
+      .eq("name", roleName)
+      .maybeSingle();
+    const tier = (tierRow as { access_tier?: string } | null)?.access_tier;
+    if (hasMinRole(roleName, "manager", tier)) return null;
+  } catch (e) {
+    console.warn("[documents preview] access_tier lookup failed", e);
+  }
+  return forbidden();
+}
+
+export async function GET(_request: NextRequest, context: PreviewParams) {
+  try {
+    const p = await Promise.resolve(context.params);
+    const contactId = typeof p?.id === "string" ? p.id : "";
+    const docId = typeof p?.docId === "string" ? p.docId : "";
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile } = crm;
-    if (!hasMinRole(profile?.role, "manager")) return forbidden();
+    const denied = await assertPreviewManager(crm.profile);
+    if (denied) return denied;
 
     if (!contactId || !docId) {
       return NextResponse.json({ error: "Άκυρο αίτημα" }, { status: 400 });
