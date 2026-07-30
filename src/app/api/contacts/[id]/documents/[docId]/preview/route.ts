@@ -103,8 +103,9 @@ export async function GET(
       return NextResponse.json({ error: "Λείπει το αρχείο" }, { status: 404 });
     }
 
-    const storagePath = documentsStorageObjectPath(doc.file_url);
-    if (!storagePath) {
+    const filePath = documentsStorageObjectPath(doc.file_url);
+    console.log("[preview]", { contactId, docId, filePath });
+    if (!filePath) {
       console.error("[documents preview] invalid storage path", {
         docId,
         file_url_prefix: doc.file_url.slice(0, 80),
@@ -112,9 +113,9 @@ export async function GET(
       return NextResponse.json({ error: "Λείπει το αρχείο" }, { status: 404 });
     }
 
-    const { data: blob, error: dlErr } = await admin.storage.from("documents").download(storagePath);
+    const { data: blob, error: dlErr } = await admin.storage.from("documents").download(filePath);
     if (dlErr || !blob) {
-      console.error("[documents preview download]", dlErr?.message, { storagePath });
+      console.error("[documents preview download]", dlErr?.message, { filePath });
       return NextResponse.json({ error: "Αποτυχία ανάκτησης αρχείου" }, { status: 404 });
     }
 

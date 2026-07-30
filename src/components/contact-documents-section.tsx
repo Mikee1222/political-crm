@@ -82,7 +82,7 @@ function uploadContactDocXHR(
 ): Promise<{ ok: boolean; document?: ContactDocRow; error?: string }> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/documents/upload");
+    xhr.open("POST", `/api/contacts/${encodeURIComponent(contactId)}/documents`);
     xhr.withCredentials = true;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -107,7 +107,6 @@ function uploadContactDocXHR(
     xhr.onerror = () => resolve({ ok: false, error: "Σφάλμα δικτύου" });
     const fd = new FormData();
     fd.set("file", file);
-    fd.set("contact_id", contactId);
     xhr.send(fd);
   });
 }
@@ -304,7 +303,7 @@ function PreviewModal({
       }
       try {
         const dr = await fetchWithTimeout(
-          `/api/documents?contact_id=${encodeURIComponent(contactId)}`,
+          `/api/contacts/${encodeURIComponent(contactId)}/documents`,
         );
         if (!dr.ok) {
           if (!cancelled) setFileUrl(null);
@@ -436,7 +435,9 @@ export function ContactDocumentsSection({ contactId }: { contactId: string }) {
 
   const load = useCallback(async () => {
     try {
-      const dr = await fetchWithTimeout(`/api/documents?contact_id=${encodeURIComponent(contactId)}`);
+      const dr = await fetchWithTimeout(
+        `/api/contacts/${encodeURIComponent(contactId)}/documents`,
+      );
       if (dr.ok) {
         const j = (await dr.json()) as { documents?: ContactDocRow[] };
         setDocs(j.documents ?? []);
