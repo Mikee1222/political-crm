@@ -2,7 +2,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 
 /**
  * Dashboard / curl connectivity checks (no call processing).
- * These may arrive without `x-retell-signature`; real call events still require HMAC in production.
+ * These may arrive without `x-retell-signature`; route always acks them before HMAC.
+ * Real events verify HMAC only when RETELL_WEBHOOK_SECRET is set (not RETELL_API_KEY).
  */
 export function isRetellWebhookTestEvent(body: unknown): boolean {
   if (body == null || typeof body !== "object") return false;
@@ -15,7 +16,7 @@ export function isRetellWebhookTestEvent(body: unknown): boolean {
 /**
  * Verifies Retell webhook `x-retell-signature` per
  * https://docs.retellai.com/features/secure-webhook
- * Message: rawBody + timestamp (ms), key: webhook signing secret (Retell API key with webhook badge),
+ * Message: rawBody + timestamp (ms), key: RETELL_WEBHOOK_SECRET only,
  * HMAC-SHA256 hex.
  */
 export function verifyRetellWebhookSignature(

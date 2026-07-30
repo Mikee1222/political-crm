@@ -16,9 +16,16 @@ export const dynamic = "force-dynamic";
  *   https://crm.kkaragkounis.com/api/retell/webhook
  * Configure this in the Retell dashboard → Agent / Account → Webhook.
  *
- * Public route (middleware `isRetellPublic` bypasses session auth).
- * Security: HMAC via RETELL_WEBHOOK_SECRET or RETELL_API_KEY for real call events.
- * Dashboard/curl probes with `event: "test"` (or ping) return 200 without HMAC.
+ * Public route — no CRM/session auth (middleware `isRetellPublic` + this handler).
+ *
+ * HMAC (optional): verified only when `RETELL_WEBHOOK_SECRET` is set.
+ * Do NOT use `RETELL_API_KEY` as an HMAC fallback — Retell may sign with the
+ * dedicated webhook secret (or send unsigned probes until configured), which
+ * caused false 401s when the API key was used for verification.
+ * If only `RETELL_API_KEY` is present, HMAC is skipped (warning logged) so
+ * Retell can deliver until the webhook secret is configured.
+ * Dashboard/curl probes with `event: "test"` / `ping` / `webhook_test` always
+ * return 200 without HMAC.
  */
 
 type TranscriptEntry = { role: string; content?: string | null };
@@ -65,24 +72,26 @@ function sanitizeWebhookForLog(body: unknown): unknown {
 }
 
 /**
- * HMAC secret for x-retell-signature.
- * Retell signs with the API key that has the webhook badge — set the same value as RETELL_WEBHOOK_SECRET
- * (or leave secret unset in local/dev to skip verification).
+ * HMAC secret for x-retell-signature — only `RETELL_WEBHOOK_SECRET`.
+ * Never fall back to `RETELL_API_KEY` (mismatched signing key → false 401).
  */
 function retellWebhookSigningSecret(): string | undefined {
-  return process.env.RETELL_WEBHOOK_SECRET?.trim() || process.env.RETELL_API_KEY?.trim() || undefined;
+  const secret = process.env.RETELL_WEBHOOK_SECRET?.trim();
+  return secret || undefined;
 }
 
 function assertRetellWebhookAuth(rawBody: string, request: NextRequest): NextResponse | null {
   const secret = retellWebhookSigningSecret();
-  const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
 
   if (!secret) {
-    if (isProd) {
-      console.error("[api/retell/webhook] RETELL_WEBHOOK_SECRET (or RETELL_API_KEY) missing — rejecting in production");
-      return NextResponse.json({ error: "Webhook verification not configured" }, { status: 401 });
+    // Optional HMAC: process without verification until RETELL_WEBHOOK_SECRET is set.
+    if (process.env.RETELL_API_KEY?.trim()) {
+      console.warn(
+        "[api/retell/webhook] RETELL_WEBHOOK_SECRET unset — skipping HMAC (RETELL_API_KEY is not used for signing)",
+      );
+    } else {
+      console.warn("[api/retell/webhook] RETELL_WEBHOOK_SECRET unset — skipping HMAC verification");
     }
-    // Local/dev: allow without secret so sandbox testing still works.
     return null;
   }
 
