@@ -112,6 +112,37 @@ function uploadContactDocXHR(
   });
 }
 
+type PreviewLoadState = "loading" | "loaded" | "error";
+
+function PreviewErrorOverlay({
+  downloadUrl,
+  name,
+}: {
+  downloadUrl: string | null;
+  name: string;
+}) {
+  return (
+    <div className="absolute inset-0 z-10 flex min-h-[240px] flex-col items-center justify-center gap-4 bg-[#0b1220] px-6 py-16 text-center">
+      <FileX className="h-10 w-10 text-[var(--text-muted)]" aria-hidden />
+      <p className="max-w-sm text-sm text-[var(--text-secondary)]">
+        Δεν ήταν δυνατή η προεπισκόπηση.
+      </p>
+      {downloadUrl ? (
+        <a
+          href={downloadUrl}
+          download={name}
+          target="_blank"
+          rel="noreferrer"
+          className={lux.btnPrimary + " inline-flex items-center gap-2"}
+        >
+          <ArrowDownToLine className="h-4 w-4" />
+          Λήψη
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 function PdfPreviewPane({
   proxyUrl,
   downloadUrl,
@@ -121,58 +152,40 @@ function PdfPreviewPane({
   downloadUrl: string | null;
   name: string;
 }) {
-  const [loading, setLoading] = useState(true);
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const loadedRef = useRef(false);
+  const [loadState, setLoadState] = useState<PreviewLoadState>("loading");
+  const loadStateRef = useRef<PreviewLoadState>("loading");
 
   useEffect(() => {
-    loadedRef.current = false;
-    setLoading(true);
-    setPreviewFailed(false);
+    loadStateRef.current = "loading";
+    setLoadState("loading");
     const t = window.setTimeout(() => {
-      if (loadedRef.current) return;
-      setLoading(false);
-      setPreviewFailed(true);
-    }, 10_000);
+      if (loadStateRef.current !== "loading") return;
+      loadStateRef.current = "error";
+      setLoadState("error");
+    }, 8_000);
     return () => window.clearTimeout(t);
   }, [proxyUrl]);
 
   const markLoaded = () => {
-    loadedRef.current = true;
-    setLoading(false);
-    setPreviewFailed(false);
+    loadStateRef.current = "loaded";
+    setLoadState("loaded");
   };
 
-  if (previewFailed) {
-    return (
-      <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-        <FileX className="h-10 w-10 text-[var(--text-muted)]" aria-hidden />
-        <p className="max-w-sm text-sm text-[var(--text-secondary)]">
-          Δεν ήταν δυνατή η προεπισκόπηση.
-        </p>
-        {downloadUrl ? (
-          <a
-            href={downloadUrl}
-            download={name}
-            target="_blank"
-            rel="noreferrer"
-            className={lux.btnPrimary + " inline-flex items-center gap-2"}
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            Λήψη
-          </a>
-        ) : null}
-      </div>
-    );
-  }
+  const markError = () => {
+    loadStateRef.current = "error";
+    setLoadState("error");
+  };
 
   return (
     <div className="relative min-h-[600px] h-[70vh] w-full bg-white">
-      {loading ? (
+      {loadState === "loading" ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0b1220]/80">
           <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" aria-hidden />
           <span className="sr-only">Φόρτωση προεπισκόπησης</span>
         </div>
+      ) : null}
+      {loadState === "error" ? (
+        <PreviewErrorOverlay downloadUrl={downloadUrl} name={name} />
       ) : null}
       <object
         data={proxyUrl}
@@ -180,7 +193,9 @@ function PdfPreviewPane({
         width="100%"
         height="600px"
         className="h-full min-h-[600px] w-full"
+        style={{ display: loadState === "loaded" ? "block" : "none" }}
         onLoad={markLoaded}
+        onError={markError}
       >
         <embed
           title={name}
@@ -190,6 +205,7 @@ function PdfPreviewPane({
           height="600px"
           className="h-full min-h-[600px] w-full"
           onLoad={markLoaded}
+          onError={markError}
         />
         {downloadUrl ? (
           <a href={downloadUrl} download={name} target="_blank" rel="noreferrer">
@@ -214,66 +230,44 @@ function ImagePreviewPane({
   downloadUrl: string | null;
   name: string;
 }) {
-  const [loading, setLoading] = useState(true);
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const loadedRef = useRef(false);
+  const [loadState, setLoadState] = useState<PreviewLoadState>("loading");
+  const loadStateRef = useRef<PreviewLoadState>("loading");
 
   useEffect(() => {
-    loadedRef.current = false;
-    setLoading(true);
-    setPreviewFailed(false);
+    loadStateRef.current = "loading";
+    setLoadState("loading");
     const t = window.setTimeout(() => {
-      if (loadedRef.current) return;
-      setLoading(false);
-      setPreviewFailed(true);
-    }, 10_000);
+      if (loadStateRef.current !== "loading") return;
+      loadStateRef.current = "error";
+      setLoadState("error");
+    }, 8_000);
     return () => window.clearTimeout(t);
   }, [proxyUrl]);
 
-  if (previewFailed) {
-    return (
-      <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-        <FileX className="h-10 w-10 text-[var(--text-muted)]" aria-hidden />
-        <p className="max-w-sm text-sm text-[var(--text-secondary)]">
-          Δεν ήταν δυνατή η προεπισκόπηση.
-        </p>
-        {downloadUrl ? (
-          <a
-            href={downloadUrl}
-            download={name}
-            target="_blank"
-            rel="noreferrer"
-            className={lux.btnPrimary + " inline-flex items-center gap-2"}
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            Λήψη
-          </a>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <div className="relative flex min-h-[240px] items-center justify-center">
-      {loading ? (
+      {loadState === "loading" ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0b1220]/80">
           <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" aria-hidden />
           <span className="sr-only">Φόρτωση προεπισκόπησης</span>
         </div>
+      ) : null}
+      {loadState === "error" ? (
+        <PreviewErrorOverlay downloadUrl={downloadUrl} name={name} />
       ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={proxyUrl}
         alt={name}
         className="mx-auto max-h-[70vh] w-auto max-w-full object-contain p-4"
+        style={{ display: loadState === "loaded" ? "block" : "none" }}
         onLoad={() => {
-          loadedRef.current = true;
-          setLoading(false);
-          setPreviewFailed(false);
+          loadStateRef.current = "loaded";
+          setLoadState("loaded");
         }}
         onError={() => {
-          setLoading(false);
-          setPreviewFailed(true);
+          loadStateRef.current = "error";
+          setLoadState("error");
         }}
       />
     </div>
