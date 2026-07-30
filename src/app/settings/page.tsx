@@ -30,6 +30,7 @@ import { EmailSettingsSection } from "@/components/settings/email-settings-secti
 import { WhatsappSettingsSection } from "@/components/settings/whatsapp-settings-section";
 import { CampaignTypesSettingsSection } from "@/components/settings/campaign-types-section";
 import { RetellAgentsSettingsSection } from "@/components/settings/retell-agents-section";
+import { RetellSettingsSection } from "@/components/settings/retell-settings-section";
 import { AccessCodeSecuritySection } from "@/components/settings/access-code-section";
 import { GroupCategoriesSettings } from "@/components/settings/group-categories-settings";
 import { ClientPaginationBar } from "@/components/ui/client-pagination-bar";
@@ -292,17 +293,7 @@ export default function SettingsPage() {
             )}
           </section>
 
-          {isAdmin && (
-            <section className={lux.card}>
-              <h2 className={lux.sectionTitle + " mb-2"}>Retell AI</h2>
-              {integrations && (
-                <p className="mb-4 text-sm text-[var(--text-primary)]">
-                  Κατάσταση API:{" "}
-                  <span className="font-semibold text-[#16A34A]">{integrations.retell ? "Συνδεδεμένο" : "Μη ρυθμισμένο"}</span>
-                </p>
-              )}
-            </section>
-          )}
+          {isAdmin && <RetellSettingsSection />}
 
           {isAdmin && <RetellAgentsSettingsSection />}
 
