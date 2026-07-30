@@ -123,6 +123,7 @@ describe("retellOutcomeLabel / badge", () => {
     expect(a).not.toBe(b);
     expect(b).not.toBe(c);
     expect(a).toContain("emerald");
-    expect(c).toContain("amber");
+    expect(c).toContain("orange");
+    expect(c).toContain("text-white");
   });
 });

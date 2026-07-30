@@ -111,7 +111,7 @@ export function formatCallLogDateTime(calledAt: string | null | undefined): stri
   });
 }
 
-/** Compact call-history stamp: «30/07 20:26» (Europe/Athens). */
+/** Compact call-history stamp: «30/07 · 21:34» (Europe/Athens). */
 export function formatCallHistoryCompact(calledAt: string | null | undefined): string {
   const d = parseInstant(calledAt);
   if (!d) return "—";
@@ -130,7 +130,7 @@ export function formatCallHistoryCompact(calledAt: string | null | undefined): s
   const hour = get("hour");
   const minute = get("minute");
   if (!day || !month || !hour || !minute) return "—";
-  return `${day}/${month} ${hour}:${minute}`;
+  return `${day}/${month} · ${hour}:${minute}`;
 }
 
 /** Relative elapsed time from a UTC instant (Greek copy for very recent marks). */

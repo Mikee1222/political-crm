@@ -4,6 +4,25 @@ export type CallTranscriptTurn = {
   text: string;
 };
 
+/** Display name for Retell `agent:` turns in call history UI. */
+export const AGENT_DISPLAY_NAME = "Αλεξάνδρα";
+
+/**
+ * Human-readable participant label for a transcript turn.
+ * `user` → contact full name (fallback «Επαφή»); `agent` → «Αλεξάνδρα».
+ */
+export function transcriptParticipantLabel(
+  role: CallTranscriptTurn["role"],
+  contactName?: string | null,
+): string {
+  if (role === "agent") return AGENT_DISPLAY_NAME;
+  if (role === "user") {
+    const n = contactName?.trim();
+    return n || "Επαφή";
+  }
+  return "";
+}
+
 const ROLE_MARKER = /\b(agent|user)\s*:/gi;
 
 /**

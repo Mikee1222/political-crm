@@ -230,7 +230,7 @@ export function retellOutcomeBadgeClass(outcome: string | null | undefined): str
   const map: Record<string, string> = {
     [RETELL_OUTCOME_CONNECTED]: "bg-emerald-700 text-white ring-1 ring-emerald-900/35",
     [RETELL_OUTCOME_DECLINED]: "bg-red-700 text-white ring-1 ring-red-900/35",
-    [RETELL_OUTCOME_NO_ANSWER]: "bg-amber-500 text-amber-950 ring-1 ring-amber-800/30",
+    [RETELL_OUTCOME_NO_ANSWER]: "bg-orange-500 text-white ring-1 ring-orange-700/35",
     Αναμονή: "bg-sky-700 text-white ring-1 ring-sky-900/35",
   };
   return map[label] ?? "bg-slate-200 text-slate-900 ring-1 ring-slate-400/50";

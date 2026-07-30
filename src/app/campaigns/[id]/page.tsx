@@ -4,8 +4,6 @@ import {
   ArrowLeft,
   BarChart3,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Circle,
   ClipboardList,
   Clock,
@@ -29,6 +27,9 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useParams } from "next/navigation";
+import { CallTranscriptBlock } from "@/components/call-transcript-block";
+import { hasCallTranscript } from "@/lib/call-transcript";
+import { formatGreekContactName } from "@/lib/contact-display-name";
 import {
   Bar,
   BarChart,
@@ -61,7 +62,6 @@ import {
   formatDurationGreek,
   type CampaignStatusIcon,
 } from "@/lib/campaign-contact-status";
-import { hasCallTranscript, parseCallTranscript } from "@/lib/call-transcript";
 import type { CampaignAnalyticsPayload } from "@/lib/campaign-stats";
 import {
   retellOutcomeBadgeClass,
@@ -1766,7 +1766,15 @@ export default function CampaignDetailPage() {
                         </td>
                         <td className="p-2 pr-3 text-right sm:p-3 sm:pr-4">
                           {hasCallTranscript(transcriptRaw) && transcriptRaw ? (
-                            <CallTranscriptBlock raw={transcriptRaw} />
+                            <CallTranscriptBlock
+                              raw={transcriptRaw}
+                              contactName={
+                                n
+                                  ? formatGreekContactName(n.last_name, n.first_name, null)
+                                  : null
+                              }
+                              align="right"
+                            />
                           ) : call.transferred_to_politician ? (
                             <span className="inline-flex items-center justify-end gap-1 text-[9px] font-bold uppercase text-[#C9A84C] sm:text-[10px]">
                               <Link2 className="h-2.5 w-2.5" />
@@ -1941,46 +1949,6 @@ function CompareStat({
           {delta >= 0 ? "+" : ""}
           {delta} μονάδες έναντι Μ.Ο.
         </p>
-      )}
-    </div>
-  );
-}
-
-function CallTranscriptBlock({ raw }: { raw: string }) {
-  const [open, setOpen] = useState(false);
-  const turns = useMemo(() => parseCallTranscript(raw), [raw]);
-  if (!turns.length) return null;
-  return (
-    <div className="text-left">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C9A84C] hover:underline"
-      >
-        {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        {open ? "Απόκρυψη" : "Συνομιλία"}
-      </button>
-      {open && (
-        <div className="mt-1.5 max-w-xs space-y-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/50 px-2 py-1.5 text-left">
-          {turns.map((t, i) => (
-            <p
-              key={`${t.role}-${i}`}
-              className={
-                "text-[10px] leading-relaxed " +
-                (t.role === "agent"
-                  ? "text-[#C9A84C]"
-                  : t.role === "user"
-                    ? "text-[var(--text-muted)]"
-                    : "text-[var(--text-secondary)]")
-              }
-            >
-              <span className="mr-1 font-semibold">
-                {t.role === "agent" ? "agent" : t.role === "user" ? "user" : "•"}:
-              </span>
-              {t.text}
-            </p>
-          ))}
-        </div>
       )}
     </div>
   );

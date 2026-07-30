@@ -14,7 +14,9 @@ import {
   Gift,
   MapPin,
   Maximize2,
+  Megaphone,
   Minimize2,
+  MoreVertical,
   Pencil,
   Phone,
   Plus,
@@ -33,7 +35,9 @@ import {
   formatRelativeAthens,
 } from "@/lib/date-format";
 import { formatDurationGreek } from "@/lib/campaign-contact-status";
-import { hasCallTranscript, parseCallTranscript } from "@/lib/call-transcript";
+import { hasCallTranscript } from "@/lib/call-transcript";
+import { CallTranscriptBlock } from "@/components/call-transcript-block";
+import { formatGreekContactName } from "@/lib/contact-display-name";
 import { retellOutcomeBadgeClass, retellOutcomeLabel } from "@/lib/retell-call-outcomes";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import type { ReactNode } from "react";
@@ -295,58 +299,10 @@ function OutcomeBadge({ o }: { o: string | null | undefined }) {
   const label = retellOutcomeLabel(o);
   return (
     <span
-      className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-bold tracking-wide ${retellOutcomeBadgeClass(o)}`}
+      className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold tracking-wide ${retellOutcomeBadgeClass(o)}`}
     >
       {label}
     </span>
-  );
-}
-
-function CallTranscriptBlock({ raw }: { raw: string }) {
-  const [open, setOpen] = useState(false);
-  const turns = useMemo(() => parseCallTranscript(raw), [raw]);
-  if (!turns.length) return null;
-  return (
-    <div className="mt-1.5">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="text-[11px] font-medium text-[var(--accent-gold)] hover:underline"
-      >
-        {open ? "Απόκρυψη συνομιλίας ▲" : "Εμφάνιση συνομιλίας ▼"}
-      </button>
-      {open && (
-        <div className="mt-1.5 space-y-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/50 px-2.5 py-2">
-          {turns.map((t, i) => {
-            const isAgent = t.role === "agent";
-            const isUser = t.role === "user";
-            return (
-              <p
-                key={`${t.role}-${i}`}
-                className={[
-                  "text-[11px] leading-relaxed",
-                  isAgent
-                    ? "text-[var(--accent-gold)]"
-                    : isUser
-                      ? "text-[var(--text-muted)]"
-                      : "text-[var(--text-secondary)]",
-                ].join(" ")}
-              >
-                <span
-                  className={[
-                    "mr-1 font-semibold",
-                    isAgent ? "text-[var(--accent-blue-bright)]" : "",
-                  ].join(" ")}
-                >
-                  {isAgent ? "🤖 agent" : isUser ? "👤 user" : "•"}:
-                </span>
-                {t.text}
-              </p>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -454,6 +410,7 @@ function ContactDetailPage() {
   const [callLogs, setCallLogs] = useState<ContactCallLogItem[]>([]);
   const [markingContacted, setMarkingContacted] = useState(false);
   const [cleaningPending, setCleaningPending] = useState(false);
+  const [callHistoryMenuOpen, setCallHistoryMenuOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSending, setNoteSending] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -3046,50 +3003,80 @@ function ContactDetailPage() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)]/80 pb-3">
                 <h2 className="mb-0 text-sm font-semibold tracking-wide text-[var(--text-primary)]">Ιστορικό κλήσεων</h2>
                 {isAdmin && (
-                  <button
-                    type="button"
-                    disabled={cleaningPending}
-                    onClick={() => void handleCleanupPendingCalls()}
-                    className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:border-amber-500/40 hover:text-amber-200 disabled:opacity-50"
-                  >
-                    {cleaningPending ? "Καθαρισμός…" : "Καθαρισμός Pending"}
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setCallHistoryMenuOpen((v) => !v)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+                      aria-label="Ρυθμίσεις ιστορικού κλήσεων"
+                      aria-expanded={callHistoryMenuOpen}
+                    >
+                      <MoreVertical className="h-4 w-4" aria-hidden />
+                    </button>
+                    {callHistoryMenuOpen ? (
+                      <>
+                        <button
+                          type="button"
+                          className="fixed inset-0 z-10 cursor-default"
+                          aria-label="Κλείσιμο μενού"
+                          onClick={() => setCallHistoryMenuOpen(false)}
+                        />
+                        <div className="absolute right-0 z-20 mt-1 min-w-[12rem] rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-lg">
+                          <button
+                            type="button"
+                            disabled={cleaningPending}
+                            onClick={() => {
+                              setCallHistoryMenuOpen(false);
+                              void handleCleanupPendingCalls();
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] hover:text-amber-700 disabled:opacity-50"
+                          >
+                            {cleaningPending ? "Καθαρισμός…" : "Καθαρισμός Pending"}
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
                 )}
               </div>
               {calls.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Δεν υπάρχουν κλήσεις ακόμα</p>
               ) : (
-                <ul className="relative space-y-0">
-                  {calls.map((cl, i) => {
+                <ul className="divide-y divide-[var(--border)]/60">
+                  {calls.map((cl) => {
                     const transcriptRaw = cl.transcript ?? cl.notes;
                     const showTranscript = hasCallTranscript(transcriptRaw);
                     return (
-                      <li key={cl.id} className="relative flex gap-3 pb-4 last:pb-0">
-                        {i < calls.length - 1 && (
-                          <span className="absolute left-2 top-4 h-[calc(100%-4px)] w-px bg-[var(--border)]" />
-                        )}
-                        <span className="relative z-[1] mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-gold)] ring-2 ring-[var(--bg-card)]" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                            <p className="text-xs font-semibold text-[var(--text-primary)]">
-                              {cl.called_at ? formatCallHistoryCompact(cl.called_at) : "—"}
-                            </p>
-                            {cl.duration_seconds != null && (
-                              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-                                {formatDurationGreek(cl.duration_seconds)}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                            <OutcomeBadge o={cl.outcome} />
-                          </div>
-                          {cl.campaign_name ? (
-                            <p className="mt-1 text-[10px] text-[var(--text-muted)]">{cl.campaign_name}</p>
-                          ) : null}
-                          {showTranscript && transcriptRaw ? (
-                            <CallTranscriptBlock raw={transcriptRaw} />
-                          ) : null}
+                      <li key={cl.id} className="py-3.5 first:pt-1 last:pb-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold tabular-nums text-[var(--text-primary)]">
+                            {cl.called_at ? formatCallHistoryCompact(cl.called_at) : "—"}
+                          </p>
+                          {cl.duration_seconds != null && (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-gray-600">
+                              {formatDurationGreek(cl.duration_seconds)}
+                            </span>
+                          )}
+                          <OutcomeBadge o={cl.outcome} />
                         </div>
+                        {cl.campaign_name ? (
+                          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                            <Megaphone className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                            <span className="truncate">{cl.campaign_name}</span>
+                          </p>
+                        ) : null}
+                        {showTranscript && transcriptRaw ? (
+                          <div className="mt-2">
+                            <CallTranscriptBlock
+                              raw={transcriptRaw}
+                              contactName={formatGreekContactName(
+                                c.last_name,
+                                c.first_name,
+                                null,
+                              )}
+                            />
+                          </div>
+                        ) : null}
                       </li>
                     );
                   })}
