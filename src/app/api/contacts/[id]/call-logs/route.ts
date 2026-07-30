@@ -70,7 +70,7 @@ async function fetchContactCalls(
   contactId: string,
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q: any = supabase
+  const q: any = supabase
     .from("calls")
     .select(
       "id, contact_id, campaign_id, called_at, duration_seconds, outcome, notes, campaigns ( id, name )",

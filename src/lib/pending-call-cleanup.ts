@@ -38,7 +38,7 @@ export async function cleanupStuckPendingCalls(
   const cutoff = isoOlderThan(olderThanMs, now);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q: any = supabase
+  const q: any = supabase
     .from("calls")
     .select("id, called_at, outcome")
     .eq("contact_id", contactId)
