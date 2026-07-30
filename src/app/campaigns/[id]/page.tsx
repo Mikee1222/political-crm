@@ -2,26 +2,48 @@
 
 import {
   ArrowLeft,
+  BarChart3,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Circle,
+  ClipboardList,
+  Clock,
   Download,
-  FileText,
+  Link2,
+  MessageCircle,
   Minus,
   Pause,
+  Pencil,
   Phone,
+  PhoneMissed,
   PhoneOff,
   Play,
   Plus,
   RefreshCw,
   Search,
   UserPlus,
+  Users,
   XCircle,
-  Clock,
-  Pencil,
-  MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useParams } from "next/navigation";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateTimeAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
@@ -34,8 +56,18 @@ import {
   CONCURRENT_LINES_MAX,
   CONCURRENT_LINES_MIN,
 } from "@/lib/campaign-concurrent-lines";
-import { formatDurationGreek } from "@/lib/campaign-contact-status";
-import { retellOutcomeLabel } from "@/lib/retell-call-outcomes";
+import {
+  campaignStatusBadgeClass,
+  formatDurationGreek,
+  type CampaignStatusIcon,
+} from "@/lib/campaign-contact-status";
+import { hasCallTranscript, parseCallTranscript } from "@/lib/call-transcript";
+import type { CampaignAnalyticsPayload } from "@/lib/campaign-stats";
+import {
+  retellOutcomeBadgeClass,
+  retellOutcomeLabel,
+  retellOutcomeRowTintClass,
+} from "@/lib/retell-call-outcomes";
 
 type OutcomeStats = { total: number; positive: number; negative: number; noAnswer: number };
 
@@ -46,6 +78,8 @@ type CallRow = {
   duration_seconds: number | null;
   transferred_to_politician: boolean | null;
   contact_id: string;
+  notes?: string | null;
+  transcript?: string | null;
   contacts: {
     first_name: string;
     last_name: string;
@@ -58,7 +92,7 @@ type CallRow = {
 type CampaignStatusMeta = {
   key: string;
   label: string;
-  icon: string;
+  icon: CampaignStatusIcon | string;
   tone: "amber" | "emerald" | "rose" | "orange" | "slate";
 };
 
@@ -163,15 +197,29 @@ const GOLD = "#D4AF37";
 const CREAM = "#FDFAF5";
 const NAVY = "#0A1628";
 
+const OUTCOME_CHART_COLORS: Record<string, string> = {
+  positive: "#15803D",
+  negative: "#B91C1C",
+  no_answer: "#D97706",
+};
+
 const tableTh = "text-left text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]";
 
-const statusToneClass: Record<CampaignStatusMeta["tone"], string> = {
-  amber: "bg-amber-500/15 text-amber-200 ring-amber-500/25",
-  emerald: "bg-emerald-500/15 text-emerald-200 ring-emerald-500/25",
-  rose: "bg-rose-500/15 text-rose-200 ring-rose-500/25",
-  orange: "bg-orange-500/15 text-orange-200 ring-orange-500/25",
-  slate: "bg-slate-500/15 text-slate-300 ring-slate-500/25",
+const sectionHead =
+  "mb-3 border-l-[3px] border-[#D4AF37] pl-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[#D4AF37]";
+
+const STATUS_ICON_MAP: Record<string, ComponentType<{ className?: string }>> = {
+  link2: Link2,
+  "x-circle": XCircle,
+  "phone-missed": PhoneMissed,
+  clock: Clock,
+  circle: Circle,
 };
+
+function StatusIcon({ name, className }: { name?: string; className?: string }) {
+  const Icon = (name && STATUS_ICON_MAP[name]) || Circle;
+  return <Icon className={className ?? "h-3 w-3"} aria-hidden />;
+}
 
 function formatEta(sec: number | null | undefined): string {
   if (sec == null || !Number.isFinite(sec)) return "—";
@@ -279,8 +327,7 @@ function liveCallElapsedSec(
 
 function requestChipLabel(r: OpenRequestChip): string {
   const label = (r.category || r.title || "Αίτημα").trim();
-  const short = label.length > 18 ? `${label.slice(0, 17)}…` : label;
-  return `📋 ${short}`;
+  return label.length > 18 ? `${label.slice(0, 17)}…` : label;
 }
 
 export default function CampaignDetailPage() {
@@ -316,6 +363,8 @@ export default function CampaignDetailPage() {
   const [descDraft, setDescDraft] = useState("");
   const [editingDesc, setEditingDesc] = useState(false);
   const [metaSaving, setMetaSaving] = useState(false);
+  const [analytics, setAnalytics] = useState<CampaignAnalyticsPayload | null>(null);
+  const [contactSort, setContactSort] = useState<"status" | "name" | "calls">("status");
   const { showToast } = useFormToast();
 
   useEffect(() => {
@@ -388,9 +437,26 @@ export default function CampaignDetailPage() {
     }
   }, [id]);
 
+  const loadAnalytics = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await fetchWithTimeout(`/api/campaigns/${id}/analytics`);
+      const j = (await res.json().catch(() => ({}))) as {
+        analytics?: CampaignAnalyticsPayload;
+      };
+      if (res.ok && j.analytics) setAnalytics(j.analytics);
+    } catch {
+      /* ignore */
+    }
+  }, [id]);
+
   useEffect(() => {
     void loadNoAnswerCount();
   }, [loadNoAnswerCount, data?.stats?.noAnswer]);
+
+  useEffect(() => {
+    void loadAnalytics();
+  }, [loadAnalytics, data?.stats?.total]);
 
   const patchCampaign = useCallback(
     async (body: Record<string, unknown>) => {
@@ -606,6 +672,29 @@ export default function CampaignDetailPage() {
   const etaSec = live?.estimatedRemainingSec ?? data?.estimatedRemainingSec ?? null;
   const callsMadeDisplay = live?.callsMade ?? data?.callsMade ?? 0;
   const contactTotalDisplay = live?.contactTotal ?? data?.contactTotal ?? 0;
+  const successRate =
+    s && s.total > 0 ? Math.round((s.positive / s.total) * 1000) / 10 : 0;
+
+  const sortedContacts = useMemo(() => {
+    const rows = [...(data?.assigned_contacts ?? [])];
+    const statusOrder: Record<string, number> = {
+      pending: 0,
+      connected: 1,
+      declined: 2,
+      no_answer: 3,
+      not_called: 4,
+    };
+    rows.sort((a, b) => {
+      if (contactSort === "calls") return (b.call_count ?? 0) - (a.call_count ?? 0);
+      if (contactSort === "name") {
+        const an = [a.contact?.last_name, a.contact?.first_name].filter(Boolean).join(" ");
+        const bn = [b.contact?.last_name, b.contact?.first_name].filter(Boolean).join(" ");
+        return an.localeCompare(bn, "el");
+      }
+      return (statusOrder[a.campaign_status?.key] ?? 9) - (statusOrder[b.campaign_status?.key] ?? 9);
+    });
+    return rows;
+  }, [data?.assigned_contacts, contactSort]);
 
   if (!id) {
     return <p className="text-sm text-[var(--text-secondary)]">Μη έγκυρο id.</p>;
@@ -673,8 +762,8 @@ export default function CampaignDetailPage() {
                   className={
                     "inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase " +
                     (c.status === "active"
-                      ? "border-[#C9A84C]/45 bg-[var(--accent-gold)]/10 text-[var(--accent-gold)]"
-                      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400")
+                      ? "border-[#C9A84C]/45 bg-[#D4AF37]/20 text-[#6B5210] [data-theme='dark']:text-[#E8C96B]"
+                      : "border-slate-400/40 bg-slate-200 text-slate-800 [data-theme='dark']:bg-slate-600 [data-theme='dark']:text-white")
                   }
                 >
                   {c.status === "active" ? "Ενεργή" : "Ολοκληρώθηκε"}
@@ -804,6 +893,44 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
+      {c && s && (
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <GoldKpi
+            icon={Link2}
+            label="Συνδέθηκε με ΚΚ"
+            value={String(s.positive)}
+            valueColor="#15803D"
+          />
+          <GoldKpi
+            icon={XCircle}
+            label="Δεν ήθελε"
+            value={String(s.negative)}
+            valueColor="#B91C1C"
+          />
+          <GoldKpi
+            icon={PhoneMissed}
+            label="Δεν απάντησε"
+            value={String(s.noAnswer)}
+            valueColor="#C2410C"
+          />
+          <GoldKpi
+            icon={Phone}
+            label="Σύνολο κλήσεων"
+            value={String(s.total)}
+            valueColor={NAVY}
+          />
+          <div className="flex items-center justify-center gap-3 rounded-xl border border-[#D4AF37]/45 bg-white p-3 shadow-sm">
+            <SuccessGauge rate={successRate} />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                Ποσοστό επιτυχίας
+              </p>
+              <p className="text-2xl font-bold tabular-nums text-[#15803D]">{successRate}%</p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {err && (
         <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           {err}
@@ -899,7 +1026,7 @@ export default function CampaignDetailPage() {
                     setRedialMode(true);
                     if (typeof j.eligible === "number") setNoAnswerCount(j.eligible);
                     showToast(
-                      `✓ Επανεκκινήθηκε — ${formatDateTimeAthens(stamped)}`,
+                      `Επανεκκινήθηκε — ${formatDateTimeAthens(stamped)}`,
                       "success",
                     );
                     // Kick first redial batch
@@ -918,12 +1045,23 @@ export default function CampaignDetailPage() {
               {redialBusy
                 ? "Επανεκκίνηση…"
                 : lastRedialAt
-                  ? `📵 Επανεκκίνηση ξανά (${noAnswerCount} επαφές)`
-                  : `📵 Επανεκκίνηση «Δεν Απάντησε» (${noAnswerCount} επαφές)`}
+                  ? (
+                    <span className="inline-flex items-center gap-2">
+                      <PhoneMissed className="h-4 w-4 shrink-0" />
+                      Επανεκκίνηση ξανά ({noAnswerCount} επαφές)
+                    </span>
+                  )
+                  : (
+                    <span className="inline-flex items-center gap-2">
+                      <PhoneMissed className="h-4 w-4 shrink-0" />
+                      Επανεκκίνηση «Δεν Απάντησε» ({noAnswerCount} επαφές)
+                    </span>
+                  )}
             </button>
             {lastRedialAt ? (
-              <p className="text-xs text-emerald-600">
-                ✓ Τελευταία επανεκκίνηση: {formatDateTimeAthens(lastRedialAt)}
+              <p className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                Τελευταία επανεκκίνηση: {formatDateTimeAthens(lastRedialAt)}
                 {redialMode ? " · λειτουργία επανεκκίνησης ενεργή" : ""}
               </p>
             ) : null}
@@ -1015,8 +1153,9 @@ export default function CampaignDetailPage() {
                       </div>
                     </div>
                     {oc.transferred_to_kk && (
-                      <span className="mt-2 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-[#16A34A] ring-1 ring-emerald-200">
-                        🔗 Συνδέθηκε με ΚΚ
+                      <span className="mt-2 inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        <Link2 className="h-3 w-3" />
+                        Συνδέθηκε με ΚΚ
                       </span>
                     )}
                     {(oc.open_requests?.length ?? 0) > 0 && (
@@ -1024,9 +1163,10 @@ export default function CampaignDetailPage() {
                         {oc.open_requests.map((r) => (
                           <span
                             key={r.id}
-                            className="inline-flex max-w-full truncate rounded-md bg-[#FDFAF5] px-1.5 py-0.5 text-[10px] font-medium text-gray-700 ring-1 ring-[#D4AF37]/40"
+                            className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-[#FDFAF5] px-1.5 py-0.5 text-[10px] font-medium text-gray-800 ring-1 ring-[#D4AF37]/40"
                             title={r.title ?? r.category ?? ""}
                           >
+                            <ClipboardList className="h-3 w-3 shrink-0 text-[#8B6914]" />
                             {requestChipLabel(r)}
                           </span>
                         ))}
@@ -1092,21 +1232,25 @@ export default function CampaignDetailPage() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <GoldKpi
-              label="🔗 Συνδέθηκε με ΚΚ"
+              icon={Link2}
+              label="Συνδέθηκε με ΚΚ"
               value={String(s.positive)}
-              valueColor="#16A34A"
+              valueColor="#15803D"
             />
             <GoldKpi
-              label="✗ Δεν ήθελε σύνδεση"
+              icon={XCircle}
+              label="Δεν ήθελε σύνδεση"
               value={String(s.negative)}
-              valueColor="#DC2626"
+              valueColor="#B91C1C"
             />
             <GoldKpi
-              label="📵 Δεν απάντησε"
+              icon={PhoneMissed}
+              label="Δεν απάντησε"
               value={String(s.noAnswer)}
-              valueColor="#EA580C"
+              valueColor="#C2410C"
             />
             <GoldKpi
+              icon={Phone}
               label="Σύνολο κλήσεων"
               value={String(s.total)}
               valueColor={NAVY}
@@ -1145,8 +1289,9 @@ export default function CampaignDetailPage() {
                     </Link>
                     <OutcomePill o={lc.outcome} light />
                     {lc.open_requests_count > 0 && (
-                      <span className="text-[10px] font-medium text-gray-500">
-                        📋 {lc.open_requests_count} αίτημ
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-600">
+                        <ClipboardList className="h-3 w-3" />
+                        {lc.open_requests_count} αίτημ
                         {lc.open_requests_count === 1 ? "α" : "ατα"}
                       </span>
                     )}
@@ -1164,8 +1309,119 @@ export default function CampaignDetailPage() {
         </section>
       )}
 
+      {analytics && (
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm hover:shadow-md transition-shadow sm:p-5">
+          <h2 className={sectionHead}>Αναλυτικά καμπάνιας</h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-[var(--border)] bg-white/80 p-3 [data-theme='dark']:bg-[var(--bg-elevated)]/40">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                Κλήσεις ανά ώρα (σήμερα)
+              </p>
+              <div className="h-48">
+                {(analytics.calls_per_hour_today.some((h) => h.count > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.calls_per_hour_today.filter((h) => h.count > 0 || (h.hour >= 8 && h.hour <= 22))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--text-muted)" }} interval="preserveStartEnd" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "var(--text-muted)" }} width={28} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="Κλήσεις" fill={GOLD} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyChart msg="Καμία κλήση σήμερα ακόμα." />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[var(--border)] bg-white/80 p-3 [data-theme='dark']:bg-[var(--bg-elevated)]/40">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                Κατανομή αποτελεσμάτων
+              </p>
+              <div className="h-48">
+                {analytics.outcome_distribution.some((o) => o.value > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={analytics.outcome_distribution.filter((o) => o.value > 0)}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius="42%"
+                        outerRadius="70%"
+                        paddingAngle={2}
+                      >
+                        {analytics.outcome_distribution
+                          .filter((o) => o.value > 0)
+                          .map((o) => (
+                            <Cell key={o.key} fill={OUTCOME_CHART_COLORS[o.key] ?? "#94A3B8"} />
+                          ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number, _n, item) => {
+                          const pct = (item?.payload as { pct?: number })?.pct ?? 0;
+                          return [`${value} (${pct}%)`, "Κλήσεις"];
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyChart msg="Δεν υπάρχουν αποτελέσματα ακόμα." />
+                )}
+              </div>
+            </div>
+
+            {analytics.multi_day && (
+              <div className="rounded-xl border border-[var(--border)] bg-white/80 p-3 lg:col-span-2 [data-theme='dark']:bg-[var(--bg-elevated)]/40">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                  Σωρευτικές κλήσεις ανά ημέρα
+                </p>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analytics.cumulative_by_day}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "var(--text-muted)" }} width={32} />
+                      <Tooltip />
+                      <Line
+                        type="monotone"
+                        dataKey="cumulative"
+                        name="Σωρευτικά"
+                        stroke={GOLD}
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: GOLD }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-[var(--border)] bg-white/80 p-3 lg:col-span-2 [data-theme='dark']:bg-[var(--bg-elevated)]/40">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                Σύγκριση με μέσο όρο άλλων καμπανιών
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <CompareStat
+                  label="Ποσοστό επιτυχίας"
+                  thisValue={analytics.comparison.this_success_rate}
+                  avgValue={analytics.comparison.avg_success_rate}
+                />
+                <CompareStat
+                  label="Ποσοστό απάντησης"
+                  thisValue={analytics.comparison.this_answer_rate}
+                  avgValue={analytics.comparison.avg_answer_rate}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {data && c && (
-        <div className={lux.card + " !overflow-hidden !p-0"}>
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-sm transition-shadow hover:shadow-md">
           <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
             <div>
               <h2 className="text-sm font-bold text-[var(--text-primary)]">Ανατεθειμένες επαφές</h2>
@@ -1174,19 +1430,31 @@ export default function CampaignDetailPage() {
                 {data.assigned_pagination.page_count} ({data.assigned_pagination.total})
               </p>
             </div>
-            <button
-              type="button"
-              className={lux.btnPrimary + " !min-h-10 w-full gap-2 !py-2 sm:w-auto"}
-              disabled={c.status !== "active"}
-              onClick={() => {
-                setAddOpen(true);
-                setAddSearch("");
-                setAddResults([]);
-              }}
-            >
-              <UserPlus className="h-4 w-4" />
-              Προσθήκη Επαφής
-            </button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <HqSelect
+                className="!min-h-10 !text-sm"
+                value={contactSort}
+                onChange={(e) => setContactSort(e.target.value as "status" | "name" | "calls")}
+                aria-label="Ταξινόμηση"
+              >
+                <option value="status">Ταξινόμηση: κατάσταση</option>
+                <option value="name">Ταξινόμηση: όνομα</option>
+                <option value="calls">Ταξινόμηση: κλήσεις</option>
+              </HqSelect>
+              <button
+                type="button"
+                className={lux.btnPrimary + " !min-h-10 w-full gap-2 !py-2 sm:w-auto"}
+                disabled={c.status !== "active"}
+                onClick={() => {
+                  setAddOpen(true);
+                  setAddSearch("");
+                  setAddResults([]);
+                }}
+              >
+                <UserPlus className="h-4 w-4" />
+                Προσθήκη Επαφής
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
@@ -1200,18 +1468,27 @@ export default function CampaignDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {(data.assigned_contacts ?? []).length === 0 ? (
+                {sortedContacts.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-[var(--text-secondary)]">
-                      Καμία επαφή με αριθμό σε αυτή τη σελίδα.
+                    <td colSpan={5} className="p-10 text-center">
+                      <Users className="mx-auto mb-2 h-8 w-8 text-[var(--text-muted)]" />
+                      <p className="text-sm text-[var(--text-secondary)]">
+                        Καμία επαφή με αριθμό σε αυτή τη σελίδα.
+                      </p>
                     </td>
                   </tr>
                 ) : (
-                  (data.assigned_contacts ?? []).map((row) => {
+                  sortedContacts.map((row, idx) => {
                     const n = row.contact;
                     const st = row.campaign_status;
                     return (
-                      <tr key={row.contact_id} className="border-b border-[var(--border)]/80 last:border-0">
+                      <tr
+                        key={row.contact_id}
+                        className={
+                          "border-b border-[var(--border)]/80 last:border-0 " +
+                          (idx % 2 === 1 ? "bg-[var(--bg-elevated)]/25" : "")
+                        }
+                      >
                         <td className="p-2 pl-3 sm:p-3 sm:pl-4">
                           <Link
                             className="font-medium text-[var(--text-primary)] hover:text-[#C9A84C]"
@@ -1225,9 +1502,9 @@ export default function CampaignDetailPage() {
                         </td>
                         <td className="p-2 sm:p-3">
                           <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${statusToneClass[st?.tone ?? "slate"]}`}
+                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${campaignStatusBadgeClass(st?.tone ?? "slate")}`}
                           >
-                            <span aria-hidden>{st?.icon ?? "⬜"}</span>
+                            <StatusIcon name={st?.icon} className="h-3 w-3 shrink-0" />
                             {st?.label ?? "—"}
                           </span>
                         </td>
@@ -1239,7 +1516,7 @@ export default function CampaignDetailPage() {
                         <td className="p-2 pr-3 text-right sm:p-3 sm:pr-4">
                           <button
                             type="button"
-                            className={lux.btnDanger + " !px-2 !py-1.5 text-xs"}
+                            className="inline-flex items-center rounded-lg border-2 border-red-400 px-2.5 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/15 disabled:opacity-50 [data-theme='light']:border-red-600 [data-theme='light']:text-red-700 [data-theme='light']:hover:bg-red-50"
                             disabled={removingId === row.contact_id || c.status !== "active"}
                             onClick={async () => {
                               setRemovingId(row.contact_id);
@@ -1372,7 +1649,7 @@ export default function CampaignDetailPage() {
         ) : null}
       </CenteredModal>
 
-      <div className={lux.card + " !overflow-hidden !p-0"}>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-sm transition-shadow hover:shadow-md">
         <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
           <div>
             <h2 className="text-sm font-bold text-[var(--text-primary)]">Καταγεγραμμένες κλήσεις</h2>
@@ -1409,7 +1686,10 @@ export default function CampaignDetailPage() {
                 lux.btnSecondary +
                 " !min-h-11 w-full !justify-center gap-2 !py-2 sm:w-auto sm:!shrink-0"
               }
-              onClick={() => void load()}
+              onClick={() => {
+                void load();
+                void loadAnalytics();
+              }}
             >
               <RefreshCw className="h-4 w-4" />
               Αναν.
@@ -1428,23 +1708,36 @@ export default function CampaignDetailPage() {
                   <th className={`p-2 sm:p-3 ${tableTh}`}>Αποτέλεσμα</th>
                   <th className={`p-2 sm:p-3 ${tableTh}`}>Διάρκεια</th>
                   <th className={`p-2 pr-3 text-left sm:p-3 sm:pr-4 ${tableTh}`}>Χρόνος</th>
-                  <th className={`p-2 pr-3 text-right sm:p-3 sm:pr-4 ${tableTh}`}>Κατάσταση</th>
+                  <th className={`p-2 pr-3 text-right sm:p-3 sm:pr-4 ${tableTh}`}>Συνομιλία</th>
                 </tr>
               </thead>
               <tbody>
                 {(data?.calls ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-[var(--text-secondary)]">
-                      Δεν βρέθηκαν εγγραφές κλήσεων{outcome ? " γι’ αυτό το φίλτρο" : ""}.
+                    <td colSpan={6} className="p-10 text-center">
+                      <PhoneOff className="mx-auto mb-2 h-8 w-8 text-[var(--text-muted)]" />
+                      <p className="text-sm text-[var(--text-secondary)]">
+                        Δεν βρέθηκαν εγγραφές κλήσεων{outcome ? " γι’ αυτό το φίλτρο" : ""}.
+                      </p>
                     </td>
                   </tr>
                 ) : (
-                  (data?.calls ?? []).map((call) => {
+                  (data?.calls ?? []).map((call, idx) => {
                     const n = call.contacts;
                     const phone =
                       n?.phone?.trim() || n?.phone2?.trim() || n?.landline?.trim() || null;
+                    const transcriptRaw = call.transcript ?? call.notes;
                     return (
-                      <tr key={call.id} className="border-b border-[var(--border)]/80 last:border-0">
+                      <tr
+                        key={call.id}
+                        className={
+                          "border-b border-[var(--border)]/80 last:border-0 " +
+                          retellOutcomeRowTintClass(call.outcome) +
+                          (idx % 2 === 1 && !retellOutcomeRowTintClass(call.outcome)
+                            ? " bg-[var(--bg-elevated)]/20"
+                            : "")
+                        }
+                      >
                         <td className="p-2 pl-3 sm:max-w-[14rem] sm:p-3 sm:pl-4">
                           <Link
                             className="font-semibold text-[var(--text-primary)] hover:text-[#C9A84C] hover:underline"
@@ -1472,16 +1765,15 @@ export default function CampaignDetailPage() {
                           {call.called_at ? formatDateTimeAthens(call.called_at) : "—"}
                         </td>
                         <td className="p-2 pr-3 text-right sm:p-3 sm:pr-4">
-                          {call.transferred_to_politician ? (
+                          {hasCallTranscript(transcriptRaw) && transcriptRaw ? (
+                            <CallTranscriptBlock raw={transcriptRaw} />
+                          ) : call.transferred_to_politician ? (
                             <span className="inline-flex items-center justify-end gap-1 text-[9px] font-bold uppercase text-[#C9A84C] sm:text-[10px]">
-                              <Phone className="h-2.5 w-2.5" />
+                              <Link2 className="h-2.5 w-2.5" />
                               Transfer
                             </span>
                           ) : (
-                            <span className="inline-flex items-center justify-end gap-1 text-[9px] font-semibold uppercase text-[var(--text-muted)] sm:text-[10px]">
-                              <FileText className="h-2.5 w-2.5 opacity-50" />
-                              —
-                            </span>
+                            <span className="text-[10px] text-[var(--text-muted)]">—</span>
                           )}
                         </td>
                       </tr>
@@ -1500,14 +1792,14 @@ export default function CampaignDetailPage() {
 function ChannelBadge({ channel }: { channel?: string }) {
   if (channel === "whatsapp") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase text-emerald-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-700 px-2.5 py-0.5 text-[11px] font-bold uppercase text-white">
         <MessageCircle className="h-3 w-3" />
         WhatsApp
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase text-sky-200">
+    <span className="inline-flex items-center gap-1 rounded-full bg-sky-700 px-2.5 py-0.5 text-[11px] font-bold uppercase text-white">
       <Phone className="h-3 w-3" />
       Κλήσεις
     </span>
@@ -1544,20 +1836,25 @@ function PhoneStack({
 }
 
 function GoldKpi({
+  icon: Icon,
   label,
   value,
   valueColor,
 }: {
+  icon?: ComponentType<{ className?: string }>;
   label: string;
   value: string;
   valueColor: string;
 }) {
   return (
     <div
-      className="rounded-lg border bg-white p-3"
+      className="rounded-xl border bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
       style={{ borderColor: `${GOLD}55`, borderTopWidth: 3, borderTopColor: GOLD }}
     >
-      <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500">{label}</p>
+      <p className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-gray-600">
+        {Icon ? <Icon className="h-3 w-3 shrink-0" aria-hidden /> : null}
+        {label}
+      </p>
       <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: valueColor }}>
         {value}
       </p>
@@ -1565,70 +1862,164 @@ function GoldKpi({
   );
 }
 
+function SuccessGauge({ rate }: { rate: number }) {
+  const data = [
+    { name: "ok", value: Math.max(0, Math.min(100, rate)) },
+    { name: "rest", value: Math.max(0, 100 - rate) },
+  ];
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            cx="50%"
+            cy="50%"
+            innerRadius={18}
+            outerRadius={28}
+            startAngle={90}
+            endAngle={-270}
+            strokeWidth={0}
+            isAnimationActive={false}
+          >
+            <Cell fill="#15803D" />
+            <Cell fill="#E5E7EB" />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function EmptyChart({ msg }: { msg: string }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+      <BarChart3 className="h-7 w-7 text-[var(--text-muted)]" />
+      <p className="text-xs text-[var(--text-secondary)]">{msg}</p>
+    </div>
+  );
+}
+
+function CompareStat({
+  label,
+  thisValue,
+  avgValue,
+}: {
+  label: string;
+  thisValue: number | null;
+  avgValue: number | null;
+}) {
+  const delta =
+    thisValue != null && avgValue != null
+      ? Math.round((thisValue - avgValue) * 10) / 10
+      : null;
+  return (
+    <div className="rounded-lg border border-[var(--border)] p-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <div>
+          <p className="text-[10px] text-[var(--text-muted)]">Αυτή</p>
+          <p className="text-xl font-bold tabular-nums text-[var(--text-primary)]">
+            {thisValue != null ? `${thisValue}%` : "—"}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-[var(--text-muted)]">Μ.Ο. άλλων</p>
+          <p className="text-xl font-bold tabular-nums text-[var(--text-secondary)]">
+            {avgValue != null ? `${avgValue}%` : "—"}
+          </p>
+        </div>
+      </div>
+      {delta != null && (
+        <p
+          className={
+            "mt-2 text-xs font-semibold " +
+            (delta >= 0 ? "text-emerald-700" : "text-red-700")
+          }
+        >
+          {delta >= 0 ? "+" : ""}
+          {delta} μονάδες έναντι Μ.Ο.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CallTranscriptBlock({ raw }: { raw: string }) {
+  const [open, setOpen] = useState(false);
+  const turns = useMemo(() => parseCallTranscript(raw), [raw]);
+  if (!turns.length) return null;
+  return (
+    <div className="text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C9A84C] hover:underline"
+      >
+        {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        {open ? "Απόκρυψη" : "Συνομιλία"}
+      </button>
+      {open && (
+        <div className="mt-1.5 max-w-xs space-y-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/50 px-2 py-1.5 text-left">
+          {turns.map((t, i) => (
+            <p
+              key={`${t.role}-${i}`}
+              className={
+                "text-[10px] leading-relaxed " +
+                (t.role === "agent"
+                  ? "text-[#C9A84C]"
+                  : t.role === "user"
+                    ? "text-[var(--text-muted)]"
+                    : "text-[var(--text-secondary)]")
+              }
+            >
+              <span className="mr-1 font-semibold">
+                {t.role === "agent" ? "agent" : t.role === "user" ? "user" : "•"}:
+              </span>
+              {t.text}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OutcomePill({ o, light = false }: { o: string | null; light?: boolean }) {
-  const t = o ?? "—";
-  const darkMap: Record<string, { bg: string; text: string; ring: string; icon: typeof CheckCircle2 }> = {
-    Positive: { bg: "bg-emerald-500/15", text: "text-emerald-200", ring: "ring-emerald-500/25", icon: CheckCircle2 },
-    Negative: { bg: "bg-rose-500/15", text: "text-rose-200", ring: "ring-rose-500/25", icon: XCircle },
-    "No Answer": { bg: "bg-amber-500/15", text: "text-amber-200", ring: "ring-amber-500/25", icon: PhoneOff },
-    "Συνδέθηκε με ΚΚ": {
-      bg: "bg-emerald-500/15",
-      text: "text-emerald-200",
-      ring: "ring-emerald-500/25",
-      icon: CheckCircle2,
-    },
-    "Δεν ήθελε σύνδεση με ΚΚ": {
-      bg: "bg-rose-500/15",
-      text: "text-rose-200",
-      ring: "ring-rose-500/25",
-      icon: XCircle,
-    },
-    "Δεν απάντησε": {
-      bg: "bg-amber-500/15",
-      text: "text-amber-200",
-      ring: "ring-amber-500/25",
-      icon: PhoneOff,
-    },
-    Pending: { bg: "bg-sky-500/15", text: "text-sky-200", ring: "ring-sky-500/25", icon: Clock },
-  };
-  const lightMap: Record<string, { bg: string; text: string; ring: string; icon: typeof CheckCircle2 }> = {
-    Positive: { bg: "bg-emerald-50", text: "text-[#16A34A]", ring: "ring-emerald-200", icon: CheckCircle2 },
-    Negative: { bg: "bg-red-50", text: "text-[#DC2626]", ring: "ring-red-200", icon: XCircle },
-    "No Answer": { bg: "bg-orange-50", text: "text-[#EA580C]", ring: "ring-orange-200", icon: PhoneOff },
-    "Συνδέθηκε με ΚΚ": {
-      bg: "bg-emerald-50",
-      text: "text-[#16A34A]",
-      ring: "ring-emerald-200",
-      icon: CheckCircle2,
-    },
-    "Δεν ήθελε σύνδεση με ΚΚ": {
-      bg: "bg-red-50",
-      text: "text-[#DC2626]",
-      ring: "ring-red-200",
-      icon: XCircle,
-    },
-    "Δεν απάντησε": {
-      bg: "bg-orange-50",
-      text: "text-[#EA580C]",
-      ring: "ring-orange-200",
-      icon: PhoneOff,
-    },
-    Pending: { bg: "bg-sky-50", text: "text-sky-700", ring: "ring-sky-200", icon: Clock },
-  };
-  const map = light ? lightMap : darkMap;
-  const c = map[t] ?? {
-    bg: light ? "bg-slate-50" : "bg-slate-500/10",
-    text: light ? "text-slate-700" : "text-[#E2E8F0]",
-    ring: light ? "ring-slate-200" : "ring-slate-500/20",
-    icon: Clock,
-  };
-  const Icon = c.icon;
+  const label = retellOutcomeLabel(o);
+  const Icon =
+    label === "Συνδέθηκε με ΚΚ" || o === "Positive"
+      ? Link2
+      : label === "Δεν ήθελε σύνδεση με ΚΚ" || o === "Negative"
+        ? XCircle
+        : label === "Δεν απάντησε" || o === "No Answer"
+          ? PhoneMissed
+          : Clock;
+
+  if (light) {
+    const lightClass =
+      label === "Συνδέθηκε με ΚΚ" || o === "Positive"
+        ? "bg-emerald-700 text-white"
+        : label === "Δεν ήθελε σύνδεση με ΚΚ" || o === "Negative"
+          ? "bg-red-700 text-white"
+          : label === "Δεν απάντησε" || o === "No Answer"
+            ? "bg-amber-500 text-amber-950"
+            : "bg-sky-700 text-white";
+    return (
+      <span className={`inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${lightClass}`}>
+        <Icon className="h-3 w-3 shrink-0" />
+        {label}
+      </span>
+    );
+  }
+
   return (
     <span
-      className={`inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${c.bg} ${c.text} ${c.ring}`}
+      className={`inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${retellOutcomeBadgeClass(o)}`}
     >
       <Icon className="h-3 w-3 shrink-0" />
-      {retellOutcomeLabel(t === "—" ? null : t)}
+      {label}
     </span>
   );
 }

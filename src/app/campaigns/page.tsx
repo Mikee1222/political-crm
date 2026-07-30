@@ -5,17 +5,24 @@ import {
   BarChart3,
   CheckCircle2,
   FileText,
+  Link2,
   Megaphone,
   MessageCircle,
   Minus,
+  Percent,
   Phone,
+  PhoneMissed,
   Play,
   Plus,
   Radio,
+  Search,
+  Target,
   Trash2,
+  XCircle,
 } from "lucide-react";
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { useSearchParams } from "next/navigation";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
@@ -358,6 +365,19 @@ function CampaignsPageInner() {
   const totalN = campaigns.length;
   const activeN = campaigns.filter((c) => c.status === "active").length;
   const doneN = campaigns.filter((c) => c.status === "completed").length;
+  const totalCalls = campaigns.reduce((a, c) => a + (c.stats?.total ?? 0), 0);
+  const totalConnected = campaigns.reduce((a, c) => a + (c.stats?.positive ?? 0), 0);
+  const rates = campaigns
+    .map((c) => {
+      const t = c.stats?.total ?? 0;
+      if (t <= 0) return null;
+      return ((c.stats?.positive ?? 0) / t) * 100;
+    })
+    .filter((x): x is number => x != null);
+  const avgSuccess =
+    rates.length > 0
+      ? Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 10) / 10
+      : 0;
 
   const previewText = (() => {
     if (previewing) return "Υπολογισμός…";
@@ -369,7 +389,7 @@ function CampaignsPageInner() {
 
   return (
     <div className="space-y-8 max-md:space-y-6">
-      <section className="data-hq-card relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm [data-theme='light']:bg-white [data-theme='light']:shadow-[0_2px_20px_rgba(0,0,0,0.06)] sm:p-6">
+      <section className="data-hq-card relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm hover:shadow-md transition-shadow [data-theme='light']:bg-white [data-theme='light']:shadow-[0_2px_20px_rgba(0,0,0,0.06)] sm:p-6">
         <div className="pointer-events-none absolute -right-12 -top-8 h-40 w-40 rounded-full bg-[var(--accent-gold)]/10 blur-3xl" aria-hidden />
         <div className="relative flex flex-col gap-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -393,10 +413,18 @@ function CampaignsPageInner() {
               <span>Νέα Καμπάνια</span>
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <TopMetric label="Σύνολο" value={totalN} sub="Όλες οι καταχωρήσεις" icon={BarChart3} />
-            <TopMetric label="Ενεργές" value={activeN} sub="Σε εξέλιξη" icon={Radio} />
-            <TopMetric label="Ολοκληρώθηκαν" value={doneN} sub="Έκλεισαν" icon={CheckCircle2} />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <TopMetric label="Σύνολο Καμπανιών" value={totalN} icon={BarChart3} />
+            <TopMetric label="Ενεργές" value={activeN} icon={Radio} />
+            <TopMetric label="Ολοκληρώθηκαν" value={doneN} icon={CheckCircle2} />
+            <TopMetric label="Συνολικές Κλήσεις" value={totalCalls} icon={Phone} />
+            <TopMetric label="Συνδέθηκε με ΚΚ" value={totalConnected} icon={Link2} />
+            <TopMetric
+              label="Μέσο Ποσοστό Επιτυχίας"
+              value={avgSuccess}
+              suffix="%"
+              icon={Percent}
+            />
           </div>
         </div>
       </section>
@@ -404,9 +432,26 @@ function CampaignsPageInner() {
       {loading && <p className="text-sm text-[var(--text-muted)]">Φόρτωση καμπανιών…</p>}
 
       {!loading && campaigns.length === 0 && (
-        <p className="text-center text-sm text-[var(--text-secondary)]">
-          Δεν έχετε ακόμα δημιουργήσει καμία καμπάνια.
-        </p>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-card)] px-6 py-16 text-center shadow-sm">
+          <Target className="h-10 w-10 text-[#D4AF37]/70" aria-hidden />
+          <p className="text-sm font-medium text-[var(--text-primary)]">Δεν υπάρχουν καμπάνιες ακόμα</p>
+          <p className="max-w-sm text-xs text-[var(--text-secondary)]">
+            Δημιουργήστε την πρώτη σας καμπάνια για να ξεκινήσετε κλήσεις προς επιλεγμένες επαφές.
+          </p>
+          <button
+            type="button"
+            className={goldCta}
+            onClick={() => {
+              setFormErr(null);
+              setSelectedContactIds([]);
+              setConcurrentLines(3);
+              setModal(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Νέα Καμπάνια
+          </button>
+        </div>
       )}
 
       <ul className="flex flex-col gap-4">
@@ -419,11 +464,13 @@ function CampaignsPageInner() {
           const barPct = hasPool ? Math.min(100, c.progress) : s.total > 0 ? 100 : 0;
           const isWhatsApp = c.channel === "whatsapp";
           const agentLabel = c.retell_agent_name?.trim() || null;
+          const successRate =
+            s.total > 0 ? Math.round((s.positive / s.total) * 1000) / 10 : 0;
           return (
             <li
               key={c.id}
-              className="relative flex w-full max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 border-l-4 bg-white p-5 shadow-[0_2px_16px_rgba(10,22,40,0.06)]"
-              style={{ borderLeftColor: "#D4AF37" }}
+              className="relative flex w-full max-w-full flex-col overflow-hidden rounded-xl border border-slate-200/80 border-l-4 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+              style={{ borderLeftColor: isActive ? "#D4AF37" : isDone ? "#94A3B8" : "#CBD5E1" }}
             >
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -435,9 +482,9 @@ function CampaignsPageInner() {
                       className={
                         statusBadge +
                         (isActive
-                          ? " border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#8B6914]"
+                          ? " border-[#D4AF37]/50 bg-[#D4AF37]/15 text-[#6B5210]"
                           : isDone
-                            ? " border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                            ? " border-slate-300 bg-slate-100 text-slate-700"
                             : " border-slate-200 bg-slate-50 text-slate-600")
                       }
                     >
@@ -447,7 +494,7 @@ function CampaignsPageInner() {
                       <span
                         className={
                           statusBadge +
-                          " inline-flex items-center gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                          " inline-flex items-center gap-1 border-emerald-700/30 bg-emerald-700 text-white"
                         }
                       >
                         <MessageCircle className="h-3 w-3" />
@@ -457,7 +504,7 @@ function CampaignsPageInner() {
                       <span
                         className={
                           statusBadge +
-                          " inline-flex items-center gap-1 border-sky-500/30 bg-sky-500/10 text-sky-700"
+                          " inline-flex items-center gap-1 border-sky-700/30 bg-sky-700 text-white"
                         }
                       >
                         <Phone className="h-3 w-3" />
@@ -482,7 +529,7 @@ function CampaignsPageInner() {
                   </p>
                 </div>
                 {isWhatsApp ? (
-                  <MessageCircle className="h-5 w-5 shrink-0 text-emerald-500 opacity-90" strokeWidth={2} aria-hidden />
+                  <MessageCircle className="h-5 w-5 shrink-0 text-emerald-600 opacity-90" strokeWidth={2} aria-hidden />
                 ) : (
                   <Megaphone className="h-5 w-5 shrink-0 text-[#D4AF37] opacity-90" strokeWidth={2} aria-hidden />
                 )}
@@ -492,44 +539,47 @@ function CampaignsPageInner() {
                 <p className="mt-2 line-clamp-2 text-sm text-slate-600">{c.description}</p>
               ) : null}
 
-              <div className="mt-4">
-                <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                  <span>Πρόοδος</span>
-                  <span className="normal-case tracking-normal text-slate-700">
-                    {hasPool
-                      ? `${c.callsMade} / ${dialable} επαφές με αριθμό`
-                      : s.total
-                        ? `${s.total} κλήση/εις`
-                        : "0 / 0 επαφές με αριθμό"}
-                  </span>
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                    <span>Πρόοδος</span>
+                    <span className="normal-case tracking-normal text-slate-700">
+                      {hasPool
+                        ? `${c.callsMade} / ${dialable} με αριθμό`
+                        : s.total
+                          ? `${s.total} κλήση/εις`
+                          : "0 / 0 με αριθμό"}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${barPct}%`,
+                        backgroundColor: "#D4AF37",
+                        transition: "width 0.25s ease",
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${barPct}%`,
-                      backgroundColor: "#D4AF37",
-                      transition: "width 0.25s ease",
-                    }}
-                  />
-                </div>
+                <SuccessRateDonut rate={successRate} />
               </div>
 
               <div className="mt-4 grid grid-cols-3 gap-2.5">
-                <CampaignStatEmoji
-                  emoji="🔗"
+                <CampaignStatCard
+                  icon={Link2}
                   label="Συνδέθηκε με ΚΚ"
                   value={s.positive}
                   tone="emerald"
                 />
-                <CampaignStatEmoji
-                  emoji="✗"
+                <CampaignStatCard
+                  icon={XCircle}
                   label="Δεν ήθελε"
                   value={s.negative}
                   tone="rose"
                 />
-                <CampaignStatEmoji
-                  emoji="📵"
+                <CampaignStatCard
+                  icon={PhoneMissed}
                   label="Δεν απάντησε"
                   value={s.noAnswer}
                   tone="orange"
@@ -540,9 +590,9 @@ function CampaignsPageInner() {
                 <p className="mt-3 text-xs text-slate-500">
                   Συνδέθηκε με ΚΚ {c.sentiment.positiveRate}%
                   {c.sentiment.trendDelta >= 0 ? (
-                    <span className="ml-1 font-semibold text-emerald-600">+{c.sentiment.trendDelta}%</span>
+                    <span className="ml-1 font-semibold text-emerald-700">+{c.sentiment.trendDelta}%</span>
                   ) : (
-                    <span className="ml-1 font-semibold text-rose-500">{c.sentiment.trendDelta}%</span>
+                    <span className="ml-1 font-semibold text-red-700">{c.sentiment.trendDelta}%</span>
                   )}{" "}
                   <span>έναντι προηγούμενης</span>
                 </p>
@@ -600,7 +650,7 @@ function CampaignsPageInner() {
                 {isActive ? (
                   <button
                     type="button"
-                    className="h-10 min-w-0 flex-1 rounded-xl border-2 border-emerald-500/50 bg-transparent px-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-500/10 sm:min-w-[7rem] sm:flex-none"
+                    className="h-10 min-w-0 flex-1 rounded-xl border-2 border-emerald-700/50 bg-transparent px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 sm:min-w-[7rem] sm:flex-none"
                     disabled={togglingId === c.id}
                     onClick={async () => {
                       setTogglingId(c.id);
@@ -621,7 +671,7 @@ function CampaignsPageInner() {
                 ) : (
                   <button
                     type="button"
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-transparent px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:min-w-[7rem] sm:flex-none"
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-transparent px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:min-w-[7rem] sm:flex-none"
                     disabled={togglingId === c.id}
                     onClick={async () => {
                       setTogglingId(c.id);
@@ -642,7 +692,7 @@ function CampaignsPageInner() {
                 )}
                 <button
                   type="button"
-                  className="group inline-flex h-10 w-10 shrink-0 items-center justify-center self-center rounded-xl border border-red-500/40 bg-transparent text-red-500 transition hover:border-red-500/70 hover:bg-red-500/5 sm:ml-0.5"
+                  className="group inline-flex h-10 w-10 shrink-0 items-center justify-center self-center rounded-xl border-2 border-red-600 bg-transparent text-red-700 transition hover:bg-red-50 sm:ml-0.5"
                   title="Διαγραφή"
                   disabled={deletingId === c.id}
                   onClick={async () => {
@@ -1004,10 +1054,11 @@ function CampaignsPageInner() {
               role="status"
               aria-live="polite"
             >
-              <p className="text-sm font-medium text-slate-900">
-                🔍 {previewText}
+              <p className="text-sm font-medium text-slate-900 inline-flex items-center gap-2">
+                <Search className="h-4 w-4 shrink-0 text-[#8B6914]" aria-hidden />
+                {previewText}
                 {previewCount != null && !previewing ? (
-                  <span className="ml-2 tabular-nums text-[#8B6914]">({previewCount} σύνολο)</span>
+                  <span className="tabular-nums text-[#8B6914]">({previewCount} σύνολο)</span>
                 ) : null}
               </p>
             </div>
@@ -1021,63 +1072,91 @@ function CampaignsPageInner() {
 function TopMetric({
   label,
   value,
-  sub,
+  suffix,
   icon: Icon,
 }: {
   label: string;
   value: number;
-  sub: string;
+  suffix?: string;
   icon: ComponentType<{ className?: string }>;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]/30 p-4 [data-theme='light']:bg-slate-50/90">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#C9A84C]/20 bg-[var(--accent-gold)]/5 text-[#C9A84C] [data-theme='light']:bg-amber-50 [data-theme='light']:text-amber-800">
+    <div className="flex items-center gap-3 rounded-xl border-2 border-[#D4AF37]/45 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#D4AF37]/25 bg-[#FDFAF5] text-[#8B6914]">
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
         <p
-          className="text-2xl font-bold tabular-nums text-[var(--accent-gold)] [data-theme='light']:text-amber-800 sm:text-3xl"
+          className="text-xl font-bold tabular-nums text-[#0A1628] sm:text-2xl"
           style={{ fontFeatureSettings: '"tnum"' }}
         >
           {value}
+          {suffix ?? ""}
         </p>
-        <p className="text-[10px] text-[var(--text-muted)] sm:text-xs">{sub}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">{label}</p>
       </div>
     </div>
   );
 }
 
-function CampaignStatEmoji({
-  emoji,
+function SuccessRateDonut({ rate }: { rate: number }) {
+  const data = [
+    { name: "ok", value: Math.max(0, Math.min(100, rate)) },
+    { name: "rest", value: Math.max(0, 100 - rate) },
+  ];
+  return (
+    <div className="relative mx-auto h-[72px] w-[72px] shrink-0" title={`Επιτυχία ${rate}%`}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            cx="50%"
+            cy="50%"
+            innerRadius={22}
+            outerRadius={32}
+            startAngle={90}
+            endAngle={-270}
+            strokeWidth={0}
+            isAnimationActive={false}
+          >
+            <Cell fill="#16A34A" />
+            <Cell fill="#E5E7EB" />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold tabular-nums text-[#0A1628]">
+        {rate}%
+      </span>
+    </div>
+  );
+}
+
+function CampaignStatCard({
+  icon: Icon,
   label,
   value,
   tone,
 }: {
-  emoji: string;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   value: number;
   tone: "emerald" | "rose" | "orange";
 }) {
   const toneClass =
     tone === "emerald"
-      ? "text-emerald-600"
+      ? "text-emerald-800 border-emerald-200 bg-emerald-50"
       : tone === "rose"
-        ? "text-rose-600"
-        : "text-orange-600";
-  const borderClass =
-    tone === "emerald"
-      ? "border-emerald-200 bg-emerald-50/70"
-      : tone === "rose"
-        ? "border-rose-200 bg-rose-50/70"
-        : "border-orange-200 bg-orange-50/70";
+        ? "text-red-800 border-red-200 bg-red-50"
+        : "text-orange-800 border-orange-200 bg-orange-50";
   return (
-    <div className={`flex flex-col justify-center rounded-xl border p-2.5 ${borderClass}`}>
-      <span className={`text-[10px] font-bold uppercase tracking-wide ${toneClass}`}>
-        {emoji} {label}
+    <div className={`flex flex-col justify-center rounded-xl border p-2.5 ${toneClass}`}>
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide">
+        <Icon className="h-3 w-3 shrink-0" aria-hidden />
+        {label}
       </span>
       <span
-        className={`mt-0.5 text-lg font-bold tabular-nums sm:text-xl ${toneClass}`}
+        className="mt-0.5 text-lg font-bold tabular-nums sm:text-xl"
         style={{ fontFeatureSettings: '"tnum"' }}
       >
         {value}

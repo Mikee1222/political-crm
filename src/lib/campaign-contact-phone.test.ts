@@ -34,12 +34,16 @@ describe("campaign-contact-phone", () => {
 });
 
 describe("campaign-contact-status", () => {
-  it("maps outcomes to status", () => {
+  it("maps outcomes to status with lucide icon keys", () => {
     expect(resolveCampaignContactStatus([]).key).toBe("not_called");
+    expect(resolveCampaignContactStatus([]).icon).toBe("circle");
     expect(resolveCampaignContactStatus(["Pending"]).key).toBe("pending");
+    expect(resolveCampaignContactStatus(["Pending"]).icon).toBe("clock");
     expect(resolveCampaignContactStatus(["Συνδέθηκε με ΚΚ"]).key).toBe("connected");
+    expect(resolveCampaignContactStatus(["Συνδέθηκε με ΚΚ"]).icon).toBe("link2");
     expect(resolveCampaignContactStatus(["Δεν ήθελε σύνδεση με ΚΚ"]).key).toBe("declined");
     expect(resolveCampaignContactStatus(["Δεν απάντησε"]).key).toBe("no_answer");
+    expect(resolveCampaignContactStatus(["Δεν απάντησε"]).icon).toBe("phone-missed");
   });
 
   it("formats greek duration", () => {

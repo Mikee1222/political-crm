@@ -221,16 +221,27 @@ export function retellOutcomeLabel(outcome: string | null | undefined): string {
   return legacy[outcome] ?? outcome;
 }
 
-/** Tailwind classes for prominent outcome badges on contact call history. */
+/**
+ * Tailwind classes for outcome badges — solid fills + high-contrast text (WCAG AA ≥4.5:1).
+ * Works on light and dark surfaces (white/dark text on saturated backgrounds).
+ */
 export function retellOutcomeBadgeClass(outcome: string | null | undefined): string {
   const label = retellOutcomeLabel(outcome);
   const map: Record<string, string> = {
-    [RETELL_OUTCOME_CONNECTED]:
-      "bg-emerald-500/20 text-emerald-300 ring-2 ring-emerald-400/50",
-    [RETELL_OUTCOME_DECLINED]: "bg-red-500/20 text-red-300 ring-2 ring-red-400/45",
-    [RETELL_OUTCOME_NO_ANSWER]:
-      "bg-amber-500/20 text-amber-200 ring-2 ring-amber-400/50",
-    Αναμονή: "bg-sky-500/20 text-sky-200 ring-2 ring-sky-400/45",
+    [RETELL_OUTCOME_CONNECTED]: "bg-emerald-700 text-white ring-1 ring-emerald-900/35",
+    [RETELL_OUTCOME_DECLINED]: "bg-red-700 text-white ring-1 ring-red-900/35",
+    [RETELL_OUTCOME_NO_ANSWER]: "bg-amber-500 text-amber-950 ring-1 ring-amber-800/30",
+    Αναμονή: "bg-sky-700 text-white ring-1 ring-sky-900/35",
   };
-  return map[label] ?? "bg-[var(--bg-elevated)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]";
+  return map[label] ?? "bg-slate-200 text-slate-900 ring-1 ring-slate-400/50";
+}
+
+/** Subtle row background tint by call outcome (tables / lists). */
+export function retellOutcomeRowTintClass(outcome: string | null | undefined): string {
+  const label = retellOutcomeLabel(outcome);
+  if (label === RETELL_OUTCOME_CONNECTED) return "bg-emerald-500/[0.07]";
+  if (label === RETELL_OUTCOME_DECLINED) return "bg-red-500/[0.07]";
+  if (label === RETELL_OUTCOME_NO_ANSWER) return "bg-amber-500/[0.08]";
+  if (label === "Αναμονή") return "bg-sky-500/[0.07]";
+  return "";
 }

@@ -149,6 +149,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       outcome: string | null;
       duration_seconds: number | null;
       transferred_to_politician: boolean | null;
+      notes: string | null;
       contact_id: string;
       contacts: unknown;
     };
@@ -158,7 +159,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         let q = supabase
           .from("calls")
           .select(
-            "id, called_at, outcome, duration_seconds, transferred_to_politician, contact_id, contacts(phone, phone2, landline, first_name, last_name)",
+            "id, called_at, outcome, duration_seconds, transferred_to_politician, notes, contact_id, contacts(phone, phone2, landline, first_name, last_name)",
           )
           .eq("campaign_id", params.id)
           .order("called_at", { ascending: false })
@@ -172,7 +173,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const calls = callLogRows.map((row) => {
       const cont = row.contacts;
       const contact = Array.isArray(cont) ? cont[0] : cont;
-      return { ...row, contacts: contact ?? null };
+      return {
+        ...row,
+        contacts: contact ?? null,
+        transcript: row.notes,
+      };
     });
 
     const campRow = { ...(camp as Record<string, unknown>) };

@@ -28,8 +28,9 @@ export const lux = {
     "btn-scale hq-btn-gold-glow inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-[#C9A84C] bg-gradient-to-b from-[#C9A84C] to-[#8b6914] px-4 py-2.5 text-sm font-bold text-[var(--text-badge-on-gold)] shadow-sm transition duration-150 hover:brightness-110 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50",
   btnSecondary:
     "btn-scale inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--text-body)] transition duration-150 hover:bg-[var(--bg-elevated)] active:scale-[0.98] disabled:opacity-50",
+  /** Red outline + readable text on light & dark (WCAG AA). Default = dark theme. */
   btnDanger:
-    "btn-scale inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/20 px-4 py-2.5 text-sm font-semibold text-red-200 transition duration-150 hover:bg-red-500/30 active:scale-[0.98] disabled:opacity-50",
+    "btn-scale inline-flex items-center justify-center gap-2 rounded-lg border-2 border-red-400 bg-transparent px-4 py-2.5 text-sm font-semibold text-red-300 transition duration-150 hover:bg-red-500/15 active:scale-[0.98] disabled:opacity-50 [data-theme='light']:border-red-600 [data-theme='light']:text-red-700 [data-theme='light']:hover:bg-red-50",
   btnGold:
     "btn-scale hq-btn-gold-glow inline-flex items-center justify-center gap-2 rounded-lg border border-[#C9A84C] bg-gradient-to-b from-[#C9A84C] to-[#8b6914] px-4 py-2.5 text-sm font-bold text-[var(--text-badge-on-gold)] shadow-sm transition duration-150 hover:brightness-110 active:scale-[0.97] disabled:opacity-50",
   /** Theme-aware text links / inline actions (readable on dark + light) */
