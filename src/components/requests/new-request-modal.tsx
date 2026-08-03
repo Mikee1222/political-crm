@@ -8,6 +8,11 @@ import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
+import {
+  FormFileAttachments,
+  reportPendingUploadResults,
+  uploadPendingDocuments,
+} from "@/components/ui/form-file-attachments";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 import { REQUEST_STATUSES, REQUEST_STATUS_OPEN } from "@/lib/request-statuses";
@@ -50,6 +55,8 @@ export function NewRequestModal({
   const [slaDate, setSlaDate] = useState(""); // yyyy-mm-dd optional
   const [assignedTo, setAssignedTo] = useState(""); // profile id
   const [initialNote, setInitialNote] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [filesErr, setFilesErr] = useState<string | null>(null);
   const [titleFieldErr, setTitleFieldErr] = useState<string | null>(null);
   const [contactFieldErr, setContactFieldErr] = useState<string | null>(null);
   const { showToast } = useFormToast();
@@ -95,6 +102,8 @@ export function NewRequestModal({
     setSlaDate("");
     setAssignedTo("");
     setInitialNote("");
+    setPendingFiles([]);
+    setFilesErr(null);
     setErr("");
     setTitleFieldErr(null);
     setContactFieldErr(null);
@@ -141,14 +150,22 @@ export function NewRequestModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const j = await res.json();
+      const j = (await res.json()) as { error?: string; request?: { id?: string } };
       if (!res.ok) {
-        const msg = String((j as { error?: string }).error ?? "Σφάλμα");
+        const msg = String(j.error ?? "Σφάλμα");
         setErr(msg);
         showToast(msg, "error");
         return;
       }
+      const newId = j.request?.id;
       showToast("Το αίτημα δημιουργήθηκε επιτυχώς.", "success");
+      if (newId && pendingFiles.length > 0) {
+        const uploadResults = await uploadPendingDocuments(
+          `/api/requests/${encodeURIComponent(newId)}/documents`,
+          pendingFiles,
+        );
+        reportPendingUploadResults(uploadResults, showToast);
+      }
       reset();
       onClose();
       await onCreated();
@@ -362,6 +379,17 @@ export function NewRequestModal({
               rows={3}
             />
           </div>
+
+          <div className="my-6 h-px bg-[var(--border)]" />
+
+          <FormFileAttachments
+            id="nr-docs"
+            files={pendingFiles}
+            onChange={setPendingFiles}
+            error={filesErr}
+            onError={setFilesErr}
+            disabled={saving}
+          />
       </form>
     </CenteredModal>
   );

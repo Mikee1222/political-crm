@@ -52,6 +52,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import {
+  FormFileAttachments,
+  reportPendingUploadResults,
+  uploadPendingDocuments,
+} from "@/components/ui/form-file-attachments";
 import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormToast } from "@/contexts/form-toast-context";
@@ -1868,6 +1873,8 @@ function CreateContactModal({
     group_id: "",
   });
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [filesErr, setFilesErr] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<{
@@ -1906,13 +1913,24 @@ function CreateContactModal({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildPayload()),
     });
+    const j = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      contact?: { id?: string };
+    };
     if (!res.ok) {
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
       throw new Error(j.error ?? "Σφάλμα αποθήκευσης");
     }
     setConflict(null);
-    await onSaved();
+    const newId = j.contact?.id;
     showToast("Η επαφή αποθηκεύτηκε επιτυχώς.", "success");
+    if (newId && pendingFiles.length > 0) {
+      const uploadResults = await uploadPendingDocuments(
+        `/api/contacts/${encodeURIComponent(newId)}/documents`,
+        pendingFiles,
+      );
+      reportPendingUploadResults(uploadResults, showToast);
+    }
+    await onSaved();
     onClose();
   };
 
@@ -2166,6 +2184,16 @@ function CreateContactModal({
                 placeholder="Καταγράψτε σημαντικές πληροφορίες..."
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </div>
+            <div className="md:col-span-2 border-t border-[var(--border)] pt-4">
+              <FormFileAttachments
+                id="nc-docs"
+                files={pendingFiles}
+                onChange={setPendingFiles}
+                error={filesErr}
+                onError={setFilesErr}
+                disabled={submitting}
               />
             </div>
           </div>
