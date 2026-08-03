@@ -105,6 +105,87 @@ export function contactDocPreviewKind(fileType: string | null | undefined, name:
 
 const DOCUMENTS_BUCKET = "documents";
 
+/** Greek letters → Latin approximations (NFD alone does not transliterate Greek). */
+const GREEK_TO_LATIN: Record<string, string> = {
+  α: "a",
+  ά: "a",
+  β: "v",
+  γ: "g",
+  δ: "d",
+  ε: "e",
+  έ: "e",
+  ζ: "z",
+  η: "i",
+  ή: "i",
+  θ: "th",
+  ι: "i",
+  ί: "i",
+  ϊ: "i",
+  ΐ: "i",
+  κ: "k",
+  λ: "l",
+  μ: "m",
+  ν: "n",
+  ξ: "x",
+  ο: "o",
+  ό: "o",
+  π: "p",
+  ρ: "r",
+  σ: "s",
+  ς: "s",
+  τ: "t",
+  υ: "y",
+  ύ: "y",
+  ϋ: "y",
+  ΰ: "y",
+  φ: "f",
+  χ: "ch",
+  ψ: "ps",
+  ω: "o",
+  ώ: "o",
+};
+
+function transliterateGreek(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    const lower = ch.toLowerCase();
+    const mapped = GREEK_TO_LATIN[lower];
+    if (mapped) {
+      out += ch === lower ? mapped : mapped.toUpperCase();
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/**
+ * ASCII-safe filename for Supabase Storage object keys.
+ * Keeps the extension; callers should store the original name in DB for display.
+ */
+export function sanitizeStorageFilename(filename: string): string {
+  const raw = (filename ?? "").trim();
+  const lastDot = raw.lastIndexOf(".");
+  const hasExt = lastDot > 0 && lastDot < raw.length - 1;
+  const baseRaw = hasExt ? raw.slice(0, lastDot) : raw || "document";
+  const extRaw = hasExt ? raw.slice(lastDot + 1) : "";
+
+  const toSegment = (part: string): string => {
+    const stripped = part
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const latin = transliterateGreek(stripped);
+    return latin
+      .replace(/[^a-zA-Z0-9_-]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+  };
+
+  const base = toSegment(baseRaw) || "document";
+  const ext = extRaw ? toSegment(extRaw) : "";
+  return ext ? `${base}.${ext}` : base;
+}
+
 /**
  * Normalize `documents.file_url` for `storage.from('documents').download/createSignedUrl`.
  * Accepts plain object paths (`crm/…/file.pdf`) and full Supabase public/signed URLs.

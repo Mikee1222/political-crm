@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { fetchWithTimeout } from "@/lib/client-fetch";
@@ -27,6 +27,8 @@ import {
   isRequestsSearchNavActive,
   loadRequestsSearchNav,
 } from "@/lib/search-session-state";
+
+const DESCRIPTION_MAX_LEN = 2000;
 
 type ContactCard = {
   id: string;

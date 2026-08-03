@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/admin";
+import { sanitizeStorageFilename } from "@/lib/contact-documents";
 
 const BUCKET = "documents";
 const SIGNED_TTL_SEC = 60 * 60 * 24;
@@ -9,7 +10,7 @@ export async function storeAlexandraExport(
   buffer: Buffer,
   contentType: string,
 ): Promise<{ path: string; download_url: string }> {
-  const safe = filename.replace(/[^\w.\- ()\u0370-\u03FF\u1F00-\u1FFF]+/g, "_").slice(0, 180) || "export";
+  const safe = sanitizeStorageFilename(filename).slice(0, 180) || "export";
   const path = `alexandra/${userId}/${Date.now()}-${safe}`;
   const admin = createServiceClient();
   const { error: upErr } = await admin.storage.from(BUCKET).upload(path, buffer, {

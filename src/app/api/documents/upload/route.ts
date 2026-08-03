@@ -7,6 +7,7 @@ import { nextJsonError } from "@/lib/api-resilience";
 import {
   CONTACT_DOC_MAX_BYTES,
   contactDocumentRejectReason,
+  sanitizeStorageFilename,
 } from "@/lib/contact-documents";
 
 export const dynamic = "force-dynamic";
@@ -50,8 +51,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const safe = nameRaw.replace(/[^\w.\- ()\u0370-\u03FF\u1F00-\u1FFF]+/g, "_");
-    const path = `crm/${user.id}/${Date.now()}-${safe}`;
+    const storageName = sanitizeStorageFilename(nameRaw);
+    const path = `crm/${user.id}/${Date.now()}-${storageName}`;
 
     const admin = createServiceClient();
     const { error: upErr } = await admin.storage.from("documents").upload(path, file, {
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
       .insert({
         contact_id: library ? null : contactId,
         request_id: library ? null : requestId,
-        name: safe,
+        name: nameRaw,
         file_url: path,
         file_type: file.type || null,
         file_size: file.size,

@@ -125,8 +125,15 @@ export async function GET(_request: NextRequest, context: PreviewParams) {
       return NextResponse.json({ error: "Λείπει το αρχείο" }, { status: 404 });
     }
 
+    // Download via DB `file_url` storage path only — never reconstruct from display `name`.
     const filePath = documentsStorageObjectPath(doc.file_url);
-    console.log("[preview]", { contactId, docId, filePath });
+    console.log("[preview]", {
+      contactId,
+      docId,
+      filePath,
+      file_url_prefix: doc.file_url.slice(0, 120),
+      display_name: doc.name,
+    });
     if (!filePath) {
       console.error("[documents preview] invalid storage path", {
         docId,

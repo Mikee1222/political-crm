@@ -7,6 +7,7 @@ import {
   documentsStorageObjectPath,
   formatFileSize,
   isAllowedContactDocument,
+  sanitizeStorageFilename,
 } from "./contact-documents";
 
 describe("contact-documents", () => {
@@ -47,6 +48,16 @@ describe("contact-documents", () => {
     expect(formatFileSize(500)).toBe("500 B");
     expect(formatFileSize(2048)).toBe("2.0 KB");
     expect(formatFileSize(2 * 1024 * 1024)).toBe("2.0 MB");
+  });
+
+  it("sanitizeStorageFilename produces ASCII-safe keys from Greek names", () => {
+    expect(sanitizeStorageFilename("ΜΑΥΡΕΛΗ ΠΑΝΑΓΙΩΤΑ.pdf")).toBe("MAYRELI_PANAGIOTA.pdf");
+    expect(sanitizeStorageFilename("έγγραφο-δοκιμή.docx")).toBe("eggrafo-dokimi.docx");
+    expect(sanitizeStorageFilename("Report 2024.pdf")).toBe("Report_2024.pdf");
+    expect(sanitizeStorageFilename("!!!")).toBe("document");
+    expect(sanitizeStorageFilename("")).toBe("document");
+    expect(sanitizeStorageFilename("αβγ")).toBe("avg");
+    expect(sanitizeStorageFilename("café.pdf")).toBe("cafe.pdf");
   });
 
   it("extracts storage object paths from plain paths and URLs", () => {

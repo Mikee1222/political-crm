@@ -8,6 +8,7 @@ import {
   CONTACT_DOC_MAX_BYTES,
   contactDocumentRejectReason,
   documentsStorageObjectPath,
+  sanitizeStorageFilename,
 } from "@/lib/contact-documents";
 
 export const dynamic = "force-dynamic";
@@ -148,8 +149,8 @@ export async function POST(request: NextRequest, context: RouteParams) {
       return NextResponse.json({ error: "Το αρχείο υπερβαίνει το όριο 10MB" }, { status: 400 });
     }
 
-    const safe = nameRaw.replace(/[^\w.\- ()\u0370-\u03FF\u1F00-\u1FFF]+/g, "_");
-    const path = `crm/${user.id}/${Date.now()}-${safe}`;
+    const storageName = sanitizeStorageFilename(nameRaw);
+    const path = `crm/${user.id}/${Date.now()}-${storageName}`;
 
     const admin = createServiceClient();
     const { error: upErr } = await admin.storage.from("documents").upload(path, file, {
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
       .insert({
         contact_id: contactId,
         request_id: null,
-        name: safe,
+        name: nameRaw,
         file_url: path,
         file_type: file.type || null,
         file_size: file.size,
