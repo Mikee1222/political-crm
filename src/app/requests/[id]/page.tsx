@@ -202,6 +202,10 @@ function RequestDetailPageInner() {
   const [portalMsg, setPortalMsg] = useState("");
   const [savingMsg, setSavingMsg] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
+  const [descSaving, setDescSaving] = useState(false);
+  const descTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [navInfo, setNavInfo] = useState<RequestNavInfo | null>(null);
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
   const alexPage = useOptionalAlexandraPageContext();
@@ -289,6 +293,72 @@ function RequestDetailPageInner() {
       setNavInfo(null);
     }
   }, [id, searchParams]);
+
+  const adjustDescTextareaHeight = useCallback(() => {
+    const el = descTextareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 72)}px`;
+  }, []);
+
+  useEffect(() => {
+    if (!editingDesc) return;
+    adjustDescTextareaHeight();
+  }, [editingDesc, descDraft, adjustDescTextareaHeight]);
+
+  const startEditingDesc = useCallback(() => {
+    if (!canEdit || !data) return;
+    setDescDraft(data.description ?? "");
+    setEditingDesc(true);
+  }, [canEdit, data]);
+
+  const cancelEditingDesc = useCallback(() => {
+    setDescDraft(data?.description ?? "");
+    setEditingDesc(false);
+  }, [data?.description]);
+
+  const saveDescription = useCallback(async () => {
+    if (!requestApiId || !data || descSaving) return;
+    const next = descDraft.slice(0, DESCRIPTION_MAX_LEN);
+    const prev = (data.description ?? "").trim();
+    const trimmed = next.trim();
+    if (trimmed === prev) {
+      setEditingDesc(false);
+      setDescDraft(data.description ?? "");
+      return;
+    }
+    setDescSaving(true);
+    try {
+      const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestApiId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: trimmed || null }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        request?: RequestDetail;
+      };
+      if (!res.ok || !body.request) {
+        throw new Error(body.error ?? "Αποτυχία αποθήκευσης περιγραφής");
+      }
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              description: body.request?.description ?? (trimmed || null),
+              updated_at: body.request?.updated_at ?? prev.updated_at,
+            }
+          : prev,
+      );
+      setEditingDesc(false);
+      showToast("Η περιγραφή αποθηκεύτηκε.", "success");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Αποτυχία αποθήκευσης περιγραφής";
+      showToast(message, "error");
+    } finally {
+      setDescSaving(false);
+    }
+  }, [data, descDraft, descSaving, requestApiId, showToast]);
 
   const handleStatusChange = useCallback(
     async (rawNextStatus: string) => {
@@ -493,9 +563,76 @@ function RequestDetailPageInner() {
         <div className="space-y-6">
           <div className={lux.card + " p-5"}>
             <h2 className={lux.pageTitle + " !text-lg"}>Περιγραφή</h2>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-body)]">
-              {data.description?.trim() || "Χωρίς περιγραφή."}
-            </p>
+            {canEdit && editingDesc ? (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  ref={descTextareaRef}
+                  className={lux.textarea + " !min-h-[72px] resize-none overflow-hidden"}
+                  value={descDraft}
+                  maxLength={DESCRIPTION_MAX_LEN}
+                  disabled={descSaving}
+                  autoFocus
+                  aria-label="Περιγραφή αιτήματος"
+                  onChange={(e) => setDescDraft(e.target.value.slice(0, DESCRIPTION_MAX_LEN))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelEditingDesc();
+                    }
+                  }}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {descDraft.length}/{DESCRIPTION_MAX_LEN}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className={lux.btnSecondary + " !min-h-0 !px-3 !py-1.5 !text-xs"}
+                      disabled={descSaving}
+                      onClick={cancelEditingDesc}
+                    >
+                      Άκυρο
+                    </button>
+                    <button
+                      type="button"
+                      className={lux.btnGold + " !min-h-0 !px-3 !py-1.5 !text-xs"}
+                      disabled={descSaving}
+                      onClick={() => void saveDescription()}
+                    >
+                      {descSaving ? "…" : "Αποθήκευση"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : canEdit ? (
+              <button
+                type="button"
+                className="group mt-2 flex w-full items-start gap-2 rounded-md text-left transition hover:text-[#C9A84C]"
+                onClick={startEditingDesc}
+                aria-label="Επεξεργασία περιγραφής"
+              >
+                {data.description?.trim() ? (
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-[var(--text-body)] group-hover:text-[#C9A84C]">
+                    {data.description}
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1 text-sm text-[var(--text-muted)] group-hover:text-[#C9A84C]">
+                    Προσθήκη περιγραφής...
+                  </span>
+                )}
+                <Pencil
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-muted)] opacity-0 transition group-hover:opacity-100 group-hover:text-[#C9A84C]"
+                  aria-hidden
+                />
+              </button>
+            ) : (
+              <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-body)]">
+                {data.description?.trim() || (
+                  <span className="text-[var(--text-muted)]">Χωρίς περιγραφή.</span>
+                )}
+              </p>
+            )}
           </div>
 
           {canEdit && (
