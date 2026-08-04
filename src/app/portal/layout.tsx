@@ -1,7 +1,6 @@
 import { Inter } from "next/font/google";
 import Script from "next/script";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { PortalChatWidget } from "@/components/portal/portal-chat-widget";
 import "./portal-theme.css";
 
 const inter = Inter({
@@ -20,7 +19,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         crossOrigin="anonymous"
       />
       <PortalShell>{children}</PortalShell>
-      <PortalChatWidget />
     </div>
   );
 }

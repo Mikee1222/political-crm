@@ -20,7 +20,6 @@ function isAlwaysPublicApi(pathname: string) {
 function isApiPortalPublic(pathname: string) {
   if (pathname === "/api/portal/auth/register" || pathname === "/api/portal/auth/login") return true;
   if (pathname === "/api/portal/news" || pathname.startsWith("/api/portal/news/")) return true;
-  if (pathname === "/api/portal/chat" || pathname === "/api/portal/voice/session") return true;
   if (pathname === "/api/portal/appointments/slots" || pathname === "/api/portal/appointments/book") {
     return true;
   }
