@@ -35,6 +35,7 @@ import {
   searchContactsInGroupsFiltered,
   type GroupFilterResolution,
 } from "@/lib/contact-group-members";
+import { fetchRowsInBatches, SUPABASE_MAX_PAGE_ROWS } from "@/lib/supabase-batch";
 
 const COUNT_SELECT =
   "id, first_name, last_name, father_name, phone, phone2, landline, nickname, area, municipality, toponym, gender, call_status, priority, tags, political_stance, birthday, age, electoral_district, predicted_score, is_volunteer, volunteer_area, last_contacted_at, may_not_have_mobile, may_not_have_landline, may_not_have_email";
@@ -547,13 +548,14 @@ export async function queryContactsListTotal(
 export async function queryContactsListRows(
   supabase: SupabaseClient,
   f: ContactListFilters,
-  opts: { partialLocation?: boolean; limit?: number } = {},
+  opts: { partialLocation?: boolean; limit?: number; offset?: number } = {},
 ): Promise<ContactsListRowsResult> {
   const partialLocation = opts.partialLocation ?? false;
   const limit = Math.min(
     CONTACTS_EXPORT_LIMIT,
     Math.max(1, opts.limit ?? CONTACTS_EXPORT_LIMIT),
   );
+  const offset = Math.max(0, Math.floor(opts.offset ?? 0));
 
   if (canUseAdvancedSearchRpc(f, { partialLocation })) {
     const plan = buildContactQueryPlan(
@@ -561,8 +563,40 @@ export async function queryContactsListRows(
       { includeContactIds: null, excludeContactIds: [] },
       { partialLocation },
     );
+    // Page past PostgREST 1000-row cap when fetching a large ID set.
+    if (offset === 0 && limit > SUPABASE_MAX_PAGE_ROWS) {
+      const all: Record<string, unknown>[] = [];
+      let pageOffset = 0;
+      let total = 0;
+      let emptyInclude = false;
+      while (all.length < limit) {
+        const pageLimit = Math.min(SUPABASE_MAX_PAGE_ROWS, limit - all.length);
+        const page = await fetchContactsViaAdvancedRpc(supabase, f, {
+          offset: pageOffset,
+          limit: pageLimit,
+        });
+        if (page.emptyInclude) {
+          emptyInclude = true;
+          break;
+        }
+        total = page.total;
+        if (page.contacts.length === 0) break;
+        all.push(...page.contacts);
+        pageOffset += page.contacts.length;
+        if (page.contacts.length < pageLimit || all.length >= total) break;
+      }
+      if (emptyInclude) {
+        return {
+          contacts: [],
+          total: 0,
+          plan: { path: "empty", reason: "include group matches zero contacts" },
+          subPath: "advanced-rpc",
+        };
+      }
+      return { contacts: all.slice(0, limit), total, plan, subPath: "advanced-rpc" };
+    }
     const { contacts, total, emptyInclude } = await fetchContactsViaAdvancedRpc(supabase, f, {
-      offset: 0,
+      offset,
       limit,
     });
     if (emptyInclude) {
@@ -762,21 +796,27 @@ export async function queryContactsListRows(
     };
   }
 
-  // Default SQL path — fetch up to export limit (same filters as list, no page-size-50).
-  let query: QueryBuilder = supabase
-    .from("contacts")
-    .select(SELECT_LIST, { count: "exact" })
-    .order("last_name", { ascending: true })
-    .order("first_name", { ascending: true })
-    .limit(limit);
-  query = applyApiContactFilters(query, f, sqlGroupResolution, partialLocation);
-  const { data, error, count } = await query;
-  if (error) throw error;
-  let rows = (data ?? []) as Record<string, unknown>[];
-  rows = refineRowsWithColumnFilters(rows, f, filterResolution, partialLocation);
+  // Default SQL path — page with fetchRowsInBatches (avoids silent 1000-row truncate).
+  const { rows: batched, error: batchErr } = await fetchRowsInBatches<Record<string, unknown>>(
+    (from, to) => {
+      let query: QueryBuilder = supabase
+        .from("contacts")
+        .select(SELECT_LIST)
+        .order("last_name", { ascending: true })
+        .order("first_name", { ascending: true })
+        .order("id", { ascending: true });
+      query = applyApiContactFilters(query, f, sqlGroupResolution, partialLocation);
+      return query.range(from, to);
+    },
+  );
+  if (batchErr) throw new Error(batchErr);
+  let rows = refineRowsWithColumnFilters(batched, f, filterResolution, partialLocation);
+  const total = rows.length;
+  if (offset > 0) rows = rows.slice(offset);
+  const contacts = rows.slice(0, limit);
   return {
-    contacts: rows,
-    total: count ?? rows.length,
+    contacts,
+    total,
     plan,
     subPath: "sql-paginated",
   };

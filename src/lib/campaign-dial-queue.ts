@@ -3,6 +3,7 @@ import { contactHasAnyCampaignPhone } from "@/lib/campaign-contact-phone";
 import { isNoAnswerRetellOutcome } from "@/lib/retell-call-outcomes";
 import { fetchAllCampaignContactPhoneRows } from "@/lib/campaign-stats";
 import { fetchRowsInBatches } from "@/lib/supabase-batch";
+import { isActivePendingOutcome } from "@/lib/pending-call-cleanup";
 
 type AssignedPhoneRow = {
   contact_id: string;
@@ -10,6 +11,12 @@ type AssignedPhoneRow = {
     | { phone: string | null; phone2: string | null; landline: string | null }
     | { phone: string | null; phone2: string | null; landline: string | null }[]
     | null;
+};
+
+type CallOutcomeRow = {
+  contact_id: string | null;
+  outcome: string | null;
+  called_at: string | null;
 };
 
 function unwrapContact(
@@ -22,11 +29,11 @@ function unwrapContact(
 async function fetchAllCampaignCallOutcomes(
   supabase: SupabaseClient,
   campaignId: string,
-): Promise<{ rows: Array<{ contact_id: string | null; outcome: string | null }>; error: string | null }> {
+): Promise<{ rows: CallOutcomeRow[]; error: string | null }> {
   return fetchRowsInBatches((from, to) =>
     supabase
       .from("calls")
-      .select("contact_id, outcome")
+      .select("contact_id, outcome, called_at")
       .eq("campaign_id", campaignId)
       .order("id", { ascending: true })
       .range(from, to),
@@ -39,15 +46,18 @@ async function fetchAllCampaignCallOutcomes(
  *
  * `redialNoAnswer`: συμπεριλαμβάνει επαφές των οποίων όλες οι κλήσεις είναι «Δεν απάντησε»
  * (ώστε να ξανακληθούν μετά από Επανεκκίνηση χωρίς διαγραφή ιστορικού).
+ *
+ * Pending/Αναμονή older than 30 minutes are treated as expired (eligible again).
  */
 export async function getNextUncalledContactIds(
   supabase: SupabaseClient,
   campaignId: string,
   limit: number,
-  opts?: { redialNoAnswer?: boolean },
+  opts?: { redialNoAnswer?: boolean; now?: number },
 ): Promise<{ contactIds: string[]; error: string | null }> {
   const cap = Math.min(50, Math.max(1, Math.floor(limit)));
   const redialNoAnswer = opts?.redialNoAnswer === true;
+  const now = opts?.now ?? Date.now();
 
   const { rows: assigned, error: aErr } = await fetchAllCampaignContactPhoneRows(supabase, campaignId);
   if (aErr) return { contactIds: [], error: aErr };
@@ -68,21 +78,27 @@ export async function getNextUncalledContactIds(
   const { rows: callRows, error: cErr } = await fetchAllCampaignCallOutcomes(supabase, campaignId);
   if (cErr) return { contactIds: [], error: cErr };
 
-  const byContact = new Map<string, string[]>();
+  const byContact = new Map<string, CallOutcomeRow[]>();
   for (const r of callRows) {
     if (!r.contact_id) continue;
     const list = byContact.get(r.contact_id) ?? [];
-    list.push(r.outcome ?? "");
+    list.push(r);
     byContact.set(r.contact_id, list);
   }
 
   const isEligible = (contactId: string): boolean => {
-    const outcomes = byContact.get(contactId);
-    if (!outcomes || outcomes.length === 0) return true;
-    if (outcomes.some((o) => o === "Pending" || o === "Αναμονή")) return false;
+    const rows = byContact.get(contactId);
+    if (!rows || rows.length === 0) return true;
+    // Active (non-expired) Pending blocks; expired Pending is ignored for eligibility.
+    if (rows.some((r) => isActivePendingOutcome(r.outcome, r.called_at, now))) return false;
+    const concluded = rows.filter((r) => !isActivePendingOutcome(r.outcome, r.called_at, now));
+    // Drop expired pending from consideration — treat as if not holding the slot
+    const nonPending = concluded.filter(
+      (r) => r.outcome !== "Pending" && r.outcome !== "Αναμονή",
+    );
+    if (nonPending.length === 0) return true;
     if (redialNoAnswer) {
-      // Eligible if every concluded outcome is no-answer (no positive/negative yet)
-      return outcomes.every((o) => isNoAnswerRetellOutcome(o));
+      return nonPending.every((r) => isNoAnswerRetellOutcome(r.outcome));
     }
     return false;
   };
@@ -112,7 +128,9 @@ export async function getNextUncalledContactId(
 export async function getNoAnswerContactIds(
   supabase: SupabaseClient,
   campaignId: string,
+  opts?: { now?: number },
 ): Promise<{ contactIds: string[]; error: string | null }> {
+  const now = opts?.now ?? Date.now();
   const { rows: assigned, error: aErr } = await fetchAllCampaignContactPhoneRows(supabase, campaignId);
   if (aErr) return { contactIds: [], error: aErr };
 
@@ -127,18 +145,21 @@ export async function getNoAnswerContactIds(
   const { rows: callRows, error: cErr } = await fetchAllCampaignCallOutcomes(supabase, campaignId);
   if (cErr) return { contactIds: [], error: cErr };
 
-  const byContact = new Map<string, string[]>();
+  const byContact = new Map<string, CallOutcomeRow[]>();
   for (const r of callRows) {
     if (!r.contact_id || !withPhone.has(r.contact_id)) continue;
     const list = byContact.get(r.contact_id) ?? [];
-    list.push(r.outcome ?? "");
+    list.push(r);
     byContact.set(r.contact_id, list);
   }
 
   const out: string[] = [];
-  for (const [cid, outcomes] of byContact) {
-    if (outcomes.some((o) => o === "Pending" || o === "Αναμονή")) continue;
-    if (outcomes.length > 0 && outcomes.every((o) => isNoAnswerRetellOutcome(o))) {
+  for (const [cid, rows] of byContact) {
+    if (rows.some((r) => isActivePendingOutcome(r.outcome, r.called_at, now))) continue;
+    const nonPending = rows.filter(
+      (r) => r.outcome !== "Pending" && r.outcome !== "Αναμονή",
+    );
+    if (nonPending.length > 0 && nonPending.every((r) => isNoAnswerRetellOutcome(r.outcome))) {
       out.push(cid);
     }
   }

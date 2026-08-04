@@ -18,12 +18,9 @@ export const dynamic = "force-dynamic";
  *
  * Public route — no CRM/session auth (middleware `isRetellPublic` + this handler).
  *
- * HMAC (optional): verified only when `RETELL_WEBHOOK_SECRET` is set.
- * Do NOT use `RETELL_API_KEY` as an HMAC fallback — Retell may sign with the
- * dedicated webhook secret (or send unsigned probes until configured), which
- * caused false 401s when the API key was used for verification.
- * If only `RETELL_API_KEY` is present, HMAC is skipped (warning logged) so
- * Retell can deliver until the webhook secret is configured.
+ * HMAC: when `RETELL_WEBHOOK_SECRET` is set, signature is required (401 if invalid).
+ * When unset: production → 503; development → allow with warning.
+ * Do NOT use `RETELL_API_KEY` as an HMAC fallback.
  * Dashboard/curl probes with `event: "test"` / `ping` / `webhook_test` always
  * return 200 without HMAC.
  */
@@ -84,14 +81,16 @@ function assertRetellWebhookAuth(rawBody: string, request: NextRequest): NextRes
   const secret = retellWebhookSigningSecret();
 
   if (!secret) {
-    // Optional HMAC: process without verification until RETELL_WEBHOOK_SECRET is set.
-    if (process.env.RETELL_API_KEY?.trim()) {
-      console.warn(
-        "[api/retell/webhook] RETELL_WEBHOOK_SECRET unset — skipping HMAC (RETELL_API_KEY is not used for signing)",
+    if (process.env.NODE_ENV === "production") {
+      console.error("[api/retell/webhook] Webhook secret required in production");
+      return NextResponse.json(
+        { error: "Webhook secret required in production" },
+        { status: 503 },
       );
-    } else {
-      console.warn("[api/retell/webhook] RETELL_WEBHOOK_SECRET unset — skipping HMAC verification");
     }
+    console.warn(
+      "[api/retell/webhook] RETELL_WEBHOOK_SECRET unset — skipping HMAC in development (RETELL_API_KEY is not used for signing)",
+    );
     return null;
   }
 
@@ -247,11 +246,27 @@ export async function POST(request: NextRequest) {
   } as const;
 
   // Prefer updating the in-flight Pending/Αναμονή row so UI leaves «Αναμονή».
-  // Match by campaign when present; otherwise fall back to latest pending for contact.
+  // Prefer retell_call_id match; then campaign+contact; else latest pending for contact.
   let updatedPending = false;
   let pendId: string | undefined;
 
-  if (campaignId) {
+  const retellCallId = String(call.call_id ?? call.id ?? "").trim();
+  if (retellCallId) {
+    const { data: byRetell } = await admin
+      .from("calls")
+      .select("id")
+      .eq("retell_call_id", retellCallId)
+      .in("outcome", [...PENDING_OUTCOMES])
+      .order("called_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    pendId = (byRetell as { id?: string } | null)?.id;
+    if (pendId) {
+      console.log("[api/retell/webhook] pending match by retell_call_id:", { pendId, retellCallId });
+    }
+  }
+
+  if (!pendId && campaignId) {
     const { data: pend } = await admin
       .from("calls")
       .select("id")
@@ -283,8 +298,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Persist retell_call_id on the pending row when known.
+  const payloadWithRetell = retellCallId
+    ? { ...payload, retell_call_id: retellCallId }
+    : payload;
+
   if (pendId) {
-    const { error: upErr } = await admin.from("calls").update(payload).eq("id", pendId);
+    const { error: upErr } = await admin.from("calls").update(payloadWithRetell).eq("id", pendId);
     if (upErr) {
       console.error("[api/retell/webhook] pending call update failed:", upErr.message, { pendId, outcome });
       return NextResponse.json(
@@ -314,6 +334,7 @@ export async function POST(request: NextRequest) {
       outcome: payload.outcome,
       transferred_to_politician: payload.transferred_to_politician,
       notes: payload.notes,
+      ...(retellCallId ? { retell_call_id: retellCallId } : {}),
     });
     if (insErr) {
       console.error("[api/retell/webhook] call insert failed:", insErr.message);

@@ -270,10 +270,10 @@ export async function listContactIdsMatching(
   supabase: SupabaseClient,
   f: ContactFilter,
   opts?: { applyHasPhone?: boolean; defaultHasPhone?: boolean },
-): Promise<{ ids: string[]; error: string | null }> {
+): Promise<{ ids: string[]; error: string | null; match_total?: number }> {
   try {
     const listFilters = campaignFilterToListFilters(f);
-    const { contacts } = await queryContactsListRows(supabase, listFilters, {
+    const { contacts, total } = await queryContactsListRows(supabase, listFilters, {
       limit: CONTACTS_EXPORT_LIMIT,
     });
     let ids = contacts
@@ -289,7 +289,8 @@ export async function listContactIdsMatching(
       }
     }
 
-    return { ids: [...new Set(ids)], error: null };
+    const unique = [...new Set(ids)];
+    return { ids: unique, error: null, match_total: total };
   } catch (e) {
     return { ids: [], error: e instanceof Error ? e.message : "Σφάλμα φίλτρου επαφών" };
   }

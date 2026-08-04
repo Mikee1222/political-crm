@@ -156,13 +156,15 @@ export async function POST(request: NextRequest) {
     }
 
     let filterIds: string[] = [];
+    let filterMatchTotal: number | undefined;
     if (hasFilter) {
-      const { ids, error: idErr } = await listContactIdsMatching(supabase, f, {
+      const { ids, error: idErr, match_total } = await listContactIdsMatching(supabase, f, {
         applyHasPhone: true,
         defaultHasPhone: true,
       });
       if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
       filterIds = ids;
+      filterMatchTotal = match_total;
     }
 
     // Manual selections UNION filter matches.
@@ -214,10 +216,14 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     const campaign = data as { id: string; name: string };
     const rows = contactIds.map((contact_id) => ({ campaign_id: campaign.id, contact_id }));
-    const { error: ccErr } = await supabase.from("campaign_contacts").insert(rows);
-    if (ccErr) {
-      await supabase.from("campaigns").delete().eq("id", campaign.id);
-      return NextResponse.json({ error: ccErr.message }, { status: 400 });
+    const INSERT_CHUNK = 500;
+    for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+      const chunk = rows.slice(i, i + INSERT_CHUNK);
+      const { error: ccErr } = await supabase.from("campaign_contacts").insert(chunk);
+      if (ccErr) {
+        await supabase.from("campaigns").delete().eq("id", campaign.id);
+        return NextResponse.json({ error: ccErr.message }, { status: 400 });
+      }
     }
 
     const agentInfo = retell_agent_id
@@ -236,9 +242,18 @@ export async function POST(request: NextRequest) {
         contact_count: contactIds.length,
       },
     });
+
+    const assigned_count = contactIds.length;
+    const warning =
+      filterMatchTotal != null && assigned_count < filterMatchTotal
+        ? `Ανατέθηκαν ${assigned_count} επαφές αλλά το φίλτρο ταιριάζει σε ${filterMatchTotal} (πιθανό όριο σελίδας).`
+        : undefined;
+
     return NextResponse.json({
       campaign: data,
-      assigned_contacts: contactIds.length,
+      assigned_contacts: assigned_count,
+      assigned_count,
+      ...(warning ? { warning } : {}),
       retell_agent_name: agentInfo.agent_name,
     });
   } catch (e) {

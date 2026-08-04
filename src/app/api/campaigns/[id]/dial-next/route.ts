@@ -3,10 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { getNextUncalledContactIds } from "@/lib/campaign-dial-queue";
-import { insertPendingCampaignCall } from "@/lib/campaign-pending-call";
+import {
+  attachRetellCallIdToPending,
+  insertPendingCampaignCall,
+  markPendingCallFailed,
+} from "@/lib/campaign-pending-call";
 import { executeRetellCreatePhoneCall } from "@/lib/retell-execute-outbound";
 import { getRetellAgentIdForCampaign } from "@/lib/campaign-retell-agent";
 import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
+import { cleanExpiredPendingCalls } from "@/lib/pending-call-cleanup";
+import { getRetellLiveCallCount } from "@/lib/retell-live-calls";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { data: campDial, error: campDialErr } = await supabase
     .from("campaigns")
-    .select("concurrent_lines, channel")
+    .select("concurrent_lines, channel, status")
     .eq("id", campaignId)
     .maybeSingle();
   if (campDialErr) {
@@ -51,15 +57,54 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!campDial) {
     return NextResponse.json({ error: "Καμπάνια δεν βρέθηκε" }, { status: 404 });
   }
-  const channel = String((campDial as { channel?: string | null }).channel ?? "call");
-  if (channel === "whatsapp") {
+
+  const status = String((campDial as { status?: string | null }).status ?? "").trim();
+  if (status !== "active") {
     return NextResponse.json(
-      { error: "Η καμπάνια είναι WhatsApp — οι κλήσεις Retell δεν ισχύουν" },
+      { error: "Η καμπάνια πρέπει να είναι ενεργή για κλήσεις" },
       { status: 400 },
     );
   }
 
-  const batch = clampConcurrentLines((campDial as { concurrent_lines?: unknown }).concurrent_lines);
+  const channel = String((campDial as { channel?: string | null }).channel ?? "call").trim() || "call";
+  if (channel !== "call") {
+    return NextResponse.json(
+      { error: "Η καμπάνια δεν είναι καναλιού κλήσης — οι κλήσεις Retell δεν ισχύουν" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    await cleanExpiredPendingCalls(supabase, { campaignId });
+  } catch (e) {
+    console.warn(
+      "[api/campaigns/dial-next] cleanExpiredPendingCalls:",
+      e instanceof Error ? e.message : e,
+    );
+  }
+
+  const concurrentLines = clampConcurrentLines((campDial as { concurrent_lines?: unknown }).concurrent_lines);
+
+  const agentOverride = await getRetellAgentIdForCampaign(supabase, campaignId);
+  if (!agentOverride) {
+    return NextResponse.json(
+      { error: "Λείπει Retell agent (τύπος καμπάνιας ή RETELL_AGENT_ID)" },
+      { status: 503 },
+    );
+  }
+
+  const { count: liveCount, error: liveErr } = await getRetellLiveCallCount({
+    agentId: agentOverride,
+    campaignId,
+  });
+  if (liveErr) {
+    console.warn("[api/campaigns/dial-next] live count:", liveErr);
+  }
+
+  const batch = Math.max(0, concurrentLines - liveCount);
+  if (batch === 0) {
+    return NextResponse.json({ message: "All lines busy", dialed: 0 });
+  }
 
   const { contactIds, error: queueErr } = await getNextUncalledContactIds(
     supabase,
@@ -81,14 +126,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     );
   }
 
-  const agentOverride = await getRetellAgentIdForCampaign(supabase, campaignId);
-  if (!agentOverride) {
-    return NextResponse.json(
-      { error: "Λείπει Retell agent (τύπος καμπάνιας ή RETELL_AGENT_ID)" },
-      { status: 503 },
-    );
-  }
-
   const dialOne = async (contactId: string): Promise<DialResult> => {
     const { data: contact, error: contactErr } = await supabase
       .from("contacts")
@@ -106,8 +143,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       phone2: string | null;
       landline: string | null;
     };
+
+    // 1) Insert Pending before Retell so the queue / webhook can track the attempt.
+    const pending = await insertPendingCampaignCall(supabase, contactId, campaignId);
+    if (pending.error || !pending.id) {
+      return {
+        contact_id: contactId,
+        ok: false,
+        error: `Καταγραφή κλήσης: ${pending.error?.message ?? "άγνωστο"}`,
+      };
+    }
+    const pendingId = pending.id;
+
+    await supabase.from("contacts").update({ call_status: "Pending" }).eq("id", contactId);
+
+    // 2) Call Retell
     const retell = await executeRetellCreatePhoneCall(row, campaignId, agentOverride);
     if (!retell.ok) {
+      // 4) Don't leave stuck Pending
+      await markPendingCallFailed(supabase, pendingId);
       return {
         contact_id: contactId,
         ok: false,
@@ -115,11 +169,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         ...(retell.detail != null ? { detail: retell.detail } : {}),
       };
     }
-    await supabase.from("contacts").update({ call_status: "Pending" }).eq("id", contactId);
-    const { error: pendErr } = await insertPendingCampaignCall(supabase, contactId, campaignId);
-    if (pendErr) {
-      return { contact_id: contactId, ok: false, error: `Καταγραφή κλήσης: ${pendErr.message}` };
+
+    // 3) Attach retell_call_id to Pending row
+    if (retell.call_id) {
+      const { error: attachErr } = await attachRetellCallIdToPending(
+        supabase,
+        pendingId,
+        retell.call_id,
+      );
+      if (attachErr) {
+        console.warn("[api/campaigns/dial-next] attach retell_call_id:", attachErr.message);
+      }
     }
+
     return { contact_id: contactId, ok: true, call_id: retell.call_id };
   };
 
@@ -149,6 +211,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   return NextResponse.json({
     success: true,
     results,
+    dialed: results.filter((r) => r.ok).length,
     contact_id: firstOk?.contact_id,
     call_id: firstOk?.call_id ?? null,
     redial_no_answer: redialNoAnswer,

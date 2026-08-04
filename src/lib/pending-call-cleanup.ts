@@ -8,6 +8,9 @@ export const PENDING_CALL_OUTCOMES = ["Pending", "Αναμονή"] as const;
 
 export const PENDING_CONTACT_STATUSES = ["Pending", "Αναμονή"] as const;
 
+/** Dial-queue / dial-next: Pending older than this is expired (eligible again + cleaned). */
+export const PENDING_DIAL_TTL_MS = 30 * 60 * 1000;
+
 /** Auto-resolve stuck pending when loading call history. */
 export const PENDING_AUTO_CLEANUP_MS = 2 * 60 * 60 * 1000;
 
@@ -22,6 +25,25 @@ export type PendingCleanupResult = {
 
 function isoOlderThan(ms: number, now = Date.now()): string {
   return new Date(now - ms).toISOString();
+}
+
+export function isPendingOutcome(outcome: string | null | undefined): boolean {
+  const o = String(outcome ?? "");
+  return PENDING_CALL_OUTCOMES.includes(o as (typeof PENDING_CALL_OUTCOMES)[number]);
+}
+
+/** True when Pending/Αναμονή is still within the dial TTL (not expired). */
+export function isActivePendingOutcome(
+  outcome: string | null | undefined,
+  calledAt: string | null | undefined,
+  now = Date.now(),
+  ttlMs = PENDING_DIAL_TTL_MS,
+): boolean {
+  if (!isPendingOutcome(outcome)) return false;
+  if (!calledAt) return true;
+  const t = Date.parse(calledAt);
+  if (!Number.isFinite(t)) return true;
+  return now - t < ttlMs;
 }
 
 /**
@@ -66,6 +88,59 @@ export async function cleanupStuckPendingCalls(
 
   const contactUpdated = await maybeUpdateContactCallStatusAfterCleanup(supabase, contactId);
   return { cleaned: callIds.length, callIds, contactCallStatusUpdated: contactUpdated };
+}
+
+/**
+ * Expire campaign (or global) Pending/Αναμονή rows older than TTL → «Δεν απάντησε».
+ * Called at the start of dial-next so stuck rows do not block the queue.
+ */
+export async function cleanExpiredPendingCalls(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  opts?: { campaignId?: string | null; olderThanMs?: number; now?: number },
+): Promise<{ cleaned: number; callIds: string[] }> {
+  const olderThanMs = opts?.olderThanMs ?? PENDING_DIAL_TTL_MS;
+  const now = opts?.now ?? Date.now();
+  const cutoff = isoOlderThan(olderThanMs, now);
+  const campaignId = opts?.campaignId?.trim() || null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q: any = supabase
+    .from("calls")
+    .select("id, contact_id")
+    .in("outcome", [...PENDING_CALL_OUTCOMES])
+    .lt("called_at", cutoff);
+  if (campaignId) {
+    q = q.eq("campaign_id", campaignId);
+  }
+
+  const { data: rows, error } = await q;
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const list = (rows ?? []) as Array<{ id: string; contact_id: string | null }>;
+  if (!list.length) {
+    return { cleaned: 0, callIds: [] };
+  }
+
+  const callIds = list.map((r) => r.id);
+  const { error: upErr } = await supabase
+    .from("calls")
+    .update({ outcome: RETELL_OUTCOME_NO_ANSWER })
+    .in("id", callIds);
+  if (upErr) {
+    throw new Error(upErr.message);
+  }
+
+  const contactIds = [
+    ...new Set(list.map((r) => r.contact_id).filter((id): id is string => Boolean(id))),
+  ];
+  for (const contactId of contactIds) {
+    await maybeUpdateContactCallStatusAfterCleanup(supabase, contactId);
+  }
+
+  return { cleaned: callIds.length, callIds };
 }
 
 /**

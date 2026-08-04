@@ -51,4 +51,4 @@ npm run dev
 - Retell webhook: `POST /api/retell/webhook`
 - Production webhook URL: `https://crm.kkaragkounis.com/api/retell/webhook`
 
-Configure this URL in the Retell dashboard (account or agent webhook). Session auth is bypassed for `/api/retell/webhook` and `/api/retell/llm`; real call events require HMAC (`RETELL_WEBHOOK_SECRET` or `RETELL_API_KEY`). A body like `{"event":"test"}` returns 200 without a signature (dashboard / curl connectivity check).
+Configure this URL in the Retell dashboard (account or agent webhook). Session auth is bypassed for `/api/retell/webhook` and `/api/retell/llm`; real call events require `RETELL_WEBHOOK_SECRET` (HMAC). In production without the secret the webhook returns 503. A body like `{"event":"test"}` returns 200 without a signature (dashboard / curl connectivity check).

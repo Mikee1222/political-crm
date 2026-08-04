@@ -519,18 +519,24 @@ export default function CampaignDetailPage() {
     setLinesDraft(String(clampConcurrentLines(concurrentLinesStored)));
   }, [campaignIdForLines, concurrentLinesStored]);
 
-  const runDialBatch = useCallback(async (): Promise<number> => {
+  const runDialBatch = useCallback(async (opts?: { redial?: boolean }): Promise<number> => {
     if (!id) return 0;
-    const q = redialMode ? "?redial_no_answer=1" : "";
+    const useRedial = opts?.redial ?? redialMode;
+    const q = useRedial ? "?redial_no_answer=1" : "";
     const r = await fetchWithTimeout(`/api/campaigns/${id}/dial-next${q}`, { method: "POST" });
     const j = (await r.json().catch(() => ({}))) as {
       error?: string;
+      message?: string;
+      dialed?: number;
       results?: Array<{ ok: boolean }>;
     };
     if (!r.ok) {
       const msg = j.error ?? "Σφάλμα";
       if (r.status === 400 && (msg.includes("όλες") || msg.includes("Δεν υπάρχουν"))) {
         setAutoDial(false);
+        if (useRedial && msg.includes("Δεν υπάρχουν")) {
+          setRedialMode(false);
+        }
         if (!autoDialRef.current) setErr(msg);
         return 0;
       }
@@ -538,7 +544,10 @@ export default function CampaignDetailPage() {
       setAutoDial(false);
       return 0;
     }
-    return (j.results ?? []).filter((x) => x.ok).length;
+    if (j.message === "All lines busy") return 0;
+    return typeof j.dialed === "number"
+      ? j.dialed
+      : (j.results ?? []).filter((x) => x.ok).length;
   }, [id, redialMode]);
 
   const campStatus = data?.campaign?.status;
@@ -832,7 +841,27 @@ export default function CampaignDetailPage() {
             <h1 className="text-xl text-[var(--text-muted)]">{loading ? "Φόρτωση…" : "—"}</h1>
           )}
         </div>
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          {redialMode && isCallChannel ? (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold"
+              style={{ backgroundColor: `${GOLD}22`, color: GOLD, border: `1px solid ${GOLD}` }}
+            >
+              Λειτουργία επανάκλησης
+            </span>
+          ) : null}
+          {redialMode && isCallChannel ? (
+            <button
+              type="button"
+              className={lux.btnSecondary + " !h-10 !gap-2 !px-3 !text-sm"}
+              onClick={() => {
+                setRedialMode(false);
+                showToast("Κανονική λειτουργία", "success");
+              }}
+            >
+              Κανονική λειτουργία
+            </button>
+          ) : null}
           {isCallChannel && c?.status === "active" && (
             <>
               {!autoDial ? (
@@ -841,6 +870,7 @@ export default function CampaignDetailPage() {
                   className={lux.btnSecondary + " !h-10 !gap-2 !px-3 !text-sm"}
                   disabled={dialing || !data?.contactTotal}
                   onClick={() => {
+                    setRedialMode(false);
                     setAutoDial(true);
                     showToast("Αυτόματη συνέχεια ενεργή", "success");
                   }}
@@ -866,11 +896,12 @@ export default function CampaignDetailPage() {
                 className={lux.btnPrimary + " !h-10 !gap-2 !px-3 !py-2 !text-sm"}
                 disabled={dialing || !c || !data?.contactTotal}
                 onClick={async () => {
+                  setRedialMode(false);
                   setDialing(true);
                   dialingRef.current = true;
                   setErr(null);
                   try {
-                    const n = await runDialBatch();
+                    const n = await runDialBatch({ redial: false });
                     if (n > 0) showToast(`Ξεκίνησαν ${n} κλήσεις`, "success");
                     await load();
                   } finally {
@@ -1062,7 +1093,6 @@ export default function CampaignDetailPage() {
               <p className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                 Τελευταία επανεκκίνηση: {formatDateTimeAthens(lastRedialAt)}
-                {redialMode ? " · λειτουργία επανεκκίνησης ενεργή" : ""}
               </p>
             ) : null}
           </div>

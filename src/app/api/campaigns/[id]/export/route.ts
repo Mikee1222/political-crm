@@ -6,6 +6,7 @@ import { nextJsonError } from "@/lib/api-resilience";
 import { retellOutcomeLabel } from "@/lib/retell-call-outcomes";
 import { formatDurationGreek } from "@/lib/campaign-contact-status";
 import { pickCampaignDialPhone } from "@/lib/campaign-contact-phone";
+import { fetchRowsInBatches } from "@/lib/supabase-batch";
 import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
@@ -26,15 +27,6 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (campErr || !camp) {
       return NextResponse.json({ error: "Καμπάνια δεν βρέθηκε" }, { status: 404 });
     }
-
-    const { data, error } = await crm.supabase
-      .from("calls")
-      .select(
-        "id, called_at, outcome, duration_seconds, transferred_to_politician, contact_id, contacts(first_name, last_name, phone, phone2, landline)",
-      )
-      .eq("campaign_id", params.id)
-      .order("called_at", { ascending: false });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     type Row = {
       id: string;
@@ -61,6 +53,19 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         | null;
     };
 
+    const { rows: data, error } = await fetchRowsInBatches<Row>((from, to) =>
+      crm.supabase
+        .from("calls")
+        .select(
+          "id, called_at, outcome, duration_seconds, transferred_to_politician, contact_id, contacts(first_name, last_name, phone, phone2, landline)",
+        )
+        .eq("campaign_id", params.id)
+        .order("called_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    );
+    if (error) return NextResponse.json({ error }, { status: 400 });
+
     const aoa: (string | number)[][] = [
       [
         "Επαφή",
@@ -73,7 +78,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         "Contact ID",
       ],
     ];
-    for (const r of (data ?? []) as Row[]) {
+    for (const r of data) {
       const cont = Array.isArray(r.contacts) ? r.contacts[0] : r.contacts;
       const name = cont
         ? [cont.first_name, cont.last_name].filter(Boolean).join(" ")

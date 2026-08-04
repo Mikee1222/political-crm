@@ -48,10 +48,18 @@ create table if not exists public.calls (
 
 alter table public.calls
   add column if not exists marked_by_user_id uuid references auth.users (id) on delete set null,
-  add column if not exists marked_by_name text;
+  add column if not exists marked_by_name text,
+  add column if not exists retell_call_id text;
 
 create index if not exists idx_calls_contact_called_at
   on public.calls (contact_id, called_at desc nulls last);
+
+create index if not exists idx_calls_campaign_id
+  on public.calls (campaign_id);
+
+create index if not exists idx_calls_retell_call_id
+  on public.calls (retell_call_id)
+  where retell_call_id is not null;
 
 create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),

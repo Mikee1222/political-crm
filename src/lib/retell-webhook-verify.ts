@@ -1,9 +1,9 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
 /**
- * Dashboard / curl connectivity checks (no call processing).
- * These may arrive without `x-retell-signature`; route always acks them before HMAC.
- * Real events verify HMAC only when RETELL_WEBHOOK_SECRET is set (not RETELL_API_KEY).
+ * Real events: HMAC with RETELL_WEBHOOK_SECRET only (never RETELL_API_KEY).
+ * Route enforces: secret set → verify; production without secret → 503; dev → warn + allow.
+ * Dashboard / curl connectivity checks (no call processing) may arrive without signature.
  */
 export function isRetellWebhookTestEvent(body: unknown): boolean {
   if (body == null || typeof body !== "object") return false;
