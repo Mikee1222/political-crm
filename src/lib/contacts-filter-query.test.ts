@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   campaignFilterChips,
   campaignFilterToListFilters,
+  campaignFiltersToContactListFilters,
   contactFilterHasCriteria,
   normalizeCampaignHasPhone,
   parseCampaignFilterBody,
   serializeCampaignFilter,
 } from "@/lib/contacts-filter-query";
+import { canUseAdvancedSearchRpc } from "@/lib/contacts-query";
 
 describe("contacts-filter-query campaign helpers", () => {
   it("maps age_groups to age_min/max like advanced search", () => {
@@ -81,5 +83,27 @@ describe("contacts-filter-query campaign helpers", () => {
     expect(normalizeCampaignHasPhone(undefined, true)).toBe("has");
     expect(normalizeCampaignHasPhone("any", true)).toBe("");
     expect(normalizeCampaignHasPhone("not")).toBe("not");
+  });
+
+  it("alias campaignFiltersToContactListFilters matches mapper", () => {
+    const f = { first_name: "ΣΩΤΗΡ", group_ids: ["g1"] };
+    expect(campaignFiltersToContactListFilters(f)).toEqual(campaignFilterToListFilters(f));
+  });
+
+  it("group / muni / call_status (no name OR) are advanced-RPC eligible", () => {
+    expect(
+      canUseAdvancedSearchRpc(
+        campaignFilterToListFilters({
+          group_ids: ["g1"],
+          municipality: "ΔΗΜΟΣ ΑΓΡΙΝΙΟΥ",
+          call_status: "Pending",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      canUseAdvancedSearchRpc(
+        campaignFilterToListFilters({ first_name: "ΣΩΤΗΡ", group_ids: ["g1"] }),
+      ),
+    ).toBe(true);
   });
 });

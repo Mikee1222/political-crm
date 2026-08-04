@@ -9,7 +9,6 @@ import {
   parseCampaignFilterBody,
   type ContactFilter,
 } from "@/lib/contacts-filter-query";
-import { nextJsonError } from "@/lib/api-resilience";
 export const dynamic = "force-dynamic";
 
 function parseCsvParam(request: NextRequest, key: string): string[] {
@@ -59,8 +58,12 @@ export async function GET(request: NextRequest) {
       return forbidden();
     }
 
+    const rawParams = Object.fromEntries(request.nextUrl.searchParams.entries());
+    console.log("[api/campaigns/preview] query params", rawParams);
+
     const manualIds = parseCsvParam(request, "contact_ids");
     const f = filterFromSearchParams(request);
+    console.log("[api/campaigns/preview] parsed filter", f);
     const hasFilter = contactFilterHasCriteria(f);
 
     if (!manualIds.length && !hasFilter) {
@@ -77,7 +80,10 @@ export async function GET(request: NextRequest) {
       const { ids, error: idErr } = await listContactIdsMatching(supabase, f, {
         applyHasPhone: false,
       });
-      if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
+      if (idErr) {
+        console.error("[api/campaigns/preview] listContactIdsMatching error", idErr);
+        return NextResponse.json({ error: idErr }, { status: 400 });
+      }
       filterIds = ids;
     }
 
@@ -86,7 +92,10 @@ export async function GET(request: NextRequest) {
       supabase,
       unionIds,
     );
-    if (phoneErr) return NextResponse.json({ error: phoneErr }, { status: 400 });
+    if (phoneErr) {
+      console.error("[api/campaigns/preview] countPhonesForContactIds error", phoneErr);
+      return NextResponse.json({ error: phoneErr }, { status: 400 });
+    }
 
     return NextResponse.json({
       count: with_phone + without_phone,
@@ -97,7 +106,8 @@ export async function GET(request: NextRequest) {
       from_ids: manualIds.length > 0 && !hasFilter,
     });
   } catch (e) {
-    console.error("[api/campaigns/preview]", e);
-    return nextJsonError();
+    const message = e instanceof Error ? e.message : "Σφάλμα";
+    console.error("[api/campaigns/preview]", message, e);
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
