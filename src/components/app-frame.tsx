@@ -698,7 +698,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [profile?.avatar_url]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || isPortal) return;
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -720,7 +720,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
       window.removeEventListener("appinstalled", onInstalled);
     };
-  }, []);
+  }, [isPortal]);
 
   const triggerInstallPrompt = useCallback(async () => {
     const ev = promptEvent as (Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome?: string }> }) | null;

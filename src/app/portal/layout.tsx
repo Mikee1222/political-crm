@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -7,6 +8,17 @@ const inter = Inter({
   subsets: ["latin", "greek"],
   display: "swap",
 });
+
+/** Public portal is not a PWA — clear CRM manifest / apple install hints. */
+export const metadata: Metadata = {
+  applicationName: "Κώστας Καραγκούνης",
+  title: { default: "Κώστας Καραγκούνης", template: "%s · Καραγκούνης" },
+  description: "Πύλη πολιτών — ενημέρωση και επικοινωνία",
+  manifest: null,
+  appleWebApp: {
+    capable: false,
+  },
+};
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return (
