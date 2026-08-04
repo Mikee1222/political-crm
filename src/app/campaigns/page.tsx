@@ -43,7 +43,6 @@ const CAMPAIGN_PREVIEW_MIN_NAME_CHARS = 4;
 const CAMPAIGN_PREVIEW_DEBOUNCE_MS = 800;
 import { formatDateAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
-import type { CampaignTypeRow } from "@/lib/campaign-types";
 import {
   clampConcurrentLines,
   CONCURRENT_LINES_MAX,
@@ -273,9 +272,6 @@ function CampaignsPageInner() {
   const [formErr, setFormErr] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [campaignChannel, setCampaignChannel] = useState<"call" | "whatsapp">("call");
-  const [campaignTypes, setCampaignTypes] = useState<CampaignTypeRow[]>([]);
-  const [campaignTypeId, setCampaignTypeId] = useState("");
   const [concurrentLines, setConcurrentLines] = useState(3);
   const [filter, setFilter] = useState<NewFilter>(emptyFilter);
   const [areas, setAreas] = useState<string[]>([]);
@@ -440,23 +436,18 @@ function CampaignsPageInner() {
       }),
       getMunicipalitiesCached(),
       getToponymsCached(),
-      fetchWithTimeout("/api/campaign-types").then(async (r) => {
-        const d = (await r.json()) as { types?: CampaignTypeRow[] };
-        return d.types ?? [];
-      }),
       fetchWithTimeout("/api/groups").then(async (r) => {
         const d = (await r.json()) as { groups?: ContactGroupRow[] };
         return dedupeContactGroupsById(d.groups ?? []);
       }),
     ])
-      .then(([areaList, muniList, topRows, types, groupList]) => {
+      .then(([areaList, muniList, topRows, groupList]) => {
         if (cancelled) return;
         setAreas(areaList);
         setMunicipalities(muniList);
         setMuniLoading(false);
         setToponyms(topRows.map((t) => t.name).filter(Boolean));
         setToponymsLoading(false);
-        setCampaignTypes(types);
         setGroups(groupList);
       })
       .catch(() => {
@@ -466,7 +457,6 @@ function CampaignsPageInner() {
         setMuniLoading(false);
         setToponyms([]);
         setToponymsLoading(false);
-        setCampaignTypes([]);
         setGroups([]);
       });
 
@@ -537,11 +527,6 @@ function CampaignsPageInner() {
     return () => clearTimeout(t);
   }, [modal, filter, selectedContactIds]);
 
-  const selectedType = campaignTypes.find((x) => x.id === campaignTypeId);
-  const agentLabel =
-    selectedType?.retell_agent_name?.trim() ||
-    (selectedType?.retell_agent_id ? selectedType.retell_agent_id : null);
-
   const groupOptions = useMemo(
     () =>
       groups.map((g) => ({
@@ -605,8 +590,7 @@ function CampaignsPageInner() {
       const body: Record<string, unknown> = {
         name,
         description: description || null,
-        channel: campaignChannel,
-        campaign_type_id: campaignTypeId || null,
+        channel: "call",
         concurrent_lines: clampConcurrentLines(concurrentLines),
       };
       if (selectedContactIds.length > 0) {
@@ -632,8 +616,6 @@ function CampaignsPageInner() {
       setModal(false);
       setName("");
       setDescription("");
-      setCampaignChannel("call");
-      setCampaignTypeId("");
       setConcurrentLines(3);
       setSelectedContacts([]);
       setFilter(emptyFilter());
@@ -1301,106 +1283,40 @@ function CampaignsPageInner() {
               </div>
             </section>
 
-            {/* Section 2 — Ρυθμίσεις κλήσεων */}
+            {/* Section 2 — Παράλληλες γραμμές */}
             <section>
-              <p className={sectionLabel}>Ρυθμίσεις κλήσεων</p>
-              <div className="space-y-4">
-                <div>
-                  <label className={lux.label} htmlFor="c-ctype">
-                    Τύπος καμπάνιας
-                  </label>
-                  <HqSelect
-                    id="c-ctype"
-                    className="!min-h-11 !text-base"
-                    value={campaignTypeId}
-                    onChange={(e) => setCampaignTypeId(e.target.value)}
+              <p className={sectionLabel}>Παράλληλες γραμμές</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center overflow-hidden rounded-xl border border-[var(--border)]">
+                  <button
+                    type="button"
+                    className="flex h-11 w-11 items-center justify-center text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+                    disabled={concurrentLines <= CONCURRENT_LINES_MIN}
+                    onClick={() =>
+                      setConcurrentLines((n) => clampConcurrentLines(n - 1))
+                    }
+                    aria-label="Μείωση γραμμών"
                   >
-                    <option value="">— Επιλέξτε —</option>
-                    {campaignTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                        {t.retell_agent_name ? ` · ${t.retell_agent_name}` : ""}
-                      </option>
-                    ))}
-                  </HqSelect>
-                  {agentLabel ? (
-                    <p className="mt-1.5 text-sm font-medium text-[#D4AF37]">
-                      Agent: {agentLabel}
-                    </p>
-                  ) : (
-                    <p className="mt-1.5 text-xs text-[var(--text-muted)]">
-                      Agent: προεπιλογή περιβάλλοντος (RETELL_AGENT_ID)
-                    </p>
-                  )}
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="min-w-[2.5rem] text-center text-base font-bold tabular-nums text-[var(--text-primary)]">
+                    {concurrentLines}
+                  </span>
+                  <button
+                    type="button"
+                    className="flex h-11 w-11 items-center justify-center text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] disabled:opacity-40"
+                    disabled={concurrentLines >= CONCURRENT_LINES_MAX}
+                    onClick={() =>
+                      setConcurrentLines((n) => clampConcurrentLines(n + 1))
+                    }
+                    aria-label="Αύξηση γραμμών"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
                 </div>
-
-                <div>
-                  <span className={lux.label}>Κανάλι</span>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCampaignChannel("call")}
-                      className={
-                        "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border-2 px-3 text-sm font-semibold transition sm:flex-none " +
-                        (campaignChannel === "call"
-                          ? "border-[#D4AF37] bg-[#D4AF37]/15 text-slate-900"
-                          : "border-[var(--border)] bg-transparent text-[var(--text-secondary)] hover:border-[#D4AF37]/50")
-                      }
-                    >
-                      <Phone className="h-4 w-4" aria-hidden />
-                      Κλήσεις (Retell)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCampaignChannel("whatsapp")}
-                      className={
-                        "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border-2 px-3 text-sm font-semibold transition sm:flex-none " +
-                        (campaignChannel === "whatsapp"
-                          ? "border-[#D4AF37] bg-[#D4AF37]/15 text-slate-900"
-                          : "border-[var(--border)] bg-transparent text-[var(--text-secondary)] hover:border-[#D4AF37]/50")
-                      }
-                    >
-                      <MessageCircle className="h-4 w-4" aria-hidden />
-                      WhatsApp
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <span className={lux.label}>Παράλληλες γραμμές</span>
-                  <div className="mt-1 flex flex-wrap items-center gap-3">
-                    <div className="inline-flex items-center overflow-hidden rounded-xl border border-[var(--border)]">
-                      <button
-                        type="button"
-                        className="flex h-11 w-11 items-center justify-center text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] disabled:opacity-40"
-                        disabled={concurrentLines <= CONCURRENT_LINES_MIN}
-                        onClick={() =>
-                          setConcurrentLines((n) => clampConcurrentLines(n - 1))
-                        }
-                        aria-label="Μείωση γραμμών"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <span className="min-w-[2.5rem] text-center text-base font-bold tabular-nums text-[var(--text-primary)]">
-                        {concurrentLines}
-                      </span>
-                      <button
-                        type="button"
-                        className="flex h-11 w-11 items-center justify-center text-[var(--text-secondary)] transition hover:bg-[var(--bg-elevated)] disabled:opacity-40"
-                        disabled={concurrentLines >= CONCURRENT_LINES_MAX}
-                        onClick={() =>
-                          setConcurrentLines((n) => clampConcurrentLines(n + 1))
-                        }
-                        aria-label="Αύξηση γραμμών"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <p className="text-sm text-[var(--text-muted)]">
-                      {concurrentLines} ταυτόχρονες κλήσεις
-                    </p>
-                  </div>
-                </div>
+                <p className="text-sm text-[var(--text-muted)]">
+                  {concurrentLines} ταυτόχρονες κλήσεις
+                </p>
               </div>
             </section>
 
