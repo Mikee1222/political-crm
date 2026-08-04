@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const { data: camp, error: campErr } = await supabase
       .from("campaigns")
       .select(
-        "id, name, created_at, started_at, description, status, channel, campaign_type_id, retell_agent_id, concurrent_lines, last_no_answer_redial_at, campaign_types ( id, name, color, retell_agent_id )",
+        "id, name, created_at, started_at, description, status, channel, campaign_type_id, retell_agent_id, concurrent_lines, last_no_answer_redial_at, filters, campaign_types ( id, name, color, retell_agent_id )",
       )
       .eq("id", params.id)
       .single();

@@ -12,9 +12,17 @@ import {
   CONTACTS_EXPORT_LIMIT,
   queryContactsListRows,
 } from "@/lib/contacts-list-api";
+import { searchContactsByName } from "@/lib/contacts-query";
 
 /** Campaign create / preview filter payload (subset of advanced contact search). */
 export type ContactFilter = {
+  /**
+   * Όνομα — accent-insensitive via name / advanced RPC (`first_name` + nickname).
+   * Parse also accepts aliases `name` / `search`; persisted as `first_name`.
+   */
+  first_name?: string;
+  last_name?: string;
+  father_name?: string;
   call_status?: string;
   area?: string;
   municipality?: string;
@@ -72,6 +80,38 @@ function ageBoundsFromFilter(f: ContactFilter): { age_min: string; age_max: stri
   return { age_min: amin, age_max: amax };
 }
 
+function resolveCampaignNameFields(f: ContactFilter): {
+  first_name: string;
+  last_name: string;
+  father_name: string;
+} {
+  return {
+    first_name: f.first_name?.trim() || "",
+    last_name: f.last_name?.trim() || "",
+    father_name: f.father_name?.trim() || "",
+  };
+}
+
+/**
+ * Map campaign name fields → ContactListFilters for name / advanced RPC.
+ * Single «ΟΝΟΜΑ» persists as `first_name`. Query OR across first/last/father is
+ * handled in listContactIdsMatching via searchContactsByName.
+ */
+function campaignNameToListNameFilters(f: ContactFilter): Pick<
+  ContactListFilters,
+  "first_name" | "last_name" | "father_name" | "search"
+> {
+  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
+  return { first_name, last_name, father_name, search: "" };
+}
+
+/** Single Όνομα term → OR match on first_name / last_name / father_name via name RPC. */
+function campaignSingleNameOrTerm(f: ContactFilter): string | null {
+  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
+  if (first_name && !last_name && !father_name) return first_name;
+  return null;
+}
+
 /** Map campaign filter → ContactListFilters for buildContactQueryPlan / list pipeline. */
 export function campaignFilterToListFilters(f: ContactFilter): ContactListFilters {
   const base = getDefaultContactFilters();
@@ -86,8 +126,10 @@ export function campaignFilterToListFilters(f: ContactFilter): ContactListFilter
     f.toponyms?.length ? f.toponyms : f.toponym?.trim() ? [f.toponym.trim()] : [],
   );
   const { age_min, age_max } = ageBoundsFromFilter(f);
+  const name = campaignNameToListNameFilters(f);
   return {
     ...base,
+    ...name,
     call_status: f.call_status?.trim() || "",
     area: f.area?.trim() || "",
     municipalities,
@@ -106,6 +148,11 @@ export function campaignFilterToListFilters(f: ContactFilter): ContactListFilter
 /** Persistable filter JSON (omits empty fields). has_phone defaults to "has". */
 export function serializeCampaignFilter(f: ContactFilter): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
+  // Prefer first_name key (matches advanced search Όνομα); omit empty.
+  if (first_name) out.first_name = first_name;
+  if (last_name) out.last_name = last_name;
+  if (father_name) out.father_name = father_name;
   if (f.call_status?.trim()) out.call_status = f.call_status.trim();
   if (f.area?.trim()) out.area = f.area.trim();
   const municipalities = uniqStrings(
@@ -172,7 +219,12 @@ export function parseCampaignFilterBody(raw: unknown): ContactFilter {
   else if (hasRaw === "" || hasRaw === "any") has_phone = "";
   else if (typeof hasRaw === "string") has_phone = hasRaw as ContactFilter["has_phone"];
 
+  // Aliases: name / search → first_name (single Όνομα box).
+  const first_name = str("first_name") ?? str("name") ?? str("search");
   return {
+    first_name,
+    last_name: str("last_name"),
+    father_name: str("father_name"),
     call_status: str("call_status"),
     area: str("area"),
     municipality: str("municipality"),
@@ -205,8 +257,12 @@ export function contactFilterHasCriteria(f: ContactFilter): boolean {
     f.toponyms?.length ? f.toponyms : f.toponym?.trim() ? [f.toponym.trim()] : [],
   );
   const { age_min, age_max } = ageBoundsFromFilter(f);
+  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
   return Boolean(
-    f.call_status?.trim() ||
+    first_name ||
+      last_name ||
+      father_name ||
+      f.call_status?.trim() ||
       f.area?.trim() ||
       municipalities.length ||
       toponyms.length ||
@@ -219,6 +275,19 @@ export function contactFilterHasCriteria(f: ContactFilter): boolean {
       age_min ||
       age_max,
   );
+}
+
+/** Chip labels for campaign card/detail (name filter). */
+export function campaignFilterChips(
+  raw: ContactFilter | Record<string, unknown> | null | undefined,
+): string[] {
+  const f = parseCampaignFilterBody(raw ?? {});
+  const chips: string[] = [];
+  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
+  if (first_name) chips.push(`Όνομα: ${first_name}`);
+  if (last_name) chips.push(`Επώνυμο: ${last_name}`);
+  if (father_name) chips.push(`Πατρώνυμο: ${father_name}`);
+  return chips;
 }
 
 async function fetchPhoneFieldsForIds(
@@ -265,6 +334,7 @@ export async function countContactsMatching(
 /**
  * Resolve contact IDs with the same plan/pipeline as GET /api/contacts.
  * By default applies has_phone (campaign default: has). Pass applyHasPhone:false for preview splits.
+ * A single `first_name` (Όνομα) matches first OR last OR father via search_contacts_by_name.
  */
 export async function listContactIdsMatching(
   supabase: SupabaseClient,
@@ -272,13 +342,54 @@ export async function listContactIdsMatching(
   opts?: { applyHasPhone?: boolean; defaultHasPhone?: boolean },
 ): Promise<{ ids: string[]; error: string | null; match_total?: number }> {
   try {
-    const listFilters = campaignFilterToListFilters(f);
-    const { contacts, total } = await queryContactsListRows(supabase, listFilters, {
-      limit: CONTACTS_EXPORT_LIMIT,
-    });
-    let ids = contacts
-      .map((r) => String((r as { id?: unknown }).id ?? "").trim())
-      .filter(Boolean);
+    const orTerm = campaignSingleNameOrTerm(f);
+    let ids: string[];
+    let match_total: number | undefined;
+
+    if (orTerm) {
+      const [byFirst, byLast, byFather] = await Promise.all([
+        searchContactsByName(supabase, { firstName: orTerm }),
+        searchContactsByName(supabase, { lastName: orTerm }),
+        searchContactsByName(supabase, { fatherName: orTerm }),
+      ]);
+      const nameIds = new Set<string>();
+      for (const row of [...byFirst, ...byLast, ...byFather]) {
+        const id = String(row.id ?? "").trim();
+        if (id) nameIds.add(id);
+      }
+
+      const rest: ContactFilter = {
+        ...f,
+        first_name: undefined,
+        last_name: undefined,
+        father_name: undefined,
+      };
+      if (contactFilterHasCriteria(rest)) {
+        const listFilters = campaignFilterToListFilters(rest);
+        const { contacts, total } = await queryContactsListRows(supabase, listFilters, {
+          limit: CONTACTS_EXPORT_LIMIT,
+        });
+        const other = new Set(
+          contacts
+            .map((r) => String((r as { id?: unknown }).id ?? "").trim())
+            .filter(Boolean),
+        );
+        ids = [...nameIds].filter((id) => other.has(id));
+        match_total = total;
+      } else {
+        ids = [...nameIds];
+        match_total = ids.length;
+      }
+    } else {
+      const listFilters = campaignFilterToListFilters(f);
+      const { contacts, total } = await queryContactsListRows(supabase, listFilters, {
+        limit: CONTACTS_EXPORT_LIMIT,
+      });
+      ids = contacts
+        .map((r) => String((r as { id?: unknown }).id ?? "").trim())
+        .filter(Boolean);
+      match_total = total;
+    }
 
     const apply = opts?.applyHasPhone !== false;
     if (apply) {
@@ -290,7 +401,7 @@ export async function listContactIdsMatching(
     }
 
     const unique = [...new Set(ids)];
-    return { ids: unique, error: null, match_total: total };
+    return { ids: unique, error: null, match_total };
   } catch (e) {
     return { ids: [], error: e instanceof Error ? e.message : "Σφάλμα φίλτρου επαφών" };
   }

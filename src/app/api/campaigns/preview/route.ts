@@ -27,6 +27,9 @@ function filterFromSearchParams(request: NextRequest): ContactFilter {
   const toponyms = parseCsvParam(request, "toponyms");
   const toponymSingle = sp.get("toponym")?.trim();
   return parseCampaignFilterBody({
+    first_name: sp.get("first_name") ?? sp.get("name") ?? sp.get("search") ?? undefined,
+    last_name: sp.get("last_name") ?? undefined,
+    father_name: sp.get("father_name") ?? undefined,
     call_status: sp.get("call_status") ?? undefined,
     area: sp.get("area") ?? undefined,
     municipality: muniSingle,

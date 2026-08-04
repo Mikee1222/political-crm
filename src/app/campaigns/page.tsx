@@ -55,6 +55,7 @@ import {
 } from "@/lib/geo-lists-cache";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
 import { formatGreekContactName } from "@/lib/contact-display-name";
+import { campaignFilterChips } from "@/lib/contacts-filter-query";
 import { cn } from "@/lib/utils";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
@@ -86,6 +87,7 @@ type Campaign = {
   concurrent_lines?: number | null;
   retell_agent_name?: string | null;
   retell_agent_id_resolved?: string | null;
+  filters?: Record<string, unknown> | null;
   stats: OutcomeStats;
   progress: number;
   callsMade: number;
@@ -101,6 +103,8 @@ type Campaign = {
 };
 
 type NewFilter = {
+  /** Όνομα — searches first/last/father via name RPC (stored as first_name). */
+  first_name: string;
   call_status: string;
   area: string;
   municipality: string;
@@ -187,6 +191,7 @@ const sectionLabel =
   "mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[#D4AF37]";
 
 const emptyFilter = (): NewFilter => ({
+  first_name: "",
   call_status: "",
   area: "",
   municipality: "",
@@ -203,7 +208,8 @@ const emptyFilter = (): NewFilter => ({
 
 function filterHasCriteria(f: NewFilter): boolean {
   return Boolean(
-    f.call_status ||
+    f.first_name.trim() ||
+      f.call_status ||
       f.area ||
       f.municipality ||
       f.toponym ||
@@ -229,6 +235,7 @@ function buildFilterPayload(f: NewFilter): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     has_phone: f.has_phone || "any",
   };
+  if (f.first_name.trim()) payload.first_name = f.first_name.trim();
   if (f.call_status) payload.call_status = f.call_status;
   if (f.area) payload.area = f.area;
   if (f.municipality) payload.municipality = f.municipality;
@@ -465,6 +472,7 @@ function CampaignsPageInner() {
 
     const q = new URLSearchParams();
     if (selectedContactIds.length) q.set("contact_ids", selectedContactIds.join(","));
+    if (filter.first_name.trim()) q.set("first_name", filter.first_name.trim());
     if (filter.call_status) q.set("call_status", filter.call_status);
     if (filter.area) q.set("area", filter.area);
     if (filter.municipality) q.set("municipality", filter.municipality);
@@ -887,6 +895,22 @@ function CampaignsPageInner() {
                       </>
                     ) : null}
                   </p>
+                  {(() => {
+                    const chips = campaignFilterChips(c.filters);
+                    if (!chips.length) return null;
+                    return (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {chips.map((label) => (
+                          <span
+                            key={label}
+                            className="inline-flex max-w-full items-center rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/12 px-2.5 py-0.5 text-[11px] font-semibold text-[#6B5210]"
+                          >
+                            <span className="truncate">{label}</span>
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {isWhatsApp ? (
                   <MessageCircle className="h-5 w-5 shrink-0 text-emerald-600 opacity-90" strokeWidth={2} aria-hidden />
@@ -1407,6 +1431,19 @@ function CampaignsPageInner() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className={lux.label} htmlFor="c-first-name">
+                    Όνομα
+                  </label>
+                  <input
+                    id="c-first-name"
+                    className={lux.input + " !text-base"}
+                    value={filter.first_name}
+                    onChange={(e) => setFilter((f) => ({ ...f, first_name: e.target.value }))}
+                    placeholder="Αναζήτηση ονόματος (όνομα / επώνυμο / πατρώνυμο)…"
+                    autoComplete="off"
+                  />
+                </div>
                 <div>
                   <label className={lux.label} htmlFor="c-st">
                     Κατάσταση κλήσης

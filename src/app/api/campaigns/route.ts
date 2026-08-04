@@ -18,7 +18,7 @@ import { resolveRetellAgentName } from "@/lib/campaign-retell-agent";
 export const dynamic = "force-dynamic";
 
 const CAMPAIGN_LIST_SELECT =
-  "id, name, started_at, created_at, description, status, sentiment_data, channel, campaign_type_id, retell_agent_id, concurrent_lines";
+  "id, name, started_at, created_at, description, status, sentiment_data, channel, campaign_type_id, retell_agent_id, concurrent_lines, filters";
 
 type CampaignListRow = {
   id: string;
@@ -31,6 +31,7 @@ type CampaignListRow = {
   channel?: string | null;
   retell_agent_id?: string | null;
   concurrent_lines?: number | null;
+  filters?: Record<string, unknown> | null;
 };
 
 type CampaignSort = "newest" | "oldest" | "alphabetical" | "success";

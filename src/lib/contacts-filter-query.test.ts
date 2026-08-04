@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  campaignFilterChips,
   campaignFilterToListFilters,
   contactFilterHasCriteria,
   normalizeCampaignHasPhone,
@@ -31,10 +32,19 @@ describe("contacts-filter-query campaign helpers", () => {
     expect(f.exclude_group_ids).toEqual(["g1"]);
   });
 
+  it("maps first_name to list filters (name / advanced RPC)", () => {
+    const f = campaignFilterToListFilters({ first_name: "ΣΩΤΗΡΗΣ" });
+    expect(f.first_name).toBe("ΣΩΤΗΡΗΣ");
+    expect(f.last_name).toBe("");
+    expect(f.father_name).toBe("");
+    expect(f.search).toBe("");
+  });
+
   it("does not treat has_phone alone as audience criteria", () => {
     expect(contactFilterHasCriteria({ has_phone: "has" })).toBe(false);
     expect(contactFilterHasCriteria({ gender: "Γυναίκα" })).toBe(true);
     expect(contactFilterHasCriteria({ exclude_group_ids: ["x"] })).toBe(true);
+    expect(contactFilterHasCriteria({ first_name: "Μαρία" })).toBe(true);
   });
 
   it("serializes and parses filter payload round-trip", () => {
@@ -44,6 +54,7 @@ describe("contacts-filter-query campaign helpers", () => {
       age_groups: ["20-40"],
       has_phone: "has",
       toponym: "Μεσολόγγι",
+      first_name: "ΣΩΤΗΡΗΣ",
     });
     const ser = serializeCampaignFilter(raw);
     expect(ser.call_status).toBe("Pending");
@@ -53,6 +64,17 @@ describe("contacts-filter-query campaign helpers", () => {
     expect(ser.age_min).toBe("20");
     expect(ser.age_max).toBe("40");
     expect(ser.has_phone).toBe("has");
+    expect(ser.first_name).toBe("ΣΩΤΗΡΗΣ");
+  });
+
+  it("parses name / search aliases as first_name", () => {
+    expect(parseCampaignFilterBody({ name: "Νίκος" }).first_name).toBe("Νίκος");
+    expect(parseCampaignFilterBody({ search: "Ελένη" }).first_name).toBe("Ελένη");
+  });
+
+  it("builds Όνομα chip from filters JSON", () => {
+    expect(campaignFilterChips({ first_name: "ΣΩΤΗΡΗΣ" })).toEqual(["Όνομα: ΣΩΤΗΡΗΣ"]);
+    expect(campaignFilterChips({ has_phone: "has" })).toEqual([]);
   });
 
   it("normalizes has_phone defaults", () => {

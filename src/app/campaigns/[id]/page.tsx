@@ -62,6 +62,7 @@ import {
   formatDurationGreek,
   type CampaignStatusIcon,
 } from "@/lib/campaign-contact-status";
+import { campaignFilterChips } from "@/lib/contacts-filter-query";
 import type { CampaignAnalyticsPayload } from "@/lib/campaign-stats";
 import {
   retellOutcomeBadgeClass,
@@ -125,6 +126,7 @@ type CampaignHead = {
   last_no_answer_redial_at?: string | null;
   campaign_type?: { id: string; name: string; color: string; retell_agent_id?: string | null } | null;
   concurrent_lines?: number | null;
+  filters?: Record<string, unknown> | null;
 };
 
 type HeadData = {
@@ -836,6 +838,22 @@ export default function CampaignDetailPage() {
               <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                 {data?.withPhone ?? 0} με αριθμό / {data?.withoutPhone ?? 0} χωρίς
               </p>
+              {(() => {
+                const chips = campaignFilterChips(c.filters);
+                if (!chips.length) return null;
+                return (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {chips.map((label) => (
+                      <span
+                        key={label}
+                        className="inline-flex max-w-full items-center rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/12 px-2.5 py-0.5 text-[11px] font-semibold text-[#6B5210]"
+                      >
+                        <span className="truncate">{label}</span>
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
             </>
           ) : (
             <h1 className="text-xl text-[var(--text-muted)]">{loading ? "Φόρτωση…" : "—"}</h1>
