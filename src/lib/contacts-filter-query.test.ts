@@ -82,7 +82,26 @@ describe("contacts-filter-query campaign helpers", () => {
   it("normalizes has_phone defaults", () => {
     expect(normalizeCampaignHasPhone(undefined, true)).toBe("has");
     expect(normalizeCampaignHasPhone("any", true)).toBe("");
+    expect(normalizeCampaignHasPhone("", true)).toBe("");
     expect(normalizeCampaignHasPhone("not")).toBe("not");
+  });
+
+  it("treats has_phone empty string / any as ignore in parse", () => {
+    expect(parseCampaignFilterBody({ has_phone: "" }).has_phone).toBe("");
+    expect(parseCampaignFilterBody({ has_phone: "any" }).has_phone).toBe("");
+    expect(parseCampaignFilterBody({}).has_phone).toBeUndefined();
+    expect(normalizeCampaignHasPhone(parseCampaignFilterBody({ has_phone: "" }).has_phone, true)).toBe(
+      "",
+    );
+  });
+
+  it("maps exclude_group_ids through campaignFilterToListFilters for preview/create", () => {
+    const f = campaignFilterToListFilters({
+      first_name: "Σωτηρ",
+      exclude_group_ids: ["24f9be31-d694-4cb9-b878-31f01a47bc3d"],
+    });
+    expect(f.first_name).toBe("Σωτηρ");
+    expect(f.exclude_group_ids).toEqual(["24f9be31-d694-4cb9-b878-31f01a47bc3d"]);
   });
 
   it("alias campaignFiltersToContactListFilters matches mapper", () => {

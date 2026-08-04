@@ -3,6 +3,9 @@
  */
 export const CLIENT_FETCH_TIMEOUT_MS = 8_000;
 
+/** Campaign create can resolve name+group filters + assign contacts — allow up to 25s. */
+export const CAMPAIGN_CREATE_FETCH_TIMEOUT_MS = 25_000;
+
 /** In-memory contact list queries (name + group combos) can exceed the default 8s. */
 export const CONTACT_LIST_FETCH_TIMEOUT_MS = 120_000;
 

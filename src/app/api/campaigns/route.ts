@@ -232,8 +232,15 @@ export async function POST(request: NextRequest) {
       : [];
     const f = parseCampaignFilterBody(body.filter ?? {});
     // Campaigns default to dialable contacts when has_phone omitted.
-    if (body.filter == null || (body.filter as ContactFilter).has_phone === undefined) {
+    // Explicit "" / "any" means ignore phone filter (do not re-default to "has").
+    const rawHas =
+      body.filter != null && typeof body.filter === "object"
+        ? (body.filter as ContactFilter).has_phone
+        : undefined;
+    if (body.filter == null || rawHas === undefined) {
       f.has_phone = "has";
+    } else if (rawHas === "" || rawHas === "any") {
+      f.has_phone = "";
     }
     const hasFilter = contactFilterHasCriteria(f);
 

@@ -32,7 +32,7 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
-import { fetchWithTimeout } from "@/lib/client-fetch";
+import { fetchWithTimeout, CAMPAIGN_CREATE_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
 import { formatDateAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 import type { CampaignTypeRow } from "@/lib/campaign-types";
@@ -599,6 +599,7 @@ function CampaignsPageInner() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        timeoutMs: CAMPAIGN_CREATE_FETCH_TIMEOUT_MS,
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; assigned_contacts?: number };
       if (!res.ok) {

@@ -45,7 +45,8 @@ function filterFromSearchParams(request: NextRequest): ContactFilter {
     age_max: sp.get("age_max") ?? undefined,
     age_groups: parseCsvParam(request, "age_groups"),
     // Preview always computes with/without on the unfiltered-by-phone match set.
-    has_phone: "any",
+    // "" / "any" → ignore has_phone in listContactIdsMatching (applyHasPhone: false anyway).
+    has_phone: "",
   });
 }
 
