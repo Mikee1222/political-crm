@@ -1,10 +1,41 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
 /**
- * Real events: HMAC with RETELL_WEBHOOK_SECRET only (never RETELL_API_KEY).
- * Route enforces: secret set → verify; production without secret → 503; dev → warn + allow.
- * Dashboard / curl connectivity checks (no call processing) may arrive without signature.
+ * Primary webhook auth is a shared URL token (`?token=` / RETELL_WEBHOOK_TOKEN).
+ * Retell does not provide a signing secret — HMAC is optional only if
+ * RETELL_WEBHOOK_SECRET is explicitly set.
+ * Dashboard / curl connectivity checks (event test/ping) skip optional HMAC.
  */
+
+export type RetellWebhookAuthResult =
+  | { ok: true }
+  | { ok: false; status: 401; error: string };
+
+/** True when token env is unset (caller should log a warning). */
+export function isRetellWebhookTokenUnset(
+  expectedToken: string | undefined = process.env.RETELL_WEBHOOK_TOKEN,
+): boolean {
+  return !expectedToken?.trim();
+}
+
+/**
+ * URL token gate: when RETELL_WEBHOOK_TOKEN is set, `token` query must match.
+ * When unset, allow (caller logs a warning for local/dev).
+ */
+export function verifyRetellWebhookUrlToken(
+  tokenParam: string | null | undefined,
+  expectedToken: string | undefined = process.env.RETELL_WEBHOOK_TOKEN,
+): RetellWebhookAuthResult {
+  const expected = expectedToken?.trim();
+  if (!expected) {
+    return { ok: true };
+  }
+  if ((tokenParam ?? "") !== expected) {
+    return { ok: false, status: 401, error: "Μη έγκυρο webhook token" };
+  }
+  return { ok: true };
+}
+
 export function isRetellWebhookTestEvent(body: unknown): boolean {
   if (body == null || typeof body !== "object") return false;
   const ev = (body as { event?: unknown }).event;
@@ -14,10 +45,9 @@ export function isRetellWebhookTestEvent(body: unknown): boolean {
 }
 
 /**
- * Verifies Retell webhook `x-retell-signature` per
- * https://docs.retellai.com/features/secure-webhook
- * Message: rawBody + timestamp (ms), key: RETELL_WEBHOOK_SECRET only,
- * HMAC-SHA256 hex.
+ * Optional Retell webhook `x-retell-signature` verify when RETELL_WEBHOOK_SECRET
+ * is explicitly configured. Message: rawBody + timestamp (ms), HMAC-SHA256 hex.
+ * Never use RETELL_API_KEY as the signing key.
  */
 export function verifyRetellWebhookSignature(
   rawBody: string,

@@ -6,23 +6,27 @@ import { resolveRetellCallOutcome } from "@/lib/retell-call-outcomes";
 import { nextJsonError } from "@/lib/api-resilience";
 import {
   isRetellWebhookTestEvent,
+  isRetellWebhookTokenUnset,
   verifyRetellWebhookSignature,
+  verifyRetellWebhookUrlToken,
 } from "@/lib/retell-webhook-verify";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Expected Retell webhook URL (production):
- *   https://crm.kkaragkounis.com/api/retell/webhook
+ *   https://crm.kkaragkounis.com/api/retell/webhook?token=<RETELL_WEBHOOK_TOKEN>
  * Configure this in the Retell dashboard → Agent / Account → Webhook.
+ * Generate token: `openssl rand -hex 16` → set RETELL_WEBHOOK_TOKEN in Vercel.
  *
  * Public route — no CRM/session auth (middleware `isRetellPublic` + this handler).
  *
- * HMAC: when `RETELL_WEBHOOK_SECRET` is set, signature is required (401 if invalid).
- * When unset: production → 503; development → allow with warning.
- * Do NOT use `RETELL_API_KEY` as an HMAC fallback.
- * Dashboard/curl probes with `event: "test"` / `ping` / `webhook_test` always
- * return 200 without HMAC.
+ * Primary auth: shared URL token (`?token=`). When RETELL_WEBHOOK_TOKEN is set,
+ * mismatch/missing → 401. When unset → warn and allow (dev).
+ * Optional HMAC: only if RETELL_WEBHOOK_SECRET is explicitly set (Retell has no
+ * signing secret by default). Do NOT use RETELL_API_KEY as an HMAC fallback.
+ * Dashboard/curl probes with `event: "test"` / `ping` / `webhook_test` skip
+ * optional HMAC (URL token still required when configured).
  */
 
 type TranscriptEntry = { role: string; content?: string | null };
@@ -69,7 +73,7 @@ function sanitizeWebhookForLog(body: unknown): unknown {
 }
 
 /**
- * HMAC secret for x-retell-signature — only `RETELL_WEBHOOK_SECRET`.
+ * Optional HMAC secret for x-retell-signature — only when explicitly set.
  * Never fall back to `RETELL_API_KEY` (mismatched signing key → false 401).
  */
 function retellWebhookSigningSecret(): string | undefined {
@@ -77,23 +81,25 @@ function retellWebhookSigningSecret(): string | undefined {
   return secret || undefined;
 }
 
-function assertRetellWebhookAuth(rawBody: string, request: NextRequest): NextResponse | null {
-  const secret = retellWebhookSigningSecret();
-
-  if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      console.error("[api/retell/webhook] Webhook secret required in production");
-      return NextResponse.json(
-        { error: "Webhook secret required in production" },
-        { status: 503 },
-      );
-    }
+/** Primary gate: shared URL `?token=` vs RETELL_WEBHOOK_TOKEN. */
+function assertRetellWebhookUrlToken(request: NextRequest): NextResponse | null {
+  if (isRetellWebhookTokenUnset()) {
     console.warn(
-      "[api/retell/webhook] RETELL_WEBHOOK_SECRET unset — skipping HMAC in development (RETELL_API_KEY is not used for signing)",
+      "[api/retell/webhook] RETELL_WEBHOOK_TOKEN unset — allowing without URL token (set token for production)",
     );
     return null;
   }
+  const tokenCheck = verifyRetellWebhookUrlToken(request.nextUrl.searchParams.get("token"));
+  if (!tokenCheck.ok) {
+    return NextResponse.json({ error: tokenCheck.error }, { status: tokenCheck.status });
+  }
+  return null;
+}
 
+/** Optional HMAC only when RETELL_WEBHOOK_SECRET is explicitly configured. */
+function assertRetellWebhookHmac(rawBody: string, request: NextRequest): NextResponse | null {
+  const secret = retellWebhookSigningSecret();
+  if (!secret) return null;
   const signature = request.headers.get("x-retell-signature");
   if (!verifyRetellWebhookSignature(rawBody, secret, signature)) {
     return NextResponse.json({ error: "Μη έγκυρη υπογραφή webhook" }, { status: 401 });
@@ -113,14 +119,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Άκυρο JSON" }, { status: 400 });
   }
 
-  // Connectivity probe from Retell dashboard / curl — ack before HMAC (unsigned is OK).
+  // Primary gate: URL token (required when RETELL_WEBHOOK_TOKEN is set).
+  const tokenErr = assertRetellWebhookUrlToken(request);
+  if (tokenErr) return tokenErr;
+
+  // Connectivity probe from Retell dashboard / curl — ack; skip optional HMAC.
   if (isRetellWebhookTestEvent(body)) {
-    console.log("[api/retell/webhook] test/ping ack (HMAC skipped)");
+    console.log("[api/retell/webhook] test/ping ack (optional HMAC skipped)");
     return NextResponse.json({ ok: true });
   }
 
-  const authErr = assertRetellWebhookAuth(rawBody, request);
-  if (authErr) return authErr;
+  const hmacErr = assertRetellWebhookHmac(rawBody, request);
+  if (hmacErr) return hmacErr;
 
   const ev = body.event;
   console.log("[api/retell/webhook] event type:", ev ?? "(missing)");

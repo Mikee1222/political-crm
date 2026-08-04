@@ -12,7 +12,7 @@ const FIELD_TO_ENV: Record<string, string> = {
   retell_agent_id: "RETELL_AGENT_ID",
   retell_from_number: "RETELL_FROM_NUMBER",
   retell_transfer_number: "RETELL_TRANSFER_NUMBER",
-  retell_webhook_secret: "RETELL_WEBHOOK_SECRET",
+  retell_webhook_token: "RETELL_WEBHOOK_TOKEN",
 };
 
 function maskApiKey(value: string | undefined): string {
@@ -25,7 +25,7 @@ function maskAgentId(value: string | undefined): string {
   return `agent_****...${value.slice(-8)}`;
 }
 
-function maskWebhookSecret(value: string | undefined): string {
+function maskWebhookToken(value: string | undefined): string {
   if (!value) return "";
   return "****";
 }
@@ -48,7 +48,7 @@ export async function GET() {
     const agentId = process.env.RETELL_AGENT_ID?.trim() ?? "";
     const fromNumber = process.env.RETELL_FROM_NUMBER?.trim() ?? "";
     const transferNumber = process.env.RETELL_TRANSFER_NUMBER?.trim() ?? "";
-    const webhookSecret = process.env.RETELL_WEBHOOK_SECRET?.trim() ?? "";
+    const webhookToken = process.env.RETELL_WEBHOOK_TOKEN?.trim() ?? "";
 
     return NextResponse.json({
       configured: Boolean(apiKey),
@@ -56,7 +56,7 @@ export async function GET() {
       retell_agent_id: maskAgentId(agentId),
       retell_from_number: fromNumber,
       retell_transfer_number: transferNumber,
-      retell_webhook_secret: maskWebhookSecret(webhookSecret),
+      retell_webhook_token: maskWebhookToken(webhookToken),
     });
   } catch (e) {
     console.error("[api/admin/settings/retell GET]", e instanceof Error ? e.message : "error");

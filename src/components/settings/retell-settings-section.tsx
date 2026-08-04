@@ -12,7 +12,7 @@ type RetellSettings = {
   retell_agent_id: string;
   retell_from_number: string;
   retell_transfer_number: string;
-  retell_webhook_secret: string;
+  retell_webhook_token: string;
 };
 
 type FieldKey =
@@ -20,7 +20,7 @@ type FieldKey =
   | "retell_agent_id"
   | "retell_from_number"
   | "retell_transfer_number"
-  | "retell_webhook_secret";
+  | "retell_webhook_token";
 
 const FIELDS: {
   key: FieldKey;
@@ -58,11 +58,12 @@ const FIELDS: {
     hint: "Για Single Prompt Agent, ο αριθμός transfer ρυθμίζεται απευθείας στο Retell dashboard.",
   },
   {
-    key: "retell_webhook_secret",
-    label: "Webhook Secret",
+    key: "retell_webhook_token",
+    label: "Webhook URL Token",
     placeholder: "••••••••",
     type: "password",
     sensitive: true,
+    hint: "Shared token στο URL (όχι HMAC — το Retell δεν παρέχει signing secret). Generate: openssl rand -hex 16. Webhook URL: https://crm.kkaragkounis.com/api/retell/webhook?token=<token>",
   },
 ];
 
@@ -73,7 +74,7 @@ export function RetellSettingsSection() {
     retell_agent_id: "",
     retell_from_number: "",
     retell_transfer_number: "",
-    retell_webhook_secret: "",
+    retell_webhook_token: "",
   });
   const [editing, setEditing] = useState<Partial<Record<FieldKey, boolean>>>({});
   const [dirty, setDirty] = useState<Partial<Record<FieldKey, boolean>>>({});
@@ -98,7 +99,7 @@ export function RetellSettingsSection() {
         retell_agent_id: j.retell_agent_id ?? "",
         retell_from_number: j.retell_from_number ?? "",
         retell_transfer_number: j.retell_transfer_number ?? "",
-        retell_webhook_secret: j.retell_webhook_secret ?? "",
+        retell_webhook_token: j.retell_webhook_token ?? "",
       });
       setEditing({});
       setDirty({});

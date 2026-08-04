@@ -49,6 +49,6 @@ npm run dev
 
 - Trigger outbound call: `POST /api/retell/call`
 - Retell webhook: `POST /api/retell/webhook`
-- Production webhook URL: `https://crm.kkaragkounis.com/api/retell/webhook`
+- Production webhook URL: `https://crm.kkaragkounis.com/api/retell/webhook?token=<RETELL_WEBHOOK_TOKEN>`
 
-Configure this URL in the Retell dashboard (account or agent webhook). Session auth is bypassed for `/api/retell/webhook` and `/api/retell/llm`; real call events require `RETELL_WEBHOOK_SECRET` (HMAC). In production without the secret the webhook returns 503. A body like `{"event":"test"}` returns 200 without a signature (dashboard / curl connectivity check).
+Configure this URL in the Retell dashboard (account or agent webhook). Session auth is bypassed for `/api/retell/webhook` and `/api/retell/llm`. Primary auth is a shared URL token (`RETELL_WEBHOOK_TOKEN` — generate with `openssl rand -hex 16`); when set, a missing/wrong `?token=` returns 401. When unset, the handler warns and allows (dev). Optional HMAC via `RETELL_WEBHOOK_SECRET` only if you set it explicitly (Retell has no signing secret). A body like `{"event":"test"}` returns 200 after the URL token check (optional HMAC skipped).
