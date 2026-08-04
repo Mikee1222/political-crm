@@ -20,8 +20,17 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
-import { useSearchParams } from "next/navigation";
+import {
+  FormEvent,
+  Suspense,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+} from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { formatDateAthens } from "@/lib/date-format";
@@ -118,6 +127,55 @@ const POLITICAL_STANCE_OPTIONS = [
 ] as const;
 
 const CAMPAIGN_CREATE_IDS_KEY = "campaign_create_contact_ids";
+const PAGE_SIZE = 5;
+const SEARCH_DEBOUNCE_MS = 300;
+
+type ListStatusFilter = "" | "active" | "completed";
+type ListChannelFilter = "" | "call" | "whatsapp";
+type ListSort = "newest" | "oldest" | "alphabetical" | "success";
+
+const STATUS_FILTER_OPTIONS: { value: ListStatusFilter; label: string }[] = [
+  { value: "", label: "Όλες" },
+  { value: "active", label: "Ενεργές" },
+  { value: "completed", label: "Ολοκληρώθηκαν" },
+];
+
+const CHANNEL_FILTER_OPTIONS: { value: ListChannelFilter; label: string }[] = [
+  { value: "", label: "Όλα" },
+  { value: "call", label: "Κλήσεις" },
+  { value: "whatsapp", label: "WhatsApp" },
+];
+
+const SORT_OPTIONS: { value: ListSort; label: string }[] = [
+  { value: "newest", label: "Νεότερες πρώτα" },
+  { value: "oldest", label: "Παλαιότερες πρώτα" },
+  { value: "alphabetical", label: "Αλφαβητικά" },
+  { value: "success", label: "Υψηλότερο ποσοστό επιτυχίας" },
+];
+
+function parseListStatus(raw: string | null): ListStatusFilter {
+  if (raw === "active" || raw === "completed") return raw;
+  return "";
+}
+
+function parseListChannel(raw: string | null): ListChannelFilter {
+  if (raw === "call" || raw === "whatsapp") return raw;
+  return "";
+}
+
+function parseListSort(raw: string | null): ListSort {
+  if (raw === "oldest" || raw === "alphabetical" || raw === "success") return raw;
+  return "newest";
+}
+
+function pageNumbers(current: number, total: number): number[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total, current]);
+  for (let i = current - 1; i <= current + 1; i++) {
+    if (i >= 1 && i <= total) pages.add(i);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
 
 const statusBadge =
   "inline-flex min-h-7 min-w-0 max-w-full shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide";
@@ -189,8 +247,11 @@ function buildFilterPayload(f: NewFilter): Record<string, unknown> {
 }
 
 function CampaignsPageInner() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [listTotal, setListTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -223,17 +284,81 @@ function CampaignsPageInner() {
   const [nameFieldErr, setNameFieldErr] = useState<string | null>(null);
   const { showToast } = useFormToast();
 
+  const listPage = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+  const listStatus = parseListStatus(searchParams.get("status"));
+  const listChannel = parseListChannel(searchParams.get("channel"));
+  const listSort = parseListSort(searchParams.get("sort"));
+  const listQ = searchParams.get("q") ?? "";
+  const [searchInput, setSearchInput] = useState(listQ);
+
+  const patchListParams = useCallback(
+    (updates: Record<string, string | null>, resetPage = false) => {
+      const p = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (value == null || value === "") p.delete(key);
+        else p.set(key, value);
+      }
+      if (resetPage) p.delete("page");
+      const qs = p.toString();
+      startTransition(() => {
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      });
+    },
+    [searchParams, router, pathname],
+  );
+
+  useEffect(() => {
+    setSearchInput(listQ);
+  }, [listQ]);
+
+  useEffect(() => {
+    if (searchInput === listQ) return;
+    const t = window.setTimeout(() => {
+      patchListParams({ q: searchInput.trim() || null }, true);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [searchInput, listQ, patchListParams]);
+
+  const listQueryKey = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("page", String(listPage));
+    p.set("page_size", String(PAGE_SIZE));
+    if (listStatus) p.set("status", listStatus);
+    if (listChannel) p.set("channel", listChannel);
+    if (listQ.trim()) p.set("q", listQ.trim());
+    if (listSort !== "newest") p.set("sort", listSort);
+    return p.toString();
+  }, [listPage, listStatus, listChannel, listQ, listSort]);
+
+  const hasListFilters = Boolean(listStatus || listChannel || listQ.trim());
+
   const load = useCallback(async () => {
-    const res = await fetchWithTimeout("/api/campaigns");
-    const data = await res.json();
+    const res = await fetchWithTimeout(`/api/campaigns?${listQueryKey}`);
+    const data = (await res.json().catch(() => ({}))) as {
+      campaigns?: Campaign[];
+      total?: number;
+    };
     if (!res.ok) return;
     setCampaigns((data.campaigns ?? []) as Campaign[]);
-  }, []);
+    setListTotal(typeof data.total === "number" ? data.total : (data.campaigns ?? []).length);
+  }, [listQueryKey]);
 
   useEffect(() => {
     setLoading(true);
     void load().finally(() => setLoading(false));
   }, [load]);
+
+  const totalPages = listTotal === 0 ? 0 : Math.ceil(listTotal / PAGE_SIZE);
+  const rangeFrom = listTotal === 0 ? 0 : (listPage - 1) * PAGE_SIZE + 1;
+  const rangeTo = Math.min(listPage * PAGE_SIZE, listTotal);
+  const pageList = totalPages > 0 ? pageNumbers(listPage, totalPages) : [];
+
+  useEffect(() => {
+    if (loading || totalPages === 0) return;
+    if (listPage > totalPages) {
+      patchListParams({ page: totalPages <= 1 ? null : String(totalPages) });
+    }
+  }, [loading, listPage, totalPages, patchListParams]);
 
   // Deep-link / session: create from advanced search selection
   useEffect(() => {
@@ -493,7 +618,7 @@ function CampaignsPageInner() {
     }
   };
 
-  const totalN = campaigns.length;
+  const totalN = listTotal;
   const activeN = campaigns.filter((c) => c.status === "active").length;
   const doneN = campaigns.filter((c) => c.status === "completed").length;
   const totalCalls = campaigns.reduce((a, c) => a + (c.stats?.total ?? 0), 0);
@@ -566,27 +691,126 @@ function CampaignsPageInner() {
 
       {loading && <p className="text-sm text-[var(--text-muted)]">Φόρτωση καμπανιών…</p>}
 
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm [data-theme='light']:bg-white sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
+          <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                Κατάσταση
+              </p>
+              <SegmentedControl
+                options={STATUS_FILTER_OPTIONS}
+                value={listStatus}
+                onChange={(status) =>
+                  patchListParams({ status: status || null }, true)
+                }
+              />
+            </div>
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                Κανάλι
+              </p>
+              <SegmentedControl
+                options={CHANNEL_FILTER_OPTIONS}
+                value={listChannel}
+                onChange={(channel) =>
+                  patchListParams({ channel: channel || null }, true)
+                }
+              />
+            </div>
+            <div className="sm:col-span-2 xl:col-span-1">
+              <label
+                className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]"
+                htmlFor="campaigns-search"
+              >
+                Αναζήτηση
+              </label>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                  aria-hidden
+                />
+                <input
+                  id="campaigns-search"
+                  type="search"
+                  className={lux.input + " !h-10 !pl-9 !text-sm"}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Όνομα καμπάνιας…"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="w-full shrink-0 lg:w-56">
+            <label
+              className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]"
+              htmlFor="campaigns-sort"
+            >
+              Ταξινόμηση
+            </label>
+            <HqSelect
+              id="campaigns-sort"
+              className="!min-h-10 !text-sm"
+              value={listSort}
+              onChange={(e) => {
+                const next = parseListSort(e.target.value);
+                patchListParams(
+                  { sort: next === "newest" ? null : next },
+                  true,
+                );
+              }}
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </HqSelect>
+          </div>
+        </div>
+      </section>
+
       {!loading && campaigns.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-card)] px-6 py-16 text-center shadow-sm">
           <Target className="h-10 w-10 text-[#D4AF37]/70" aria-hidden />
-          <p className="text-sm font-medium text-[var(--text-primary)]">Δεν υπάρχουν καμπάνιες ακόμα</p>
-          <p className="max-w-sm text-xs text-[var(--text-secondary)]">
-            Δημιουργήστε την πρώτη σας καμπάνια για να ξεκινήσετε κλήσεις προς επιλεγμένες επαφές.
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {hasListFilters ? "Δεν βρέθηκαν καμπάνιες" : "Δεν υπάρχουν καμπάνιες ακόμα"}
           </p>
-          <button
-            type="button"
-            className={goldCta}
-            onClick={() => {
-              setFormErr(null);
-              setSelectedContacts([]);
-              setFilter(emptyFilter());
-              setConcurrentLines(3);
-              setModal(true);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            Νέα Καμπάνια
-          </button>
+          <p className="max-w-sm text-xs text-[var(--text-secondary)]">
+            {hasListFilters
+              ? "Δοκιμάστε διαφορετικά φίλτρα ή καθαρίστε την αναζήτηση."
+              : "Δημιουργήστε την πρώτη σας καμπάνια για να ξεκινήσετε κλήσεις προς επιλεγμένες επαφές."}
+          </p>
+          {hasListFilters ? (
+            <button
+              type="button"
+              className={lux.btnSecondary}
+              onClick={() =>
+                patchListParams(
+                  { status: null, channel: null, q: null, sort: null, page: null },
+                  true,
+                )
+              }
+            >
+              Καθαρισμός φίλτρων
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={goldCta}
+              onClick={() => {
+                setFormErr(null);
+                setSelectedContacts([]);
+                setFilter(emptyFilter());
+                setConcurrentLines(3);
+                setModal(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Νέα Καμπάνια
+            </button>
+          )}
         </div>
       )}
 
@@ -856,6 +1080,66 @@ function CampaignsPageInner() {
           );
         })}
       </ul>
+
+      {!loading && listTotal > 0 && (
+        <div className="flex w-full min-w-0 flex-col items-stretch justify-between gap-3 border-t border-[var(--border)]/60 pt-4 sm:flex-row sm:items-center">
+          <p
+            className="w-full min-w-0 text-center text-sm text-[var(--text-secondary)] sm:max-w-[50%] sm:text-left"
+            aria-live="polite"
+          >
+            Εμφάνιση {rangeFrom}-{rangeTo} από {listTotal} καμπάνιες
+          </p>
+          {totalPages > 1 && (
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-1 sm:justify-end">
+              <button
+                type="button"
+                className={lux.btnSecondary + " !px-3 !py-2 text-xs sm:text-sm"}
+                disabled={listPage <= 1}
+                onClick={() =>
+                  patchListParams({
+                    page: listPage <= 2 ? null : String(listPage - 1),
+                  })
+                }
+              >
+                ← Προηγούμενη
+              </button>
+              {pageList.map((pn, i) => {
+                const prev = pageList[i - 1];
+                const showEllipsis = prev != null && pn - prev > 1;
+                return (
+                  <span key={pn} className="inline-flex items-center gap-1">
+                    {showEllipsis ? (
+                      <span className="px-1 text-sm text-[var(--text-muted)]">…</span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={
+                        lux.btnSecondary +
+                        (pn === listPage ? " !ring-1 !ring-[var(--accent-gold)]" : "") +
+                        " !min-w-[2.5rem] !px-2 !py-2 text-xs sm:text-sm"
+                      }
+                      onClick={() =>
+                        patchListParams({ page: pn === 1 ? null : String(pn) })
+                      }
+                      aria-current={pn === listPage ? "page" : undefined}
+                    >
+                      {pn}
+                    </button>
+                  </span>
+                );
+              })}
+              <button
+                type="button"
+                className={lux.btnSecondary + " !px-3 !py-2 text-xs sm:text-sm"}
+                disabled={listPage >= totalPages}
+                onClick={() => patchListParams({ page: String(listPage + 1) })}
+              >
+                Επόμενη →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {formErr && !modal && (
         <p

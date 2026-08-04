@@ -17,7 +17,38 @@ import { clampConcurrentLines } from "@/lib/campaign-concurrent-lines";
 import { resolveRetellAgentName } from "@/lib/campaign-retell-agent";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+const CAMPAIGN_LIST_SELECT =
+  "id, name, started_at, created_at, description, status, sentiment_data, channel, campaign_type_id, retell_agent_id, concurrent_lines";
+
+type CampaignListRow = {
+  id: string;
+  name: string;
+  started_at: string | null;
+  created_at: string | null;
+  description: string | null;
+  status: string | null;
+  sentiment_data: unknown;
+  channel?: string | null;
+  retell_agent_id?: string | null;
+  concurrent_lines?: number | null;
+};
+
+type CampaignSort = "newest" | "oldest" | "alphabetical" | "success";
+
+function parseCampaignSort(raw: string | null): CampaignSort {
+  if (raw === "oldest" || raw === "alphabetical" || raw === "success") return raw;
+  return "newest";
+}
+
+function escapeIlike(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+function successRate(stats: { total: number; positive: number }): number {
+  return stats.total > 0 ? (stats.positive / stats.total) * 100 : 0;
+}
+
+export async function GET(request: NextRequest) {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
@@ -26,25 +57,70 @@ export async function GET() {
       return forbidden();
     }
 
-    const { data: campaignRows, error } = await supabase
-      .from("campaigns")
-      .select(
-        "id, name, started_at, created_at, description, status, sentiment_data, channel, campaign_type_id, retell_agent_id, concurrent_lines",
-      )
-      .order("created_at", { ascending: false });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    const campaigns = (campaignRows ?? []) as Array<{
-      id: string;
-      name: string;
-      started_at: string | null;
-      created_at: string | null;
-      description: string | null;
-      status: string | null;
-      sentiment_data: unknown;
-      channel?: string | null;
-      retell_agent_id?: string | null;
-      concurrent_lines?: number | null;
-    }>;
+    const sp = request.nextUrl.searchParams;
+    const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
+    const pageSize = Math.min(
+      50,
+      Math.max(1, parseInt(sp.get("page_size") || "5", 10) || 5),
+    );
+    const statusParam = (sp.get("status") || "").trim().toLowerCase();
+    const channelParam = (sp.get("channel") || "").trim().toLowerCase();
+    const q = (sp.get("q") || "").trim();
+    const sort = parseCampaignSort((sp.get("sort") || "").trim().toLowerCase());
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const applyFilters = (query: any) => {
+      let qBuilder = query;
+      if (statusParam === "active" || statusParam === "completed") {
+        qBuilder = qBuilder.eq("status", statusParam);
+      }
+      if (channelParam === "whatsapp") {
+        qBuilder = qBuilder.eq("channel", "whatsapp");
+      } else if (channelParam === "call") {
+        qBuilder = qBuilder.or("channel.eq.call,channel.is.null");
+      }
+      if (q) {
+        qBuilder = qBuilder.ilike("name", `%${escapeIlike(q)}%`);
+      }
+      return qBuilder;
+    };
+
+    let campaignRows: CampaignListRow[] = [];
+    let total = 0;
+
+    if (sort === "success") {
+      // Success-rate sort needs rollups first — load all matching rows, then paginate in memory.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let listQuery: any = supabase
+        .from("campaigns")
+        .select(CAMPAIGN_LIST_SELECT, { count: "exact" });
+      listQuery = applyFilters(listQuery).order("created_at", { ascending: false });
+      const { data, error, count } = await listQuery;
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      campaignRows = (data ?? []) as CampaignListRow[];
+      total = count ?? campaignRows.length;
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let listQuery: any = supabase
+        .from("campaigns")
+        .select(CAMPAIGN_LIST_SELECT, { count: "exact" });
+      listQuery = applyFilters(listQuery);
+      if (sort === "oldest") {
+        listQuery = listQuery.order("created_at", { ascending: true });
+      } else if (sort === "alphabetical") {
+        listQuery = listQuery.order("name", { ascending: true });
+      } else {
+        listQuery = listQuery.order("created_at", { ascending: false });
+      }
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, error, count } = await listQuery.range(from, to);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      campaignRows = (data ?? []) as CampaignListRow[];
+      total = count ?? 0;
+    }
+
+    const campaigns = campaignRows;
 
     const agentIds = [
       ...new Set(
@@ -92,23 +168,35 @@ export async function GET() {
       }),
     );
 
-    const pr = (s: { total: number; positive: number }) =>
-      s.total > 0 ? (s.positive / s.total) * 100 : 0;
-    const withSentiment = withStats.map((c, i) => {
-      const cur = pr(c.stats);
-      const prev = i < withStats.length - 1 ? pr(withStats[i + 1]!.stats) : null;
+    let pageStats = withStats;
+    if (sort === "success") {
+      const sorted = [...withStats].sort(
+        (a, b) => successRate(b.stats) - successRate(a.stats),
+      );
+      const from = (page - 1) * pageSize;
+      pageStats = sorted.slice(from, from + pageSize);
+    }
+
+    const withSentiment = pageStats.map((c, i) => {
+      const cur = successRate(c.stats);
+      const prev = i < pageStats.length - 1 ? successRate(pageStats[i + 1]!.stats) : null;
       const trendDelta = prev != null ? Math.round((cur - prev) * 10) / 10 : null;
       return {
         ...c,
         sentiment: {
           positiveRate: Math.round(cur * 10) / 10,
           trendDelta,
-          previousCampaignId: i < withStats.length - 1 ? withStats[i + 1]!.id : null,
+          previousCampaignId: i < pageStats.length - 1 ? pageStats[i + 1]!.id : null,
         },
       };
     });
 
-    return NextResponse.json({ campaigns: withSentiment });
+    return NextResponse.json({
+      campaigns: withSentiment,
+      total,
+      page,
+      page_size: pageSize,
+    });
   } catch (e) {
     console.error("[api/campaigns GET]", e);
     return nextJsonError();
