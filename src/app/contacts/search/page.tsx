@@ -974,7 +974,7 @@ function ContactSearchPageInner() {
         </div>
       </div>
 
-      <MobileFilterFab onClick={() => setMobileFiltersOpen(true)} />
+      <MobileFilterFab onClick={() => setMobileFiltersOpen(true)} badgeCount={chips.length} />
 
       <MobileFilterSheet
         open={mobileFiltersOpen}

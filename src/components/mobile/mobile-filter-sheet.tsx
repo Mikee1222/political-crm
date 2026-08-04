@@ -76,7 +76,7 @@ export function MobileFilterSheet({
         aria-modal
         aria-labelledby={titleId}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-[70] flex max-h-[min(92dvh,720px)] flex-col rounded-t-3xl border border-b-0 border-[var(--border)] bg-[var(--bg-card)] pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] shadow-[0_-12px_40px_rgba(0,0,0,0.45)] transition-transform duration-250 ease-out",
+          "fixed inset-x-0 bottom-0 z-[70] flex max-h-[min(92dvh,720px)] flex-col rounded-t-3xl border border-b-0 border-[var(--border)] bg-[var(--bg-card)] pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] shadow-[0_-12px_40px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-out",
           entered ? "translate-y-0" : "translate-y-full",
           className,
         )}
