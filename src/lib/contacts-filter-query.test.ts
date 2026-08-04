@@ -125,4 +125,14 @@ describe("contacts-filter-query campaign helpers", () => {
       ),
     ).toBe(true);
   });
+
+  it("name + exclude_group_ids maps to advanced-RPC eligible list filters", () => {
+    const f = campaignFilterToListFilters({
+      first_name: "Ιωάννης",
+      exclude_group_ids: ["981ac496-08f8-4348-8200-ffee32df4651"],
+    });
+    expect(f.first_name).toBe("Ιωάννης");
+    expect(f.exclude_group_ids).toEqual(["981ac496-08f8-4348-8200-ffee32df4651"]);
+    expect(canUseAdvancedSearchRpc(f)).toBe(true);
+  });
 });

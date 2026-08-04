@@ -78,11 +78,15 @@ export async function GET(request: NextRequest) {
 
     let filterIds: string[] = [];
     if (hasFilter) {
-      const { ids, error: idErr } = await listContactIdsMatching(supabase, f, {
+      const { ids, error: idErr, match_total } = await listContactIdsMatching(supabase, f, {
         applyHasPhone: false,
       });
       if (idErr) {
-        console.error("[api/campaigns/preview] listContactIdsMatching error", idErr);
+        console.error("[api/campaigns/preview] listContactIdsMatching error", {
+          error: idErr,
+          filter: f,
+          match_total,
+        });
         return NextResponse.json({ error: idErr }, { status: 400 });
       }
       filterIds = ids;
