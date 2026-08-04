@@ -138,12 +138,19 @@ describe("contacts-filter-query campaign helpers", () => {
     expect(canUseAdvancedSearchRpc(f)).toBe(true);
   });
 
-  it("single Όνομα alone is name criteria (OR path in listContactIdsMatching)", () => {
+  it("single Όνομα alone is name criteria (first_name-only path in listContactIdsMatching)", () => {
     expect(contactFilterHasCriteria({ first_name: "Σωτηρ" })).toBe(true);
     expect(contactFilterHasCriteria({ exclude_group_ids: ["g1"] })).toBe(true);
     // Rest after stripping name is exclude-only → name-first then membership exclude.
     const rest = { exclude_group_ids: ["24f9be31-d694-4cb9-b878-31f01a47bc3d"] };
     expect(contactFilterHasCriteria(rest)).toBe(true);
     expect(contactFilterHasCriteria({ ...rest, first_name: undefined })).toBe(true);
+  });
+
+  it("campaign Όνομα maps to first_name only (not last/father)", () => {
+    const f = campaignFilterToListFilters({ first_name: "Σωτηρ" });
+    expect(f.first_name).toBe("Σωτηρ");
+    expect(f.last_name).toBe("");
+    expect(f.father_name).toBe("");
   });
 });

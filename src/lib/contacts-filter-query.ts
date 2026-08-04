@@ -106,8 +106,8 @@ function resolveCampaignNameFields(f: ContactFilter): {
 
 /**
  * Map campaign name fields → ContactListFilters for name / advanced RPC.
- * Single «ΟΝΟΜΑ» persists as `first_name`. Query OR across first/last/father is
- * handled in listContactIdsMatching via searchContactsByName.
+ * Single «ΟΝΟΜΑ» persists as `first_name` and is searched as first_name only
+ * (not last_name / father_name).
  */
 function campaignNameToListNameFilters(f: ContactFilter): Pick<
   ContactListFilters,
@@ -115,13 +115,6 @@ function campaignNameToListNameFilters(f: ContactFilter): Pick<
 > {
   const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
   return { first_name, last_name, father_name, search: "" };
-}
-
-/** Single Όνομα term → OR match on first_name / last_name / father_name via name RPC. */
-function campaignSingleNameOrTerm(f: ContactFilter): string | null {
-  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
-  if (first_name && !last_name && !father_name) return first_name;
-  return null;
 }
 
 /** Map campaign filter → ContactListFilters for buildContactQueryPlan / list pipeline. */
@@ -159,27 +152,6 @@ export function campaignFilterToListFilters(f: ContactFilter): ContactListFilter
 
 /** Alias used by campaign create/preview (same mapper as advanced contact search). */
 export const campaignFiltersToContactListFilters = campaignFilterToListFilters;
-
-/**
- * Single Όνομα → OR across first/last/father via search_contacts_by_name (union).
- * Returns full contact rows for in-memory refine.
- */
-async function fetchCampaignNameOrRows(
-  supabase: SupabaseClient,
-  orTerm: string,
-): Promise<Record<string, unknown>[]> {
-  const [byFirst, byLast, byFather] = await Promise.all([
-    searchContactsByName(supabase, { firstName: orTerm }),
-    searchContactsByName(supabase, { lastName: orTerm }),
-    searchContactsByName(supabase, { fatherName: orTerm }),
-  ]);
-  const byId = new Map<string, Record<string, unknown>>();
-  for (const row of [...byFirst, ...byLast, ...byFather]) {
-    const id = String(row.id ?? "").trim();
-    if (id && !byId.has(id)) byId.set(id, row as Record<string, unknown>);
-  }
-  return [...byId.values()];
-}
 
 /**
  * Apply exclude_group_ids against an already-narrowed row set via membership checks among
@@ -268,13 +240,15 @@ async function refineCampaignNameRowsByRestFilters(
   ) as Record<string, unknown>[];
 }
 
-/** Fetch name-matched rows for any combination of first/last/father (campaign Όνομα OR or AND). */
+/**
+ * Campaign name search via search_contacts_by_name.
+ * Όνομα (`first_name`) searches first_name (+ nickname in RPC) only —
+ * p_last_name / p_father_name stay null unless those fields are explicitly set.
+ */
 async function fetchCampaignNameRows(
   supabase: SupabaseClient,
   f: ContactFilter,
 ): Promise<Record<string, unknown>[]> {
-  const orTerm = campaignSingleNameOrTerm(f);
-  if (orTerm) return fetchCampaignNameOrRows(supabase, orTerm);
   const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
   return searchContactsByName(supabase, {
     firstName: first_name || null,
@@ -489,9 +463,9 @@ export async function countContactsMatching(
  * By default applies has_phone (campaign default: has). Pass applyHasPhone:false for preview splits.
  *
  * Routing:
- * - Any name field set: search_contacts_by_name first (single Όνομα ORs first/last/father),
- *   then refine groups/exclude/columns on that small set via contactIdsInGroupsAmong —
- *   never materialize a full exclude group then search names among survivors.
+ * - Any name field set: search_contacts_by_name first (Όνομα = first_name only;
+ *   last/father only when those fields are set), then refine groups/exclude/columns
+ *   on that small set via contactIdsInGroupsAmong.
  * - Group / municipality / call_status / gender without name: queryContactsListRows
  *   → search_contacts_advanced when canUseAdvancedSearchRpc.
  */
@@ -515,9 +489,12 @@ export async function listContactIdsMatching(
         father_name: undefined,
       };
 
+      const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
       console.log("[listContactIdsMatching] name-first", {
         name_match_count: nameRows.length,
-        or_term: campaignSingleNameOrTerm(f),
+        first_name: first_name || null,
+        last_name: last_name || null,
+        father_name: father_name || null,
         exclude_groups: uniqStrings(f.exclude_group_ids).length,
         include_groups: uniqStrings(f.group_ids).length,
         rest_has_criteria: contactFilterHasCriteria(rest),
