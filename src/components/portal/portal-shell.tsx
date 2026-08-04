@@ -108,19 +108,7 @@ function PortalHeader({
               Γεια, {firstName}
             </span>
           )}
-          {signedIn ? (
-            <SignOutButton />
-          ) : isAuthPage(pathname) ? null : (
-            <div className="hidden items-center gap-2 sm:flex">
-              <Link
-                href="/portal/login"
-                className="rounded-lg px-3.5 py-2 text-sm font-bold text-[#0f172a] shadow-sm transition"
-                style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-              >
-                Σύνδεση
-              </Link>
-            </div>
-          )}
+          {signedIn ? <SignOutButton /> : null}
           {!isAuthPage(pathname) && (
             <button
               type="button"
@@ -160,18 +148,6 @@ function PortalHeader({
                 {i.label}
               </Link>
             ))}
-            {!signedIn && (
-              <div className="mt-3 flex flex-col gap-2 border-t border-[#E2E8F0] pt-3">
-                <Link
-                  href="/portal/login"
-                  className="rounded-lg py-2.5 text-center text-sm font-bold text-[#0f172a]"
-                  style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Σύνδεση
-                </Link>
-              </div>
-            )}
           </nav>
         </div>
       )}

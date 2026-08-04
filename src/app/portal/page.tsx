@@ -81,12 +81,6 @@ export default async function PortalHomePage() {
                 >
                   Μάθετε περισσότερα
                 </Link>
-                <Link
-                  href="/portal/login"
-                  className="inline-flex w-full max-w-sm items-center justify-center rounded-xl border-2 border-white/90 px-8 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-white/10 sm:w-auto sm:py-4"
-                >
-                  Σύνδεση
-                </Link>
               </div>
             </div>
           </div>
@@ -303,41 +297,26 @@ export default async function PortalHomePage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section
-        className="py-16"
-        style={{
-          background: "linear-gradient(135deg, #003476 0%, #001a3d 100%)",
-        }}
-      >
-        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-          {user ? (
-            <>
-              <p className="text-xl font-extrabold text-white sm:text-2xl">Καλώς ήρθατε στην πύλη πολιτών.</p>
-              <Link
-                href="/portal/dashboard"
-                className="mt-8 inline-flex items-center justify-center gap-1 rounded-xl border-2 border-white/50 px-8 py-3 text-sm font-extrabold text-white transition hover:bg-white/10"
-              >
-                Πίνακας ελέγχου
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </>
-          ) : (
-            <>
-              <p className="text-2xl font-extrabold text-white sm:text-3xl">
-                Συνδεθείτε για πλήρη πρόσβαση στην πύλη
-              </p>
-              <Link
-                href="/portal/login"
-                className="mt-8 inline-flex rounded-xl px-10 py-4 text-base font-extrabold text-[#0f172a] shadow-lg"
-                style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
-              >
-                Σύνδεση
-              </Link>
-            </>
-          )}
-        </div>
-      </section>
+      {/* CTA — signed-in only */}
+      {user ? (
+        <section
+          className="py-16"
+          style={{
+            background: "linear-gradient(135deg, #003476 0%, #001a3d 100%)",
+          }}
+        >
+          <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+            <p className="text-xl font-extrabold text-white sm:text-2xl">Καλώς ήρθατε στην πύλη πολιτών.</p>
+            <Link
+              href="/portal/dashboard"
+              className="mt-8 inline-flex items-center justify-center gap-1 rounded-xl border-2 border-white/50 px-8 py-3 text-sm font-extrabold text-white transition hover:bg-white/10"
+            >
+              Πίνακας ελέγχου
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
