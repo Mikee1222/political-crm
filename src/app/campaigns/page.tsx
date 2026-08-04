@@ -1461,7 +1461,7 @@ function CampaignsPageInner() {
                     className={lux.input + " !text-base"}
                     value={filter.first_name}
                     onChange={(e) => setFilter((f) => ({ ...f, first_name: e.target.value }))}
-                    placeholder="Αναζήτηση ονόματος (όνομα / επώνυμο / πατρώνυμο)…"
+                    placeholder="Αναζήτηση με βάση το όνομα..."
                     autoComplete="off"
                   />
                 </div>
