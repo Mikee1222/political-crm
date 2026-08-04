@@ -8,6 +8,8 @@ import { getCampaignRollup } from "@/lib/campaign-stats";
 import {
   contactFilterHasCriteria,
   listContactIdsMatching,
+  parseCampaignFilterBody,
+  serializeCampaignFilter,
   type ContactFilter,
 } from "@/lib/contacts-filter-query";
 import { nextJsonError } from "@/lib/api-resilience";
@@ -125,7 +127,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       name?: string;
       description?: string;
-      filter?: ContactFilter;
+      filter?: ContactFilter | Record<string, unknown>;
       contact_ids?: string[];
       channel?: string;
       campaign_type_id?: string | null;
@@ -136,39 +138,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Υποχρεωτικό όνομα" }, { status: 400 });
     }
 
-    let contactIds: string[] = [];
-    if (Array.isArray(body.contact_ids) && body.contact_ids.length > 0) {
-      contactIds = [...new Set(body.contact_ids.map((x) => String(x).trim()).filter(Boolean))];
-    } else {
-      const rawGroupIds = body.filter?.group_ids;
-      const group_ids = Array.isArray(rawGroupIds)
-        ? [...new Set(rawGroupIds.map((x) => String(x).trim()).filter(Boolean))]
-        : undefined;
-      const f: ContactFilter = {
-        call_status: body.filter?.call_status,
-        area: body.filter?.area,
-        municipality: body.filter?.municipality,
-        priority: body.filter?.priority,
-        tag: body.filter?.tag,
-        group_ids: group_ids?.length ? group_ids : undefined,
-      };
-      if (!contactFilterHasCriteria(f)) {
-        return NextResponse.json(
-          { error: "Επιλέξτε τουλάχιστον ένα κριτήριο φίλτρου για τις επαφές ή contact_ids" },
-          { status: 400 },
-        );
-      }
-
-      const { ids, error: idErr } = await listContactIdsMatching(supabase, f);
-      if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
-      contactIds = ids;
+    const manualIds = Array.isArray(body.contact_ids)
+      ? [...new Set(body.contact_ids.map((x) => String(x).trim()).filter(Boolean))]
+      : [];
+    const f = parseCampaignFilterBody(body.filter ?? {});
+    // Campaigns default to dialable contacts when has_phone omitted.
+    if (body.filter == null || (body.filter as ContactFilter).has_phone === undefined) {
+      f.has_phone = "has";
     }
+    const hasFilter = contactFilterHasCriteria(f);
+
+    if (!manualIds.length && !hasFilter) {
+      return NextResponse.json(
+        { error: "Επιλέξτε τουλάχιστον ένα κριτήριο φίλτρου για τις επαφές ή contact_ids" },
+        { status: 400 },
+      );
+    }
+
+    let filterIds: string[] = [];
+    if (hasFilter) {
+      const { ids, error: idErr } = await listContactIdsMatching(supabase, f, {
+        applyHasPhone: true,
+        defaultHasPhone: true,
+      });
+      if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
+      filterIds = ids;
+    }
+
+    // Manual selections UNION filter matches.
+    const contactIds = [...new Set([...filterIds, ...manualIds])];
     if (contactIds.length === 0) {
       return NextResponse.json(
         { error: "Καμία επαφή δεν ταιριάζει με το φίλτρο" },
         { status: 400 },
       );
     }
+
+    const filtersJson = hasFilter ? serializeCampaignFilter(f) : null;
 
     const channel = body.channel === "whatsapp" ? "whatsapp" : "call";
     let campaign_type_id: string | null = null;
@@ -201,6 +207,7 @@ export async function POST(request: NextRequest) {
         campaign_type_id,
         retell_agent_id,
         concurrent_lines,
+        filters: filtersJson,
       })
       .select("*")
       .single();

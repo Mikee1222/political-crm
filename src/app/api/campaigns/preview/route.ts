@@ -4,20 +4,47 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import {
   contactFilterHasCriteria,
-  countContactsMatching,
+  countPhonesForContactIds,
   listContactIdsMatching,
+  parseCampaignFilterBody,
   type ContactFilter,
 } from "@/lib/contacts-filter-query";
 import { nextJsonError } from "@/lib/api-resilience";
-import { contactHasAnyCampaignPhone } from "@/lib/campaign-contact-phone";
 export const dynamic = "force-dynamic";
 
-function parseGroupIds(request: NextRequest): string[] {
+function parseCsvParam(request: NextRequest, key: string): string[] {
   const collected: string[] = [];
-  for (const v of request.nextUrl.searchParams.getAll("group_ids")) {
+  for (const v of request.nextUrl.searchParams.getAll(key)) {
     collected.push(...v.split(","));
   }
   return [...new Set(collected.map((x) => x.trim()).filter(Boolean))];
+}
+
+function filterFromSearchParams(request: NextRequest): ContactFilter {
+  const sp = request.nextUrl.searchParams;
+  const municipalities = parseCsvParam(request, "municipalities");
+  const muniSingle = sp.get("municipality")?.trim();
+  const toponyms = parseCsvParam(request, "toponyms");
+  const toponymSingle = sp.get("toponym")?.trim();
+  return parseCampaignFilterBody({
+    call_status: sp.get("call_status") ?? undefined,
+    area: sp.get("area") ?? undefined,
+    municipality: muniSingle,
+    municipalities: municipalities.length ? municipalities : undefined,
+    toponym: toponymSingle,
+    toponyms: toponyms.length ? toponyms : undefined,
+    priority: sp.get("priority") ?? undefined,
+    tag: sp.get("tag") ?? undefined,
+    group_ids: parseCsvParam(request, "group_ids"),
+    exclude_group_ids: parseCsvParam(request, "exclude_group_ids"),
+    gender: sp.get("gender") ?? undefined,
+    political_stance: sp.get("political_stance") ?? undefined,
+    age_min: sp.get("age_min") ?? undefined,
+    age_max: sp.get("age_max") ?? undefined,
+    age_groups: parseCsvParam(request, "age_groups"),
+    // Preview always computes with/without on the unfiltered-by-phone match set.
+    has_phone: "any",
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -29,80 +56,42 @@ export async function GET(request: NextRequest) {
       return forbidden();
     }
 
-    const idsParam = request.nextUrl.searchParams.get("contact_ids")?.trim() ?? "";
-    if (idsParam) {
-      const ids = [...new Set(idsParam.split(",").map((x) => x.trim()).filter(Boolean))];
-      if (ids.length === 0) {
-        return NextResponse.json({ count: 0, with_phone: 0, without_phone: 0 });
-      }
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("id, phone, phone2, landline")
-        .in("id", ids.slice(0, 5000));
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      let with_phone = 0;
-      let without_phone = 0;
-      for (const row of (data ?? []) as Array<{
-        phone: string | null;
-        phone2: string | null;
-        landline: string | null;
-      }>) {
-        if (contactHasAnyCampaignPhone(row)) with_phone += 1;
-        else without_phone += 1;
-      }
+    const manualIds = parseCsvParam(request, "contact_ids");
+    const f = filterFromSearchParams(request);
+    const hasFilter = contactFilterHasCriteria(f);
+
+    if (!manualIds.length && !hasFilter) {
       return NextResponse.json({
-        count: with_phone + without_phone,
-        with_phone,
-        without_phone,
-        from_ids: true,
+        count: null,
+        with_phone: null,
+        without_phone: null,
+        manual_count: 0,
       });
     }
 
-    const groupIds = parseGroupIds(request);
-    const f: ContactFilter = {
-      call_status: request.nextUrl.searchParams.get("call_status") ?? undefined,
-      area: request.nextUrl.searchParams.get("area") ?? undefined,
-      municipality: request.nextUrl.searchParams.get("municipality") ?? undefined,
-      priority: request.nextUrl.searchParams.get("priority") ?? undefined,
-      tag: request.nextUrl.searchParams.get("tag") ?? undefined,
-      group_ids: groupIds.length ? groupIds : undefined,
-    };
-
-    if (!contactFilterHasCriteria(f)) {
-      return NextResponse.json({ count: null, with_phone: null, without_phone: null });
+    let filterIds: string[] = [];
+    if (hasFilter) {
+      const { ids, error: idErr } = await listContactIdsMatching(supabase, f, {
+        applyHasPhone: false,
+      });
+      if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
+      filterIds = ids;
     }
 
-    const { count, error } = await countContactsMatching(supabase, f);
-    if (error) return NextResponse.json({ error }, { status: 400 });
-
-    const { ids, error: idErr } = await listContactIdsMatching(supabase, f);
-    if (idErr) return NextResponse.json({ error: idErr }, { status: 400 });
-
-    let with_phone = 0;
-    let without_phone = 0;
-    // Batch fetch phones (Supabase .in limit — chunk)
-    const CHUNK = 500;
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      const slice = ids.slice(i, i + CHUNK);
-      const { data, error: pErr } = await supabase
-        .from("contacts")
-        .select("id, phone, phone2, landline")
-        .in("id", slice);
-      if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
-      for (const row of (data ?? []) as Array<{
-        phone: string | null;
-        phone2: string | null;
-        landline: string | null;
-      }>) {
-        if (contactHasAnyCampaignPhone(row)) with_phone += 1;
-        else without_phone += 1;
-      }
-    }
+    const unionIds = [...new Set([...filterIds, ...manualIds])];
+    const { with_phone, without_phone, error: phoneErr } = await countPhonesForContactIds(
+      supabase,
+      unionIds,
+    );
+    if (phoneErr) return NextResponse.json({ error: phoneErr }, { status: 400 });
 
     return NextResponse.json({
-      count: count ?? with_phone + without_phone,
+      count: with_phone + without_phone,
       with_phone,
       without_phone,
+      manual_count: manualIds.length,
+      filter_count: filterIds.length,
+      from_ids: manualIds.length > 0 && !hasFilter,
     });
   } catch (e) {
     console.error("[api/campaigns/preview]", e);

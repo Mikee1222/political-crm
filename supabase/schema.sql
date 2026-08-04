@@ -1364,6 +1364,12 @@ alter table public.campaigns
 alter table public.campaigns
   add column if not exists last_no_answer_redial_at timestamptz;
 
+alter table public.campaigns
+  add column if not exists filters jsonb;
+
+comment on column public.campaigns.filters is
+  'Contact filter snapshot used when creating the campaign (JSON).';
+
 create index if not exists idx_campaigns_campaign_type_id on public.campaigns (campaign_type_id);
 
 alter table public.campaign_types enable row level security;

@@ -33,13 +33,27 @@ import {
   CONCURRENT_LINES_MIN,
 } from "@/lib/campaign-concurrent-lines";
 import { CONTACT_CALL_STATUS_OPTIONS } from "@/lib/call-status-options";
-import { getMunicipalitiesCached, peekMunicipalities } from "@/lib/geo-lists-cache";
+import {
+  CONTACT_SEARCH_AGE_GROUPS,
+  GENDER_OPTIONS,
+  PRESENCE_OPTIONS,
+} from "@/lib/contact-search-constants";
+import {
+  getMunicipalitiesCached,
+  getToponymsCached,
+  peekMunicipalities,
+  peekToponyms,
+} from "@/lib/geo-lists-cache";
 import { dedupeContactGroupsById, type ContactGroupRow } from "@/lib/contact-groups";
+import { formatGreekContactName } from "@/lib/contact-display-name";
+import { cn } from "@/lib/utils";
 import { CenteredModal } from "@/components/ui/centered-modal";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { ContactSearchCombobox } from "@/components/requests/contact-search-combobox";
+import { SegmentedControl } from "@/components/search/segmented-control";
 import { useFormToast } from "@/contexts/form-toast-context";
 
 export default function CampaignsPage() {
@@ -81,10 +95,27 @@ type NewFilter = {
   call_status: string;
   area: string;
   municipality: string;
+  toponym: string;
   priority: string;
   tag: string;
   group_ids: string[];
+  exclude_group_ids: string[];
+  gender: string;
+  political_stance: string;
+  age_groups: string[];
+  /** has | not | "" (Αδιάφορο) — default has for dialable pool */
+  has_phone: "" | "has" | "not";
 };
+
+type SelectedContactChip = { id: string; label: string };
+
+const POLITICAL_STANCE_OPTIONS = [
+  "Κεντροδεξιός",
+  "Αριστερός",
+  "Ακροδεξιός",
+  "Αναποφάσιστος",
+  "Άλλο",
+] as const;
 
 const CAMPAIGN_CREATE_IDS_KEY = "campaign_create_contact_ids";
 
@@ -101,10 +132,61 @@ const emptyFilter = (): NewFilter => ({
   call_status: "",
   area: "",
   municipality: "",
+  toponym: "",
   priority: "",
   tag: "",
   group_ids: [],
+  exclude_group_ids: [],
+  gender: "",
+  political_stance: "",
+  age_groups: [],
+  has_phone: "has",
 });
+
+function filterHasCriteria(f: NewFilter): boolean {
+  return Boolean(
+    f.call_status ||
+      f.area ||
+      f.municipality ||
+      f.toponym ||
+      f.priority ||
+      f.tag ||
+      f.group_ids.length ||
+      f.exclude_group_ids.length ||
+      f.gender ||
+      f.political_stance ||
+      f.age_groups.length,
+  );
+}
+
+function ageBoundsFromGroups(groups: string[]): { age_min?: string; age_max?: string } {
+  const keys = groups.filter((k) => k in CONTACT_SEARCH_AGE_GROUPS);
+  if (!keys.length) return {};
+  const mins = keys.map((k) => CONTACT_SEARCH_AGE_GROUPS[k]!.min);
+  const maxs = keys.map((k) => CONTACT_SEARCH_AGE_GROUPS[k]!.max);
+  return { age_min: String(Math.min(...mins)), age_max: String(Math.max(...maxs)) };
+}
+
+function buildFilterPayload(f: NewFilter): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    has_phone: f.has_phone || "any",
+  };
+  if (f.call_status) payload.call_status = f.call_status;
+  if (f.area) payload.area = f.area;
+  if (f.municipality) payload.municipality = f.municipality;
+  if (f.toponym) payload.toponym = f.toponym;
+  if (f.priority) payload.priority = f.priority;
+  if (f.tag) payload.tag = f.tag;
+  if (f.group_ids.length) payload.group_ids = f.group_ids;
+  if (f.exclude_group_ids.length) payload.exclude_group_ids = f.exclude_group_ids;
+  if (f.gender) payload.gender = f.gender;
+  if (f.political_stance) payload.political_stance = f.political_stance;
+  if (f.age_groups.length) {
+    payload.age_groups = f.age_groups;
+    Object.assign(payload, ageBoundsFromGroups(f.age_groups));
+  }
+  return payload;
+}
 
 function CampaignsPageInner() {
   const searchParams = useSearchParams();
@@ -123,12 +205,18 @@ function CampaignsPageInner() {
   const [areas, setAreas] = useState<string[]>([]);
   const [municipalities, setMunicipalities] = useState<string[]>(() => peekMunicipalities() ?? []);
   const [muniLoading, setMuniLoading] = useState(false);
+  const [toponyms, setToponyms] = useState<string[]>(() => {
+    const cached = peekToponyms();
+    return cached ? cached.map((t) => t.name).filter(Boolean) : [];
+  });
+  const [toponymsLoading, setToponymsLoading] = useState(false);
   const [groups, setGroups] = useState<ContactGroupRow[]>([]);
-  const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewWithPhone, setPreviewWithPhone] = useState<number | null>(null);
   const [previewWithoutPhone, setPreviewWithoutPhone] = useState<number | null>(null);
+  const [previewManualCount, setPreviewManualCount] = useState<number>(0);
   const [previewing, setPreviewing] = useState(false);
-  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<SelectedContactChip[]>([]);
+  const selectedContactIds = useMemo(() => selectedContacts.map((c) => c.id), [selectedContacts]);
   const [dialingId, setDialingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -169,7 +257,31 @@ function CampaignsPageInner() {
       }
     }
     if (create === "1" || ids.length > 0) {
-      if (ids.length > 0) setSelectedContactIds(ids);
+      if (ids.length > 0) {
+        setSelectedContacts(ids.map((id) => ({ id, label: id })));
+        void (async () => {
+          const labels = await Promise.all(
+            ids.map(async (id) => {
+              try {
+                const res = await fetchWithTimeout(`/api/contacts/${id}`);
+                if (!res.ok) return { id, label: id };
+                const j = (await res.json()) as {
+                  contact?: { first_name?: string; last_name?: string; father_name?: string | null };
+                };
+                const c = j.contact;
+                if (!c) return { id, label: id };
+                return {
+                  id,
+                  label: formatGreekContactName(c.last_name, c.first_name, c.father_name) || id,
+                };
+              } catch {
+                return { id, label: id };
+              }
+            }),
+          );
+          setSelectedContacts(labels);
+        })();
+      }
       setConcurrentLines(3);
       setModal(true);
     }
@@ -179,6 +291,7 @@ function CampaignsPageInner() {
     if (!modal) return;
     let cancelled = false;
     setMuniLoading(!(peekMunicipalities()?.length));
+    setToponymsLoading(!(peekToponyms()?.length));
 
     void Promise.all([
       fetchWithTimeout("/api/contacts/field-options").then(async (r) => {
@@ -186,6 +299,7 @@ function CampaignsPageInner() {
         return d.areas ?? [];
       }),
       getMunicipalitiesCached(),
+      getToponymsCached(),
       fetchWithTimeout("/api/campaign-types").then(async (r) => {
         const d = (await r.json()) as { types?: CampaignTypeRow[] };
         return d.types ?? [];
@@ -195,11 +309,13 @@ function CampaignsPageInner() {
         return dedupeContactGroupsById(d.groups ?? []);
       }),
     ])
-      .then(([areaList, muniList, types, groupList]) => {
+      .then(([areaList, muniList, topRows, types, groupList]) => {
         if (cancelled) return;
         setAreas(areaList);
         setMunicipalities(muniList);
         setMuniLoading(false);
+        setToponyms(topRows.map((t) => t.name).filter(Boolean));
+        setToponymsLoading(false);
         setCampaignTypes(types);
         setGroups(groupList);
       })
@@ -208,6 +324,8 @@ function CampaignsPageInner() {
         setAreas([]);
         setMunicipalities([]);
         setMuniLoading(false);
+        setToponyms([]);
+        setToponymsLoading(false);
         setCampaignTypes([]);
         setGroups([]);
       });
@@ -219,54 +337,47 @@ function CampaignsPageInner() {
 
   useEffect(() => {
     if (!modal) return;
-    if (selectedContactIds.length > 0) {
-      setPreviewing(true);
-      const q = new URLSearchParams();
-      q.set("contact_ids", selectedContactIds.join(","));
-      const t = setTimeout(() => {
-        fetchWithTimeout(`/api/campaigns/preview?${q.toString()}`)
-          .then((r) => r.json())
-          .then((d) => {
-            setPreviewCount(typeof d.count === "number" ? d.count : null);
-            setPreviewWithPhone(typeof d.with_phone === "number" ? d.with_phone : null);
-            setPreviewWithoutPhone(typeof d.without_phone === "number" ? d.without_phone : null);
-          })
-          .catch(() => {
-            setPreviewCount(null);
-            setPreviewWithPhone(null);
-            setPreviewWithoutPhone(null);
-          })
-          .finally(() => setPreviewing(false));
-      }, 500);
-      return () => clearTimeout(t);
-    }
 
     const q = new URLSearchParams();
+    if (selectedContactIds.length) q.set("contact_ids", selectedContactIds.join(","));
     if (filter.call_status) q.set("call_status", filter.call_status);
     if (filter.area) q.set("area", filter.area);
     if (filter.municipality) q.set("municipality", filter.municipality);
+    if (filter.toponym) q.set("toponym", filter.toponym);
     if (filter.priority) q.set("priority", filter.priority);
     if (filter.tag) q.set("tag", filter.tag);
     if (filter.group_ids.length) q.set("group_ids", filter.group_ids.join(","));
-    if (!q.toString()) {
-      setPreviewCount(null);
+    if (filter.exclude_group_ids.length) {
+      q.set("exclude_group_ids", filter.exclude_group_ids.join(","));
+    }
+    if (filter.gender) q.set("gender", filter.gender);
+    if (filter.political_stance) q.set("political_stance", filter.political_stance);
+    if (filter.age_groups.length) q.set("age_groups", filter.age_groups.join(","));
+    const ages = ageBoundsFromGroups(filter.age_groups);
+    if (ages.age_min) q.set("age_min", ages.age_min);
+    if (ages.age_max) q.set("age_max", ages.age_max);
+
+    const hasAnything = selectedContactIds.length > 0 || filterHasCriteria(filter);
+    if (!hasAnything) {
       setPreviewWithPhone(null);
       setPreviewWithoutPhone(null);
+      setPreviewManualCount(0);
       return;
     }
+
     setPreviewing(true);
     const t = setTimeout(() => {
       fetchWithTimeout(`/api/campaigns/preview?${q.toString()}`)
         .then((r) => r.json())
         .then((d) => {
-          setPreviewCount(typeof d.count === "number" ? d.count : null);
           setPreviewWithPhone(typeof d.with_phone === "number" ? d.with_phone : null);
           setPreviewWithoutPhone(typeof d.without_phone === "number" ? d.without_phone : null);
+          setPreviewManualCount(typeof d.manual_count === "number" ? d.manual_count : selectedContactIds.length);
         })
         .catch(() => {
-          setPreviewCount(null);
           setPreviewWithPhone(null);
           setPreviewWithoutPhone(null);
+          setPreviewManualCount(0);
         })
         .finally(() => setPreviewing(false));
     }, 500);
@@ -299,7 +410,28 @@ function CampaignsPageInner() {
     [municipalities],
   );
 
+  const toponymOptions = useMemo(
+    () => toponyms.map((t) => ({ value: t, label: t })),
+    [toponyms],
+  );
+
+  const politicalStanceOptions = useMemo(
+    () => POLITICAL_STANCE_OPTIONS.map((s) => ({ value: s, label: s })),
+    [],
+  );
+
   const nameFilled = name.trim().length > 0;
+
+  const addSelectedContact = (id: string, displayName?: string) => {
+    setSelectedContacts((prev) => {
+      if (prev.some((c) => c.id === id)) return prev;
+      return [...prev, { id, label: (displayName ?? id).toUpperCase() }];
+    });
+  };
+
+  const removeSelectedContact = (id: string) => {
+    setSelectedContacts((prev) => prev.filter((c) => c.id !== id));
+  };
 
   const createCampaign = async (e: FormEvent) => {
     e.preventDefault();
@@ -308,6 +440,11 @@ function CampaignsPageInner() {
     if (!name.trim()) {
       setNameFieldErr("Υποχρεωτικό όνομα");
       showToast("Συμπληρώστε το όνομα της καμπάνιας.", "error");
+      return;
+    }
+    if (!selectedContactIds.length && !filterHasCriteria(filter)) {
+      setFormErr("Επιλέξτε επαφές ή τουλάχιστον ένα κριτήριο φίλτρου.");
+      showToast("Επιλέξτε επαφές ή φίλτρα.", "error");
       return;
     }
     setSaving(true);
@@ -321,15 +458,9 @@ function CampaignsPageInner() {
       };
       if (selectedContactIds.length > 0) {
         body.contact_ids = selectedContactIds;
-      } else {
-        body.filter = {
-          call_status: filter.call_status || undefined,
-          area: filter.area || undefined,
-          municipality: filter.municipality || undefined,
-          priority: filter.priority || undefined,
-          tag: filter.tag || undefined,
-          group_ids: filter.group_ids.length ? filter.group_ids : undefined,
-        };
+      }
+      if (filterHasCriteria(filter)) {
+        body.filter = buildFilterPayload(filter);
       }
       const res = await fetchWithTimeout("/api/campaigns", {
         method: "POST",
@@ -350,7 +481,7 @@ function CampaignsPageInner() {
       setCampaignChannel("call");
       setCampaignTypeId("");
       setConcurrentLines(3);
-      setSelectedContactIds([]);
+      setSelectedContacts([]);
       setFilter(emptyFilter());
       await load();
     } catch (err) {
@@ -381,10 +512,13 @@ function CampaignsPageInner() {
 
   const previewText = (() => {
     if (previewing) return "Υπολογισμός…";
-    if (previewWithPhone == null) return "Επιλέξτε φίλτρα για προεπισκόπηση";
+    if (previewWithPhone == null) return "Επιλέξτε φίλτρα ή επαφές για προεπισκόπηση";
     const withN = previewWithPhone;
     const withoutN = previewWithoutPhone ?? 0;
-    return `${withN} επαφές με αριθμό · ${withoutN} χωρίς αριθμό (εξαιρούνται)`;
+    const manualN = previewManualCount;
+    let text = `${withN} επαφές με αριθμό · ${withoutN} χωρίς (εξαιρούνται)`;
+    if (manualN > 0) text += ` · ${manualN} επιλεγμένες χειροκίνητα`;
+    return text;
   })();
 
   return (
@@ -404,7 +538,8 @@ function CampaignsPageInner() {
               className={goldCta + " w-full min-w-0 sm:w-auto sm:self-center"}
               onClick={() => {
                 setFormErr(null);
-                setSelectedContactIds([]);
+                setSelectedContacts([]);
+                setFilter(emptyFilter());
                 setConcurrentLines(3);
                 setModal(true);
               }}
@@ -443,7 +578,8 @@ function CampaignsPageInner() {
             className={goldCta}
             onClick={() => {
               setFormErr(null);
-              setSelectedContactIds([]);
+              setSelectedContacts([]);
+              setFilter(emptyFilter());
               setConcurrentLines(3);
               setModal(true);
             }}
@@ -770,16 +906,17 @@ function CampaignsPageInner() {
               </p>
             )}
 
-            {selectedContactIds.length > 0 && (
+            {selectedContacts.length > 0 && (
               <div className="rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-2 text-sm text-slate-800">
-                Επιλεγμένες επαφές από αναζήτηση:{" "}
-                <strong className="tabular-nums">{selectedContactIds.length}</strong>
+                Χειροκίνητες επιλογές:{" "}
+                <strong className="tabular-nums">{selectedContacts.length}</strong>
+                {" "}— ενώνονται με τα αποτελέσματα φίλτρων
                 <button
                   type="button"
                   className="ml-2 text-xs text-[#D4AF37] underline"
-                  onClick={() => setSelectedContactIds([])}
+                  onClick={() => setSelectedContacts([])}
                 >
-                  Καθαρισμός — χρήση φίλτρων
+                  Καθαρισμός επιλογών
                 </button>
               </div>
             )}
@@ -938,128 +1075,262 @@ function CampaignsPageInner() {
               </div>
             </section>
 
-            {/* Section 3 — Φίλτρα */}
-            {selectedContactIds.length === 0 && (
-              <section>
-                <p className={sectionLabel}>Φιλτράρισμα επαφών</p>
-                <p className="mb-3 text-[11px] text-[var(--text-muted)]">
-                  Τουλάχιστον ένα κριτήριο — ή επιλέξτε από{" "}
-                  <Link href="/contacts/search" className="text-[#D4AF37] underline">
-                    προηγμένη αναζήτηση
-                  </Link>
-                  .
-                </p>
+            {/* Section 3 — Επαφές & φίλτρα */}
+            <section>
+              <p className={sectionLabel}>Φιλτράρισμα επαφών</p>
+              <p className="mb-3 text-[11px] text-[var(--text-muted)]">
+                Αναζητήστε μεμονωμένες επαφές και/ή ορίστε κριτήρια. Οι χειροκίνητες επιλογές
+                ενώνονται με τα αποτελέσματα φίλτρων. Μπορείτε επίσης από{" "}
+                <Link href="/contacts/search" className="text-[#D4AF37] underline">
+                  προηγμένη αναζήτηση
+                </Link>
+                .
+              </p>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+              <div className="mb-4 space-y-2">
+                <ContactSearchCombobox
+                  label="Αναζήτηση επαφής"
+                  valueId=""
+                  onChange={() => {}}
+                  onSelect={(id, displayName) => addSelectedContact(id, displayName)}
+                  placeholder="Όνομα ή τηλέφωνο…"
+                />
+                {selectedContacts.length > 0 && (
                   <div>
-                    <label className={lux.label} htmlFor="c-st">
-                      Κατάσταση κλήσης
-                    </label>
-                    <HqSelect
-                      id="c-st"
-                      className="!min-h-11 !text-base"
-                      value={filter.call_status}
-                      onChange={(e) => setFilter((f) => ({ ...f, call_status: e.target.value }))}
-                    >
-                      <option value="">Όλες</option>
-                      {CONTACT_CALL_STATUS_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
+                    <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      Επιλεγμένες επαφές
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedContacts.map((c) => (
+                        <span
+                          key={c.id}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/15 py-1 pl-2.5 pr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-900"
+                        >
+                          <span className="truncate">{c.label}</span>
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-slate-600 transition hover:bg-[#D4AF37]/25 hover:text-slate-900"
+                            onClick={() => removeSelectedContact(c.id)}
+                            aria-label={`Αφαίρεση ${c.label}`}
+                          >
+                            <XCircle className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </span>
                       ))}
-                    </HqSelect>
+                    </div>
                   </div>
-                  <div>
-                    <label className={lux.label} htmlFor="c-pri">
-                      Προτεραιότητα
-                    </label>
-                    <HqSelect
-                      id="c-pri"
-                      className="!min-h-11 !text-base"
-                      value={filter.priority}
-                      onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value }))}
-                    >
-                      <option value="">Όλες</option>
-                      <option value="High">Υψηλή</option>
-                      <option value="Medium">Μεσαία</option>
-                      <option value="Low">Χαμηλή</option>
-                    </HqSelect>
-                  </div>
-                  <div>
-                    <label className={lux.label} htmlFor="c-area">
-                      Περιοχή
-                    </label>
-                    <SearchableSelect
-                      id="c-area"
-                      options={areaOptions}
-                      value={filter.area}
-                      onChange={(area) => setFilter((f) => ({ ...f, area }))}
-                      placeholder="Όλες οι περιοχές"
-                      emptyText="Δεν βρέθηκαν περιοχές"
-                      searchPlaceholder="Αναζήτηση περιοχής…"
-                    />
-                  </div>
-                  <div>
-                    <label className={lux.label} htmlFor="c-mun">
-                      Δήμος που ψηφίζει
-                    </label>
-                    <SearchableSelect
-                      id="c-mun"
-                      options={municipalityOptions}
-                      value={filter.municipality}
-                      onChange={(municipality) => setFilter((f) => ({ ...f, municipality }))}
-                      placeholder="Όλοι οι δήμοι"
-                      emptyText="Δεν βρέθηκαν δήμοι"
-                      loading={muniLoading}
-                      loadingText="Φόρτωση δήμων…"
-                      searchPlaceholder="Αναζήτηση δήμου…"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className={lux.label} htmlFor="c-tag">
-                      Ετικέτα
-                    </label>
-                    <input
-                      id="c-tag"
-                      className={lux.input + " !text-base"}
-                      value={filter.tag}
-                      onChange={(e) => setFilter((f) => ({ ...f, tag: e.target.value }))}
-                      placeholder="Ακριβές tag…"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className={lux.label}>Ομάδα</label>
-                    <SearchableMultiSelect
-                      options={groupOptions}
-                      values={filter.group_ids}
-                      onToggle={(id) =>
-                        setFilter((f) => ({
-                          ...f,
-                          group_ids: f.group_ids.includes(id)
-                            ? f.group_ids.filter((x) => x !== id)
-                            : [...f.group_ids, id],
-                        }))
-                      }
-                      placeholder="Επιλέξτε ομάδες…"
-                      emptyText="Δεν βρέθηκαν ομάδες"
-                      countSummaryWhenMultiple
-                    />
+                )}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className={lux.label} htmlFor="c-st">
+                    Κατάσταση κλήσης
+                  </label>
+                  <HqSelect
+                    id="c-st"
+                    className="!min-h-11 !text-base"
+                    value={filter.call_status}
+                    onChange={(e) => setFilter((f) => ({ ...f, call_status: e.target.value }))}
+                  >
+                    <option value="">Όλες</option>
+                    {CONTACT_CALL_STATUS_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </HqSelect>
+                </div>
+                <div>
+                  <label className={lux.label} htmlFor="c-pri">
+                    Προτεραιότητα
+                  </label>
+                  <HqSelect
+                    id="c-pri"
+                    className="!min-h-11 !text-base"
+                    value={filter.priority}
+                    onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value }))}
+                  >
+                    <option value="">Όλες</option>
+                    <option value="High">Υψηλή</option>
+                    <option value="Medium">Μεσαία</option>
+                    <option value="Low">Χαμηλή</option>
+                  </HqSelect>
+                </div>
+                <div>
+                  <label className={lux.label} htmlFor="c-area">
+                    Περιοχή
+                  </label>
+                  <SearchableSelect
+                    id="c-area"
+                    options={areaOptions}
+                    value={filter.area}
+                    onChange={(area) => setFilter((f) => ({ ...f, area }))}
+                    placeholder="Όλες οι περιοχές"
+                    emptyText="Δεν βρέθηκαν περιοχές"
+                    searchPlaceholder="Αναζήτηση περιοχής…"
+                  />
+                </div>
+                <div>
+                  <label className={lux.label} htmlFor="c-mun">
+                    Δήμος που ψηφίζει
+                  </label>
+                  <SearchableSelect
+                    id="c-mun"
+                    options={municipalityOptions}
+                    value={filter.municipality}
+                    onChange={(municipality) => setFilter((f) => ({ ...f, municipality }))}
+                    placeholder="Όλοι οι δήμοι"
+                    emptyText="Δεν βρέθηκαν δήμοι"
+                    loading={muniLoading}
+                    loadingText="Φόρτωση δήμων…"
+                    searchPlaceholder="Αναζήτηση δήμου…"
+                  />
+                </div>
+                <div>
+                  <label className={lux.label} htmlFor="c-topo">
+                    Τοπωνύμιο
+                  </label>
+                  <SearchableSelect
+                    id="c-topo"
+                    options={toponymOptions}
+                    value={filter.toponym}
+                    onChange={(toponym) => setFilter((f) => ({ ...f, toponym }))}
+                    placeholder="Όλα τα τοπωνύμια"
+                    emptyText="Δεν βρέθηκαν τοπωνύμια"
+                    loading={toponymsLoading}
+                    loadingText="Φόρτωση τοπωνυμίων…"
+                    searchPlaceholder="Αναζήτηση τοπωνυμίου…"
+                  />
+                </div>
+                <div>
+                  <label className={lux.label} htmlFor="c-stance">
+                    Πολιτική στάση
+                  </label>
+                  <SearchableSelect
+                    id="c-stance"
+                    options={politicalStanceOptions}
+                    value={filter.political_stance}
+                    onChange={(political_stance) => setFilter((f) => ({ ...f, political_stance }))}
+                    placeholder="Όλες"
+                    emptyText="—"
+                    searchPlaceholder="Αναζήτηση…"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <span className={lux.label}>Φύλο</span>
+                  <SegmentedControl
+                    options={GENDER_OPTIONS}
+                    value={filter.gender}
+                    onChange={(gender) => setFilter((f) => ({ ...f, gender }))}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <span className={lux.label}>Ηλικιακή ομάδα</span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {Object.entries(CONTACT_SEARCH_AGE_GROUPS).map(([key, g]) => {
+                      const active = filter.age_groups.includes(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() =>
+                            setFilter((f) => ({
+                              ...f,
+                              age_groups: active
+                                ? f.age_groups.filter((x) => x !== key)
+                                : [...f.age_groups, key],
+                            }))
+                          }
+                          className={cn(
+                            "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                            active
+                              ? "border-[#D4AF37] bg-[#D4AF37]/20 text-slate-900"
+                              : "border-[var(--border)] text-[var(--text-muted)] hover:border-[#D4AF37]/50",
+                          )}
+                        >
+                          {g.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              </section>
-            )}
+                <div className="sm:col-span-2">
+                  <span className={lux.label}>Έχει τηλέφωνο</span>
+                  <SegmentedControl
+                    options={PRESENCE_OPTIONS}
+                    value={filter.has_phone}
+                    onChange={(has_phone) =>
+                      setFilter((f) => ({
+                        ...f,
+                        has_phone: has_phone as NewFilter["has_phone"],
+                      }))
+                    }
+                  />
+                  <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                    Προεπιλογή «Έχει» — εξαιρεί επαφές χωρίς αριθμό από το σύνολο κλήσεων.
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={lux.label} htmlFor="c-tag">
+                    Ετικέτα
+                  </label>
+                  <input
+                    id="c-tag"
+                    className={lux.input + " !text-base"}
+                    value={filter.tag}
+                    onChange={(e) => setFilter((f) => ({ ...f, tag: e.target.value }))}
+                    placeholder="Ακριβές tag…"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={lux.label}>Ομάδα (συμπερίληψη)</label>
+                  <SearchableMultiSelect
+                    options={groupOptions}
+                    values={filter.group_ids}
+                    onToggle={(id) =>
+                      setFilter((f) => ({
+                        ...f,
+                        group_ids: f.group_ids.includes(id)
+                          ? f.group_ids.filter((x) => x !== id)
+                          : [...f.group_ids, id],
+                      }))
+                    }
+                    placeholder="Επιλέξτε ομάδες…"
+                    emptyText="Δεν βρέθηκαν ομάδες"
+                    countSummaryWhenMultiple
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={lux.label}>Εξαίρεση ομάδας</label>
+                  <SearchableMultiSelect
+                    options={groupOptions}
+                    values={filter.exclude_group_ids}
+                    onToggle={(id) =>
+                      setFilter((f) => ({
+                        ...f,
+                        exclude_group_ids: f.exclude_group_ids.includes(id)
+                          ? f.exclude_group_ids.filter((x) => x !== id)
+                          : [...f.exclude_group_ids, id],
+                      }))
+                    }
+                    placeholder="Εξαίρεση ομάδων…"
+                    emptyText="Δεν βρέθηκαν ομάδες"
+                    countSummaryWhenMultiple
+                  />
+                </div>
+              </div>
+            </section>
 
             <div
               className="rounded-xl border border-[#D4AF37]/35 bg-[#D4AF37]/15 px-4 py-3"
               role="status"
               aria-live="polite"
             >
-              <p className="text-sm font-medium text-slate-900 inline-flex items-center gap-2">
+              <p className="text-sm font-medium text-slate-900 inline-flex flex-wrap items-center gap-2">
                 <Search className="h-4 w-4 shrink-0 text-[#8B6914]" aria-hidden />
                 {previewText}
-                {previewCount != null && !previewing ? (
-                  <span className="tabular-nums text-[#8B6914]">({previewCount} σύνολο)</span>
-                ) : null}
               </p>
             </div>
           </div>
