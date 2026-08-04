@@ -126,13 +126,24 @@ describe("contacts-filter-query campaign helpers", () => {
     ).toBe(true);
   });
 
-  it("name + exclude_group_ids maps to advanced-RPC eligible list filters", () => {
+  it("name + exclude_group_ids maps to list filters (campaign uses name-first refine)", () => {
     const f = campaignFilterToListFilters({
       first_name: "Ιωάννης",
       exclude_group_ids: ["981ac496-08f8-4348-8200-ffee32df4651"],
     });
     expect(f.first_name).toBe("Ιωάννης");
     expect(f.exclude_group_ids).toEqual(["981ac496-08f8-4348-8200-ffee32df4651"]);
+    // Contacts list may still use advanced-rpc; campaign preview uses name-first +
+    // contactIdsInGroupsAmong (see listContactIdsMatching).
     expect(canUseAdvancedSearchRpc(f)).toBe(true);
+  });
+
+  it("single Όνομα alone is name criteria (OR path in listContactIdsMatching)", () => {
+    expect(contactFilterHasCriteria({ first_name: "Σωτηρ" })).toBe(true);
+    expect(contactFilterHasCriteria({ exclude_group_ids: ["g1"] })).toBe(true);
+    // Rest after stripping name is exclude-only → name-first then membership exclude.
+    const rest = { exclude_group_ids: ["24f9be31-d694-4cb9-b878-31f01a47bc3d"] };
+    expect(contactFilterHasCriteria(rest)).toBe(true);
+    expect(contactFilterHasCriteria({ ...rest, first_name: undefined })).toBe(true);
   });
 });

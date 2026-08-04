@@ -5,6 +5,12 @@ import {
 } from "@/lib/campaign-contact-phone";
 import { CONTACT_SEARCH_AGE_GROUPS } from "@/lib/contact-search-constants";
 import {
+  contactIdsInGroupsAmong,
+  filterRowsByDeferredGroupMembership,
+  resolveContactListFilterIds,
+  resolveGroupIdsToUuids,
+} from "@/lib/contact-group-members";
+import {
   getDefaultContactFilters,
   type ContactListFilters,
 } from "@/lib/contacts-filters";
@@ -12,6 +18,11 @@ import {
   CONTACTS_EXPORT_LIMIT,
   queryContactsListRows,
 } from "@/lib/contacts-list-api";
+import {
+  filterContactRowsByListFilters,
+  hasNameColumnFilters,
+  searchContactsByName,
+} from "@/lib/contacts-query";
 
 /** Campaign create / preview filter payload (subset of advanced contact search). */
 export type ContactFilter = {
@@ -95,7 +106,8 @@ function resolveCampaignNameFields(f: ContactFilter): {
 
 /**
  * Map campaign name fields → ContactListFilters for name / advanced RPC.
- * Single «ΟΝΟΜΑ» persists as `first_name` (same as advanced contact search).
+ * Single «ΟΝΟΜΑ» persists as `first_name`. Query OR across first/last/father is
+ * handled in listContactIdsMatching via searchContactsByName.
  */
 function campaignNameToListNameFilters(f: ContactFilter): Pick<
   ContactListFilters,
@@ -103,6 +115,13 @@ function campaignNameToListNameFilters(f: ContactFilter): Pick<
 > {
   const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
   return { first_name, last_name, father_name, search: "" };
+}
+
+/** Single Όνομα term → OR match on first_name / last_name / father_name via name RPC. */
+function campaignSingleNameOrTerm(f: ContactFilter): string | null {
+  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
+  if (first_name && !last_name && !father_name) return first_name;
+  return null;
 }
 
 /** Map campaign filter → ContactListFilters for buildContactQueryPlan / list pipeline. */
@@ -140,6 +159,129 @@ export function campaignFilterToListFilters(f: ContactFilter): ContactListFilter
 
 /** Alias used by campaign create/preview (same mapper as advanced contact search). */
 export const campaignFiltersToContactListFilters = campaignFilterToListFilters;
+
+/**
+ * Single Όνομα → OR across first/last/father via search_contacts_by_name (union).
+ * Returns full contact rows for in-memory refine.
+ */
+async function fetchCampaignNameOrRows(
+  supabase: SupabaseClient,
+  orTerm: string,
+): Promise<Record<string, unknown>[]> {
+  const [byFirst, byLast, byFather] = await Promise.all([
+    searchContactsByName(supabase, { firstName: orTerm }),
+    searchContactsByName(supabase, { lastName: orTerm }),
+    searchContactsByName(supabase, { fatherName: orTerm }),
+  ]);
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const row of [...byFirst, ...byLast, ...byFather]) {
+    const id = String(row.id ?? "").trim();
+    if (id && !byId.has(id)) byId.set(id, row as Record<string, unknown>);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Apply exclude_group_ids against an already-narrowed row set via membership checks among
+ * those IDs only — never fetches the full exclude member list.
+ */
+async function excludeNameRowsByGroups(
+  supabase: SupabaseClient,
+  rows: Record<string, unknown>[],
+  excludeGroupIds: string[],
+): Promise<Record<string, unknown>[]> {
+  const uuids = await resolveGroupIdsToUuids(supabase, uniqStrings(excludeGroupIds));
+  if (!uuids.length || !rows.length) {
+    console.log("[listContactIdsMatching] exclude among name set", {
+      exclude_group_uuids: uuids,
+      name_before: rows.length,
+      excluded: 0,
+      name_after: rows.length,
+    });
+    return rows;
+  }
+  const contactIds = rows.map((r) => String(r.id ?? "").trim()).filter(Boolean);
+  const inExclude = await contactIdsInGroupsAmong(supabase, uuids, contactIds, "or");
+  const filtered = rows.filter((row) => !inExclude.has(String(row.id ?? "").trim()));
+  console.log("[listContactIdsMatching] exclude among name set", {
+    exclude_group_uuids: uuids,
+    name_before: rows.length,
+    excluded: inExclude.size,
+    name_after: filtered.length,
+  });
+  return filtered;
+}
+
+/** Rest filter is only exclude groups (no include/columns) — cheapest invert path. */
+function restIsExcludeGroupsOnly(rest: ContactFilter): boolean {
+  const withoutExclude: ContactFilter = { ...rest, exclude_group_ids: undefined };
+  return (
+    Boolean(rest.exclude_group_ids?.length) && !contactFilterHasCriteria(withoutExclude)
+  );
+}
+
+/**
+ * Refine a name-narrowed row set by group/exclude/column filters (name-search-then-refine).
+ * Never materializes a full large group — membership is tested against the small name set.
+ */
+async function refineCampaignNameRowsByRestFilters(
+  supabase: SupabaseClient,
+  nameRows: Record<string, unknown>[],
+  rest: ContactFilter,
+): Promise<Record<string, unknown>[]> {
+  // Fast path: name set + exclude only → membership check on the small ID set.
+  if (restIsExcludeGroupsOnly(rest)) {
+    return excludeNameRowsByGroups(supabase, nameRows, rest.exclude_group_ids ?? []);
+  }
+
+  const listFilters = campaignFilterToListFilters(rest);
+  // Always size-aware defer for groups: large includes stay deferred; small ones resolve eagerly.
+  // Exclude is always deferred here — never contactIdsForGroups on ~24k members.
+  const filterResolution = await resolveContactListFilterIds(supabase, listFilters, {
+    deferLargeGroupMembership: true,
+  });
+
+  console.log("[listContactIdsMatching] refine after name", {
+    name_before: nameRows.length,
+    deferred_exclude: filterResolution.deferredExcludeGroupIds ?? [],
+    deferred_include: filterResolution.deferredIncludeGroupIds?.length ?? 0,
+    eager_exclude_ids: filterResolution.excludeContactIds.length,
+    eager_include_ids: filterResolution.includeContactIds?.length ?? null,
+  });
+
+  let rows = await filterRowsByDeferredGroupMembership(supabase, nameRows, filterResolution);
+
+  if (filterResolution.includeContactIds !== null) {
+    const allow = new Set(filterResolution.includeContactIds);
+    rows = rows.filter((row) => allow.has(String(row.id)));
+  }
+
+  // Belt-and-suspenders: if exclude IDs were eagerly resolved somehow, still filter in memory
+  // on the small name set — never re-fetch the full group.
+  return filterContactRowsByListFilters(
+    rows as Parameters<typeof filterContactRowsByListFilters>[0],
+    listFilters,
+    {
+      partialLocation: false,
+      excludeContactIds: filterResolution.excludeContactIds,
+    },
+  ) as Record<string, unknown>[];
+}
+
+/** Fetch name-matched rows for any combination of first/last/father (campaign Όνομα OR or AND). */
+async function fetchCampaignNameRows(
+  supabase: SupabaseClient,
+  f: ContactFilter,
+): Promise<Record<string, unknown>[]> {
+  const orTerm = campaignSingleNameOrTerm(f);
+  if (orTerm) return fetchCampaignNameOrRows(supabase, orTerm);
+  const { first_name, last_name, father_name } = resolveCampaignNameFields(f);
+  return searchContactsByName(supabase, {
+    firstName: first_name || null,
+    lastName: last_name || null,
+    fatherName: father_name || null,
+  });
+}
 
 /** Surface PostgREST / plain-object throws (not always `instanceof Error`). */
 function formatContactFilterError(e: unknown): string {
@@ -343,11 +485,15 @@ export async function countContactsMatching(
 }
 
 /**
- * Resolve contact IDs with the same plan/pipeline as GET /api/contacts.
+ * Resolve contact IDs for campaign create/preview.
  * By default applies has_phone (campaign default: has). Pass applyHasPhone:false for preview splits.
  *
- * Always uses queryContactsListRows → buildContactQueryPlan (advanced-rpc for name+exclude,
- * name-search-then-refine when groups are deferred, etc.). Do not invent a parallel path.
+ * Routing:
+ * - Any name field set: search_contacts_by_name first (single Όνομα ORs first/last/father),
+ *   then refine groups/exclude/columns on that small set via contactIdsInGroupsAmong —
+ *   never materialize a full exclude group then search names among survivors.
+ * - Group / municipality / call_status / gender without name: queryContactsListRows
+ *   → search_contacts_advanced when canUseAdvancedSearchRpc.
  */
 export async function listContactIdsMatching(
   supabase: SupabaseClient,
@@ -355,25 +501,63 @@ export async function listContactIdsMatching(
   opts?: { applyHasPhone?: boolean; defaultHasPhone?: boolean },
 ): Promise<{ ids: string[]; error: string | null; match_total?: number }> {
   try {
-    const listFilters = campaignFilterToListFilters(f);
-    const { contacts, total, plan, subPath } = await queryContactsListRows(supabase, listFilters, {
-      limit: CONTACTS_EXPORT_LIMIT,
-    });
-    console.log("[listContactIdsMatching] plan", {
-      path: plan.path,
-      reason: plan.reason,
-      subPath,
-      total,
-      returned: contacts.length,
-      name: Boolean(listFilters.first_name || listFilters.last_name || listFilters.father_name),
-      exclude_groups: listFilters.exclude_group_ids.length,
-      include_groups: listFilters.group_ids.length,
-    });
+    const listForNameCheck = campaignFilterToListFilters(f);
+    const hasName = hasNameColumnFilters(listForNameCheck);
+    let ids: string[];
+    let match_total: number | undefined;
 
-    let ids = contacts
-      .map((r) => String((r as { id?: unknown }).id ?? "").trim())
-      .filter(Boolean);
-    const match_total = total;
+    if (hasName) {
+      const nameRows = await fetchCampaignNameRows(supabase, f);
+      const rest: ContactFilter = {
+        ...f,
+        first_name: undefined,
+        last_name: undefined,
+        father_name: undefined,
+      };
+
+      console.log("[listContactIdsMatching] name-first", {
+        name_match_count: nameRows.length,
+        or_term: campaignSingleNameOrTerm(f),
+        exclude_groups: uniqStrings(f.exclude_group_ids).length,
+        include_groups: uniqStrings(f.group_ids).length,
+        rest_has_criteria: contactFilterHasCriteria(rest),
+      });
+
+      if (contactFilterHasCriteria(rest)) {
+        // Name first → refine by group/exclude/muni/call_status/… on the small set
+        // (same inversion as name-search-then-refine; never fetch all group members).
+        const refined = await refineCampaignNameRowsByRestFilters(supabase, nameRows, rest);
+        ids = refined.map((r) => String(r.id ?? "").trim()).filter(Boolean);
+        match_total = ids.length;
+        console.log("[listContactIdsMatching] after refine", {
+          name_before: nameRows.length,
+          after_exclude: ids.length,
+        });
+      } else {
+        ids = nameRows.map((r) => String(r.id ?? "").trim()).filter(Boolean);
+        match_total = ids.length;
+      }
+    } else {
+      // Groups / columns only → buildContactQueryPlan via list pipeline
+      // (advanced-rpc when supported — exclude via EXISTS, not 24k ID materialization).
+      const listFilters = campaignFilterToListFilters(f);
+      const { contacts, total, plan, subPath } = await queryContactsListRows(supabase, listFilters, {
+        limit: CONTACTS_EXPORT_LIMIT,
+      });
+      console.log("[listContactIdsMatching] plan (no name)", {
+        path: plan.path,
+        reason: plan.reason,
+        subPath,
+        total,
+        returned: contacts.length,
+        exclude_groups: listFilters.exclude_group_ids.length,
+        include_groups: listFilters.group_ids.length,
+      });
+      ids = contacts
+        .map((r) => String((r as { id?: unknown }).id ?? "").trim())
+        .filter(Boolean);
+      match_total = total;
+    }
 
     const apply = opts?.applyHasPhone !== false;
     if (apply) {
