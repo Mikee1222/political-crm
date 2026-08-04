@@ -16,7 +16,7 @@ export type MobileFilterSheetProps = {
 };
 
 /**
- * Mobile-only bottom sheet for advanced search filters.
+ * Mobile-only bottom sheet for advanced search filters (contacts/requests).
  * Portal + backdrop + Escape; slides up from bottom with safe-area padding.
  * Hidden at `lg` so desktop keeps the sidebar.
  */
