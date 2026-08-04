@@ -1504,7 +1504,7 @@ export default function CampaignDetailPage() {
               </button>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-4 px-4">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className={lux.tableHead + " border-b border-[var(--border)]"}>
@@ -1747,7 +1747,7 @@ export default function CampaignDetailPage() {
         {loading && !data ? (
           <p className="p-6 text-sm text-[var(--text-secondary)]">Φόρτωση…</p>
         ) : (
-          <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+          <div className="overflow-x-auto -mx-4 px-4 -webkit-overflow-scrolling-touch">
             <table className="w-full min-w-[720px] text-sm text-[var(--text-primary)]">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--bg-elevated)]/60">

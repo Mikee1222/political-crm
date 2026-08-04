@@ -22,6 +22,7 @@ import { SearchResultsHeader } from "@/components/search/search-results-header";
 import { SearchResultsOverlay } from "@/components/search/search-results-overlay";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MobileFilterFab } from "@/components/mobile/mobile-filter-fab";
+import { MobileFilterSheet } from "@/components/mobile/mobile-filter-sheet";
 import { PageHeader } from "@/components/ui/page-header";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { useFormToast } from "@/contexts/form-toast-context";
@@ -402,6 +403,7 @@ function ContactSearchPageInner() {
       clearContactsSearchNav();
       restoredFingerprintRef.current = null;
       setRestoredFromCache(false);
+      setMobileFiltersOpen(false);
       const next = { ...cloneContactListFilters(f), page: "1" };
       setDraftFilters(next);
       setAppliedFilters(next);
@@ -762,6 +764,19 @@ function ContactSearchPageInner() {
     />
   );
 
+  const mobileFiltersPanel = (
+    <ContactSearchFiltersPanel
+      filters={draftFilters}
+      onChange={setDraftFilters}
+      onSearch={runSearch}
+      onClear={clearFilters}
+      onSaveFilters={handleSaveFilters}
+      savingFilters={savingFilters}
+      sheetMode
+      onCloseSheet={() => setMobileFiltersOpen(false)}
+    />
+  );
+
   const replaceSearchUrl = useCallback(
     (params: URLSearchParams) => {
       if (focusMode) params.set("focus", "1");
@@ -845,11 +860,19 @@ function ContactSearchPageInner() {
                 {!focusMode ? (
                   <button
                     type="button"
-                    className={cn(lux.btnSecondary, "inline-flex lg:hidden !h-9 !min-h-9 !rounded-lg !px-3 !py-0 text-xs")}
+                    className={cn(
+                      lux.btnSecondary,
+                      "inline-flex min-h-[44px] items-center gap-1.5 lg:hidden !h-11 !rounded-lg !px-3.5 !py-0 text-xs font-semibold",
+                    )}
                     onClick={() => setMobileFiltersOpen(true)}
                   >
-                    <Filter className="h-3.5 w-3.5" />
+                    <Filter className="h-4 w-4" />
                     Φίλτρα
+                    {chips.length > 0 ? (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--accent-gold)] px-1.5 text-[10px] font-bold text-[#0a0f1a]">
+                        {chips.length}
+                      </span>
+                    ) : null}
                   </button>
                 ) : null}
                 {!focusMode ? (
@@ -902,7 +925,7 @@ function ContactSearchPageInner() {
               <EmptyState
                 icon={<SlidersHorizontal className="h-12 w-12 text-[var(--text-muted)]" aria-hidden />}
                 title="Εφαρμόστε φίλτρα για αναζήτηση"
-                subtitle="Ρυθμίστε τα κριτήρια στα αριστερά και πατήστε «Αναζήτηση»."
+                subtitle="Ρυθμίστε τα φίλτρα και πατήστε «Αναζήτηση»"
                 className="border border-dashed border-[var(--border)] bg-transparent"
               />
             ) : loading && contacts.length === 0 ? (
@@ -953,41 +976,20 @@ function ContactSearchPageInner() {
 
       <MobileFilterFab onClick={() => setMobileFiltersOpen(true)} />
 
-      {/* Mobile bottom sheet */}
-      {mobileFiltersOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-40 [background:var(--overlay-scrim)] backdrop-blur-[2px] lg:hidden"
-            aria-label="Κλείσιμο φίλτρων"
-            onClick={() => setMobileFiltersOpen(false)}
-          />
-          <div
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[min(88vh,720px)] flex-col rounded-t-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl lg:hidden"
-            role="dialog"
-            aria-modal
-            aria-label="Φίλτρα αναζήτησης"
-          >
-            <div className="flex justify-center pt-2" aria-hidden>
-              <div className="h-1 w-10 rounded-full bg-[var(--border)]" />
-            </div>
-            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-              <span className="font-semibold text-[var(--text-primary)]">Φίλτρα αναζήτησης</span>
-              <button
-                type="button"
-                className={lux.btnIcon}
-                onClick={() => setMobileFiltersOpen(false)}
-                aria-label="Κλείσιμο"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden p-3">{filtersPanel}</div>
-          </div>
-        </>
-      ) : null}
+      <MobileFilterSheet
+        open={mobileFiltersOpen}
+        onClose={() => setMobileFiltersOpen(false)}
+        title="Φίλτρα αναζήτησης"
+      >
+        {mobileFiltersPanel}
+      </MobileFilterSheet>
 
-      <CenteredModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)} title="Αποθήκευση φίλτρων">
+      <CenteredModal
+        open={saveModalOpen}
+        onClose={() => setSaveModalOpen(false)}
+        title="Αποθήκευση φίλτρων"
+        sheetOnMobile
+      >
         <div className="space-y-3 p-1">
           <div>
             <label className={lux.label} htmlFor="sf-name">

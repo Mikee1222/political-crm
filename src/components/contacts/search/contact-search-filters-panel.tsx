@@ -74,6 +74,9 @@ export function ContactSearchFiltersPanel({
   onClear,
   onSaveFilters,
   savingFilters,
+  sheetMode = false,
+  onCloseSheet,
+  hideActions = false,
 }: {
   filters: ContactListFilters;
   onChange: (f: ContactListFilters) => void;
@@ -81,6 +84,11 @@ export function ContactSearchFiltersPanel({
   onClear: () => void;
   onSaveFilters: (f: ContactListFilters) => void;
   savingFilters?: boolean;
+  /** Mobile bottom sheet: Εφαρμογή / Κλείσιμο labels + larger targets. */
+  sheetMode?: boolean;
+  onCloseSheet?: () => void;
+  /** When true, omit sticky actions (parent sheet provides footer). */
+  hideActions?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftFromFilters(filters));
   const cachedMunis = peekMunicipalities();
@@ -493,25 +501,33 @@ export function ContactSearchFiltersPanel({
         </FilterSection>
       </div>
 
-      <SearchFilterActions
-        onSearch={runSearch}
-        onClear={onClear}
-        clearLabel="Καθαρισμός φίλτρων"
-        extraActions={
-          <button
-            type="button"
-            className={lux.btnSecondary + " w-full !h-10 !rounded-lg !py-0 text-sm"}
-            onClick={() => {
-              const f = filtersFromDraft(draft);
-              applyDraft();
-              onSaveFilters(f);
-            }}
-            disabled={savingFilters}
-          >
-            Αποθήκευση φίλτρων
-          </button>
-        }
-      />
+      {!hideActions ? (
+        <SearchFilterActions
+          onSearch={runSearch}
+          onClear={onClear}
+          onClose={onCloseSheet}
+          sheetMode={sheetMode}
+          clearLabel="Καθαρισμός φίλτρων"
+          extraActions={
+            <button
+              type="button"
+              className={cn(
+                lux.btnSecondary,
+                "w-full !rounded-lg !py-0 text-sm",
+                sheetMode ? "!h-11 !min-h-[44px]" : "!h-10",
+              )}
+              onClick={() => {
+                const f = filtersFromDraft(draft);
+                applyDraft();
+                onSaveFilters(f);
+              }}
+              disabled={savingFilters}
+            >
+              Αποθήκευση φίλτρων
+            </button>
+          }
+        />
+      ) : null}
     </div>
   );
 }

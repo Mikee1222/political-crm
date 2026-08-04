@@ -61,7 +61,7 @@ export function RequestSearchResultCard({
           onNavigate();
         }
       }}
-      className="group/request-card relative flex w-full min-w-0 cursor-pointer gap-3 border-b border-[var(--border)] bg-[var(--bg-card)] px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors duration-200 first:rounded-t-xl last:rounded-b-xl last:border-b-0 hover:bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg-elevated))]"
+      className="group/request-card relative flex w-full min-w-0 cursor-pointer gap-3 border-b border-[var(--border)] bg-[var(--bg-card)] px-3 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors duration-200 first:rounded-t-xl last:rounded-b-xl last:border-b-0 hover:bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg-elevated))] active:bg-[color-mix(in_srgb,var(--accent)_8%,var(--bg-elevated))] sm:px-4 sm:py-3"
     >
       <div
         className="w-1 shrink-0 self-stretch rounded-full"

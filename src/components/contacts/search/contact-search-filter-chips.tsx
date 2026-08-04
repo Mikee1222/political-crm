@@ -68,7 +68,9 @@ export function ContactSearchFilterChips({
   onDismiss: (key: string) => void;
   onClearAll?: () => void;
 }) {
-  return <ActiveFilterChips chips={chips} onDismiss={onDismiss} onClearAll={onClearAll} />;
+  return (
+    <ActiveFilterChips chips={chips} onDismiss={onDismiss} onClearAll={onClearAll} scrollOnMobile />
+  );
 }
 
 export { REQUEST_STATUSES } from "@/lib/request-statuses";

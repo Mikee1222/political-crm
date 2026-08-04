@@ -512,19 +512,19 @@ function RequestDetailPageInner() {
             </h1>
             {data.category && <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>}
           </div>
-          <div className="flex min-w-[240px] flex-col items-start gap-2 sm:items-end">
+          <div className="flex w-full flex-col items-start gap-2 sm:min-w-[240px] sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
               <RequestStatusBadge status={data.status ?? REQUEST_STATUS_OPEN} size="md" bold />
               <PriorityBadge p={data.priority} />
             </div>
             {canEdit ? (
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center gap-2 sm:w-auto">
                 <label htmlFor="request-inline-status" className="text-xs font-medium text-[var(--text-secondary)]">
                   Κατάσταση
                 </label>
                 <select
                   id="request-inline-status"
-                  className={lux.select + " min-w-[220px] !py-1.5 text-xs sm:min-w-[260px]"}
+                  className={lux.select + " w-full !py-1.5 text-xs sm:min-w-[220px]"}
                   value={normalizeRequestStatus(data.status ?? REQUEST_STATUS_OPEN)}
                   disabled={statusSaving}
                   onChange={(e) => void handleStatusChange(e.target.value)}
@@ -622,7 +622,7 @@ function RequestDetailPageInner() {
                   </span>
                 )}
                 <Pencil
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-muted)] opacity-0 transition group-hover:opacity-100 group-hover:text-[#C9A84C]"
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-muted)] opacity-100 transition group-hover:text-[#C9A84C] sm:opacity-0 sm:group-hover:opacity-100"
                   aria-hidden
                 />
               </button>

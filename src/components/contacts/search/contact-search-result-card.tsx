@@ -87,7 +87,7 @@ export function ContactSearchResultCard({
           onNavigate();
         }
       }}
-      className="group/contact-card flex w-full min-w-0 cursor-pointer items-center gap-4 border-b border-[var(--border)] bg-[var(--bg-card)] px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors duration-200 first:rounded-t-xl last:rounded-b-xl last:border-b-0 hover:bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg-elevated))]"
+      className="group/contact-card flex w-full min-w-0 cursor-pointer items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-card)] px-3 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors duration-200 first:rounded-t-xl last:rounded-b-xl last:border-b-0 hover:bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg-elevated))] active:bg-[color-mix(in_srgb,var(--accent)_8%,var(--bg-elevated))] sm:gap-4 sm:px-4 sm:py-3"
     >
       <div
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[13px] font-bold shadow-sm"
@@ -98,7 +98,7 @@ export function ContactSearchResultCard({
 
       <div className="min-w-0 flex-1">
         <ContactStatusBadges contact={c} size="xs" className="mb-1" />
-        <div className="truncate text-[15px] font-bold text-[var(--text-primary)]">
+        <div className="min-w-0 text-[15px] font-bold leading-snug text-[var(--text-primary)] sm:truncate">
           {c.first_name} {c.last_name}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--text-secondary)]">
@@ -152,11 +152,12 @@ export function ContactSearchResultCard({
           onClick={(e) => e.stopPropagation()}
           className={cn(
             lux.btnPrimary,
-            "shrink-0 !h-9 !min-h-9 !rounded-lg !px-2.5 !py-0 opacity-0 transition-opacity group-hover/contact-card:opacity-100 sm:hidden",
+            "shrink-0 !h-11 !min-h-[44px] !rounded-lg !px-3 !py-0 opacity-100 transition-opacity sm:!h-9 sm:!min-h-9 sm:!px-2.5 sm:opacity-0 sm:group-hover/contact-card:opacity-100",
           )}
           title="Κλήση"
+          aria-label="Κλήση"
         >
-          <Phone className="h-3.5 w-3.5" aria-hidden />
+          <Phone className="h-4 w-4 sm:h-3.5 sm:w-3.5" aria-hidden />
         </a>
       ) : null}
     </div>

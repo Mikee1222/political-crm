@@ -25,11 +25,17 @@ export function RequestSearchFiltersPanel({
   onChange,
   onSearch,
   onClear,
+  sheetMode = false,
+  onCloseSheet,
+  hideActions = false,
 }: {
   filters: RequestListFilters;
   onChange: (f: RequestListFilters) => void;
   onSearch: (f: RequestListFilters) => void;
   onClear: () => void;
+  sheetMode?: boolean;
+  onCloseSheet?: () => void;
+  hideActions?: boolean;
 }) {
   const [draft, setDraft] = useState<RequestListFilters>(filters);
   const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
@@ -269,7 +275,14 @@ export function RequestSearchFiltersPanel({
         </FilterSection>
       </div>
 
-      <SearchFilterActions onSearch={applyAndSearch} onClear={onClear} />
+      {!hideActions ? (
+        <SearchFilterActions
+          onSearch={applyAndSearch}
+          onClear={onClear}
+          onClose={onCloseSheet}
+          sheetMode={sheetMode}
+        />
+      ) : null}
     </div>
   );
 }
