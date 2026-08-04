@@ -21,11 +21,9 @@ const card =
 
 export function ContactExtraSections({
   contactId,
-  phone: _phone,
   canManage,
 }: {
   contactId: string;
-  phone: string | null;
   canManage: boolean;
 }) {
   const [appts, setAppts] = useState<ApptRow[]>([]);

@@ -1778,7 +1778,7 @@ function ContactDetailPage() {
         ) : null}
         {canManage && (
           <div className="min-w-0 md:col-span-2">
-            <ContactExtraSections contactId={c.id} phone={c.phone} canManage={canManage} />
+            <ContactExtraSections contactId={c.id} canManage={canManage} />
           </div>
         )}
         {canManage && (
