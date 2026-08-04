@@ -325,6 +325,8 @@ function PortalFooter({ signedIn }: { signedIn: boolean }) {
   );
 }
 
+const PWA_DISMISSED_KEY = "pwa-dismissed";
+
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
   const [me, setMe] = useState<{ first: string } | null>(null);
@@ -333,16 +335,36 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const [installed, setInstalled] = useState(false);
   const [promptEvent, setPromptEvent] = useState<Event | null>(null);
   const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
+  const [pwaPromptReady, setPwaPromptReady] = useState(false);
+
+  const dismissPwaPrompt = () => {
+    try {
+      sessionStorage.setItem(PWA_DISMISSED_KEY, "1");
+    } catch {
+      // ignore quota / private mode
+    }
+    setInstallBannerDismissed(true);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const standalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
     setInstalled(Boolean(standalone));
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(PWA_DISMISSED_KEY) === "1";
+    } catch {
+      // ignore
+    }
+    if (dismissed) setInstallBannerDismissed(true);
+    setPwaPromptReady(true);
     const onBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setPromptEvent(e);
       setInstallable(true);
-      setInstallBannerDismissed(false);
+      // Keep session dismiss — do not force the banner back open
     };
     const onInstalled = () => {
       setInstalled(true);
@@ -445,7 +467,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 type="button"
-                onClick={() => setInstallBannerDismissed(true)}
+                onClick={dismissPwaPrompt}
                 className="text-xs font-bold text-[#475569]"
                 aria-label="Κλείσιμο"
               >
@@ -456,13 +478,14 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
       <div className="min-h-0 min-w-0 flex-1 bg-[#FAFBFC]">{children}</div>
-      {pathname === "/portal" && (
+      {pathname === "/portal" && pwaPromptReady && !installed && !installBannerDismissed && (
         <div className="fixed bottom-3 left-1/2 z-[80] w-[min(94vw,520px)] -translate-x-1/2 px-2 sm:bottom-4 sm:px-0">
           <PwaInstallSteps
             title="Εγκαταστήστε την εφαρμογή"
             subtitle="Οδηγίες για γρήγορη πρόσβαση από την αρχική οθόνη."
             compact
             className="bg-white/95 shadow-[0_12px_30px_rgba(0,0,0,0.14)] backdrop-blur"
+            onDismiss={dismissPwaPrompt}
           />
         </div>
       )}

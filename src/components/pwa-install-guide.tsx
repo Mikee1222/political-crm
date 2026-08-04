@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Share2, Smartphone } from "lucide-react";
+import { Download, Share2, Smartphone, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 export type InstallPlatform = "android-chrome" | "ios-safari" | "other";
@@ -54,11 +54,13 @@ export function PwaInstallSteps({
   subtitle,
   compact = false,
   className = "",
+  onDismiss,
 }: {
   title: string;
   subtitle?: string;
   compact?: boolean;
   className?: string;
+  onDismiss?: () => void;
 }) {
   const platform = useInstallPlatform();
   const steps = useMemo(() => installStepsForPlatform(platform), [platform]);
@@ -67,12 +69,22 @@ export function PwaInstallSteps({
   return (
     <section
       className={[
-        "rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)]",
+        "relative rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--card-shadow)]",
         compact ? "p-3" : "p-4 sm:p-5",
         className,
       ].join(" ")}
     >
-      <div className="mb-3 flex items-center gap-2">
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-black/5 hover:text-[var(--text-primary)]"
+          aria-label="Κλείσιμο"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
+      <div className={`mb-3 flex items-center gap-2 ${onDismiss ? "pr-8" : ""}`}>
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent-gold)_16%,var(--bg-elevated))] text-[var(--accent-gold)]">
           <Icon className="h-4 w-4" />
         </span>
