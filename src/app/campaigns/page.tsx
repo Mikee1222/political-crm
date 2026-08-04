@@ -32,7 +32,15 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
-import { fetchWithTimeout, CAMPAIGN_CREATE_FETCH_TIMEOUT_MS } from "@/lib/client-fetch";
+import {
+  fetchWithTimeout,
+  CAMPAIGN_CREATE_FETCH_TIMEOUT_MS,
+} from "@/lib/client-fetch";
+
+/** Avoid preview on 2–3 char name stubs (times out scanning ~71k contacts). */
+const CAMPAIGN_PREVIEW_MIN_NAME_CHARS = 4;
+/** Campaign create modal preview debounce (ms). */
+const CAMPAIGN_PREVIEW_DEBOUNCE_MS = 800;
 import { formatDateAthens } from "@/lib/date-format";
 import { lux } from "@/lib/luxury-styles";
 import type { CampaignTypeRow } from "@/lib/campaign-types";
@@ -470,9 +478,19 @@ function CampaignsPageInner() {
   useEffect(() => {
     if (!modal) return;
 
+    const nameTrim = filter.first_name.trim();
+    // Incomplete Όνομα (1–3 chars) → do not fire preview (avoids broad/timeout scans).
+    if (nameTrim.length > 0 && nameTrim.length < CAMPAIGN_PREVIEW_MIN_NAME_CHARS) {
+      setPreviewWithPhone(null);
+      setPreviewWithoutPhone(null);
+      setPreviewManualCount(0);
+      setPreviewing(false);
+      return;
+    }
+
     const q = new URLSearchParams();
     if (selectedContactIds.length) q.set("contact_ids", selectedContactIds.join(","));
-    if (filter.first_name.trim()) q.set("first_name", filter.first_name.trim());
+    if (nameTrim.length >= CAMPAIGN_PREVIEW_MIN_NAME_CHARS) q.set("first_name", nameTrim);
     if (filter.call_status) q.set("call_status", filter.call_status);
     if (filter.area) q.set("area", filter.area);
     if (filter.municipality) q.set("municipality", filter.municipality);
@@ -500,7 +518,9 @@ function CampaignsPageInner() {
 
     setPreviewing(true);
     const t = setTimeout(() => {
-      fetchWithTimeout(`/api/campaigns/preview?${q.toString()}`)
+      fetchWithTimeout(`/api/campaigns/preview?${q.toString()}`, {
+        timeoutMs: CAMPAIGN_CREATE_FETCH_TIMEOUT_MS,
+      })
         .then((r) => r.json())
         .then((d) => {
           setPreviewWithPhone(typeof d.with_phone === "number" ? d.with_phone : null);
@@ -513,7 +533,7 @@ function CampaignsPageInner() {
           setPreviewManualCount(0);
         })
         .finally(() => setPreviewing(false));
-    }, 500);
+    }, CAMPAIGN_PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [modal, filter, selectedContactIds]);
 

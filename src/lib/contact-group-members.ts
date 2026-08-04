@@ -154,31 +154,63 @@ export async function resolveGroupIdsToUuids(supabase: SupabaseClient, raw: stri
 
 /** PostgREST returns at most 1000 rows per request — paginate to fetch every member. */
 const RPC_PAGE_SIZE = 1000;
+/** Parallel pages when materializing large multi-group membership (one RPC, all group ids). */
+const GROUP_ID_FETCH_CONCURRENCY = 6;
+/**
+ * Chunk size for contactIdsInGroupsAmong (candidate ∩ groups). Larger than MAX_ID_IN_CLAUSE
+ * because the select is tiny (ids only) and both group_id + contact_id are constrained.
+ */
+const AMONG_CONTACT_ID_CHUNK = 500;
 
-/** Contact IDs in groups via RPC (junction + contacts.group_id). AND = all groups; OR = any. */
+/**
+ * Contact IDs in groups via RPC (junction + contacts.group_id).
+ * Always passes **all** `groupIds` in one `get_contacts_in_groups` call (`group_id = ANY(...)`) —
+ * never N sequential per-group fetches. AND = all groups; OR = any.
+ * Large result sets: page in parallel waves (still one multi-group RPC per page).
+ */
 async function contactIdsForGroups(
   supabase: SupabaseClient,
   groupIds: string[],
   matchMode: "or" | "and" = "or",
 ): Promise<string[]> {
-  if (!groupIds.length) return [];
+  const groups = uniqueIds(groupIds);
+  if (!groups.length) return [];
 
-  const allIds: string[] = [];
-  let from = 0;
+  const rpcArgs = {
+    group_ids: groups,
+    match_mode: matchMode,
+  };
 
-  while (true) {
+  const fetchPage = async (from: number): Promise<string[]> => {
     const { data, error } = await supabase
-      .rpc("get_contacts_in_groups", {
-        group_ids: groupIds,
-        match_mode: matchMode,
-      })
+      .rpc("get_contacts_in_groups", rpcArgs)
       .range(from, from + RPC_PAGE_SIZE - 1);
     if (error) throw error;
+    return (data ?? []).map((r: { contact_id: string }) => String(r.contact_id));
+  };
 
-    const page = (data ?? []).map((r: { contact_id: string }) => String(r.contact_id));
-    allIds.push(...page);
-    if (page.length < RPC_PAGE_SIZE) break;
-    from += RPC_PAGE_SIZE;
+  const first = await fetchPage(0);
+  if (first.length < RPC_PAGE_SIZE) return uniqueIds(first);
+
+  const allIds = [...first];
+  let from = RPC_PAGE_SIZE;
+
+  while (true) {
+    const offsets: number[] = [];
+    for (let i = 0; i < GROUP_ID_FETCH_CONCURRENCY; i++) {
+      offsets.push(from + i * RPC_PAGE_SIZE);
+    }
+    const pages = await Promise.all(offsets.map((off) => fetchPage(off)));
+    let sawShort = false;
+    for (const page of pages) {
+      allIds.push(...page);
+      if (page.length < RPC_PAGE_SIZE) {
+        sawShort = true;
+        break;
+      }
+    }
+    if (sawShort) break;
+    from += GROUP_ID_FETCH_CONCURRENCY * RPC_PAGE_SIZE;
   }
 
   return uniqueIds(allIds);
@@ -214,35 +246,53 @@ export async function contactIdsInGroupsAmong(
 
   const hitsByContact = new Map<string, Set<string>>();
 
-  for (let i = 0; i < contacts.length; i += MAX_ID_IN_CLAUSE) {
-    const chunk = contacts.slice(i, i + MAX_ID_IN_CLAUSE);
+  const processChunk = async (chunk: string[]) => {
+    // Single round-trip pair for ALL exclude/include group UUIDs (`.in('group_id', groups)` =
+    // SQL `= ANY(...)`), never one query per group.
+    const [junctionResult, legacyResult] = await Promise.all([
+      supabase
+        .from("contact_group_members")
+        .select("contact_id, group_id")
+        .in("group_id", groups)
+        .in("contact_id", chunk),
+      supabase
+        .from("contacts")
+        .select("id, group_id")
+        .in("id", chunk)
+        .in("group_id", groups),
+    ]);
+    if (junctionResult.error) throw junctionResult.error;
+    if (legacyResult.error) throw legacyResult.error;
 
-    const { data: junctionRows, error: junctionErr } = await supabase
-      .from("contact_group_members")
-      .select("contact_id, group_id")
-      .in("group_id", groups)
-      .in("contact_id", chunk);
-    if (junctionErr) throw junctionErr;
-    for (const row of (junctionRows ?? []) as Array<{ contact_id: string; group_id: string }>) {
+    for (const row of (junctionResult.data ?? []) as Array<{
+      contact_id: string;
+      group_id: string;
+    }>) {
       const cid = String(row.contact_id);
       const gid = String(row.group_id);
       if (!hitsByContact.has(cid)) hitsByContact.set(cid, new Set());
       hitsByContact.get(cid)!.add(gid);
     }
-
-    const { data: legacyRows, error: legacyErr } = await supabase
-      .from("contacts")
-      .select("id, group_id")
-      .in("id", chunk)
-      .in("group_id", groups);
-    if (legacyErr) throw legacyErr;
-    for (const row of (legacyRows ?? []) as Array<{ id: string; group_id: string | null }>) {
+    for (const row of (legacyResult.data ?? []) as Array<{
+      id: string;
+      group_id: string | null;
+    }>) {
       const cid = String(row.id);
       const gid = row.group_id ? String(row.group_id) : "";
       if (!gid) continue;
       if (!hitsByContact.has(cid)) hitsByContact.set(cid, new Set());
       hitsByContact.get(cid)!.add(gid);
     }
+  };
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < contacts.length; i += AMONG_CONTACT_ID_CHUNK) {
+    chunks.push(contacts.slice(i, i + AMONG_CONTACT_ID_CHUNK));
+  }
+  // Modest parallelism across chunks (each chunk already hits all groups in one query).
+  const CHUNK_CONCURRENCY = 4;
+  for (let i = 0; i < chunks.length; i += CHUNK_CONCURRENCY) {
+    await Promise.all(chunks.slice(i, i + CHUNK_CONCURRENCY).map(processChunk));
   }
 
   const need = matchMode === "and" ? groups.length : 1;

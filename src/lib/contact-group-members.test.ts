@@ -260,9 +260,47 @@ describe("resolveGroupFilterContactIds", () => {
       group_match: "or",
     });
 
-    expect(rpc).toHaveBeenCalledTimes(2);
+    // First page + parallel lookahead wave (concurrency 6) until a short page.
+    expect(rpc.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(result.includeContactIds).toHaveLength(1001);
     expect(result.includeContactIds).toContain("ffffffff-ffff-ffff-ffff-ffffffffffff");
+  });
+
+  it("passes all exclude group UUIDs in one get_contacts_in_groups call (not per-group)", async () => {
+    const g1 = "11111111-1111-4111-8111-111111111111";
+    const g2 = "22222222-2222-4222-8222-222222222222";
+    const g3 = "33333333-3333-4333-8333-333333333333";
+    const g4 = "44444444-4444-4444-8444-444444444444";
+    const rpc = mockRpcData([[{ contact_id: contact2 }]]);
+    const supabase = {
+      from: () => ({
+        select: () =>
+          Promise.resolve({
+            data: [
+              { id: g1, name: "A" },
+              { id: g2, name: "B" },
+              { id: g3, name: "C" },
+              { id: g4, name: "D" },
+            ],
+            error: null,
+          }),
+      }),
+      rpc,
+    };
+
+    const result = await resolveGroupFilterContactIds(supabase as never, {
+      group_id: "",
+      group_ids: [],
+      exclude_group_ids: [g1, g2, g3, g4],
+      group_match: "or",
+    });
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("get_contacts_in_groups", {
+      group_ids: [g1, g2, g3, g4],
+      match_mode: "or",
+    });
+    expect(result.excludeContactIds).toEqual([contact2]);
   });
 });
 
