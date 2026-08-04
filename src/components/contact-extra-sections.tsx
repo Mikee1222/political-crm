@@ -21,7 +21,7 @@ const card =
 
 export function ContactExtraSections({
   contactId,
-  phone,
+  phone: _phone,
   canManage,
 }: {
   contactId: string;
@@ -59,8 +59,8 @@ export function ContactExtraSections({
   }
 
   const base = typeof window !== "undefined" ? window.location.origin : "";
-  const regUrl = `${base}/portal/register?contact=${encodeURIComponent(contactId)}&phone=${encodeURIComponent(phone ?? "")}`;
-  const qrSrc = `/api/qrcode?url=${encodeURIComponent(regUrl)}&size=240`;
+  const portalUrl = `${base}/portal/login`;
+  const qrSrc = `/api/qrcode?url=${encodeURIComponent(portalUrl)}&size=240`;
 
   return (
     <div className="col-span-full flex flex-col gap-4">
@@ -96,14 +96,14 @@ export function ContactExtraSections({
         onClose={() => setQrOpen(false)}
         title="QR portal"
         className="max-w-sm"
-        ariaLabel="QR εγγραφής portal"
+        ariaLabel="QR portal"
         footer={
           <button type="button" className={lux.btnSecondary} onClick={() => setQrOpen(false)}>
             Άκυρο
           </button>
         }
       >
-        <p className="mb-3 text-center text-sm text-[var(--text-secondary)]">Σκανάρετε για εγγραφή portal</p>
+        <p className="mb-3 text-center text-sm text-[var(--text-secondary)]">Σκανάρετε για σύνδεση στην πύλη</p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={qrSrc} alt="" className="mx-auto h-48 w-48" />
       </CenteredModal>

@@ -82,10 +82,10 @@ export default async function PortalHomePage() {
                   Μάθετε περισσότερα
                 </Link>
                 <Link
-                  href="/portal/register"
+                  href="/portal/login"
                   className="inline-flex w-full max-w-sm items-center justify-center rounded-xl border-2 border-white/90 px-8 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-white/10 sm:w-auto sm:py-4"
                 >
-                  Εγγραφή
+                  Σύνδεση
                 </Link>
               </div>
             </div>
@@ -325,14 +325,14 @@ export default async function PortalHomePage() {
           ) : (
             <>
               <p className="text-2xl font-extrabold text-white sm:text-3xl">
-                Δημιουργήστε λογαριασμό για πλήρη πρόσβαση στην πύλη
+                Συνδεθείτε για πλήρη πρόσβαση στην πύλη
               </p>
               <Link
-                href="/portal/register"
+                href="/portal/login"
                 className="mt-8 inline-flex rounded-xl px-10 py-4 text-base font-extrabold text-[#0f172a] shadow-lg"
                 style={{ background: "linear-gradient(135deg, #C9A84C, #8B6914)" }}
               >
-                Εγγραφή τώρα
+                Σύνδεση
               </Link>
             </>
           )}

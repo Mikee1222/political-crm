@@ -16,7 +16,7 @@ export default function QrCodePage() {
 
   useEffect(() => {
     const base = typeof window !== "undefined" ? window.location.origin : "";
-    setUrl(`${base}/portal/register`);
+    setUrl(`${base}/portal/login`);
   }, []);
 
   const refresh = useCallback(() => {
@@ -42,7 +42,7 @@ export default function QrCodePage() {
     <div className="space-y-6 p-4 sm:p-6">
       <div className={lux.card}>
         <h1 className={lux.pageTitle}>QR Code</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Για εγγραφή portal και άλλα URLs.</p>
+        <p className="text-sm text-[var(--text-secondary)]">Για σύνδεση portal και άλλα URLs.</p>
         <div className="mt-4 space-y-3">
           <div>
             <label className={lux.label} htmlFor="u">

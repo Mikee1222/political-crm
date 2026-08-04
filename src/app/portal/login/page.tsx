@@ -36,6 +36,7 @@ function PortalLoginInner() {
 
   const nextRaw = sp.get("next");
   const destination = portalPostLoginDest(nextRaw);
+  const notice = (sp.get("notice") ?? "").trim();
 
   return (
     <div className="flex min-h-[-webkit-fill-available] min-h-dvh flex-col bg-[#FAFBFC]">
@@ -43,9 +44,6 @@ function PortalLoginInner() {
         <div className="mx-auto flex max-w-lg items-center justify-between">
           <Link href="/portal" className="text-sm font-bold" style={{ color: ND }}>
             ← Αρχική
-          </Link>
-          <Link href="/portal/register" className="text-sm font-semibold text-[#64748B] hover:underline">
-            Εγγραφή
           </Link>
         </div>
       </div>
@@ -62,7 +60,14 @@ function PortalLoginInner() {
           <h1 className="mt-4 text-center text-2xl font-extrabold" style={{ color: ND }}>
             Σύνδεση
           </h1>
-          <p className="mt-1 text-center text-sm text-[#64748B]">Πρόσβαση πολιτών στην πύλη (διαφορετική από το προσωπικό CRM)</p>
+          <p className="mt-1 text-center text-sm text-[#64748B]">
+            Συνδεθείτε με τα στοιχεία που σας έχουν δοθεί από το γραφείο του βουλευτή.
+          </p>
+          {notice ? (
+            <p className="mt-4 rounded-xl border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-3 py-2.5 text-center text-sm text-[#1A1A2E]" role="status">
+              {notice}
+            </p>
+          ) : null}
           {err && (
             <p className="mt-4 text-center text-sm text-red-600" role="alert">
               {err}
@@ -177,13 +182,6 @@ function PortalLoginInner() {
               Είσοδος
             </FormSubmitButton>
           </form>
-          <p className="mt-2 text-center text-sm text-[#64748B]">
-            Δεν έχετε λογαριασμό;{" "}
-            <Link href="/portal/register" className="font-extrabold hover:underline" style={{ color: ND }}>
-              Εγγραφή
-            </Link>
-          </p>
-          <p className="mt-6 text-center text-xs text-[#94A3B8]">Εγγεγραμμένοι πολίτες: 1.234+</p>
         </div>
       </div>
     </div>
