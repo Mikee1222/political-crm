@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       last_name?: string;
       phone?: string;
     };
-    const email = String(body.email ?? "").trim();
+    const email = String(body.email ?? "").trim().toLowerCase();
     const password = String(body.password ?? "");
     const first_name = String(body.first_name ?? "").trim();
     const last_name = String(body.last_name ?? "").trim();

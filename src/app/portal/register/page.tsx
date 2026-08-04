@@ -6,7 +6,7 @@ import { useState, Suspense } from "react";
 import { Check, Lock, Mail, Phone, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import { mapAuthErrorToGreek, minLength, requiredText, validateEmail, validatePhone10 } from "@/lib/form-validation";
+import { minLength, requiredText, validateEmail, validatePhone10 } from "@/lib/form-validation";
 import { HqFieldError, HqLabel } from "@/components/ui/hq-form-primitives";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { useFormToast } from "@/contexts/form-toast-context";
@@ -139,12 +139,16 @@ function RegisterForm() {
                   showToast(msg, "error");
                   return;
                 }
+                const loginEmail = email.trim().toLowerCase();
+                console.log("[register] attempting auto-login for:", loginEmail, "password length:", password.length);
                 const supabase = createClient();
-                const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+                const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
                 if (error) {
-                  const msg = "Η εγγραφή πέτυχε, αλλά απέτυχε η αυτόματη σύνδεση. " + mapAuthErrorToGreek(error.message);
+                  console.warn("[register] auto-login failed:", error.message);
+                  const msg = "Ο λογαριασμός δημιουργήθηκε! Παρακαλώ συνδεθείτε με τα στοιχεία σας.";
                   setErr(msg);
-                  showToast(msg, "error");
+                  showToast(msg, "success");
+                  router.push("/portal/login");
                   return;
                 }
                 showToast("Η εγγραφή ολοκληρώθηκε επιτυχώς.", "success");

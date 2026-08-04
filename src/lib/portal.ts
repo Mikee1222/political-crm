@@ -42,10 +42,13 @@ export async function registerPortalCitizen(input: {
 }): Promise<{ userId: string; error?: string }> {
   const admin = createServiceClient();
   const email = input.email.trim().toLowerCase();
+  // email_confirm: true so signInWithPassword works immediately after register.
+  // Portal uses its own VERIFY_PORTAL flow for portal_users.verified; Auth confirm
+  // must not block auto-login (same pattern as admin user create).
   const { data: auth, error: authErr } = await admin.auth.admin.createUser({
     email,
     password: input.password,
-    email_confirm: false,
+    email_confirm: true,
     /** Stops public.handle_new_user() from inserting a default CRM profile; register path upserts is_portal. */
     app_metadata: { portal_signup: true },
   });
@@ -105,7 +108,7 @@ export async function registerPortalCitizen(input: {
     return { userId: "", error: pIns.message };
   }
   const fullName = `${input.first_name.trim()} ${input.last_name.trim()}`;
-  await admin.from("profiles").upsert(
+  const { error: profileErr } = await admin.from("profiles").upsert(
     {
       id: userId,
       full_name: fullName,
@@ -114,6 +117,11 @@ export async function registerPortalCitizen(input: {
     } as never,
     { onConflict: "id" },
   );
+  if (profileErr) {
+    await admin.from("portal_users").delete().eq("auth_user_id", userId);
+    await admin.auth.admin.deleteUser(userId);
+    return { userId: "", error: profileErr.message };
+  }
 
   const u = EmailTemplates.verifyEmail(`${getPortalBaseUrl()}/portal/verify?token=${encodeURIComponent(verifyToken)}`);
   void sendResendEmail({
