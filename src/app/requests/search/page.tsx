@@ -24,13 +24,13 @@ import { MobileFilterSheet } from "@/components/mobile/mobile-filter-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { fetchWithTimeout } from "@/lib/client-fetch";
-import type { RequestCategoryRow } from "@/lib/request-categories";
 import {
   getDefaultRequestFilters,
   requestFiltersToSearchParams,
   searchParamsToRequestFilters,
   type RequestListFilters,
 } from "@/lib/requests-filters";
+import { useRequestFilterOptions } from "@/hooks/use-request-filter-options";
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { lux } from "@/lib/luxury-styles";
 import { buildActiveFilterSummaryLabel } from "@/lib/search-filter-summary";
@@ -44,7 +44,6 @@ import {
   saveSearchSessionState,
   SEARCH_FRESH_EVENT,
 } from "@/lib/search-session-state";
-import type { UnlinkedLegacyName } from "@/lib/staff-aliases";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -56,6 +55,7 @@ function RequestSearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { colors: statusColors } = useRequestStatusColors();
+  const { categoryNames, handlerNames } = useRequestFilterOptions();
 
   const [draftFilters, setDraftFilters] = useState<RequestListFilters>(getDefaultRequestFilters);
   const [appliedFilters, setAppliedFilters] = useState<RequestListFilters | null>(null);
@@ -65,9 +65,6 @@ function RequestSearchPageInner() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [slowSearch, setSlowSearch] = useState(false);
-  const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
-  const [assignees, setAssignees] = useState<{ id: string; full_name: string | null }[]>([]);
-  const [unlinkedHandlers, setUnlinkedHandlers] = useState<UnlinkedLegacyName[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [restoredFromCache, setRestoredFromCache] = useState(false);
@@ -96,38 +93,6 @@ function RequestSearchPageInner() {
       /* ignore */
     }
   }, []);
-
-  useEffect(() => {
-    void Promise.all([
-      fetchWithTimeout("/api/request-categories").then(async (r) => {
-        const d = (await r.json()) as { items?: RequestCategoryRow[] };
-        return d.items ?? [];
-      }),
-      fetchWithTimeout("/api/team/assignees").then(async (r) => {
-        const d = (await r.json()) as { assignees?: { id: string; full_name: string | null }[] };
-        return d.assignees ?? [];
-      }),
-      fetchWithTimeout("/api/staff-aliases/unlinked").then(async (r) => {
-        if (!r.ok) return [];
-        const d = (await r.json()) as { unlinked?: UnlinkedLegacyName[] };
-        return d.unlinked ?? [];
-      }),
-    ]).then(([cats, team, unlinked]) => {
-      setCategories(cats);
-      setAssignees(team);
-      setUnlinkedHandlers(unlinked);
-    });
-  }, []);
-
-  const categoryNames = useMemo(() => new Map(categories.map((c) => [c.name, c.name])), [categories]);
-  const handlerNames = useMemo(() => {
-    const map = new Map(assignees.map((a) => [a.id, a.full_name ?? a.id]));
-    for (const row of unlinkedHandlers) {
-      const name = row.name.trim();
-      if (name) map.set(name, name);
-    }
-    return map;
-  }, [assignees, unlinkedHandlers]);
 
   stateSnapshotRef.current = {
     hasSearched,

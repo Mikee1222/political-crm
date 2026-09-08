@@ -9,14 +9,10 @@ import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SearchFilterActions } from "@/components/search/search-filter-actions";
 import { SearchFilterInput, searchFilterInputClass } from "@/components/search/search-filter-input";
-import { fetchWithTimeout } from "@/lib/client-fetch";
-import type { RequestCategoryRow } from "@/lib/request-categories";
+import { useRequestFilterOptions } from "@/hooks/use-request-filter-options";
 import type { RequestListFilters } from "@/lib/requests-filters";
 import { REQUEST_STATUSES } from "@/lib/request-statuses";
-import type { UnlinkedLegacyName } from "@/lib/staff-aliases";
 import { cn } from "@/lib/utils";
-
-type Assignee = { id: string; full_name: string | null; role: string };
 
 const filterLabelClass = "mb-1.5 block text-xs font-medium text-[var(--text-secondary)]";
 
@@ -38,58 +34,16 @@ export function RequestSearchFiltersPanel({
   hideActions?: boolean;
 }) {
   const [draft, setDraft] = useState<RequestListFilters>(filters);
-  const [categories, setCategories] = useState<RequestCategoryRow[]>([]);
-  const [assignees, setAssignees] = useState<Assignee[]>([]);
-  const [unlinkedHandlers, setUnlinkedHandlers] = useState<UnlinkedLegacyName[]>([]);
+  const { loading, categoryOptions, assigneeOptions } = useRequestFilterOptions();
 
   useEffect(() => {
     setDraft(filters);
   }, [filters]);
 
-  useEffect(() => {
-    void Promise.all([
-      fetchWithTimeout("/api/request-categories").then(async (r) => {
-        const d = (await r.json()) as { items?: RequestCategoryRow[] };
-        return d.items ?? [];
-      }),
-      fetchWithTimeout("/api/team/assignees").then(async (r) => {
-        const d = (await r.json()) as { assignees?: Assignee[] };
-        return d.assignees ?? [];
-      }),
-      fetchWithTimeout("/api/staff-aliases/unlinked").then(async (r) => {
-        if (!r.ok) return [];
-        const d = (await r.json()) as { unlinked?: UnlinkedLegacyName[] };
-        return d.unlinked ?? [];
-      }),
-    ]).then(([cats, team, unlinked]) => {
-      setCategories(cats);
-      setAssignees(team.filter((a) => a.full_name?.trim()));
-      setUnlinkedHandlers(unlinked);
-    });
-  }, []);
-
-  const categoryOptions = useMemo(
-    () => categories.map((c) => ({ value: c.name, label: c.name })),
-    [categories],
-  );
-
   const statusOptions = useMemo(
     () => REQUEST_STATUSES.map((s) => ({ value: s, label: s })),
     [],
   );
-
-  const assigneeOptions = useMemo(() => {
-    const options = assignees.map((a) => ({
-      value: a.id,
-      label: a.full_name ?? a.id,
-    }));
-    for (const row of unlinkedHandlers) {
-      const name = row.name.trim();
-      if (!name) continue;
-      options.push({ value: name, label: name });
-    }
-    return options.sort((a, b) => a.label.localeCompare(b.label, "el"));
-  }, [assignees, unlinkedHandlers]);
 
   const patch = (p: Partial<RequestListFilters>) => setDraft((prev) => ({ ...prev, ...p }));
 
@@ -151,6 +105,8 @@ export function RequestSearchFiltersPanel({
                 })
               }
               placeholder="Επιλέξτε κατηγορίες..."
+              loading={loading}
+              loadingText="Φόρτωση κατηγοριών..."
             />
             <FilterFieldChips
               items={draft.category_ids.map((name) => ({
@@ -173,6 +129,8 @@ export function RequestSearchFiltersPanel({
                 })
               }
               placeholder="Εξαίρεση..."
+              loading={loading}
+              loadingText="Φόρτωση κατηγοριών..."
             />
             <FilterFieldChips
               items={draft.exclude_category_ids.map((name) => ({
@@ -212,7 +170,7 @@ export function RequestSearchFiltersPanel({
           </div>
           <div>
             <label className={filterLabelClass} htmlFor="rs-handler">
-              Υπεύθυνος
+              Υπεύθυνος / Χειριστής
             </label>
             <SearchableSelect
               id="rs-handler"
@@ -220,6 +178,8 @@ export function RequestSearchFiltersPanel({
               value={draft.handler_id}
               onChange={(handler_id) => patch({ handler_id })}
               placeholder="— όλοι —"
+              loading={loading}
+              loadingText="Φόρτωση χειριστών..."
             />
           </div>
           <div>

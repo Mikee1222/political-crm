@@ -1,7 +1,5 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
-import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -13,27 +11,25 @@ import type { RequestCategoryRow } from "@/lib/request-categories";
 
 export const dynamic = "force-dynamic";
 
-/** List distinct categories from requests.category (managers+). */
+/** List request categories for CRM filters / forms (all CRM users). */
 export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) {
-      return forbidden();
-    }
 
+    // Service client: reliable for dropdowns (user client is fine for request_categories
+    // RLS, but counts RPC + consistent meta load should not depend on session quirks).
     const service = createServiceClient();
     let counts;
     try {
       counts = await getRequestCategoryCounts(service);
     } catch (rpcErr) {
       console.warn("[api/request-categories GET] RPC failed, falling back to lookup table", rpcErr);
-      const metaByName = await loadRequestCategoryMeta(supabase);
+      const metaByName = await loadRequestCategoryMeta(service);
       counts = [...metaByName.values()].map((m) => ({ name: m.name, request_count: 0 }));
     }
 
-    const metaByName = await loadRequestCategoryMeta(supabase);
+    const metaByName = await loadRequestCategoryMeta(service);
     const merged = mergeCategoryCountsWithMeta(counts, metaByName);
     const items: RequestCategoryRow[] = merged.map((m) => ({
       id: m.id,

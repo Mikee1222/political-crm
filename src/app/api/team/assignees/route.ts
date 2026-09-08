@@ -1,22 +1,24 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextResponse } from "next/server";
-import { forbidden } from "@/lib/auth-helpers";
-import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
+import { createServiceClient } from "@/lib/supabase/admin";
+
 export const dynamic = "force-dynamic";
 
 type Assignee = { id: string; full_name: string | null; role: string };
 
-/** Profiles for "Ανατέθηκε σε" dropdowns (managers+). */
+/**
+ * CRM staff profiles for assignee / Υπεύθυνος / Χειριστής dropdowns.
+ * Uses service role because profiles RLS is "read own" only.
+ * Active CRM users only (is_portal = false).
+ */
 export async function GET() {
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) {
-      return forbidden();
-    }
-    const { data, error } = await supabase
+
+    const service = createServiceClient();
+    const { data, error } = await service
       .from("profiles")
       .select("id, full_name, role")
       .eq("is_portal", false)

@@ -30,6 +30,7 @@ import {
 import { lux, priorityPill } from "@/lib/luxury-styles";
 import { useRegisterMobileRefresh } from "@/contexts/mobile-refresh-context";
 import { RequestStatusBadge } from "@/components/requests/request-status-badge";
+import { useRequestFilterOptions } from "@/hooks/use-request-filter-options";
 import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { requestCardStatusStyle } from "@/lib/request-status-card-style";
 import type { RequestStatusColorsMap } from "@/lib/request-status-colors";
@@ -150,6 +151,8 @@ export default function RequestsPage() {
   const canComplete = can(profile, "requests_complete");
   const canDelete = can(profile, "requests_delete");
   const { colors: statusColors } = useRequestStatusColors();
+  const { categoryOptions: categoryFilterOptions, loading: filterOptionsLoading } =
+    useRequestFilterOptions();
 
   const [f, setF] = useState<RequestFilters>(DEFAULT_FILTERS);
   const [rows, setRows] = useState<RequestRow[]>([]);
@@ -161,7 +164,6 @@ export default function RequestsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [searchQ, setSearchQ] = useState(
     () => searchParams.get("q") ?? searchParams.get("search") ?? "",
   );
@@ -330,16 +332,6 @@ export default function RequestsPage() {
     setPageContext({ type: "requests_list", totalCount });
     return () => setPageContext(null);
   }, [setPageContext, totalCount]);
-
-  useEffect(() => {
-    void (async () => {
-      const catRes = await fetchWithTimeout("/api/request-categories");
-      if (catRes.ok) {
-        const j = (await catRes.json()) as { categories?: string[] };
-        setCategoryOptions(j.categories ?? []);
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
@@ -512,7 +504,9 @@ export default function RequestsPage() {
               value={f.category}
               onChange={(v) => patch({ category: v })}
               placeholder="Όλες οι κατηγορίες"
-              options={categoryOptions.map((c) => ({ value: c, label: c }))}
+              options={categoryFilterOptions}
+              loading={filterOptionsLoading}
+              loadingText="Φόρτωση κατηγοριών..."
             />
           </div>
         </div>
