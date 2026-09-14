@@ -1932,6 +1932,9 @@ function CreateContactModal({
     }
     await onSaved();
     onClose();
+    if (newId) {
+      router.push(`/contacts/${encodeURIComponent(newId)}`);
+    }
   };
 
   const save = async () => {
