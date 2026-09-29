@@ -18,14 +18,15 @@ type RequestNoteRow = {
   id: string;
   content: string;
   created_at: string;
-  created_by: string | null;
+  updated_at: string | null;
+  user_id: string | null;
   author_name: string | null;
 };
 
 function noteAuthorDisplay(row: RequestNoteRow, nameMap: Map<string, string | null>) {
   const stored = row.author_name?.trim();
   if (stored) return stored;
-  return row.created_by ? (nameMap.get(row.created_by) ?? "—") : "—";
+  return row.user_id ? (nameMap.get(row.user_id) ?? "—") : "—";
 }
 
 type ContactBrief = {
@@ -166,12 +167,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   const { data: noteRows } = await supabase
     .from("request_notes")
-    .select("id, content, created_at, created_by:user_id, author_name")
+    .select("id, content, created_at, updated_at, user_id, author_name")
     .eq("request_id", requestId)
     .order("created_at", { ascending: false });
 
   const rawNotes = (noteRows ?? []) as RequestNoteRow[];
-  const nameMap = await resolveProfileNames(rawNotes.map((n) => n.created_by));
+  const nameMap = await resolveProfileNames(rawNotes.map((n) => n.user_id));
   const notesData = rawNotes.map((n) => ({
     ...n,
     author_name: n.author_name?.trim() || null,

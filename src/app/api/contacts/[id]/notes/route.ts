@@ -16,7 +16,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     const { supabase } = crm;
     const { data: rows, error } = await supabase
       .from("contact_notes")
-      .select("id, contact_id, user_id, content, created_at, author_name")
+      .select("id, contact_id, user_id, content, created_at, updated_at, author_name")
       .eq("contact_id", params.id)
       .order("created_at", { ascending: false });
     if (error) {
@@ -30,6 +30,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
         user_id: string | null;
         content: string;
         created_at: string;
+        updated_at: string | null;
         author_name: string | null;
       };
       const stored = row.author_name?.trim();
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         content,
         author_name: profile?.full_name?.trim() || null,
       })
-      .select("id, contact_id, user_id, content, created_at, author_name")
+      .select("id, contact_id, user_id, content, created_at, updated_at, author_name")
       .single();
     if (insErr) {
       return NextResponse.json({ error: insErr.message }, { status: 400 });
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       user_id: string | null;
       content: string;
       created_at: string;
+      updated_at: string | null;
       author_name: string | null;
     };
     const stored = r.author_name?.trim();

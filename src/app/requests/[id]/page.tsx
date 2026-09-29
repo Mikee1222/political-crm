@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, X } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { lux, priorityPill } from "@/lib/luxury-styles";
@@ -98,6 +98,7 @@ type Note = {
   user_id: string | null;
   content: string;
   created_at: string;
+  updated_at?: string | null;
   author_name?: string | null;
   author_full_name: string;
 };
@@ -220,6 +221,7 @@ function RequestDetailPageInner() {
   const { categories, assignees, loading: filterOptionsLoading } = useRequestFilterOptions();
   const id = typeof params?.id === "string" ? params.id : "";
   const canEdit = can(profile, "requests_edit");
+  const canManageNotes = hasMinRole(profile?.role, "manager", profile?.access_tier);
   const canAddNotes =
     can(profile, "requests_view") || hasMinRole(profile?.role, "caller", profile?.access_tier);
   const canViewAiSummary = can(profile, "ai_summary_view");
@@ -230,6 +232,9 @@ function RequestDetailPageInner() {
   const [err, setErr] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteDraft, setEditNoteDraft] = useState("");
+  const [editNoteSaving, setEditNoteSaving] = useState(false);
   const [portalMsg, setPortalMsg] = useState("");
   const [savingMsg, setSavingMsg] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
@@ -1032,10 +1037,58 @@ function RequestDetailPageInner() {
                   const displayAuthor = note.author_name?.trim()
                     ? resolveName(note.author_name)
                     : note.author_full_name || "—";
+                  const canEditThis =
+                    (note.user_id != null && note.user_id === profile?.id) || canManageNotes;
+                  const canDeleteThis = canManageNotes;
+                  const isEditing = editingNoteId === note.id;
+                  const wasEdited =
+                    Boolean(note.updated_at) && note.updated_at !== note.created_at;
                   return (
                   <li key={note.id}>
                     <div className="group relative rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35 p-3 pl-3 pr-2">
-                      <div className="flex gap-3 pr-2">
+                      {!isEditing && (
+                        <div className="absolute right-1.5 top-1.5 z-[1] flex items-center gap-0.5">
+                          {canEditThis && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingNoteId(note.id);
+                                setEditNoteDraft(note.content);
+                              }}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-muted)] opacity-100 transition hover:bg-[var(--bg-card)] hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100"
+                              title="Επεξεργασία"
+                              aria-label="Επεξεργασία σημείωσης"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {canDeleteThis && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!requestApiId) return;
+                                const dres = await fetchWithTimeout(
+                                  `/api/requests/${encodeURIComponent(requestApiId)}/notes/${note.id}`,
+                                  { method: "DELETE" },
+                                );
+                                if (dres.ok) {
+                                  setNotes((prev) => prev.filter((x) => x.id !== note.id));
+                                  if (editingNoteId === note.id) {
+                                    setEditingNoteId(null);
+                                    setEditNoteDraft("");
+                                  }
+                                }
+                              }}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-muted)] opacity-100 transition hover:bg-[var(--bg-card)] hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+                              title="Διαγραφή"
+                              aria-label="Διαγραφή σημείωσης"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex gap-3 pr-5">
                         <div
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] font-bold text-[var(--text-primary)]"
                           aria-hidden
@@ -1043,14 +1096,87 @@ function RequestDetailPageInner() {
                           {authorInitials(displayAuthor)}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{note.content}</p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            {displayAuthor && displayAuthor !== "—" && (
-                              <span className="text-xs font-medium text-primary/70">{displayAuthor}</span>
-                            )}
-                            {displayAuthor && displayAuthor !== "—" && <span className="text-xs text-muted-foreground">·</span>}
-                            <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
-                          </div>
+                          {isEditing ? (
+                            <div className="flex flex-col gap-2">
+                              <textarea
+                                className="min-h-[72px] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--input-bg)] p-2.5 text-sm text-[var(--text-input)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20"
+                                value={editNoteDraft}
+                                onChange={(e) => setEditNoteDraft(e.target.value)}
+                                disabled={editNoteSaving}
+                                autoFocus
+                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={editNoteSaving || !editNoteDraft.trim()}
+                                  onClick={async () => {
+                                    if (!requestApiId || !editNoteDraft.trim()) return;
+                                    setEditNoteSaving(true);
+                                    try {
+                                      const res = await fetchWithTimeout(
+                                        `/api/requests/${encodeURIComponent(requestApiId)}/notes/${note.id}`,
+                                        {
+                                          method: "PATCH",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ content: editNoteDraft.trim() }),
+                                        },
+                                      );
+                                      if (res.ok) {
+                                        const j = (await res.json()) as { note?: Note };
+                                        if (j.note) {
+                                          setNotes((prev) =>
+                                            prev.map((x) => (x.id === note.id ? { ...x, ...j.note } : x)),
+                                          );
+                                        }
+                                        setEditingNoteId(null);
+                                        setEditNoteDraft("");
+                                      } else {
+                                        const j = (await res.json().catch(() => ({}))) as { error?: string };
+                                        showToast(j.error ?? "Αποτυχία αποθήκευσης σημείωσης", "error");
+                                      }
+                                    } finally {
+                                      setEditNoteSaving(false);
+                                    }
+                                  }}
+                                  className={lux.btnBlue + " !min-h-8 !text-xs"}
+                                >
+                                  {editNoteSaving ? "…" : "Αποθήκευση"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={editNoteSaving}
+                                  onClick={() => {
+                                    setEditingNoteId(null);
+                                    setEditNoteDraft("");
+                                  }}
+                                  className="inline-flex min-h-8 items-center justify-center rounded-lg border border-[var(--border)] px-3 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:opacity-50"
+                                >
+                                  Άκυρο
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{note.content}</p>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                {displayAuthor && displayAuthor !== "—" && (
+                                  <span className="text-xs font-medium text-primary/70">{displayAuthor}</span>
+                                )}
+                                {displayAuthor && displayAuthor !== "—" && (
+                                  <span className="text-xs text-muted-foreground">·</span>
+                                )}
+                                <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
+                                {wasEdited && (
+                                  <>
+                                    <span className="text-xs text-muted-foreground">·</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Επεξεργάστηκε {formatDate(note.updated_at)}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

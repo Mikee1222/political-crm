@@ -4,6 +4,7 @@ import { forbidden } from "@/lib/auth-helpers";
 import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 import { resolveProfileNames } from "@/lib/profile-names";
+import { resolveRequestId } from "@/lib/resolve-entity-id";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,16 @@ export async function PATCH(
     if (!crm.allowed) return crm.response;
     const { user, profile, supabase } = crm;
 
+    const requestId = await resolveRequestId(supabase, params.id);
+    if (!requestId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
     const { data: row, error: fErr } = await supabase
-      .from("contact_notes")
-      .select("id, user_id, contact_id, content, created_at, updated_at, author_name")
+      .from("request_notes")
+      .select("id, user_id, request_id, content, created_at, updated_at, author_name")
       .eq("id", params.noteId)
-      .eq("contact_id", params.id)
+      .eq("request_id", requestId)
       .maybeSingle();
     if (fErr) {
       return NextResponse.json({ error: fErr.message }, { status: 400 });
@@ -43,20 +49,15 @@ export async function PATCH(
 
     const now = new Date().toISOString();
     const { data: updated, error: uErr } = await supabase
-      .from("contact_notes")
+      .from("request_notes")
       .update({ content, updated_at: now })
       .eq("id", params.noteId)
-      .eq("contact_id", params.id)
-      .select("id, contact_id, user_id, content, created_at, updated_at, author_name")
+      .eq("request_id", requestId)
+      .select("id, request_id, user_id, content, created_at, updated_at, author_name")
       .single();
     if (uErr) {
       return NextResponse.json({ error: uErr.message }, { status: 400 });
     }
-
-    await supabase
-      .from("contacts")
-      .update({ updated_at: now, updated_by: user.id })
-      .eq("id", params.id);
 
     const r = updated as {
       id: string;
@@ -76,7 +77,7 @@ export async function PATCH(
       },
     });
   } catch (e) {
-    console.error("[api/contacts/notes/noteId PATCH]", e);
+    console.error("[api/requests/notes/noteId PATCH]", e);
     return nextJsonError();
   }
 }
@@ -93,11 +94,17 @@ export async function DELETE(
     if (!hasMinRole(profile?.role, "manager", profile?.access_tier)) {
       return forbidden();
     }
+
+    const requestId = await resolveRequestId(supabase, params.id);
+    if (!requestId) {
+      return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
+    }
+
     const { data: row, error: fErr } = await supabase
-      .from("contact_notes")
-      .select("id, user_id, contact_id")
+      .from("request_notes")
+      .select("id, user_id, request_id")
       .eq("id", params.noteId)
-      .eq("contact_id", params.id)
+      .eq("request_id", requestId)
       .maybeSingle();
     if (fErr) {
       return NextResponse.json({ error: fErr.message }, { status: 400 });
@@ -105,13 +112,13 @@ export async function DELETE(
     if (!row) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
-    const { error: dErr } = await supabase.from("contact_notes").delete().eq("id", params.noteId);
+    const { error: dErr } = await supabase.from("request_notes").delete().eq("id", params.noteId);
     if (dErr) {
       return NextResponse.json({ error: dErr.message }, { status: 400 });
     }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("[api/contacts/notes/noteId DELETE]", e);
+    console.error("[api/requests/notes/noteId DELETE]", e);
     return nextJsonError();
   }
 }
