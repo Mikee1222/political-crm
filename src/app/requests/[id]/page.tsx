@@ -34,8 +34,28 @@ import {
   loadRequestsSearchNav,
 } from "@/lib/search-session-state";
 import { HqSelect } from "@/components/ui/hq-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 const DESCRIPTION_MAX_LEN = 2000;
+
+const PRIORITY_OPTIONS: { value: InlineEditDraft["priority"]; label: string }[] = [
+  { value: "Low", label: "Χαμηλή" },
+  { value: "Medium", label: "Κανονική" },
+  { value: "High", label: "Υψηλή" },
+  { value: "Urgent", label: "Επείγον" },
+];
+
+const editFieldLabel =
+  "mb-1.5 block text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--accent-gold)]";
+
+type InlineEditDraft = {
+  title: string;
+  category: string;
+  status: string;
+  description: string;
+  assigned_to: string;
+  priority: "High" | "Medium" | "Low" | "Urgent";
+};
 
 type ContactCard = {
   id: string;
@@ -190,15 +210,6 @@ export default function RequestDetailPage() {
   );
 }
 
-type InlineEditDraft = {
-  title: string;
-  category: string;
-  status: string;
-  description: string;
-  assigned_to: string;
-  priority: "High" | "Medium" | "Low" | "Urgent";
-};
-
 function RequestDetailPageInner() {
   const params = useParams();
   const router = useRouter();
@@ -206,7 +217,7 @@ function RequestDetailPageInner() {
   const { profile } = useProfile();
   const resolveName = useResolveAuthorName();
   const { openRequestTab } = useContactTabs();
-  const { categories, assignees } = useRequestFilterOptions();
+  const { categories, assignees, loading: filterOptionsLoading } = useRequestFilterOptions();
   const id = typeof params?.id === "string" ? params.id : "";
   const canEdit = can(profile, "requests_edit");
   const canAddNotes =
@@ -229,6 +240,7 @@ function RequestDetailPageInner() {
   const [editingAll, setEditingAll] = useState(false);
   const [editDraft, setEditDraft] = useState<InlineEditDraft | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const editDescRef = useRef<HTMLTextAreaElement | null>(null);
   const [navInfo, setNavInfo] = useState<RequestNavInfo | null>(null);
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
   const alexPage = useOptionalAlexandraPageContext();
@@ -238,20 +250,36 @@ function RequestDetailPageInner() {
       value: a.full_name?.trim() || a.id,
       label: formatAssigneeOptionLabel(a),
     }));
-    const current = data?.assigned_to?.trim();
+    const current = (editDraft?.assigned_to ?? data?.assigned_to)?.trim();
     if (current && !opts.some((o) => o.value === current)) {
       opts.unshift({ value: current, label: current });
     }
     return opts;
-  }, [assignees, data?.assigned_to]);
+  }, [assignees, data?.assigned_to, editDraft?.assigned_to]);
 
   const categorySelectOptions = useMemo(() => {
-    const names = categories.map((c) => c.name);
-    const current = data?.category?.trim();
-    if (current && !names.includes(current)) names.unshift(current);
-    if (!names.includes("Άλλο")) names.push("Άλλο");
-    return names;
-  }, [categories, data?.category]);
+    const opts = categories.map((c) => ({ value: c.name, label: c.name }));
+    const current = (editDraft?.category ?? data?.category)?.trim();
+    if (current && !opts.some((o) => o.value === current)) {
+      opts.unshift({ value: current, label: current });
+    }
+    if (!opts.some((o) => o.value === "Άλλο")) {
+      opts.push({ value: "Άλλο", label: "Άλλο" });
+    }
+    return opts;
+  }, [categories, data?.category, editDraft?.category]);
+
+  const adjustEditDescHeight = useCallback(() => {
+    const el = editDescRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 120)}px`;
+  }, []);
+
+  useEffect(() => {
+    if (!editingAll) return;
+    adjustEditDescHeight();
+  }, [editingAll, editDraft?.description, adjustEditDescHeight]);
 
   const fromSearchParam = searchParams.get("from") === "search";
   const fromSearchNav = Boolean(id && (fromSearchParam || isRequestsSearchNavActive(id)));
@@ -629,130 +657,28 @@ function RequestDetailPageInner() {
         className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-[0_4px_24px_rgba(0,0,0,0.35)] sm:p-6"
         data-hq-card
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            {data.request_code && (
-              <span className="mb-2 inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {data.request_code ? (
+              <span className="inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
                 {data.request_code}
               </span>
-            )}
-            {editingAll && editDraft ? (
-              <div className="mt-1 space-y-3">
-                <div>
-                  <label className={lux.label} htmlFor="req-edit-title">
-                    Τίτλος
-                  </label>
-                  <input
-                    id="req-edit-title"
-                    className={lux.input}
-                    value={editDraft.title}
-                    disabled={editSaving}
-                    onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className={lux.label} htmlFor="req-edit-category">
-                      Κατηγορία
-                    </label>
-                    <HqSelect
-                      id="req-edit-category"
-                      value={editDraft.category}
-                      disabled={editSaving}
-                      onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })}
-                    >
-                      {categorySelectOptions.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </HqSelect>
-                  </div>
-                  <div>
-                    <label className={lux.label} htmlFor="req-edit-status">
-                      Κατάσταση
-                    </label>
-                    <HqSelect
-                      id="req-edit-status"
-                      value={normalizeRequestStatus(editDraft.status)}
-                      disabled={editSaving}
-                      onChange={(e) => setEditDraft({ ...editDraft, status: e.target.value })}
-                    >
-                      {REQUEST_STATUSES.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </HqSelect>
-                  </div>
-                  <div>
-                    <label className={lux.label} htmlFor="req-edit-priority">
-                      Προτεραιότητα
-                    </label>
-                    <HqSelect
-                      id="req-edit-priority"
-                      value={editDraft.priority}
-                      disabled={editSaving}
-                      onChange={(e) =>
-                        setEditDraft({
-                          ...editDraft,
-                          priority: e.target.value as InlineEditDraft["priority"],
-                        })
-                      }
-                    >
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                      <option value="Urgent">Urgent</option>
-                    </HqSelect>
-                  </div>
-                  <div>
-                    <label className={lux.label} htmlFor="req-edit-assignee">
-                      Υπεύθυνος
-                    </label>
-                    <HqSelect
-                      id="req-edit-assignee"
-                      value={editDraft.assigned_to}
-                      disabled={editSaving}
-                      onChange={(e) => setEditDraft({ ...editDraft, assigned_to: e.target.value })}
-                    >
-                      <option value="">— Χωρίς ανάθεση —</option>
-                      {assigneeSelectOptions.map((a) => (
-                        <option key={a.value} value={a.value}>
-                          {a.label}
-                        </option>
-                      ))}
-                    </HqSelect>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                <h1 className="text-xl font-semibold tracking-tight text-[var(--text-page-title)] sm:text-2xl">
-                  {data.title}
-                </h1>
-                {data.category && <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>}
-                {data.assigned_to?.trim() ? (
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    Υπεύθυνος: {resolveName(data.assigned_to)}
-                  </p>
-                ) : null}
-              </>
-            )}
+            ) : null}
           </div>
-          <div className="flex w-full flex-col items-start gap-2 sm:min-w-[240px] sm:items-end">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {canEdit && !editingAll ? (
               <button
                 type="button"
-                className={lux.btnSecondary + " inline-flex min-h-[44px] items-center gap-1.5 !py-2 text-xs sm:text-sm"}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--accent-gold)] hover:bg-[color-mix(in_srgb,var(--accent-gold)_12%,transparent)] hover:text-[var(--accent-gold)]"
                 onClick={startEditingAll}
+                aria-label="Επεξεργασία αιτήματος"
+                title="Επεξεργασία"
               >
-                <Pencil className="h-3.5 w-3.5" aria-hidden />
-                Επεξεργασία
+                <Pencil className="h-4 w-4" aria-hidden />
               </button>
             ) : null}
             {editingAll ? (
-              <div className="flex flex-wrap items-center gap-2">
+              <>
                 <button
                   type="button"
                   className={lux.btnSecondary + " !min-h-[44px] !px-3 !py-2 !text-xs"}
@@ -769,43 +695,194 @@ function RequestDetailPageInner() {
                 >
                   {editSaving ? "…" : "Αποθήκευση"}
                 </button>
-              </div>
+              </>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <RequestStatusBadge status={data.status ?? REQUEST_STATUS_OPEN} size="md" bold />
                 <PriorityBadge p={data.priority} />
               </div>
             )}
-            {canEdit && !editingAll ? (
-              <div className="flex w-full items-center gap-2 sm:w-auto">
-                <label htmlFor="request-inline-status" className="text-xs font-medium text-[var(--text-secondary)]">
+          </div>
+        </div>
+
+        {editingAll && editDraft ? (
+          <div className="mt-5 space-y-4">
+            <div className="w-full">
+              <label className={editFieldLabel} htmlFor="req-edit-title">
+                Τίτλος
+              </label>
+              <input
+                id="req-edit-title"
+                className={lux.input + " w-full"}
+                value={editDraft.title}
+                disabled={editSaving}
+                onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })}
+              />
+            </div>
+
+            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="min-w-0">
+                <label className={editFieldLabel} htmlFor="req-edit-status">
                   Κατάσταση
                 </label>
-                <select
-                  id="request-inline-status"
-                  className={lux.select + " w-full !py-1.5 text-xs sm:min-w-[220px]"}
-                  value={normalizeRequestStatus(data.status ?? REQUEST_STATUS_OPEN)}
-                  disabled={statusSaving}
-                  onChange={(e) => void handleStatusChange(e.target.value)}
-                  aria-label="Αλλαγή κατάστασης αιτήματος"
+                <HqSelect
+                  id="req-edit-status"
+                  className="w-full"
+                  value={normalizeRequestStatus(editDraft.status)}
+                  disabled={editSaving}
+                  onChange={(e) => setEditDraft({ ...editDraft, status: e.target.value })}
                 >
                   {REQUEST_STATUSES.map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>
                   ))}
-                </select>
+                </HqSelect>
               </div>
-            ) : null}
-            <p className="text-xs text-[var(--text-muted)]">
-              {editSaving || statusSaving
-                ? "Ενημέρωση…"
-                : data.updated_at
-                  ? `Ενημερώθηκε ${formatCalendarDateOnly(data.updated_at)}`
-                  : "Ενημερώθηκε —"}
-            </p>
+              <div className="min-w-0">
+                <label className={editFieldLabel} htmlFor="req-edit-category">
+                  Κατηγορία
+                </label>
+                <SearchableSelect
+                  id="req-edit-category"
+                  value={editDraft.category}
+                  onChange={(value) => setEditDraft({ ...editDraft, category: value })}
+                  options={categorySelectOptions}
+                  placeholder="Επιλέξτε κατηγορία…"
+                  searchPlaceholder="Αναζήτηση κατηγορίας…"
+                  loading={filterOptionsLoading}
+                  disabled={editSaving}
+                  aria-label="Κατηγορία"
+                />
+              </div>
+              <div className="min-w-0">
+                <label className={editFieldLabel} htmlFor="req-edit-priority">
+                  Προτεραιότητα
+                </label>
+                <HqSelect
+                  id="req-edit-priority"
+                  className="w-full"
+                  value={editDraft.priority}
+                  disabled={editSaving}
+                  onChange={(e) =>
+                    setEditDraft({
+                      ...editDraft,
+                      priority: e.target.value as InlineEditDraft["priority"],
+                    })
+                  }
+                >
+                  {PRIORITY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </HqSelect>
+              </div>
+              <div className="min-w-0">
+                <label className={editFieldLabel} htmlFor="req-edit-assignee">
+                  Υπεύθυνος
+                </label>
+                <SearchableSelect
+                  id="req-edit-assignee"
+                  value={editDraft.assigned_to}
+                  onChange={(value) => setEditDraft({ ...editDraft, assigned_to: value })}
+                  options={[
+                    { value: "", label: "— Χωρίς ανάθεση —" },
+                    ...assigneeSelectOptions,
+                  ]}
+                  placeholder="Επιλέξτε υπεύθυνο…"
+                  searchPlaceholder="Αναζήτηση υπευθύνου…"
+                  loading={filterOptionsLoading}
+                  disabled={editSaving}
+                  aria-label="Υπεύθυνος"
+                />
+              </div>
+            </div>
+
+            <div className="w-full">
+              <label className={editFieldLabel} htmlFor="req-edit-description">
+                Περιγραφή
+              </label>
+              <textarea
+                id="req-edit-description"
+                ref={editDescRef}
+                className={lux.textarea + " w-full !min-h-[120px] resize-none overflow-hidden"}
+                value={editDraft.description}
+                maxLength={DESCRIPTION_MAX_LEN}
+                disabled={editSaving}
+                onChange={(e) => {
+                  setEditDraft({
+                    ...editDraft,
+                    description: e.target.value.slice(0, DESCRIPTION_MAX_LEN),
+                  });
+                }}
+              />
+              <span className="mt-1 block text-[11px] text-[var(--text-muted)]">
+                {editDraft.description.length}/{DESCRIPTION_MAX_LEN}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-semibold tracking-tight text-[var(--text-page-title)] sm:text-2xl">
+                {data.title}
+              </h1>
+              {data.category ? (
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>
+              ) : null}
+              {data.assigned_to?.trim() ? (
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Υπεύθυνος: {resolveName(data.assigned_to)}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
+              {canEdit ? (
+                <div className="flex w-full items-center gap-2 sm:w-auto">
+                  <label
+                    htmlFor="request-inline-status"
+                    className="text-xs font-medium text-[var(--text-secondary)]"
+                  >
+                    Κατάσταση
+                  </label>
+                  <select
+                    id="request-inline-status"
+                    className={lux.select + " w-full !py-1.5 text-xs sm:min-w-[220px]"}
+                    value={normalizeRequestStatus(data.status ?? REQUEST_STATUS_OPEN)}
+                    disabled={statusSaving}
+                    onChange={(e) => void handleStatusChange(e.target.value)}
+                    aria-label="Αλλαγή κατάστασης αιτήματος"
+                  >
+                    {REQUEST_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <p className="text-xs text-[var(--text-muted)]">
+                {statusSaving
+                  ? "Ενημέρωση…"
+                  : data.updated_at
+                    ? `Ενημερώθηκε ${formatCalendarDateOnly(data.updated_at)}`
+                    : "Ενημερώθηκε —"}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {editingAll ? (
+          <p className="mt-3 text-xs text-[var(--text-muted)]">
+            {editSaving
+              ? "Αποθήκευση…"
+              : data.updated_at
+                ? `Ενημερώθηκε ${formatCalendarDateOnly(data.updated_at)}`
+                : null}
+          </p>
+        ) : null}
+
         {canViewAiSummary && requestApiId ? (
           <div className="mt-4">
             <AISummaryCard
@@ -820,28 +897,10 @@ function RequestDetailPageInner() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
+          {!editingAll ? (
           <div className={lux.card + " p-5"}>
             <h2 className={lux.pageTitle + " !text-lg"}>Περιγραφή</h2>
-            {editingAll && editDraft ? (
-              <div className="mt-2 space-y-2">
-                <textarea
-                  className={lux.textarea + " !min-h-[120px]"}
-                  value={editDraft.description}
-                  maxLength={DESCRIPTION_MAX_LEN}
-                  disabled={editSaving}
-                  aria-label="Περιγραφή αιτήματος"
-                  onChange={(e) =>
-                    setEditDraft({
-                      ...editDraft,
-                      description: e.target.value.slice(0, DESCRIPTION_MAX_LEN),
-                    })
-                  }
-                />
-                <span className="text-[11px] text-[var(--text-muted)]">
-                  {editDraft.description.length}/{DESCRIPTION_MAX_LEN}
-                </span>
-              </div>
-            ) : canEdit && editingDesc ? (
+            {canEdit && editingDesc ? (
               <div className="mt-2 space-y-2">
                 <textarea
                   ref={descTextareaRef}
@@ -883,7 +942,7 @@ function RequestDetailPageInner() {
                   </div>
                 </div>
               </div>
-            ) : canEdit && !editingAll ? (
+            ) : canEdit ? (
               <button
                 type="button"
                 className="group mt-2 flex w-full items-start gap-2 rounded-md text-left transition hover:text-[#C9A84C]"
@@ -912,6 +971,7 @@ function RequestDetailPageInner() {
               </p>
             )}
           </div>
+          ) : null}
 
           {canEdit && (
             <div
