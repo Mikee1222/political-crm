@@ -7,6 +7,35 @@ import { resolveProfileNames } from "@/lib/profile-names";
 
 export const dynamic = "force-dynamic";
 
+const NOTE_COLS =
+  "id, contact_id, user_id, content, created_at, updated_at, author_name, deleted_at, deleted_by, original_content, edited_at, edited_by";
+
+type NoteRow = {
+  id: string;
+  user_id: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string | null;
+  author_name: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  original_content: string | null;
+  edited_at: string | null;
+  edited_by: string | null;
+};
+
+async function enrichNote(row: NoteRow) {
+  const nameMap = await resolveProfileNames([row.user_id, row.deleted_by, row.edited_by]);
+  const stored = row.author_name?.trim();
+  return {
+    ...row,
+    author_name: stored || null,
+    author_full_name: stored || (row.user_id ? (nameMap.get(row.user_id) ?? "—") : "—"),
+    deleted_by_name: row.deleted_by ? (nameMap.get(row.deleted_by) ?? "—") : null,
+    edited_by_name: row.edited_by ? (nameMap.get(row.edited_by) ?? "—") : null,
+  };
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; noteId: string } },
@@ -18,7 +47,7 @@ export async function PATCH(
 
     const { data: row, error: fErr } = await supabase
       .from("contact_notes")
-      .select("id, user_id, contact_id, content, created_at, updated_at, author_name")
+      .select(NOTE_COLS)
       .eq("id", params.noteId)
       .eq("contact_id", params.id)
       .maybeSingle();
@@ -29,7 +58,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
 
-    const isAuthor = (row as { user_id: string | null }).user_id === user.id;
+    const existing = row as NoteRow;
+    if (existing.deleted_at) {
+      return NextResponse.json({ error: "Η σημείωση έχει διαγραφεί" }, { status: 400 });
+    }
+
+    const isAuthor = existing.user_id === user.id;
     const isManager = hasMinRole(profile?.role, "manager", profile?.access_tier);
     if (!isAuthor && !isManager) {
       return forbidden();
@@ -42,12 +76,22 @@ export async function PATCH(
     }
 
     const now = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      content,
+      updated_at: now,
+      edited_at: now,
+      edited_by: user.id,
+    };
+    if (existing.original_content == null) {
+      patch.original_content = existing.content;
+    }
+
     const { data: updated, error: uErr } = await supabase
       .from("contact_notes")
-      .update({ content, updated_at: now })
+      .update(patch)
       .eq("id", params.noteId)
       .eq("contact_id", params.id)
-      .select("id, contact_id, user_id, content, created_at, updated_at, author_name")
+      .select(NOTE_COLS)
       .single();
     if (uErr) {
       return NextResponse.json({ error: uErr.message }, { status: 400 });
@@ -58,23 +102,7 @@ export async function PATCH(
       .update({ updated_at: now, updated_by: user.id })
       .eq("id", params.id);
 
-    const r = updated as {
-      id: string;
-      user_id: string | null;
-      content: string;
-      created_at: string;
-      updated_at: string | null;
-      author_name: string | null;
-    };
-    const nameMap = await resolveProfileNames([r.user_id]);
-    const stored = r.author_name?.trim();
-    return NextResponse.json({
-      note: {
-        ...r,
-        author_name: stored || null,
-        author_full_name: stored || (r.user_id ? (nameMap.get(r.user_id) ?? "—") : "—"),
-      },
-    });
+    return NextResponse.json({ note: await enrichNote(updated as NoteRow) });
   } catch (e) {
     console.error("[api/contacts/notes/noteId PATCH]", e);
     return nextJsonError();
@@ -88,14 +116,14 @@ export async function DELETE(
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { profile, supabase } = crm;
+    const { user, profile, supabase } = crm;
     // Secretaries/callers can add notes but only manager+ can delete.
     if (!hasMinRole(profile?.role, "manager", profile?.access_tier)) {
       return forbidden();
     }
     const { data: row, error: fErr } = await supabase
       .from("contact_notes")
-      .select("id, user_id, contact_id")
+      .select("id, user_id, contact_id, deleted_at")
       .eq("id", params.noteId)
       .eq("contact_id", params.id)
       .maybeSingle();
@@ -105,11 +133,21 @@ export async function DELETE(
     if (!row) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
     }
-    const { error: dErr } = await supabase.from("contact_notes").delete().eq("id", params.noteId);
+    if ((row as { deleted_at: string | null }).deleted_at) {
+      return NextResponse.json({ ok: true });
+    }
+    const now = new Date().toISOString();
+    const { data: updated, error: dErr } = await supabase
+      .from("contact_notes")
+      .update({ deleted_at: now, deleted_by: user.id, updated_at: now })
+      .eq("id", params.noteId)
+      .eq("contact_id", params.id)
+      .select(NOTE_COLS)
+      .single();
     if (dErr) {
       return NextResponse.json({ error: dErr.message }, { status: 400 });
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, note: await enrichNote(updated as NoteRow) });
   } catch (e) {
     console.error("[api/contacts/notes/noteId DELETE]", e);
     return nextJsonError();

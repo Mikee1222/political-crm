@@ -62,6 +62,7 @@ import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { HqSelect } from "@/components/ui/hq-select";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { CenteredModal } from "@/components/ui/centered-modal";
 import type { ContactGroupRow } from "@/lib/contact-groups";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { getAgeFromBirthday, getDaysUntilBirthday } from "@/lib/contact-birthday";
@@ -70,6 +71,8 @@ import { cn } from "@/lib/utils";
 import { ContactStatusBadges } from "@/components/contacts/contact-status-badges";
 import {
   CONTACTS_NAV_KEY,
+  CONTACTS_SEARCH_NAV_KEY,
+  ENTITY_SEARCH_NAV_EVENT,
   isContactsSearchNavActive,
   loadContactsSearchNav,
 } from "@/lib/search-session-state";
@@ -209,6 +212,8 @@ type ContactNavInfo = {
   position: number;
   total: number;
   fromSearch: boolean;
+  /** True when on the last search result (linear, no wrap). */
+  atEnd?: boolean;
 };
 
 type SupporterRow = {
@@ -228,6 +233,13 @@ type ContactNoteItem = {
   updated_at?: string | null;
   author_name?: string | null;
   author_full_name: string;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  deleted_by_name?: string | null;
+  original_content?: string | null;
+  edited_at?: string | null;
+  edited_by?: string | null;
+  edited_by_name?: string | null;
 };
 
 type ContactCallLogItem = {
@@ -385,6 +397,9 @@ function ContactDetailPage() {
   const canManage = hasMinRole(profile?.role, "manager", profile?.access_tier);
   const isAdmin = profile?.role === "admin";
   const canEdit = can(profile, "contacts_edit");
+  const canDeleteContact =
+    can(profile, "contacts_delete") ||
+    hasMinRole(profile?.role, "manager", profile?.access_tier);
   const canAddNotes =
     can(profile, "contacts_view") || hasMinRole(profile?.role, "caller", profile?.access_tier);
   const canViewAiSummary = can(profile, "ai_summary_view");
@@ -419,6 +434,10 @@ function ContactDetailPage() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteDraft, setEditNoteDraft] = useState("");
   const [editNoteSaving, setEditNoteSaving] = useState(false);
+  const [showOriginalNoteIds, setShowOriginalNoteIds] = useState<Record<string, boolean>>({});
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingContact, setDeletingContact] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRows, setHistoryRows] = useState<
     {
@@ -899,53 +918,72 @@ function ContactDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    try {
-      const searchNav = loadContactsSearchNav();
-      const fromSearch =
-        searchParams.get("from") === "search" ||
-        Boolean(searchNav?.ids.includes(id));
 
-      // Prefer dedicated search-nav when this contact is in that set.
-      if (fromSearch && searchNav?.ids.includes(id)) {
-        const idx = searchNav.ids.indexOf(id);
-        const n = searchNav.ids.length;
+    const refreshNav = () => {
+      try {
+        const searchNav = loadContactsSearchNav();
+        const fromSearch =
+          searchParams.get("from") === "search" ||
+          Boolean(searchNav?.ids.includes(id));
+
+        // Prefer dedicated search-nav when this contact is in that set.
+        if (fromSearch && searchNav?.ids.includes(id)) {
+          const idx = searchNav.ids.indexOf(id);
+          const n = searchNav.ids.length;
+          const reportTotal = Math.max(n, searchNav.total ?? n);
+          const incomplete = reportTotal > n;
+          const atEnd = idx >= n - 1 && !incomplete;
+          setNavInfo({
+            prev: idx > 0 ? (searchNav.ids[idx - 1] ?? null) : null,
+            next: idx < n - 1 ? (searchNav.ids[idx + 1] ?? null) : null,
+            position: idx + 1,
+            total: reportTotal,
+            fromSearch: true,
+            atEnd,
+          });
+          return;
+        }
+
+        const stored = sessionStorage.getItem(CONTACTS_NAV_KEY);
+        if (!stored) {
+          setNavInfo(null);
+          return;
+        }
+        const nav = JSON.parse(stored) as { ids?: string[]; source?: string; total?: number };
+        // Only use list-page nav when not claiming search origin without membership.
+        if (nav.source === "search" && !nav.ids?.includes(id)) {
+          setNavInfo(null);
+          return;
+        }
+        const ids = nav.ids ?? [];
+        const idx = ids.indexOf(id);
+        if (idx === -1) {
+          setNavInfo(null);
+          return;
+        }
+        const fromSearchLegacy = nav.source === "search";
         setNavInfo({
-          prev: searchNav.ids[(idx - 1 + n) % n] ?? null,
-          next: searchNav.ids[(idx + 1) % n] ?? null,
+          prev: idx > 0 ? (ids[idx - 1] ?? null) : null,
+          next: idx < ids.length - 1 ? (ids[idx + 1] ?? null) : null,
           position: idx + 1,
-          total: n,
-          fromSearch: true,
+          total: Math.max(ids.length, nav.total ?? ids.length),
+          fromSearch: fromSearchLegacy,
+          atEnd: fromSearchLegacy && idx >= ids.length - 1,
         });
-        return;
+      } catch {
+        setNavInfo(null);
       }
+    };
 
-      const stored = sessionStorage.getItem(CONTACTS_NAV_KEY);
-      if (!stored) {
-        setNavInfo(null);
-        return;
-      }
-      const nav = JSON.parse(stored) as { ids?: string[]; source?: string };
-      // Only use list-page nav when not claiming search origin without membership.
-      if (nav.source === "search" && !nav.ids?.includes(id)) {
-        setNavInfo(null);
-        return;
-      }
-      const ids = nav.ids ?? [];
-      const idx = ids.indexOf(id);
-      if (idx === -1) {
-        setNavInfo(null);
-        return;
-      }
-      setNavInfo({
-        prev: ids[idx - 1] ?? null,
-        next: ids[idx + 1] ?? null,
-        position: idx + 1,
-        total: ids.length,
-        fromSearch: nav.source === "search",
-      });
-    } catch {
-      setNavInfo(null);
-    }
+    refreshNav();
+
+    const onNavUpdate = (ev: Event) => {
+      const key = (ev as CustomEvent<{ key?: string }>).detail?.key;
+      if (key && key !== CONTACTS_SEARCH_NAV_KEY) return;
+      refreshNav();
+    };
+    window.addEventListener(ENTITY_SEARCH_NAV_EVENT, onNavUpdate);
+    return () => window.removeEventListener(ENTITY_SEARCH_NAV_EVENT, onNavUpdate);
   }, [id, searchParams]);
 
   useEffect(() => {
@@ -1457,32 +1495,44 @@ function ContactDetailPage() {
           ) : null}
         </div>
         {navInfo ? (
-          <div className="flex min-w-0 shrink items-center gap-1 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => navInfo.prev && router.push(contactDetailHref(navInfo.prev))}
-              disabled={!navInfo.prev}
-              className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
-              aria-label="Προηγούμενο αποτέλεσμα"
-            >
-              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-              <span className="hidden sm:inline">Προηγούμενο</span>
-            </button>
-            <span className="shrink-0 whitespace-nowrap text-[11px] text-[var(--text-muted)] sm:text-xs">
-              {navInfo.fromSearch
-                ? `${navInfo.position} / ${navInfo.total} αποτελέσματα`
-                : `${navInfo.position} / ${navInfo.total}`}
-            </span>
-            <button
-              type="button"
-              onClick={() => navInfo.next && router.push(contactDetailHref(navInfo.next))}
-              disabled={!navInfo.next}
-              className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
-              aria-label="Επόμενο αποτέλεσμα"
-            >
-              <span className="hidden sm:inline">Επόμενο</span>
-              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-            </button>
+          <div className="flex min-w-0 shrink flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <div className="flex min-w-0 shrink items-center gap-1 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => navInfo.prev && router.push(contactDetailHref(navInfo.prev))}
+                disabled={!navInfo.prev}
+                className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
+                aria-label="Προηγούμενο αποτέλεσμα"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                <span className="hidden sm:inline">Προηγούμενο</span>
+              </button>
+              <span className="shrink-0 whitespace-nowrap text-[11px] text-[var(--text-muted)] sm:text-xs">
+                {navInfo.fromSearch
+                  ? `${navInfo.position} / ${navInfo.total} αποτελέσματα`
+                  : `${navInfo.position} / ${navInfo.total}`}
+              </span>
+              {navInfo.atEnd && navInfo.fromSearch ? (
+                <button
+                  type="button"
+                  onClick={() => router.push("/contacts/search")}
+                  className="inline-flex max-w-[14rem] min-h-[44px] items-center rounded-lg border border-[color-mix(in_srgb,var(--accent-gold)_40%,var(--border))] bg-[color-mix(in_srgb,var(--accent-gold)_10%,var(--bg-elevated))] px-2.5 py-2 text-left text-[10px] font-semibold leading-snug text-[var(--accent-gold)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent-gold)_18%,var(--bg-elevated))] sm:max-w-none sm:text-[11px]"
+                >
+                  Τέλος αποτελεσμάτων — Επιστροφή στην αναζήτηση
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navInfo.next && router.push(contactDetailHref(navInfo.next))}
+                  disabled={!navInfo.next}
+                  className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:opacity-40 sm:gap-1 sm:text-sm"
+                  aria-label="Επόμενο αποτέλεσμα"
+                >
+                  <span className="hidden sm:inline">Επόμενο</span>
+                  <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                </button>
+              )}
+            </div>
           </div>
         ) : null}
       </div>
@@ -1755,6 +1805,42 @@ function ContactDetailPage() {
                   <Clipboard className="h-3.5 w-3.5" />
                   {headerCopied ? "Αντιγράφηκε" : "Αντιγραφή"}
                 </button>
+                {canDeleteContact ? (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setActionsMenuOpen((v) => !v)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-[var(--text-secondary)] transition-colors hover:bg-muted hover:text-[var(--text-primary)]"
+                      aria-label="Περισσότερες ενέργειες"
+                      aria-expanded={actionsMenuOpen}
+                    >
+                      <MoreVertical className="h-4 w-4" aria-hidden />
+                    </button>
+                    {actionsMenuOpen ? (
+                      <>
+                        <button
+                          type="button"
+                          className="fixed inset-0 z-10 cursor-default"
+                          aria-label="Κλείσιμο μενού"
+                          onClick={() => setActionsMenuOpen(false)}
+                        />
+                        <div className="absolute right-0 z-20 mt-1 min-w-[12rem] rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-1 shadow-lg">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionsMenuOpen(false);
+                              setDeleteConfirmOpen(true);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-red-400 transition hover:bg-red-500/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            Διαγραφή επαφής
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => handleSetFocusMode(!focusMode)}
@@ -2476,20 +2562,37 @@ function ContactDetailPage() {
                   <li className="text-xs text-[var(--text-muted)]">Χωρίς νέες σημειώσεις.</li>
                 )}
                 {contactNotes.map((note) => {
-                  const canDeleteThis = canManage;
+                  const isDeleted = Boolean(note.deleted_at);
+                  const canDeleteThis = canManage && !isDeleted;
                   const canEditThis =
-                    (note.user_id != null && note.user_id === profile?.id) || canManage;
+                    !isDeleted &&
+                    ((note.user_id != null && note.user_id === profile?.id) || canManage);
                   const isEditing = editingNoteId === note.id;
-                  const wasEdited =
+                  const wasEdited = Boolean(note.edited_at) || (
                     Boolean(note.updated_at) &&
-                    note.updated_at !== note.created_at;
+                    note.updated_at !== note.created_at
+                  );
+                  const showOriginal = Boolean(showOriginalNoteIds[note.id]);
                   const displayAuthor = note.author_name?.trim()
                     ? resolveName(note.author_name)
                     : note.author_full_name || "—";
+                  const deletedByLabel = note.deleted_by_name
+                    ? resolveName(note.deleted_by_name)
+                    : "—";
+                  const editedByLabel = note.edited_by_name
+                    ? resolveName(note.edited_by_name)
+                    : null;
                   return (
                     <li key={note.id}>
-                      <div className="group relative rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35 p-3 pl-3 pr-2">
-                        {!isEditing && (
+                      <div
+                        className={
+                          "group relative rounded-md border border-l-[3px] p-3 pl-3 pr-2 " +
+                          (isDeleted
+                            ? "border-red-500/25 border-l-red-400/60 bg-red-500/5"
+                            : "border-[var(--border)] border-l-[var(--accent-gold)] bg-[var(--bg-elevated)]/35")
+                        }
+                      >
+                        {!isEditing && !isDeleted && (
                           <div className="absolute right-1.5 top-1.5 z-[1] flex items-center gap-0.5">
                             {canEditThis && (
                               <button
@@ -2515,7 +2618,26 @@ function ContactDetailPage() {
                                     { method: "DELETE" },
                                   );
                                   if (dres.ok) {
-                                    setContactNotes((prev) => prev.filter((x) => x.id !== note.id));
+                                    const j = (await dres.json().catch(() => ({}))) as {
+                                      note?: ContactNoteItem;
+                                    };
+                                    if (j.note) {
+                                      setContactNotes((prev) =>
+                                        prev.map((x) => (x.id === note.id ? { ...x, ...j.note } : x)),
+                                      );
+                                    } else {
+                                      setContactNotes((prev) =>
+                                        prev.map((x) =>
+                                          x.id === note.id
+                                            ? {
+                                                ...x,
+                                                deleted_at: new Date().toISOString(),
+                                                deleted_by_name: profile?.full_name ?? "—",
+                                              }
+                                            : x,
+                                        ),
+                                      );
+                                    }
                                     if (editingNoteId === note.id) {
                                       setEditingNoteId(null);
                                       setEditNoteDraft("");
@@ -2597,24 +2719,59 @@ function ContactDetailPage() {
                               </div>
                             ) : (
                               <>
-                                <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{note.content}</p>
-                                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                                  {displayAuthor && displayAuthor !== "—" && (
-                                    <span className="text-xs font-medium text-primary/70">{displayAuthor}</span>
-                                  )}
-                                  {displayAuthor && displayAuthor !== "—" && (
-                                    <span className="text-xs text-muted-foreground">·</span>
-                                  )}
-                                  <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
-                                  {wasEdited && (
-                                    <>
+                                <p
+                                  className={
+                                    "whitespace-pre-wrap text-sm " +
+                                    (isDeleted
+                                      ? "italic text-[var(--text-muted)] line-through"
+                                      : "text-[var(--text-primary)]")
+                                  }
+                                >
+                                  {note.content}
+                                </p>
+                                {isDeleted ? (
+                                  <p className="mt-1.5 text-xs italic text-red-400/90">
+                                    Διαγράφηκε από {deletedByLabel} στις {formatDate(note.deleted_at)}
+                                  </p>
+                                ) : (
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                    {displayAuthor && displayAuthor !== "—" && (
+                                      <span className="text-xs font-medium text-primary/70">{displayAuthor}</span>
+                                    )}
+                                    {displayAuthor && displayAuthor !== "—" && (
                                       <span className="text-xs text-muted-foreground">·</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        Επεξεργάστηκε {formatDate(note.updated_at)}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
+                                    )}
+                                    <span className="text-xs text-muted-foreground">{formatDate(note.created_at)}</span>
+                                    {wasEdited && (
+                                      <>
+                                        <span className="text-xs text-muted-foreground">·</span>
+                                        <span className="text-xs text-muted-foreground">
+                                          Επεξεργάστηκε από {editedByLabel || displayAuthor} στις{" "}
+                                          {formatDate(note.edited_at ?? note.updated_at)}
+                                        </span>
+                                      </>
+                                    )}
+                                    {note.original_content ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setShowOriginalNoteIds((prev) => ({
+                                            ...prev,
+                                            [note.id]: !prev[note.id],
+                                          }))
+                                        }
+                                        className="text-xs font-medium text-[var(--accent-gold)] hover:underline"
+                                      >
+                                        {showOriginal ? "Απόκρυψη αρχικού" : "Εμφάνιση αρχικού"}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                )}
+                                {showOriginal && note.original_content && !isDeleted ? (
+                                  <p className="mt-2 whitespace-pre-wrap rounded-md border border-dashed border-[var(--border)] bg-[var(--bg-card)]/60 p-2 text-xs italic text-[var(--text-muted)]">
+                                    {note.original_content}
+                                  </p>
+                                ) : null}
                               </>
                             )}
                           </div>
@@ -3211,6 +3368,62 @@ function ContactDetailPage() {
       </div>
     </div>
       </div>
+
+      {deleteConfirmOpen ? (
+        <CenteredModal
+          open
+          onClose={() => {
+            if (!deletingContact) setDeleteConfirmOpen(false);
+          }}
+          title="Διαγραφή επαφής"
+          ariaLabel="Διαγραφή επαφής"
+          className="!max-w-sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className={lux.btnSecondary}
+                disabled={deletingContact}
+                onClick={() => setDeleteConfirmOpen(false)}
+              >
+                Άκυρο
+              </button>
+              <button
+                type="button"
+                className={lux.btnDanger}
+                disabled={deletingContact}
+                onClick={async () => {
+                  if (!id) return;
+                  setDeletingContact(true);
+                  try {
+                    const res = await fetchWithTimeout(`/api/contacts/${encodeURIComponent(id)}`, {
+                      method: "DELETE",
+                    });
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
+                    if (!res.ok) {
+                      showToast(j.error ?? "Αποτυχία διαγραφής", "error");
+                      return;
+                    }
+                    showToast("Η επαφή διαγράφηκε.", "success");
+                    router.push("/contacts");
+                  } catch {
+                    showToast("Σφάλμα δικτύου.", "error");
+                  } finally {
+                    setDeletingContact(false);
+                    setDeleteConfirmOpen(false);
+                  }
+                }}
+              >
+                {deletingContact ? "…" : "Διαγραφή"}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-[var(--text-secondary)]">
+            Να διαγραφεί οριστικά αυτή η επαφή; Αυτό δεν ανακαλείται.
+          </p>
+        </CenteredModal>
+      ) : null}
     </div>
   );
 }

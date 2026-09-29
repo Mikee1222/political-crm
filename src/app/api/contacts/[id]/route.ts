@@ -248,7 +248,13 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   const crm = await checkCRMAccess();
   if (!crm.allowed) return crm.response;
   const { user, profile } = crm;
-  if (!(await hasPermissionFlexible(user.id, "contacts_delete", profile?.role === "admin"))) {
+  if (
+    !(await hasPermissionFlexible(
+      user.id,
+      "contacts_delete",
+      hasMinRole(profile?.role, "manager", profile?.access_tier),
+    ))
+  ) {
     return forbidden();
   }
   const admin = createServiceClient();

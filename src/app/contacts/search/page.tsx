@@ -48,11 +48,16 @@ import {
   CONTACTS_SEARCH_FRESH_KEY,
   CONTACTS_SEARCH_STATE_KEY,
   consumeSearchFreshIntent,
+  loadContactsSearchNav,
   loadSearchSessionState,
   saveContactsSearchNav,
   saveSearchSessionState,
   SEARCH_FRESH_EVENT,
 } from "@/lib/search-session-state";
+import {
+  extractContactListIds,
+  fetchAllSearchResultIds,
+} from "@/lib/search-nav-ids";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -116,6 +121,7 @@ function ContactSearchPageInner() {
   /** When set, matching filters+page skip network fetch (session restore). */
   const restoredFingerprintRef = useRef<string | null>(null);
   const resultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const navIdsAbortRef = useRef<AbortController | null>(null);
   const stateSnapshotRef = useRef({
     hasSearched: false,
     appliedFilters: null as ContactListFilters | null,
@@ -123,6 +129,65 @@ function ContactSearchPageInner() {
     contacts: [] as ContactSearchResult[],
     total: 0,
   });
+
+  const persistContactsNavFromResults = useCallback(
+    (list: ContactSearchResult[], totalCount: number, filters: ContactListFilters, pageNum: number) => {
+      const pageIds = list.map((c) => c.id);
+      const labels: Record<string, string> = {};
+      for (const c of list) {
+        labels[c.id] = `${c.first_name} ${c.last_name}`.trim();
+      }
+      const existing = loadContactsSearchNav();
+      // Prefer keeping a complete nav list when paging within the same search.
+      if (
+        existing?.ids.length &&
+        (existing.total ?? 0) === totalCount &&
+        existing.ids.length >= totalCount
+      ) {
+        saveContactsSearchNav(existing.ids, {
+          labels: { ...(existing.labels ?? {}), ...labels },
+          total: totalCount,
+        });
+        return;
+      }
+
+      saveContactsSearchNav(pageIds, { labels, total: totalCount });
+
+      navIdsAbortRef.current?.abort();
+      if (totalCount <= pageIds.length && pageNum === 1) return;
+
+      const ac = new AbortController();
+      navIdsAbortRef.current = ac;
+      const filtersSnapshot = cloneContactListFilters(filters);
+      void (async () => {
+        const allIds = await fetchAllSearchResultIds({
+          apiPath: "/api/contacts",
+          pageSize: PAGE_SIZE,
+          total: totalCount,
+          seedIds: pageIds,
+          seedPage: pageNum,
+          signal: ac.signal,
+          buildParams: (p, pageSize) => {
+            const params = contactFiltersToSearchParams({
+              ...cloneContactListFilters(filtersSnapshot),
+              page: String(p),
+            });
+            params.set("page_size", String(pageSize));
+            params.set("partial_location", "1");
+            return params;
+          },
+          extractIds: extractContactListIds,
+        });
+        if (ac.signal.aborted || !allIds.length) return;
+        const prev = loadContactsSearchNav();
+        saveContactsSearchNav(allIds, {
+          labels: { ...(prev?.labels ?? {}), ...labels },
+          total: totalCount,
+        });
+      })();
+    },
+    [],
+  );
 
   const contactSearchFingerprint = useCallback((f: ContactListFilters, pageNum: number) => {
     return contactFiltersToSearchParams({
@@ -238,6 +303,7 @@ function ContactSearchPageInner() {
     if (consumeSearchFreshIntent(CONTACTS_SEARCH_FRESH_KEY)) {
       clearSearchSessionState(CONTACTS_SEARCH_STATE_KEY);
       clearContactsSearchNav();
+      navIdsAbortRef.current?.abort();
       return;
     }
 
@@ -262,6 +328,7 @@ function ContactSearchPageInner() {
       filters: f,
       page: pageNum,
     });
+    persistContactsNavFromResults(cached.results, cached.total, f, pageNum);
 
     if (!urlRan) {
       const params =
@@ -364,9 +431,11 @@ function ContactSearchPageInner() {
         const contact_groups = Array.isArray(g) ? g[0] ?? null : g ?? null;
         return { ...c, contact_groups } as ContactSearchResult;
       });
+      const totalCount = typeof data.total === "number" ? data.total : list.length;
       setContacts(list);
-      setTotal(typeof data.total === "number" ? data.total : list.length);
+      setTotal(totalCount);
       setRestoredFromCache(false);
+      persistContactsNavFromResults(list, totalCount, f, pageNum);
     } catch {
       if (seq !== loadSeqRef.current) return;
       setContacts([]);
@@ -374,7 +443,7 @@ function ContactSearchPageInner() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, []);
+  }, [persistContactsNavFromResults]);
 
   useEffect(() => {
     if (!loading) {
@@ -524,17 +593,36 @@ function ContactSearchPageInner() {
   const navigateToContact = useCallback(
     (id: string) => {
       persistSearchState();
-      const labels: Record<string, string> = {};
+      const existing = loadContactsSearchNav();
+      const labels: Record<string, string> = { ...(existing?.labels ?? {}) };
       for (const c of contacts) {
         labels[c.id] = `${c.first_name} ${c.last_name}`.trim();
       }
-      saveContactsSearchNav(
-        contacts.map((c) => c.id),
-        { labels, total },
-      );
+      if (existing?.ids.length && (existing.total ?? existing.ids.length) >= total) {
+        saveContactsSearchNav(existing.ids, {
+          labels,
+          total: existing.total ?? total,
+        });
+      } else if (appliedFilters) {
+        persistContactsNavFromResults(contacts, total, appliedFilters, page);
+      } else {
+        saveContactsSearchNav(
+          contacts.map((c) => c.id),
+          { labels, total },
+        );
+      }
       router.push(contactHref(id));
     },
-    [persistSearchState, router, contactHref, contacts, total],
+    [
+      persistSearchState,
+      router,
+      contactHref,
+      contacts,
+      total,
+      appliedFilters,
+      persistContactsNavFromResults,
+      page,
+    ],
   );
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

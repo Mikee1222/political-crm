@@ -4,6 +4,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowDownToLine,
+  ChevronDown,
+  ChevronRight,
   Eye,
   File,
   FileSpreadsheet,
@@ -565,6 +567,7 @@ export function DocumentsSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [preview, setPreview] = useState<DocRow | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const onPreviewSignedUrl = useCallback((id: string, signedUrl: string) => {
     setDocs((prev) =>
@@ -664,8 +667,32 @@ export function DocumentsSection({
     }
   };
 
+  const docCount = loading ? null : docs.length;
+  const headerLabel =
+    docCount === null
+      ? "ΕΓΓΡΑΦΑ (…)"
+      : docCount === 0
+        ? "ΕΓΓΡΑΦΑ"
+        : `ΕΓΓΡΑΦΑ (${docCount})`;
+
+  const uploadBtn = (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        openPicker();
+      }}
+      disabled={uploading}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition hover:brightness-110 disabled:opacity-50"
+      style={{ borderColor: `${GOLD}88`, color: GOLD }}
+    >
+      <Upload className="h-3.5 w-3.5" aria-hidden />
+      Ανέβασμα
+    </button>
+  );
+
   return (
-    <div className="contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-5 shadow-sm">
+    <div className="contact-card-in break-inside-avoid rounded-[12px] border border-[var(--border)] bg-[var(--bg-card)]/95 p-4 shadow-sm sm:p-5">
       <input
         ref={fileInputRef}
         type="file"
@@ -678,228 +705,236 @@ export function DocumentsSection({
         }}
       />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-w-0 items-center gap-2 text-left"
+          aria-expanded={expanded}
+          aria-label={expanded ? "Σύμπτυξη εγγράφων" : "Ανάπτυξη εγγράφων"}
+        >
+          {expanded ? (
+            <ChevronDown className="h-4 w-4 shrink-0" style={{ color: GOLD }} aria-hidden />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0" style={{ color: GOLD }} aria-hidden />
+          )}
           <h2
             className="text-[11px] font-bold uppercase tracking-[0.14em]"
             style={{ color: GOLD }}
           >
-            ΕΓΓΡΑΦΑ
+            {headerLabel}
           </h2>
-          <span
-            className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-bold text-[#0a0f1a]"
-            style={{ backgroundColor: GOLD }}
-            aria-label={`${docs.length} έγγραφα`}
-          >
-            {loading ? "…" : docs.length}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={openPicker}
-          disabled={uploading}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition hover:brightness-110 disabled:opacity-50"
-          style={{ borderColor: `${GOLD}88`, color: GOLD }}
-        >
-          <Upload className="h-3.5 w-3.5" aria-hidden />
-          Ανέβασμα
+          {!expanded && !loading && docs.length === 0 ? (
+            <span className="truncate text-[11px] font-normal normal-case tracking-normal text-[var(--text-muted)]">
+              Δεν υπάρχουν έγγραφα
+            </span>
+          ) : null}
         </button>
+        {uploadBtn}
       </div>
 
-      {success ? <p className="mb-3 text-xs text-emerald-400">{success}</p> : null}
-      {error ? <p className="mb-3 text-xs text-red-400">{error}</p> : null}
-
-      {!loading && docs.length === 0 ? (
-        <div
-          className={[
-            "relative flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-10 text-center transition-all",
-            drag
-              ? "bg-[#D4AF37]/10 shadow-[0_0_0_1px_rgba(212,175,55,0.35)]"
-              : "bg-[var(--bg-elevated)]/30 hover:bg-[var(--bg-elevated)]/50",
-          ].join(" ")}
-          style={{ borderColor: drag ? GOLD : `${GOLD}66` }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            void uploadFiles(e.dataTransfer.files);
-          }}
-          onClick={() => {
-            if (!uploading) openPicker();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              if (!uploading) openPicker();
-            }
-          }}
-          role="button"
-          tabIndex={0}
-          aria-label="Ζώνη ανεβάσματος εγγράφων"
-        >
-          <div
-            className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: `${GOLD}18`, color: GOLD, boxShadow: `inset 0 0 0 1px ${GOLD}33` }}
-          >
-            <FileX className="h-7 w-7" aria-hidden />
+      {success ? <p className="mt-2 text-xs text-emerald-400">{success}</p> : null}
+      {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+      {upPct !== null && !expanded ? (
+        <div className="mt-2">
+          {uploadLabel ? (
+            <p className="mb-1 truncate text-[10px] text-[var(--text-muted)]">{uploadLabel}</p>
+          ) : null}
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+            <div
+              className="h-full transition-all duration-200"
+              style={{
+                width: `${upPct}%`,
+                background: `linear-gradient(90deg, #003476, ${GOLD})`,
+              }}
+            />
           </div>
-          <p className="text-sm font-medium text-[var(--text-primary)]">Δεν υπάρχουν έγγραφα</p>
-          <p className="mt-1 max-w-sm text-xs text-[var(--text-muted)]">
-            Σύρετε αρχεία εδώ ή κάντε κλικ για επιλογή · PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF · έως 10MB
-          </p>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              openPicker();
-            }}
-            disabled={uploading}
-            className={lux.btnPrimary + " mt-4 inline-flex items-center gap-2"}
-          >
-            <Upload className="h-4 w-4" />
-            Ανεβάστε το πρώτο έγγραφο
-          </button>
-          {upPct !== null && (
-            <div className="absolute bottom-3 left-3 right-3">
-              {uploadLabel ? (
-                <p className="mb-1 truncate text-[10px] text-[var(--text-muted)]">{uploadLabel}</p>
-              ) : null}
-              <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
-                <div
-                  className="h-full transition-all duration-200"
-                  style={{
-                    width: `${upPct}%`,
-                    background: `linear-gradient(90deg, #003476, ${GOLD})`,
-                  }}
-                />
+        </div>
+      ) : null}
+
+      {expanded ? (
+        <div className="mt-4">
+          {!loading && docs.length === 0 ? (
+            <div
+              className={[
+                "relative flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 text-center transition-all",
+                drag
+                  ? "bg-[#D4AF37]/10 shadow-[0_0_0_1px_rgba(212,175,55,0.35)]"
+                  : "bg-[var(--bg-elevated)]/30 hover:bg-[var(--bg-elevated)]/50",
+              ].join(" ")}
+              style={{ borderColor: drag ? GOLD : `${GOLD}66` }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDrag(true);
+              }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrag(false);
+                void uploadFiles(e.dataTransfer.files);
+              }}
+              onClick={() => {
+                if (!uploading) openPicker();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  if (!uploading) openPicker();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Ζώνη ανεβάσματος εγγράφων"
+            >
+              <div
+                className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: `${GOLD}18`, color: GOLD, boxShadow: `inset 0 0 0 1px ${GOLD}33` }}
+              >
+                <FileX className="h-6 w-6" aria-hidden />
               </div>
+              <p className="text-sm font-medium text-[var(--text-primary)]">Δεν υπάρχουν έγγραφα</p>
+              <p className="mt-1 max-w-sm text-xs text-[var(--text-muted)]">
+                Σύρετε αρχεία εδώ ή κάντε κλικ για επιλογή · PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF · έως 10MB
+              </p>
+              {upPct !== null && (
+                <div className="absolute bottom-3 left-3 right-3">
+                  {uploadLabel ? (
+                    <p className="mb-1 truncate text-[10px] text-[var(--text-muted)]">{uploadLabel}</p>
+                  ) : null}
+                  <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+                    <div
+                      className="h-full transition-all duration-200"
+                      style={{
+                        width: `${upPct}%`,
+                        background: `linear-gradient(90deg, #003476, ${GOLD})`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              <div
+                className={[
+                  "relative mb-4 flex min-h-[88px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-4 transition-all",
+                  drag
+                    ? "bg-[#D4AF37]/10 shadow-[0_0_0_1px_rgba(212,175,55,0.35)]"
+                    : "bg-[var(--bg-elevated)]/30 hover:bg-[var(--bg-elevated)]/50",
+                ].join(" ")}
+                style={{ borderColor: drag ? GOLD : `${GOLD}66` }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDrag(true);
+                }}
+                onDragLeave={() => setDrag(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDrag(false);
+                  void uploadFiles(e.dataTransfer.files);
+                }}
+                onClick={() => {
+                  if (!uploading) openPicker();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    if (!uploading) openPicker();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Ζώνη ανεβάσματος εγγράφων"
+              >
+                <Upload className="mb-1.5 h-5 w-5" style={{ color: GOLD }} aria-hidden />
+                <p className="text-center text-sm font-medium text-[var(--text-primary)]">
+                  Σύρετε αρχεία εδώ ή κάντε κλικ για επιλογή
+                </p>
+                <p className="mt-0.5 text-center text-xs text-[var(--text-muted)]">
+                  PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF · έως 10MB
+                </p>
+                {upPct !== null && (
+                  <div className="absolute bottom-3 left-3 right-3">
+                    {uploadLabel ? (
+                      <p className="mb-1 truncate text-[10px] text-[var(--text-muted)]">{uploadLabel}</p>
+                    ) : null}
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+                      <div
+                        className="h-full transition-all duration-200"
+                        style={{
+                          width: `${upPct}%`,
+                          background: `linear-gradient(90deg, #003476, ${GOLD})`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {docs.map((d) => {
+                  const kind = contactDocIconKind(d.file_type, d.name);
+                  return (
+                    <li
+                      key={d.id}
+                      className="group flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3 transition-colors hover:border-[#D4AF37]"
+                    >
+                      <DocTypeIcon kind={kind} />
+                      <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreview(d)}
+                          className="block w-full truncate text-left text-sm font-bold text-[var(--text-primary)] hover:underline"
+                          title={d.name}
+                        >
+                          {d.name}
+                        </button>
+                        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                          {formatFileSize(d.file_size)} · {formatDateTimeAthens(d.created_at)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setPreview(d)}
+                          className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold hover:underline"
+                          style={{ color: GOLD }}
+                        >
+                          <Eye className="h-3 w-3" aria-hidden />
+                          Προεπισκόπηση
+                        </button>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                        {d.signed_url ? (
+                          <a
+                            href={d.signed_url}
+                            download={d.name}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg transition hover:bg-[var(--bg-card)]"
+                            style={{ color: GOLD }}
+                            title="Λήψη"
+                            aria-label={`Λήψη ${d.name}`}
+                          >
+                            <ArrowDownToLine className="h-4 w-4" />
+                          </a>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-500/10"
+                          onClick={() => void delDoc(d.id)}
+                          title="Διαγραφή"
+                          aria-label={`Διαγραφή ${d.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </div>
-      ) : (
-        <>
-          <div
-            className={[
-              "relative mb-4 flex min-h-[112px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-5 transition-all",
-              drag
-                ? "bg-[#D4AF37]/10 shadow-[0_0_0_1px_rgba(212,175,55,0.35)]"
-                : "bg-[var(--bg-elevated)]/30 hover:bg-[var(--bg-elevated)]/50",
-            ].join(" ")}
-            style={{ borderColor: drag ? GOLD : `${GOLD}66` }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDrag(true);
-            }}
-            onDragLeave={() => setDrag(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDrag(false);
-              void uploadFiles(e.dataTransfer.files);
-            }}
-            onClick={() => {
-              if (!uploading) openPicker();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                if (!uploading) openPicker();
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label="Ζώνη ανεβάσματος εγγράφων"
-          >
-            <Upload className="mb-2 h-6 w-6" style={{ color: GOLD }} aria-hidden />
-            <p className="text-center text-sm font-medium text-[var(--text-primary)]">
-              Σύρετε αρχεία εδώ ή κάντε κλικ για επιλογή
-            </p>
-            <p className="mt-1 text-center text-xs text-[var(--text-muted)]">
-              PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF · έως 10MB
-            </p>
-            {upPct !== null && (
-              <div className="absolute bottom-3 left-3 right-3">
-                {uploadLabel ? (
-                  <p className="mb-1 truncate text-[10px] text-[var(--text-muted)]">{uploadLabel}</p>
-                ) : null}
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
-                  <div
-                    className="h-full transition-all duration-200"
-                    style={{
-                      width: `${upPct}%`,
-                      background: `linear-gradient(90deg, #003476, ${GOLD})`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {docs.map((d) => {
-              const kind = contactDocIconKind(d.file_type, d.name);
-              return (
-                <li
-                  key={d.id}
-                  className="group flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/40 p-3 transition-colors hover:border-[#D4AF37]"
-                >
-                  <DocTypeIcon kind={kind} />
-                  <div className="min-w-0 flex-1">
-                    <button
-                      type="button"
-                      onClick={() => setPreview(d)}
-                      className="block w-full truncate text-left text-sm font-bold text-[var(--text-primary)] hover:underline"
-                      title={d.name}
-                    >
-                      {d.name}
-                    </button>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      {formatFileSize(d.file_size)} · {formatDateTimeAthens(d.created_at)}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setPreview(d)}
-                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold hover:underline"
-                      style={{ color: GOLD }}
-                    >
-                      <Eye className="h-3 w-3" aria-hidden />
-                      Προεπισκόπηση
-                    </button>
-                  </div>
-                  <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
-                    {d.signed_url ? (
-                      <a
-                        href={d.signed_url}
-                        download={d.name}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg transition hover:bg-[var(--bg-card)]"
-                        style={{ color: GOLD }}
-                        title="Λήψη"
-                        aria-label={`Λήψη ${d.name}`}
-                      >
-                        <ArrowDownToLine className="h-4 w-4" />
-                      </a>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-500/10"
-                      onClick={() => void delDoc(d.id)}
-                      title="Διαγραφή"
-                      aria-label={`Διαγραφή ${d.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+      ) : null}
 
       {preview ? (
         <PreviewModal

@@ -22,6 +22,9 @@ export const CONTACTS_NAV_KEY = "contacts_nav";
 
 export const SEARCH_FRESH_EVENT = "crm-search-fresh-intent";
 
+/** Fired when contacts/requests search-nav IDs are written (background full-list load). */
+export const ENTITY_SEARCH_NAV_EVENT = "crm-entity-search-nav";
+
 export type SearchSessionState<TFilters, TResult> = {
   savedAt: number;
   filters: TFilters;
@@ -132,6 +135,13 @@ export function saveEntitySearchNav(
       total: opts?.total,
     };
     sessionStorage.setItem(key, JSON.stringify(payload));
+    try {
+      window.dispatchEvent(
+        new CustomEvent(ENTITY_SEARCH_NAV_EVENT, { detail: { key } }),
+      );
+    } catch {
+      /* ignore */
+    }
   } catch {
     /* quota / private mode */
   }

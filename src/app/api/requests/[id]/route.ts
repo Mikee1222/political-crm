@@ -357,7 +357,7 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   const deniedDelete = await requirePermissionFlexible(
     crm,
     "requests_delete",
-    hasMinRole(profile?.role, "manager"),
+    hasMinRole(profile?.role, "manager", profile?.access_tier),
   );
   if (deniedDelete) return deniedDelete;
   const requestId = await resolveRequestId(supabase, params.id);

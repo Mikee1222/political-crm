@@ -36,8 +36,10 @@ import { useRequestStatusColors } from "@/hooks/use-request-status-colors";
 import { lux } from "@/lib/luxury-styles";
 import { buildActiveFilterSummaryLabel } from "@/lib/search-filter-summary";
 import {
+  clearRequestsSearchNav,
   clearSearchSessionState,
   consumeSearchFreshIntent,
+  loadRequestsSearchNav,
   loadSearchSessionState,
   REQUESTS_SEARCH_FRESH_KEY,
   REQUESTS_SEARCH_STATE_KEY,
@@ -45,6 +47,10 @@ import {
   saveSearchSessionState,
   SEARCH_FRESH_EVENT,
 } from "@/lib/search-session-state";
+import {
+  extractRequestListIds,
+  fetchAllSearchResultIds,
+} from "@/lib/search-nav-ids";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -75,6 +81,7 @@ function RequestSearchPageInner() {
   const skipUrlSyncOnceRef = useRef(false);
   const restoredFingerprintRef = useRef<string | null>(null);
   const resultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const navIdsAbortRef = useRef<AbortController | null>(null);
   const stateSnapshotRef = useRef({
     hasSearched: false,
     appliedFilters: null as RequestListFilters | null,
@@ -86,6 +93,65 @@ function RequestSearchPageInner() {
   const requestSearchFingerprint = useCallback((f: RequestListFilters, pageNum: number) => {
     return requestFiltersToSearchParams({ ...f, page: String(pageNum) }).toString();
   }, []);
+
+  const persistRequestsNavFromResults = useCallback(
+    (list: RequestSearchResult[], totalCount: number, filters: RequestListFilters, pageNum: number) => {
+      const pageIds = list.map((r) => r.id);
+      const labels: Record<string, string> = {};
+      for (const row of list) {
+        labels[row.id] =
+          (row.request_code != null ? `#${row.request_code} ` : "") + row.title;
+      }
+      const existing = loadRequestsSearchNav();
+      if (
+        existing?.ids.length &&
+        (existing.total ?? 0) === totalCount &&
+        existing.ids.length >= totalCount
+      ) {
+        saveRequestsSearchNav(existing.ids, {
+          labels: { ...(existing.labels ?? {}), ...labels },
+          total: totalCount,
+        });
+        return;
+      }
+
+      saveRequestsSearchNav(pageIds, { labels, total: totalCount });
+
+      navIdsAbortRef.current?.abort();
+      if (totalCount <= pageIds.length && pageNum === 1) return;
+
+      const ac = new AbortController();
+      navIdsAbortRef.current = ac;
+      const filtersSnapshot = { ...filters };
+      void (async () => {
+        const allIds = await fetchAllSearchResultIds({
+          apiPath: "/api/requests",
+          pageSize: PAGE_SIZE,
+          total: totalCount,
+          seedIds: pageIds,
+          seedPage: pageNum,
+          signal: ac.signal,
+          buildParams: (p, pageSize) => {
+            const params = requestFiltersToSearchParams({
+              ...filtersSnapshot,
+              page: String(p),
+            });
+            params.set("page_size", String(pageSize));
+            params.set("skip_counts", "1");
+            return params;
+          },
+          extractIds: extractRequestListIds,
+        });
+        if (ac.signal.aborted || !allIds.length) return;
+        const prev = loadRequestsSearchNav();
+        saveRequestsSearchNav(allIds, {
+          labels: { ...(prev?.labels ?? {}), ...labels },
+          total: totalCount,
+        });
+      })();
+    },
+    [],
+  );
 
   useEffect(() => {
     try {
@@ -147,6 +213,8 @@ function RequestSearchPageInner() {
 
     if (consumeSearchFreshIntent(REQUESTS_SEARCH_FRESH_KEY)) {
       clearSearchSessionState(REQUESTS_SEARCH_STATE_KEY);
+      clearRequestsSearchNav();
+      navIdsAbortRef.current?.abort();
       return;
     }
 
@@ -171,6 +239,7 @@ function RequestSearchPageInner() {
       filters: f,
       page: pageNum,
     });
+    persistRequestsNavFromResults(cached.results, cached.total, f, pageNum);
 
     if (!urlRan) {
       const params =
@@ -189,6 +258,8 @@ function RequestSearchPageInner() {
       if (detail?.freshKey !== REQUESTS_SEARCH_FRESH_KEY) return;
       consumeSearchFreshIntent(REQUESTS_SEARCH_FRESH_KEY);
       clearSearchSessionState(REQUESTS_SEARCH_STATE_KEY);
+      clearRequestsSearchNav();
+      navIdsAbortRef.current?.abort();
       restoredFingerprintRef.current = null;
       setRestoredFromCache(false);
       const d = getDefaultRequestFilters();
@@ -245,9 +316,11 @@ function RequestSearchPageInner() {
         return;
       }
       const list = data.data ?? data.requests ?? [];
+      const totalCount = typeof data.count === "number" ? data.count : list.length;
       setRequests(list);
-      setTotal(typeof data.count === "number" ? data.count : list.length);
+      setTotal(totalCount);
       setRestoredFromCache(false);
+      persistRequestsNavFromResults(list, totalCount, f, pageNum);
     } catch {
       if (seq !== loadSeqRef.current) return;
       setRequests([]);
@@ -255,7 +328,7 @@ function RequestSearchPageInner() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, []);
+  }, [persistRequestsNavFromResults]);
 
   useEffect(() => {
     if (!loading) {
@@ -281,6 +354,8 @@ function RequestSearchPageInner() {
   const runSearch = useCallback(
     (f: RequestListFilters) => {
       clearSearchSessionState(REQUESTS_SEARCH_STATE_KEY);
+      clearRequestsSearchNav();
+      navIdsAbortRef.current?.abort();
       restoredFingerprintRef.current = null;
       setRestoredFromCache(false);
       setMobileFiltersOpen(false);
@@ -470,15 +545,31 @@ function RequestSearchPageInner() {
                           statusColors={statusColors}
                           onNavigate={() => {
                             persistSearchState();
-                            const labels: Record<string, string> = {};
+                            const existing = loadRequestsSearchNav();
+                            const labels: Record<string, string> = {
+                              ...(existing?.labels ?? {}),
+                            };
                             for (const row of requests) {
                               labels[row.id] =
-                                (row.request_code != null ? `#${row.request_code} ` : "") + row.title;
+                                (row.request_code != null ? `#${row.request_code} ` : "") +
+                                row.title;
                             }
-                            saveRequestsSearchNav(
-                              requests.map((row) => row.id),
-                              { labels, total },
-                            );
+                            if (
+                              existing?.ids.length &&
+                              (existing.total ?? existing.ids.length) >= total
+                            ) {
+                              saveRequestsSearchNav(existing.ids, {
+                                labels,
+                                total: existing.total ?? total,
+                              });
+                            } else if (appliedFilters) {
+                              persistRequestsNavFromResults(requests, total, appliedFilters, page);
+                            } else {
+                              saveRequestsSearchNav(
+                                requests.map((row) => row.id),
+                                { labels, total },
+                              );
+                            }
                             const tabLabel =
                               (r.request_code != null ? `#${r.request_code} ` : "") + r.title;
                             openRequestTab(r.id, tabLabel);
