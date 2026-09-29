@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { X, User } from "lucide-react";
+import { FileText, User, X } from "lucide-react";
 import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { cn } from "@/lib/utils";
 
@@ -12,17 +12,27 @@ export function ContactTabsBar() {
   const pathname = usePathname();
 
   useEffect(() => {
-    const m = pathname.match(/^\/contacts\/([^/]+)$/);
-    if (!m) return;
-    const tab = tabs.find((t) => t.contactId === m[1]);
-    if (tab && tab.id !== activeTab) setActiveTab(tab.id);
+    const contactMatch = pathname.match(/^\/contacts\/([^/]+)$/);
+    if (contactMatch) {
+      const tab = tabs.find((t) => t.entityType === "contact" && t.entityId === contactMatch[1]);
+      if (tab && tab.id !== activeTab) setActiveTab(tab.id);
+      return;
+    }
+    const requestMatch = pathname.match(/^\/requests\/([^/]+)$/);
+    if (requestMatch && requestMatch[1] !== "search") {
+      const tab = tabs.find((t) => t.entityType === "request" && t.entityId === requestMatch[1]);
+      if (tab && tab.id !== activeTab) setActiveTab(tab.id);
+    }
   }, [pathname, tabs, activeTab, setActiveTab]);
 
   if (tabs.length === 0) return null;
 
-  const contactTabHref = (contactId: string) => {
+  const tabHref = (tab: (typeof tabs)[number]) => {
+    if (tab.entityType === "request") {
+      return `/requests/${tab.entityId}`;
+    }
     const focus = new URLSearchParams(window.location.search).get("focus") === "1";
-    return focus ? `/contacts/${contactId}?focus=1` : `/contacts/${contactId}`;
+    return focus ? `/contacts/${tab.entityId}?focus=1` : `/contacts/${tab.entityId}`;
   };
 
   return (
@@ -35,13 +45,13 @@ export function ContactTabsBar() {
           aria-selected={activeTab === tab.id}
           onClick={() => {
             setActiveTab(tab.id);
-            router.push(contactTabHref(tab.contactId));
+            router.push(tabHref(tab));
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               setActiveTab(tab.id);
-              router.push(contactTabHref(tab.contactId));
+              router.push(tabHref(tab));
             }
           }}
           className={cn(
@@ -51,7 +61,11 @@ export function ContactTabsBar() {
               : "bg-muted text-muted-foreground hover:bg-muted/80",
           )}
         >
-          <User className="h-3 w-3 flex-shrink-0" aria-hidden />
+          {tab.entityType === "request" ? (
+            <FileText className="h-3 w-3 flex-shrink-0" aria-hidden />
+          ) : (
+            <User className="h-3 w-3 flex-shrink-0" aria-hidden />
+          )}
           <span className="max-w-[120px] truncate">{tab.name}</span>
           <button
             type="button"

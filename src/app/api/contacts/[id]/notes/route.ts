@@ -51,7 +51,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
     const { user, profile, supabase } = crm;
-    if (!hasMinRole(profile?.role, "manager")) {
+    // Callers / γραμματείς may add notes; delete stays manager+ elsewhere.
+    if (!hasMinRole(profile?.role, "caller", profile?.access_tier)) {
       return forbidden();
     }
     const b = (await request.json()) as { content?: string };

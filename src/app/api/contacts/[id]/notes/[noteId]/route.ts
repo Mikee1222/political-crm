@@ -1,5 +1,7 @@
 import { checkCRMAccess } from "@/lib/crm-api-access";
 import { NextRequest, NextResponse } from "next/server";
+import { forbidden } from "@/lib/auth-helpers";
+import { hasMinRole } from "@/lib/roles";
 import { nextJsonError } from "@/lib/api-resilience";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,11 @@ export async function DELETE(
   try {
     const crm = await checkCRMAccess();
     if (!crm.allowed) return crm.response;
-    const { user, profile, supabase } = crm;
+    const { profile, supabase } = crm;
+    // Secretaries/callers can add notes but only manager+ can delete.
+    if (!hasMinRole(profile?.role, "manager", profile?.access_tier)) {
+      return forbidden();
+    }
     const { data: row, error: fErr } = await supabase
       .from("contact_notes")
       .select("id, user_id, contact_id")
@@ -23,11 +29,6 @@ export async function DELETE(
     }
     if (!row) {
       return NextResponse.json({ error: "Δεν βρέθηκε" }, { status: 404 });
-    }
-    const isOwner = (row as { user_id: string | null }).user_id === user.id;
-    const isAdmin = profile?.role === "admin";
-    if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Μη εξουσιοδότηση" }, { status: 403 });
     }
     const { error: dErr } = await supabase.from("contact_notes").delete().eq("id", params.noteId);
     if (dErr) {

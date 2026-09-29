@@ -23,6 +23,7 @@ import { MobileFilterFab } from "@/components/mobile/mobile-filter-fab";
 import { MobileFilterSheet } from "@/components/mobile/mobile-filter-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import {
   getDefaultRequestFilters,
@@ -54,6 +55,7 @@ const SLOW_SEARCH_MS = 500;
 function RequestSearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { openRequestTab } = useContactTabs();
   const { colors: statusColors } = useRequestStatusColors();
   const { categoryNames, handlerNames } = useRequestFilterOptions();
 
@@ -477,6 +479,9 @@ function RequestSearchPageInner() {
                               requests.map((row) => row.id),
                               { labels, total },
                             );
+                            const tabLabel =
+                              (r.request_code != null ? `#${r.request_code} ` : "") + r.title;
+                            openRequestTab(r.id, tabLabel);
                             router.push(`/requests/${r.id}?from=search`);
                           }}
                         />

@@ -9,7 +9,9 @@ import { computeSlaStatus } from "@/lib/request-sla";
 import { formatCalendarDateOnly, formatDateTimeEnGb } from "@/lib/date-format";
 import { useProfile } from "@/contexts/profile-context";
 import { useResolveAuthorName } from "@/contexts/staff-aliases-context";
+import { useContactTabs } from "@/contexts/contact-tabs-context";
 import { can } from "@/lib/can";
+import { hasMinRole } from "@/lib/roles";
 import { useFormToast } from "@/contexts/form-toast-context";
 import { RequestDocumentsSection } from "@/components/request-documents-section";
 import { RequestPersonsSections } from "@/components/requests/request-persons-sections";
@@ -24,9 +26,14 @@ import { AISummaryCard } from "@/components/ai-summary-card";
 import { CrmErrorBoundary } from "@/components/crm-error-boundary";
 import { useOptionalAlexandraPageContext } from "@/contexts/alexandra-page-context";
 import {
+  formatAssigneeOptionLabel,
+  useRequestFilterOptions,
+} from "@/hooks/use-request-filter-options";
+import {
   isRequestsSearchNavActive,
   loadRequestsSearchNav,
 } from "@/lib/search-session-state";
+import { HqSelect } from "@/components/ui/hq-select";
 
 const DESCRIPTION_MAX_LEN = 2000;
 
@@ -183,14 +190,27 @@ export default function RequestDetailPage() {
   );
 }
 
+type InlineEditDraft = {
+  title: string;
+  category: string;
+  status: string;
+  description: string;
+  assigned_to: string;
+  priority: "High" | "Medium" | "Low" | "Urgent";
+};
+
 function RequestDetailPageInner() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { profile } = useProfile();
   const resolveName = useResolveAuthorName();
+  const { openRequestTab } = useContactTabs();
+  const { categories, assignees } = useRequestFilterOptions();
   const id = typeof params?.id === "string" ? params.id : "";
   const canEdit = can(profile, "requests_edit");
+  const canAddNotes =
+    can(profile, "requests_view") || hasMinRole(profile?.role, "caller", profile?.access_tier);
   const canViewAiSummary = can(profile, "ai_summary_view");
   const { showToast } = useFormToast();
 
@@ -206,9 +226,32 @@ function RequestDetailPageInner() {
   const [descDraft, setDescDraft] = useState("");
   const [descSaving, setDescSaving] = useState(false);
   const descTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [editingAll, setEditingAll] = useState(false);
+  const [editDraft, setEditDraft] = useState<InlineEditDraft | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [navInfo, setNavInfo] = useState<RequestNavInfo | null>(null);
   const requestApiId = useMemo(() => data?.id ?? id, [data?.id, id]);
   const alexPage = useOptionalAlexandraPageContext();
+
+  const assigneeSelectOptions = useMemo(() => {
+    const opts = assignees.map((a) => ({
+      value: a.full_name?.trim() || a.id,
+      label: formatAssigneeOptionLabel(a),
+    }));
+    const current = data?.assigned_to?.trim();
+    if (current && !opts.some((o) => o.value === current)) {
+      opts.unshift({ value: current, label: current });
+    }
+    return opts;
+  }, [assignees, data?.assigned_to]);
+
+  const categorySelectOptions = useMemo(() => {
+    const names = categories.map((c) => c.name);
+    const current = data?.category?.trim();
+    if (current && !names.includes(current)) names.unshift(current);
+    if (!names.includes("Άλλο")) names.push("Άλλο");
+    return names;
+  }, [categories, data?.category]);
 
   const fromSearchParam = searchParams.get("from") === "search";
   const fromSearchNav = Boolean(id && (fromSearchParam || isRequestsSearchNavActive(id)));
@@ -268,6 +311,14 @@ function RequestDetailPageInner() {
   }, [load]);
 
   useEffect(() => {
+    if (!data) return;
+    const label =
+      (data.request_code ? `#${data.request_code} ` : "") + (data.title?.trim() || "Αίτημα");
+    openRequestTab(data.id, label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per loaded request
+  }, [data?.id, data?.title, data?.request_code, openRequestTab]);
+
+  useEffect(() => {
     if (!id) return;
     try {
       const searchNav = loadRequestsSearchNav();
@@ -316,6 +367,84 @@ function RequestDetailPageInner() {
     setDescDraft(data?.description ?? "");
     setEditingDesc(false);
   }, [data?.description]);
+
+  const startEditingAll = useCallback(() => {
+    if (!canEdit || !data) return;
+    setEditingDesc(false);
+    const p = data.priority;
+    setEditDraft({
+      title: data.title ?? "",
+      category: data.category?.trim() || "Άλλο",
+      status: normalizeRequestStatus(data.status ?? REQUEST_STATUS_OPEN),
+      description: data.description ?? "",
+      assigned_to: data.assigned_to?.trim() ?? "",
+      priority:
+        p === "High" || p === "Low" || p === "Urgent" || p === "Medium" ? p : "Medium",
+    });
+    setEditingAll(true);
+  }, [canEdit, data]);
+
+  const cancelEditingAll = useCallback(() => {
+    setEditDraft(null);
+    setEditingAll(false);
+  }, []);
+
+  const saveEditingAll = useCallback(async () => {
+    if (!requestApiId || !data || !editDraft || editSaving) return;
+    const title = editDraft.title.trim();
+    if (!title) {
+      showToast("Ο τίτλος είναι υποχρεωτικός.", "error");
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const payload = {
+        title,
+        category: editDraft.category.trim() || null,
+        status: normalizeRequestStatus(editDraft.status),
+        description: editDraft.description.trim() || null,
+        assigned_to: editDraft.assigned_to.trim() || null,
+        priority: editDraft.priority,
+      };
+      const res = await fetchWithTimeout(`/api/requests/${encodeURIComponent(requestApiId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        request?: RequestDetail;
+        status_note?: Note;
+      };
+      if (!res.ok || !body.request) {
+        throw new Error(body.error ?? "Αποτυχία αποθήκευσης");
+      }
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...body.request,
+              title: body.request?.title ?? title,
+              category: body.request?.category ?? payload.category,
+              status: body.request?.status ?? payload.status,
+              description: body.request?.description ?? payload.description,
+              assigned_to: body.request?.assigned_to ?? payload.assigned_to,
+              priority: body.request?.priority ?? payload.priority,
+            }
+          : body.request ?? prev,
+      );
+      if (body.status_note) {
+        setNotes((prev) => [body.status_note as Note, ...prev]);
+      }
+      setEditingAll(false);
+      setEditDraft(null);
+      showToast("Το αίτημα ενημερώθηκε.", "success");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Αποτυχία αποθήκευσης", "error");
+    } finally {
+      setEditSaving(false);
+    }
+  }, [data, editDraft, editSaving, requestApiId, showToast]);
 
   const saveDescription = useCallback(async () => {
     if (!requestApiId || !data || descSaving) return;
@@ -501,23 +630,153 @@ function RequestDetailPageInner() {
         data-hq-card
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div className="min-w-0 flex-1">
             {data.request_code && (
               <span className="mb-2 inline-flex items-center rounded-lg border-2 border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1 font-mono text-sm font-bold tracking-tight text-[var(--text-card-title)]">
                 {data.request_code}
               </span>
             )}
-            <h1 className="text-xl font-semibold tracking-tight text-[var(--text-page-title)] sm:text-2xl">
-              {data.title}
-            </h1>
-            {data.category && <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>}
+            {editingAll && editDraft ? (
+              <div className="mt-1 space-y-3">
+                <div>
+                  <label className={lux.label} htmlFor="req-edit-title">
+                    Τίτλος
+                  </label>
+                  <input
+                    id="req-edit-title"
+                    className={lux.input}
+                    value={editDraft.title}
+                    disabled={editSaving}
+                    onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className={lux.label} htmlFor="req-edit-category">
+                      Κατηγορία
+                    </label>
+                    <HqSelect
+                      id="req-edit-category"
+                      value={editDraft.category}
+                      disabled={editSaving}
+                      onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })}
+                    >
+                      {categorySelectOptions.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </HqSelect>
+                  </div>
+                  <div>
+                    <label className={lux.label} htmlFor="req-edit-status">
+                      Κατάσταση
+                    </label>
+                    <HqSelect
+                      id="req-edit-status"
+                      value={normalizeRequestStatus(editDraft.status)}
+                      disabled={editSaving}
+                      onChange={(e) => setEditDraft({ ...editDraft, status: e.target.value })}
+                    >
+                      {REQUEST_STATUSES.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </HqSelect>
+                  </div>
+                  <div>
+                    <label className={lux.label} htmlFor="req-edit-priority">
+                      Προτεραιότητα
+                    </label>
+                    <HqSelect
+                      id="req-edit-priority"
+                      value={editDraft.priority}
+                      disabled={editSaving}
+                      onChange={(e) =>
+                        setEditDraft({
+                          ...editDraft,
+                          priority: e.target.value as InlineEditDraft["priority"],
+                        })
+                      }
+                    >
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                      <option value="Urgent">Urgent</option>
+                    </HqSelect>
+                  </div>
+                  <div>
+                    <label className={lux.label} htmlFor="req-edit-assignee">
+                      Υπεύθυνος
+                    </label>
+                    <HqSelect
+                      id="req-edit-assignee"
+                      value={editDraft.assigned_to}
+                      disabled={editSaving}
+                      onChange={(e) => setEditDraft({ ...editDraft, assigned_to: e.target.value })}
+                    >
+                      <option value="">— Χωρίς ανάθεση —</option>
+                      {assigneeSelectOptions.map((a) => (
+                        <option key={a.value} value={a.value}>
+                          {a.label}
+                        </option>
+                      ))}
+                    </HqSelect>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-xl font-semibold tracking-tight text-[var(--text-page-title)] sm:text-2xl">
+                  {data.title}
+                </h1>
+                {data.category && <p className="mt-1 text-sm text-[var(--text-secondary)]">{data.category}</p>}
+                {data.assigned_to?.trim() ? (
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Υπεύθυνος: {resolveName(data.assigned_to)}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
           <div className="flex w-full flex-col items-start gap-2 sm:min-w-[240px] sm:items-end">
-            <div className="flex flex-wrap items-center gap-2">
-              <RequestStatusBadge status={data.status ?? REQUEST_STATUS_OPEN} size="md" bold />
-              <PriorityBadge p={data.priority} />
-            </div>
-            {canEdit ? (
+            {canEdit && !editingAll ? (
+              <button
+                type="button"
+                className={lux.btnSecondary + " inline-flex min-h-[44px] items-center gap-1.5 !py-2 text-xs sm:text-sm"}
+                onClick={startEditingAll}
+              >
+                <Pencil className="h-3.5 w-3.5" aria-hidden />
+                Επεξεργασία
+              </button>
+            ) : null}
+            {editingAll ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={lux.btnSecondary + " !min-h-[44px] !px-3 !py-2 !text-xs"}
+                  disabled={editSaving}
+                  onClick={cancelEditingAll}
+                >
+                  Άκυρο
+                </button>
+                <button
+                  type="button"
+                  className={lux.btnGold + " !min-h-[44px] !px-3 !py-2 !text-xs"}
+                  disabled={editSaving}
+                  onClick={() => void saveEditingAll()}
+                >
+                  {editSaving ? "…" : "Αποθήκευση"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <RequestStatusBadge status={data.status ?? REQUEST_STATUS_OPEN} size="md" bold />
+                <PriorityBadge p={data.priority} />
+              </div>
+            )}
+            {canEdit && !editingAll ? (
               <div className="flex w-full items-center gap-2 sm:w-auto">
                 <label htmlFor="request-inline-status" className="text-xs font-medium text-[var(--text-secondary)]">
                   Κατάσταση
@@ -539,8 +798,8 @@ function RequestDetailPageInner() {
               </div>
             ) : null}
             <p className="text-xs text-[var(--text-muted)]">
-              {statusSaving
-                ? "Ενημέρωση κατάστασης…"
+              {editSaving || statusSaving
+                ? "Ενημέρωση…"
                 : data.updated_at
                   ? `Ενημερώθηκε ${formatCalendarDateOnly(data.updated_at)}`
                   : "Ενημερώθηκε —"}
@@ -563,7 +822,26 @@ function RequestDetailPageInner() {
         <div className="space-y-6">
           <div className={lux.card + " p-5"}>
             <h2 className={lux.pageTitle + " !text-lg"}>Περιγραφή</h2>
-            {canEdit && editingDesc ? (
+            {editingAll && editDraft ? (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  className={lux.textarea + " !min-h-[120px]"}
+                  value={editDraft.description}
+                  maxLength={DESCRIPTION_MAX_LEN}
+                  disabled={editSaving}
+                  aria-label="Περιγραφή αιτήματος"
+                  onChange={(e) =>
+                    setEditDraft({
+                      ...editDraft,
+                      description: e.target.value.slice(0, DESCRIPTION_MAX_LEN),
+                    })
+                  }
+                />
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  {editDraft.description.length}/{DESCRIPTION_MAX_LEN}
+                </span>
+              </div>
+            ) : canEdit && editingDesc ? (
               <div className="mt-2 space-y-2">
                 <textarea
                   ref={descTextareaRef}
@@ -605,7 +883,7 @@ function RequestDetailPageInner() {
                   </div>
                 </div>
               </div>
-            ) : canEdit ? (
+            ) : canEdit && !editingAll ? (
               <button
                 type="button"
                 className="group mt-2 flex w-full items-start gap-2 rounded-md text-left transition hover:text-[#C9A84C]"
@@ -721,7 +999,7 @@ function RequestDetailPageInner() {
                 })
               )}
             </ul>
-            {canEdit && (
+            {canAddNotes && (
               <div className="mt-1 flex flex-col gap-2 border-t border-[var(--border)]/80 pt-3">
                 <textarea
                   className="min-h-[80px] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--input-bg)] p-3 text-sm text-[var(--text-input)] placeholder:text-[var(--text-placeholder)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold)]/20"
@@ -750,6 +1028,9 @@ function RequestDetailPageInner() {
                             setNotes((prev) => [j.note as Note, ...prev]);
                           }
                           setNoteDraft("");
+                        } else {
+                          const j = (await res.json().catch(() => ({}))) as { error?: string };
+                          showToast(j.error ?? "Αποτυχία αποθήκευσης σημείωσης", "error");
                         }
                       } finally {
                         setSending(false);

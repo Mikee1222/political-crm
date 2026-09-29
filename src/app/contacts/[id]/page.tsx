@@ -384,6 +384,8 @@ function ContactDetailPage() {
   const canManage = hasMinRole(profile?.role, "manager", profile?.access_tier);
   const isAdmin = profile?.role === "admin";
   const canEdit = can(profile, "contacts_edit");
+  const canAddNotes =
+    can(profile, "contacts_view") || hasMinRole(profile?.role, "caller", profile?.access_tier);
   const canViewAiSummary = can(profile, "ai_summary_view");
   const isCaller = !canEdit;
   const canDeleteCommLogs = can(profile, "communication_logs_delete");
@@ -2470,9 +2472,7 @@ function ContactDetailPage() {
                   <li className="text-xs text-[var(--text-muted)]">Χωρίς νέες σημειώσεις.</li>
                 )}
                 {contactNotes.map((note) => {
-                  const canDeleteThis =
-                    Boolean(profile?.id) &&
-                    (note.user_id === profile?.id || profile?.role === "admin");
+                  const canDeleteThis = canManage;
                   const displayAuthor = note.author_name?.trim()
                     ? resolveName(note.author_name)
                     : note.author_full_name || "—";
@@ -2522,7 +2522,7 @@ function ContactDetailPage() {
                   );
                 })}
               </ul>
-              {canEdit && (
+              {canAddNotes && (
                 <div className="mt-1 flex flex-col gap-2">
                   <textarea
                     className="min-h-[80px] w-full resize-y rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-gold)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-gold)]/20"
